@@ -1,0 +1,15 @@
+# Virtual Environment
+venv/
+
+# Environment file (contains passwords!)
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+
+# VS Code settings
+.vscode/
+
+# Node modules (React - later)
+node_modules/

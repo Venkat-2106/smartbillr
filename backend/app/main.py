@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.middleware.auth import verify_token
+from app.utils.response import success_response, error_response
 
 app = FastAPI(
     title="SmartBillr API",
@@ -18,22 +19,26 @@ app.add_middleware(
 
 @app.get("/")
 def root():
-    return {"message": "SmartBillr API is running! ✅"}
+    return success_response({"message": "SmartBillr API is running! ✅"})
 
 @app.get("/health")
 def health_check():
-    return {
+    return success_response({
         "status": "healthy",
         "app": "SmartBillr API",
         "version": "1.0.0"
-    }
+    })
 
-# ✅ Test route — protected by auth middleware
+# Protected test route
 @app.get("/test-auth")
 def test_auth(current_user: dict = Depends(verify_token)):
-    return {
-        "success": True,
+    return success_response({
         "message": "Auth is working!",
         "user_id": current_user["user_id"],
         "business_id": current_user["business_id"]
-    }
+    })
+
+# Test error response
+@app.get("/test-error")
+def test_error():
+    return error_response("This is a test error message", status_code=400)

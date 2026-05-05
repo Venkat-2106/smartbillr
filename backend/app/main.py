@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.middleware.auth import verify_token
 from app.utils.response import success_response, error_response
+from app.utils.pagination import paginate, pagination_response
 
 app = FastAPI(
     title="SmartBillr API",
@@ -38,7 +39,22 @@ def test_auth(current_user: dict = Depends(verify_token)):
         "business_id": current_user["business_id"]
     })
 
-# Test error response
-@app.get("/test-error")
-def test_error():
-    return error_response("This is a test error message", status_code=400)
+# Test pagination
+@app.get("/test-pagination")
+def test_pagination(pagination: dict = Depends(paginate)):
+    # Fake 50 items for testing
+    fake_items = [{"id": i, "name": f"Item {i}"} for i in range(1, 51)]
+
+    # Slice items based on pagination
+    start = pagination["offset"]
+    end = start + pagination["limit"]
+    paged_items = fake_items[start:end]
+
+    return success_response(
+        pagination_response(
+            data=paged_items,
+            total=50,
+            page=pagination["page"],
+            limit=pagination["limit"]
+        )
+    )

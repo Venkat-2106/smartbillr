@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.middleware.auth import verify_token
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
-from app.routers import business
+from app.routers import business, category
 
 app = FastAPI(
     title="SmartBillr API",
@@ -21,6 +21,7 @@ app.add_middleware(
 
 # ─── ROUTERS ───────────────────────────────────────────────────
 app.include_router(business.router)
+app.include_router(category.router)
 
 # ─── BASE ROUTES ───────────────────────────────────────────────
 @app.get("/")

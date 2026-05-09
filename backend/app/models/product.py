@@ -1,5 +1,7 @@
 from sqlalchemy import Column, String, Boolean, Text, Integer, Numeric
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import column_property
+from sqlalchemy import select, literal_column
 from app.database import Base
 import uuid
 
@@ -12,7 +14,6 @@ class Product(Base):
     prod_name = Column(String(255), nullable=False)
     prod_sell_price = Column(Numeric, nullable=False)
     prod_cost_price = Column(Numeric, nullable=False)
-    prod_profit = Column(Numeric, nullable=True)
     prod_stock_qty = Column(Integer, default=0)
     prod_low_stock_alert = Column(Integer, default=10)
     tax_rate = Column(Numeric, default=0)

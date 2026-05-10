@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.middleware.auth import verify_token
 from app.utils.response import success_response, error_response
-from app.routers import business, category, customer, supplier, product, sale, payment
+from app.routers import business, category, customer, supplier, product, sale, payment, purchase
 
 app = FastAPI(
     title="SmartBillr API",
@@ -25,6 +25,7 @@ app.include_router(supplier.router)
 app.include_router(product.router)
 app.include_router(sale.router)
 app.include_router(payment.router)
+app.include_router(purchase.router)
 
 @app.get("/")
 def root():

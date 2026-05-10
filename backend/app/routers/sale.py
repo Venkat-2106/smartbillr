@@ -5,7 +5,6 @@ from app.database import get_db
 from app.middleware.auth import verify_token
 from app.models.sale import Sale
 from app.models.product import Product
-from app.models.customer import Customer
 from app.schemas.sale import SaleCreate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
@@ -46,24 +45,44 @@ def generate_invoice_number(db: Session, business_id: str) -> str:
 
 
 # ─────────────────────────────────────────
-# HELPER: Calculate tax for one item
+# HELPER: Global Tax Engine
+# India → cgst/sgst/igst based on state
+# Others → tax_amount only
 # ─────────────────────────────────────────
-def calculate_item_tax(unit_price: Decimal, quantity: int, tax_rate: Decimal):
+def calculate_item_tax(
+    unit_price: Decimal,
+    quantity: int,
+    tax_rate: Decimal,
+    country_code: str,
+    seller_state: str,
+    customer_state: str
+):
     subtotal = unit_price * quantity
-    tax_amount = (subtotal * tax_rate) / Decimal("100")
-    cgst = tax_amount / Decimal("2")
-    sgst = tax_amount / Decimal("2")
+    total_tax = (subtotal * tax_rate) / Decimal("100")
+
+    cgst = Decimal("0")
+    sgst = Decimal("0")
     igst = Decimal("0")
-    total_with_tax = subtotal + tax_amount
+    tax_amount = Decimal("0")
+
+    if country_code == "IN":
+        if seller_state and customer_state and \
+           seller_state.strip().lower() == customer_state.strip().lower():
+            cgst = total_tax / Decimal("2")
+            sgst = total_tax / Decimal("2")
+        else:
+            igst = total_tax
+    else:
+        tax_amount = total_tax
 
     return {
         "subtotal": subtotal,
-        "tax_amount": tax_amount,
         "cgst_amount": cgst,
         "sgst_amount": sgst,
         "igst_amount": igst,
-        "item_tax_total": tax_amount,
-        "item_total_with_tax": total_with_tax
+        "tax_amount": tax_amount,
+        "item_tax_total": total_tax,
+        "item_total_with_tax": subtotal + total_tax
     }
 
 
@@ -159,151 +178,180 @@ def create_sale(
     business_id = current_user["business_id"]
     user_id = current_user["user_id"]
 
-    # Step 1 → Validate customer if provided
-    if data.customer_id:
-        customer = db.query(Customer).filter(
-            Customer.cust_id == data.customer_id,
-            Customer.business_id == business_id,
-            Customer.is_deleted == False
-        ).first()
-        if not customer:
-            return error_response("Customer not found", status_code=404)
+    try:
+        # Step 1 → Fetch business country and state
+        business = db.execute(
+            text("""
+                SELECT business_country_code, business_state
+                FROM businesses
+                WHERE business_id = :bid
+            """),
+            {"bid": business_id}
+        ).fetchone()
 
-    # Step 2 → Validate products and calculate totals
-    total_amount = Decimal("0")
-    cgst_total = Decimal("0")
-    sgst_total = Decimal("0")
-    igst_total = Decimal("0")
-    tax_total = Decimal("0")
-    calculated_items = []
+        country_code = business.business_country_code if business else ""
+        seller_state = business.business_state if business else ""
 
-    for item in data.items:
-        product = db.query(Product).filter(
-            Product.prod_id == item.product_id,
-            Product.business_id == business_id,
-            Product.is_deleted == False
-        ).first()
+        # Step 2 → Fetch customer state if provided
+        customer_state = ""
+        if data.customer_id:
+            customer = db.execute(
+                text("""
+                    SELECT cust_state, is_deleted
+                    FROM customers
+                    WHERE cust_id = :cid
+                    AND business_id = :bid
+                """),
+                {"cid": str(data.customer_id), "bid": business_id}
+            ).fetchone()
 
-        if not product:
-            return error_response(
-                f"Product {item.product_id} not found",
-                status_code=404
+            if not customer or customer.is_deleted:
+                return error_response("Customer not found", status_code=404)
+
+            customer_state = customer.cust_state or ""
+
+        # Step 3 → Validate products and calculate totals
+        total_amount = Decimal("0")
+        cgst_total = Decimal("0")
+        sgst_total = Decimal("0")
+        igst_total = Decimal("0")
+        tax_total = Decimal("0")
+        calculated_items = []
+
+        for item in data.items:
+            product = db.query(Product).filter(
+                Product.prod_id == item.product_id,
+                Product.business_id == business_id,
+                Product.is_deleted == False
+            ).first()
+
+            if not product:
+                return error_response(
+                    f"Product {item.product_id} not found",
+                    status_code=404
+                )
+
+            tax_rate = product.tax_rate or Decimal("0")
+
+            tax_calc = calculate_item_tax(
+                item.sale_item_unit_price,
+                item.sale_item_quantity,
+                tax_rate,
+                country_code or "",
+                seller_state or "",
+                customer_state or ""
             )
 
-        tax_rate = product.tax_rate or Decimal("0")
-        tax_calc = calculate_item_tax(
-            item.sale_item_unit_price,
-            item.sale_item_quantity,
-            tax_rate
-        )
+            total_amount += tax_calc["subtotal"]
+            cgst_total += tax_calc["cgst_amount"]
+            sgst_total += tax_calc["sgst_amount"]
+            igst_total += tax_calc["igst_amount"]
+            tax_total += tax_calc["tax_amount"]
 
-        total_amount += tax_calc["subtotal"]
-        cgst_total += tax_calc["cgst_amount"]
-        sgst_total += tax_calc["sgst_amount"]
-        igst_total += tax_calc["igst_amount"]
-        tax_total += tax_calc["tax_amount"]
+            calculated_items.append({
+                "product_id": str(item.product_id),
+                "quantity": item.sale_item_quantity,
+                "unit_price": float(item.sale_item_unit_price),
+                "tax_rate": float(tax_rate),
+                "cgst_amount": float(tax_calc["cgst_amount"]),
+                "sgst_amount": float(tax_calc["sgst_amount"]),
+                "igst_amount": float(tax_calc["igst_amount"]),
+                "tax_amount": float(tax_calc["tax_amount"])
+            })
 
-        calculated_items.append({
-            "product_id": str(item.product_id),
-            "quantity": item.sale_item_quantity,
-            "unit_price": float(item.sale_item_unit_price),
-            "tax_rate": float(tax_rate),
-            "cgst_amount": float(tax_calc["cgst_amount"]),
-            "sgst_amount": float(tax_calc["sgst_amount"]),
-            "igst_amount": float(tax_calc["igst_amount"]),
-            "tax_amount": float(tax_calc["tax_amount"])
-        })
+        # Step 4 → Generate invoice number
+        invoice_no = generate_invoice_number(db, business_id)
 
-    # Step 3 → Generate invoice number
-    invoice_no = generate_invoice_number(db, business_id)
+        # Step 5 → Insert sale
+        discount = float(data.sales_discount or Decimal("0"))
+        new_sales_id = str(uuid.uuid4())
 
-    # Step 4 → Insert sale via raw SQL
-    # Using CAST() instead of ::uuid to avoid SQLAlchemy param conflict
-    discount = float(data.sales_discount or Decimal("0"))
-    new_sales_id = str(uuid.uuid4())
-
-    db.execute(
-        text("""
-            INSERT INTO sales (
-                sales_id, business_id, customer_id, invoice_no,
-                sales_total_amount, sales_discount,
-                cgst_total, sgst_total, igst_total, tax_total,
-                sales_payment_method, sales_payment_status,
-                created_by
-            ) VALUES (
-                CAST(:sales_id AS uuid),
-                CAST(:business_id AS uuid),
-                CAST(:customer_id AS uuid),
-                :invoice_no,
-                :sales_total_amount, :sales_discount,
-                :cgst_total, :sgst_total, :igst_total, :tax_total,
-                :sales_payment_method, :sales_payment_status,
-                CAST(:created_by AS uuid)
-            )
-        """),
-        {
-            "sales_id": new_sales_id,
-            "business_id": business_id,
-            "customer_id": str(data.customer_id) if data.customer_id else None,
-            "invoice_no": invoice_no,
-            "sales_total_amount": float(total_amount),
-            "sales_discount": discount,
-            "cgst_total": float(cgst_total),
-            "sgst_total": float(sgst_total),
-            "igst_total": float(igst_total),
-            "tax_total": float(tax_total),
-            "sales_payment_method": data.sales_payment_method,
-            "sales_payment_status": data.sales_payment_status,
-            "created_by": user_id
-        }
-    )
-
-    # Step 5 → Insert sale items via raw SQL
-    # DB trigger trg_sale_stock_movement AUTO reduces stock!
-    for calc in calculated_items:
         db.execute(
             text("""
-                INSERT INTO sale_items (
-                    sale_item_id, business_id, sale_id, product_id,
-                    sale_item_quantity, sale_item_unit_price,
-                    gst_rate, cgst_amount, sgst_amount,
-                    igst_amount, tax_amount
+                INSERT INTO sales (
+                    sales_id, business_id, customer_id, invoice_no,
+                    sales_total_amount, sales_discount,
+                    cgst_total, sgst_total, igst_total, tax_total,
+                    sales_payment_method, sales_payment_status,
+                    created_by
                 ) VALUES (
-                    CAST(:sale_item_id AS uuid),
+                    CAST(:sales_id AS uuid),
                     CAST(:business_id AS uuid),
-                    CAST(:sale_id AS uuid),
-                    CAST(:product_id AS uuid),
-                    :quantity, :unit_price,
-                    :gst_rate, :cgst_amount, :sgst_amount,
-                    :igst_amount, :tax_amount
+                    CAST(:customer_id AS uuid),
+                    :invoice_no,
+                    :sales_total_amount, :sales_discount,
+                    :cgst_total, :sgst_total, :igst_total, :tax_total,
+                    :sales_payment_method, :sales_payment_status,
+                    CAST(:created_by AS uuid)
                 )
             """),
             {
-                "sale_item_id": str(uuid.uuid4()),
+                "sales_id": new_sales_id,
                 "business_id": business_id,
-                "sale_id": new_sales_id,
-                "product_id": calc["product_id"],
-                "quantity": calc["quantity"],
-                "unit_price": calc["unit_price"],
-                "gst_rate": calc["tax_rate"],
-                "cgst_amount": calc["cgst_amount"],
-                "sgst_amount": calc["sgst_amount"],
-                "igst_amount": calc["igst_amount"],
-                "tax_amount": calc["tax_amount"]
+                "customer_id": str(data.customer_id) if data.customer_id else None,
+                "invoice_no": invoice_no,
+                "sales_total_amount": float(total_amount),
+                "sales_discount": discount,
+                "cgst_total": float(cgst_total),
+                "sgst_total": float(sgst_total),
+                "igst_total": float(igst_total),
+                "tax_total": float(tax_total),
+                "sales_payment_method": data.sales_payment_method,
+                "sales_payment_status": data.sales_payment_status,
+                "created_by": user_id
             }
         )
 
-    # Step 6 → Commit everything
-    db.commit()
+        # Step 6 → Insert sale items
+        # DB trigger trg_sale_stock_movement AUTO reduces stock!
+        for calc in calculated_items:
+            db.execute(
+                text("""
+                    INSERT INTO sale_items (
+                        sale_item_id, business_id, sale_id, product_id,
+                        sale_item_quantity, sale_item_unit_price,
+                        gst_rate, cgst_amount, sgst_amount,
+                        igst_amount, tax_amount
+                    ) VALUES (
+                        CAST(:sale_item_id AS uuid),
+                        CAST(:business_id AS uuid),
+                        CAST(:sale_id AS uuid),
+                        CAST(:product_id AS uuid),
+                        :quantity, :unit_price,
+                        :gst_rate, :cgst_amount, :sgst_amount,
+                        :igst_amount, :tax_amount
+                    )
+                """),
+                {
+                    "sale_item_id": str(uuid.uuid4()),
+                    "business_id": business_id,
+                    "sale_id": new_sales_id,
+                    "product_id": calc["product_id"],
+                    "quantity": calc["quantity"],
+                    "unit_price": calc["unit_price"],
+                    "gst_rate": calc["tax_rate"],
+                    "cgst_amount": calc["cgst_amount"],
+                    "sgst_amount": calc["sgst_amount"],
+                    "igst_amount": calc["igst_amount"],
+                    "tax_amount": calc["tax_amount"]
+                }
+            )
 
-    # Step 7 → Fetch full sale including all generated columns
-    sale_row = fetch_full_sale(db, new_sales_id)
-    item_rows = fetch_sale_items(db, new_sales_id)
+        # Step 7 → Commit
+        db.commit()
 
-    return success_response({
-        "message": "Sale created successfully",
-        "sale": sale_row_to_dict(sale_row, item_rows)
-    }, status_code=201)
+        # Step 8 → Fetch full sale
+        sale_row = fetch_full_sale(db, new_sales_id)
+        item_rows = fetch_sale_items(db, new_sales_id)
+
+        return success_response({
+            "message": "Sale created successfully",
+            "sale": sale_row_to_dict(sale_row, item_rows)
+        }, status_code=201)
+
+    except Exception as e:
+        db.rollback()
+        return error_response(str(e), status_code=500)
 
 
 # ─────────────────────────────────────────

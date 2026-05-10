@@ -71,6 +71,15 @@ class SaleCreate(BaseModel):
             raise ValueError("Discount cannot be negative")
         return v
 
+    @field_validator("sales_payment_method")
+    @classmethod
+    def valid_payment_method(cls, v):
+        # Must match DB check constraint exactly
+        allowed = ["cash", "upi", "card", "bank", "split"]
+        if v is not None and v not in allowed:
+            raise ValueError(f"Payment method must be one of: {allowed}")
+        return v
+
     @field_validator("sales_payment_status")
     @classmethod
     def valid_payment_status(cls, v):

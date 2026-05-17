@@ -4,9 +4,9 @@ from uuid import UUID
 from decimal import Decimal
 
 
-# --- Used when CREATING a new payment ---
+# ── CREATE: fields the frontend sends when recording a payment ────────────────
 class PaymentCreate(BaseModel):
-    sale_id: UUID
+    sale_id:        UUID
     payment_amount: Decimal
     payment_method: Optional[str] = None
 
@@ -20,19 +20,24 @@ class PaymentCreate(BaseModel):
     @field_validator("payment_method")
     @classmethod
     def valid_payment_method(cls, v):
-        allowed = ["cash", "card", "upi", "bank_transfer", "cheque", "other"]
+        allowed = ["cash", "card", "upi", "bank_transfer", "cheque", "other", "split", "adjustment"]
         if v is not None and v not in allowed:
             raise ValueError(f"Payment method must be one of: {allowed}")
         return v
 
 
-# --- Used when RETURNING payment data in response ---
+# ── OUTPUT: what the API returns for each payment row ────────────────────────
 class PaymentOut(BaseModel):
-    payment_id: UUID
-    business_id: UUID
-    sale_id: UUID
+    payment_id:     UUID
+    business_id:    UUID
+    sale_id:        UUID
     payment_amount: Decimal
     payment_method: Optional[str] = None
+
+    # New source-of-truth fields
+    payment_status: Optional[str] = None   # pending | partial | paid
+    is_active:      Optional[bool] = None  # true = latest row for this sale
+
     payment_paid_at: Optional[str] = None
 
     class Config:

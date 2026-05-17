@@ -3,17 +3,18 @@ from typing import Optional
 from uuid import UUID
 from datetime import datetime
 
-# Used when CREATING a new business
+
 class BusinessCreate(BaseModel):
     business_name: str
-    business_email: EmailStr
+    business_email: Optional[EmailStr] = None  # FIX: nullable in DB
     business_phone: Optional[str] = None
     business_address: Optional[str] = None
     business_state: Optional[str] = None
     gstin: Optional[str] = None
     is_gst_registered: Optional[bool] = False
+    business_country_code: Optional[str] = None  # FIX: added missing field
 
-# Used when UPDATING a business
+
 class BusinessUpdate(BaseModel):
     business_name: Optional[str] = None
     business_email: Optional[EmailStr] = None
@@ -22,18 +23,21 @@ class BusinessUpdate(BaseModel):
     business_state: Optional[str] = None
     gstin: Optional[str] = None
     is_gst_registered: Optional[bool] = None
+    business_country_code: Optional[str] = None  # FIX: added missing field
 
-# Used when RETURNING business data in response
+
 class BusinessResponse(BaseModel):
     business_id: UUID
     business_name: str
-    business_email: str
-    business_phone: Optional[str]
-    business_address: Optional[str]
-    business_state: Optional[str]
-    gstin: Optional[str]
-    is_gst_registered: bool
-    created_at: datetime
+    business_email: Optional[str] = None  # FIX: nullable in DB
+    business_phone: Optional[str] = None
+    business_address: Optional[str] = None
+    business_state: Optional[str] = None
+    gstin: Optional[str] = None
+    is_gst_registered: Optional[bool] = None
+    created_at: Optional[datetime] = None
+    # FIX: Added missing field — needed for tax logic in purchases
+    business_country_code: Optional[str] = None
 
     class Config:
         from_attributes = True

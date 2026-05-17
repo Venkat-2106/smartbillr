@@ -394,3 +394,61 @@ def update_sales_return(
     except Exception as e:
         db.rollback()
         return error_response(str(e), status_code=500)
+
+# ─────────────────────────────────────────
+# DELETE /sales-returns/{return_id} → Delete pending return only
+# WHY: Once a return is approved or rejected, it becomes part of the
+# business record and must not be deleted. Only pending returns
+# (not yet actioned) are safe to delete.
+# ─────────────────────────────────────────
+@router.delete("/{return_id}")
+def delete_sales_return(
+    return_id: str,
+    current_user: dict = Depends(verify_token),
+    db: Session = Depends(get_db)
+):
+    business_id = current_user["business_id"]
+
+    # Step 1 → Check the return exists and belongs to this business
+    sales_return = db.query(SalesReturn).filter(
+        SalesReturn.return_id == return_id,
+        SalesReturn.business_id == business_id
+    ).first()
+
+    if not sales_return:
+        return error_response("Sales return not found", status_code=404)
+
+    # Step 2 → Block deletion if not pending
+    if sales_return.return_status != "pending":
+        return error_response(
+            f"Cannot delete a return with status '{sales_return.return_status}'. "
+            "Only pending returns can be deleted.",
+            status_code=400
+        )
+
+    try:
+        # Step 3 → Delete return items first (FK constraint)
+        db.execute(
+            text("""
+                DELETE FROM sales_return_items
+                WHERE return_id = CAST(:return_id AS uuid)
+            """),
+            {"return_id": return_id}
+        )
+
+        # Step 4 → Delete the return header
+        db.execute(
+            text("""
+                DELETE FROM sales_returns
+                WHERE return_id = CAST(:return_id AS uuid)
+                  AND business_id = CAST(:bid AS uuid)
+            """),
+            {"return_id": return_id, "bid": business_id}
+        )
+
+        db.commit()
+        return success_response({"message": "Sales return deleted successfully"})
+
+    except Exception as e:
+        db.rollback()
+        return error_response(str(e), status_code=500)

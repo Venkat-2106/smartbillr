@@ -389,9 +389,9 @@ def get_all_purchases(
         pagination_response(result, total, pagination["page"], pagination["limit"])
     )
 
-
 # ─────────────────────────────────────────
 # GET /purchases/{pur_id} → Get one purchase
+# Includes: purchase details + items + all returns for this purchase
 # ─────────────────────────────────────────
 @router.get("/{pur_id}")
 def get_purchase(
@@ -401,6 +401,7 @@ def get_purchase(
 ):
     business_id = current_user["business_id"]
 
+    # Step 1 → Fetch purchase header
     row = db.execute(
         text("""
             SELECT pur_id, business_id, supp_id,
@@ -410,9 +411,9 @@ def get_purchase(
                    pur_payment_status, is_deleted,
                    pur_created_at, created_by
             FROM purchases
-            WHERE pur_id = :pid
+            WHERE pur_id      = :pid
               AND business_id = :bid
-              AND is_deleted = false
+              AND is_deleted  = false
         """),
         {"pid": pur_id, "bid": business_id}
     ).fetchone()
@@ -420,9 +421,93 @@ def get_purchase(
     if not row:
         return error_response("Purchase not found", status_code=404)
 
+    # Step 2 → Fetch purchase items
     items = fetch_purchase_items(db, pur_id)
-    return success_response(purchase_row_to_dict(row, items))
 
+    # Step 3 → Fetch all purchase returns for this purchase
+    return_rows = db.execute(text("""
+        SELECT
+            pr.return_id,
+            pr.pur_id,
+            pr.return_reason,
+            pr.return_status,
+            pr.restock,
+            pr.stock_updated,
+            pr.refund_method,
+            pr.approved_by,
+            pr.approved_at,
+            pr.rejected_reason,
+            pr.return_amount,
+            pr.return_created_at,
+            pr.created_by,
+            COALESCE(SUM(pri.return_item_subtotal), 0) AS total_refund_amount
+        FROM purchase_returns pr
+        LEFT JOIN purchase_return_items pri ON pri.return_id = pr.return_id
+        WHERE pr.pur_id      = :pid
+          AND pr.business_id = :bid
+        GROUP BY pr.return_id, pr.pur_id, pr.return_reason,
+                 pr.return_status, pr.restock, pr.stock_updated,
+                 pr.refund_method, pr.approved_by, pr.approved_at,
+                 pr.rejected_reason, pr.return_amount,
+                 pr.return_created_at, pr.created_by
+        ORDER BY pr.return_created_at DESC
+    """), {"pid": pur_id, "bid": business_id}).fetchall()
+
+    # Step 4 → Fetch items for each return and build returns list
+    returns = []
+    for ret in return_rows:
+        return_items = db.execute(text("""
+            SELECT
+                pri.return_item_id,
+                pri.return_id,
+                pri.product_id,
+                p.prod_name AS product_name,
+                pri.return_qty,
+                pri.refund_amount,
+                pri.return_item_subtotal
+            FROM purchase_return_items pri
+            JOIN products p ON p.prod_id = pri.product_id
+            WHERE pri.return_id = :rid
+        """), {"rid": str(ret.return_id)}).fetchall()
+
+        ret_dict = {
+            "return_id":         str(ret.return_id),
+            "pur_id":            str(ret.pur_id),
+            "return_reason":     ret.return_reason,
+            "return_status":     ret.return_status,
+            "restock":           ret.restock,
+            "stock_updated":     ret.stock_updated,
+            "refund_method":     ret.refund_method,
+            "approved_by":       str(ret.approved_by) if ret.approved_by else None,
+            "approved_at":       str(ret.approved_at) if ret.approved_at else None,
+            "rejected_reason":   ret.rejected_reason,
+            "return_amount":     float(ret.return_amount) if ret.return_amount else 0.0,
+            "return_created_at": str(ret.return_created_at) if ret.return_created_at else None,
+            "created_by":        str(ret.created_by) if ret.created_by else None,
+            "total_refund_amount": float(ret.total_refund_amount or 0),
+            "items": [
+                {
+                    "return_item_id":       str(i.return_item_id),
+                    "product_id":           str(i.product_id),
+                    "product_name":         i.product_name,
+                    "return_qty":           i.return_qty,
+                    "refund_amount":        float(i.refund_amount or 0),
+                    "return_item_subtotal": float(i.return_item_subtotal or 0) if i.return_item_subtotal else None
+                }
+                for i in return_items
+            ]
+        }
+        returns.append(ret_dict)
+
+    # Step 5 → Build final response
+    purchase_data = purchase_row_to_dict(row, items)
+    purchase_data["returns"]             = returns
+    purchase_data["total_returns"]       = len(returns)
+    purchase_data["total_refund_amount"] = float(
+        sum(r["return_amount"] for r in returns)
+    )
+
+    return success_response(purchase_data)
 
 # ─────────────────────────────────────────
 # PATCH /purchases/{pur_id}/status → Update payment status

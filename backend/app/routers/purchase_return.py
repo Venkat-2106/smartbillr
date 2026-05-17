@@ -1,0 +1,637 @@
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from sqlalchemy import func, text
+from app.database import get_db
+from app.middleware.auth import verify_token
+from app.models.purchase_return import PurchaseReturn
+from app.schemas.purchase_return import PurchaseReturnCreate, PurchaseReturnUpdate
+from app.utils.response import success_response, error_response
+from app.utils.pagination import paginate, pagination_response
+import uuid
+
+router = APIRouter(prefix="/purchase-returns", tags=["Purchase Returns"])
+
+
+# ─────────────────────────────────────────────
+# HELPER — fetch return items with product name
+# ─────────────────────────────────────────────
+def fetch_return_items(db: Session, return_id: str):
+    return db.execute(text("""
+        SELECT
+            pri.return_item_id,
+            pri.return_id,
+            pri.product_id,
+            p.prod_name AS product_name,
+            pri.return_qty,
+            pri.refund_amount,
+            pri.return_item_subtotal
+        FROM purchase_return_items pri
+        JOIN products p ON p.prod_id = pri.product_id
+        WHERE pri.return_id = CAST(:rid AS uuid)
+    """), {"rid": return_id}).fetchall()
+
+
+# ─────────────────────────────────────────────
+# HELPER — format return row as dict
+# ─────────────────────────────────────────────
+def return_to_dict(r, items):
+    return {
+        "return_id":         str(r.return_id),
+        "business_id":       str(r.business_id),
+        "pur_id":            str(r.pur_id),
+        "return_reason":     r.return_reason,
+        "return_status":     r.return_status,
+        "restock":           r.restock,
+        "stock_updated":     r.stock_updated,
+        "refund_method":     r.refund_method,
+        "approved_by":       str(r.approved_by) if r.approved_by else None,
+        "approved_at":       str(r.approved_at) if r.approved_at else None,
+        "rejected_reason":   r.rejected_reason,
+        "return_amount":     float(r.return_amount) if r.return_amount else 0.0,
+        "return_created_at": str(r.return_created_at) if r.return_created_at else None,
+        "created_by":        str(r.created_by) if r.created_by else None,
+        "items":             [return_item_to_dict(i) for i in items]
+    }
+
+
+# ─────────────────────────────────────────────
+# HELPER — format return item row as dict
+# ─────────────────────────────────────────────
+def return_item_to_dict(row):
+    return {
+        "return_item_id":       str(row.return_item_id),
+        "product_id":           str(row.product_id),
+        "product_name":         row.product_name,
+        "return_qty":           row.return_qty,
+        "refund_amount":        float(row.refund_amount) if row.refund_amount else 0.0,
+        "return_item_subtotal": float(row.return_item_subtotal) if row.return_item_subtotal else None
+    }
+
+
+# ─────────────────────────────────────────────
+# HELPER — validate return items against original purchase
+# Checks:
+#   1. Product was part of the original purchase
+#   2. refund_amount <= original purchase unit price
+#   3. return_qty <= (purchased_qty - already_returned_qty)
+# ─────────────────────────────────────────────
+def validate_return_items(
+    db: Session,
+    pur_id: str,
+    business_id: str,
+    items,
+    exclude_return_id: str = None
+):
+    for item in items:
+        product_id = str(item.product_id)
+
+        # Step 1 → Was this product part of the purchase?
+        # FIX: products PK is prod_id not product_id
+        purchase_item = db.execute(text("""
+            SELECT pi.pur_item_qty, pi.item_unit_price, p.prod_name
+            FROM purchase_items pi
+            JOIN products p ON p.prod_id = pi.product_id
+            WHERE pi.pur_id = CAST(:pur_id AS uuid)
+              AND pi.product_id = CAST(:product_id AS uuid)
+            LIMIT 1
+        """), {
+            "pur_id":     pur_id,
+            "product_id": product_id
+        }).fetchone()
+
+        if not purchase_item:
+            return f"Product '{product_id}' was not part of purchase '{pur_id}'"
+
+        # Step 2 → refund_amount must not exceed original purchase unit price
+        # Only validate on create (item has refund_amount), not on approval revalidation
+        if hasattr(item, "refund_amount") and item.refund_amount is not None:
+            if float(item.refund_amount) > float(purchase_item.item_unit_price):
+                return (
+                    f"'{purchase_item.prod_name}': refund amount ({item.refund_amount}) "
+                    f"cannot exceed original purchase price "
+                    f"({float(purchase_item.item_unit_price)})"
+                )
+
+        # Step 3 → return_qty must not exceed available returnable qty
+        query = """
+            SELECT COALESCE(SUM(pri.return_qty), 0) AS total_returned
+            FROM purchase_return_items pri
+            JOIN purchase_returns pr ON pr.return_id = pri.return_id
+            WHERE pr.pur_id       = CAST(:pur_id AS uuid)
+              AND pri.product_id  = CAST(:product_id AS uuid)
+              AND pr.return_status != 'rejected'
+              AND pr.business_id  = CAST(:business_id AS uuid)
+        """
+        params = {
+            "pur_id":      pur_id,
+            "product_id":  product_id,
+            "business_id": business_id
+        }
+
+        # When updating — exclude current return from already_returned count
+        if exclude_return_id:
+            query += " AND pr.return_id != CAST(:exclude_id AS uuid)"
+            params["exclude_id"] = exclude_return_id
+
+        already_returned = int(
+            db.execute(text(query), params).fetchone().total_returned
+        )
+        available = purchase_item.pur_item_qty - already_returned
+
+        if item.return_qty > available:
+            return (
+                f"'{purchase_item.prod_name}': cannot return {item.return_qty} units. "
+                f"Only {available} units are returnable "
+                f"(purchased: {purchase_item.pur_item_qty}, "
+                f"already returned: {already_returned})."
+            )
+
+    return None  # all items valid
+
+
+# ─────────────────────────────────────────────
+# POST /purchase-returns → Create a return
+# ─────────────────────────────────────────────
+@router.post("/")
+def create_purchase_return(
+    data: PurchaseReturnCreate,
+    current_user: dict = Depends(verify_token),
+    db: Session = Depends(get_db)
+):
+    business_id = current_user["business_id"]
+    user_id     = current_user["user_id"]
+
+    try:
+        # Step 1 → Check purchase exists and belongs to this business
+        purchase = db.execute(text("""
+            SELECT pur_id, pur_payment_status
+            FROM purchases
+            WHERE pur_id       = CAST(:pur_id AS uuid)
+              AND business_id  = CAST(:business_id AS uuid)
+              AND is_deleted   = false
+        """), {
+            "pur_id":      str(data.pur_id),
+            "business_id": str(business_id)
+        }).fetchone()
+
+        if not purchase:
+            return error_response("Purchase not found", status_code=404)
+
+        # Step 2 → Validate each return item
+        error = validate_return_items(
+            db, str(data.pur_id), str(business_id), data.items
+        )
+        if error:
+            return error_response(error, status_code=400)
+
+        # Step 3 → Calculate total return amount
+        total_return_amount = sum(
+            float(item.refund_amount) * item.return_qty
+            for item in data.items
+        )
+
+        # Step 4 → Insert purchase_return header
+        new_return_id = str(uuid.uuid4())
+
+        # Validate status value on creation
+        allowed_statuses = ["pending", "approved", "rejected"]
+        if data.return_status not in allowed_statuses:
+            return error_response(
+                f"Invalid status. Allowed: {allowed_statuses}", 400
+            )
+
+        db.execute(text("""
+            INSERT INTO purchase_returns (
+                return_id, business_id, pur_id,
+                return_reason, return_status,
+                restock, refund_method,
+                return_amount, created_by
+            ) VALUES (
+                CAST(:return_id AS uuid),
+                CAST(:business_id AS uuid),
+                CAST(:pur_id AS uuid),
+                :return_reason, :return_status,
+                :restock, :refund_method,
+                :return_amount,
+                CAST(:created_by AS uuid)
+            )
+        """), {
+            "return_id":     new_return_id,
+            "business_id":   str(business_id),
+            "pur_id":        str(data.pur_id),
+            "return_reason": data.return_reason,
+            "return_status": data.return_status,
+            "restock":       data.restock,
+            "refund_method": data.refund_method,
+            "return_amount": total_return_amount,
+            "created_by":    str(user_id)
+        })
+
+        # Step 5 → Insert each return item
+        # NOTE: return_item_subtotal is a DB generated column — do NOT insert it
+        for item in data.items:
+            db.execute(text("""
+                INSERT INTO purchase_return_items
+                    (return_item_id, return_id, product_id,
+                     return_qty, refund_amount)
+                VALUES (
+                    CAST(:return_item_id AS uuid),
+                    CAST(:return_id AS uuid),
+                    CAST(:product_id AS uuid),
+                    :return_qty, :refund_amount
+                )
+            """), {
+                "return_item_id": str(uuid.uuid4()),
+                "return_id":      new_return_id,
+                "product_id":     str(item.product_id),
+                "return_qty":     item.return_qty,
+                "refund_amount":  float(item.refund_amount)
+            })
+
+        db.commit()
+        
+        # Step 6 → If created as approved + restock → reduce stock immediately
+        if data.return_status == "approved" and data.restock:
+            for item in data.items:
+                product_id = str(item.product_id)
+                return_qty = item.return_qty
+
+                product = db.execute(text("""
+                    SELECT prod_stock_qty
+                    FROM products
+                    WHERE prod_id     = CAST(:product_id AS uuid)
+                      AND business_id = CAST(:business_id AS uuid)
+                """), {
+                    "product_id":  product_id,
+                    "business_id": str(business_id)
+                }).fetchone()
+
+                if not product:
+                    db.rollback()
+                    return error_response(
+                        f"Product {product_id} not found", status_code=404
+                    )
+
+                prev_stock = product.prod_stock_qty
+                new_stock  = prev_stock - return_qty
+
+                if new_stock < 0:
+                    db.rollback()
+                    return error_response(
+                        f"Product {product_id}: insufficient stock to return "
+                        f"{return_qty} units (current stock: {prev_stock})",
+                        status_code=400
+                    )
+
+                db.execute(text("""
+                    UPDATE products
+                    SET prod_stock_qty = :new_stock
+                    WHERE prod_id      = CAST(:product_id AS uuid)
+                      AND business_id  = CAST(:business_id AS uuid)
+                """), {
+                    "new_stock":   new_stock,
+                    "product_id":  product_id,
+                    "business_id": str(business_id)
+                })
+
+                db.execute(text("""
+                    INSERT INTO stock_movements
+                        (product_id, business_id, move_type,
+                         move_qty, move_prev_stock,
+                         reference_type, reference_id)
+                    VALUES (
+                        CAST(:product_id AS uuid),
+                        CAST(:business_id AS uuid),
+                        'purchase_return',
+                        :move_qty, :prev_stock,
+                        'purchase_return',
+                        CAST(:return_id AS uuid)
+                    )
+                """), {
+                    "product_id":  product_id,
+                    "business_id": str(business_id),
+                    "move_qty":    -return_qty,
+                    "prev_stock":  prev_stock,
+                    "return_id":   new_return_id
+                })
+
+            # Mark stock_updated = true on the header
+            db.execute(text("""
+                UPDATE purchase_returns
+                SET stock_updated = true,
+                    approved_by   = CAST(:approved_by AS uuid),
+                    approved_at   = NOW()
+                WHERE return_id   = CAST(:return_id AS uuid)
+            """), {
+                "approved_by": str(user_id),
+                "return_id":   new_return_id
+            })
+
+        db.commit()
+
+        # Step 7 → Fetch and return full record
+
+        return_row = db.query(PurchaseReturn).filter(
+            PurchaseReturn.return_id == new_return_id
+        ).first()
+        item_rows = fetch_return_items(db, new_return_id)
+
+        return success_response({
+            "message": "Purchase return created successfully",
+            "return":  return_to_dict(return_row, item_rows)
+        }, status_code=201)
+
+    except Exception as e:
+        db.rollback()
+        return error_response(str(e), status_code=500)
+
+
+# ─────────────────────────────────────────────
+# GET /purchase-returns → List all (paginated)
+# ─────────────────────────────────────────────
+@router.get("/")
+def get_all_purchase_returns(
+    current_user: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+    pagination: dict = Depends(paginate)
+):
+    business_id = current_user["business_id"]
+
+    total = db.query(func.count(PurchaseReturn.return_id)).filter(
+        PurchaseReturn.business_id == business_id
+    ).scalar()
+
+    returns = db.query(PurchaseReturn).filter(
+        PurchaseReturn.business_id == business_id
+    ).order_by(PurchaseReturn.return_created_at.desc()) \
+     .offset(pagination["offset"]).limit(pagination["limit"]).all()
+
+    result = []
+    for r in returns:
+        items = fetch_return_items(db, str(r.return_id))
+        result.append(return_to_dict(r, items))
+
+    return success_response(
+        pagination_response(result, total, pagination["page"], pagination["limit"])
+    )
+
+
+# ─────────────────────────────────────────────
+# GET /purchase-returns/{return_id} → Single return
+# ─────────────────────────────────────────────
+@router.get("/{return_id}")
+def get_purchase_return(
+    return_id: str,
+    current_user: dict = Depends(verify_token),
+    db: Session = Depends(get_db)
+):
+    business_id = current_user["business_id"]
+
+    purchase_return = db.query(PurchaseReturn).filter(
+        PurchaseReturn.return_id == return_id,
+        PurchaseReturn.business_id == business_id
+    ).first()
+
+    if not purchase_return:
+        return error_response("Purchase return not found", status_code=404)
+
+    items = fetch_return_items(db, return_id)
+    return success_response(return_to_dict(purchase_return, items))
+
+
+# ─────────────────────────────────────────────
+# PUT /purchase-returns/{return_id} → Update status
+# When approved + restock=true → stock REDUCES
+# (goods physically left your warehouse back to supplier)
+# ─────────────────────────────────────────────
+@router.put("/{return_id}")
+def update_purchase_return(
+    return_id: str,
+    data: PurchaseReturnUpdate,
+    current_user: dict = Depends(verify_token),
+    db: Session = Depends(get_db)
+):
+    business_id = current_user["business_id"]
+    user_id     = current_user["user_id"]
+
+    # Validate status value
+    allowed_statuses = ["pending", "approved", "rejected"]
+    if data.return_status not in allowed_statuses:
+        return error_response(
+            f"Invalid status. Allowed: {allowed_statuses}", 400
+        )
+
+    # Fetch existing return
+    purchase_return = db.query(PurchaseReturn).filter(
+        PurchaseReturn.return_id == return_id,
+        PurchaseReturn.business_id == business_id
+    ).first()
+
+    if not purchase_return:
+        return error_response("Purchase return not found", status_code=404)
+
+    # Block if already approved
+    if purchase_return.return_status == "approved":
+        return error_response(
+            "Cannot change status of an already approved return", 400
+        )
+
+    # Block if same status
+    if purchase_return.return_status == data.return_status:
+        return error_response(
+            f"Return is already '{data.return_status}'", 400
+        )
+
+    try:
+        # If approving → validate quantities again then handle stock
+        if data.return_status == "approved":
+
+            item_rows = fetch_return_items(db, return_id)
+
+            # Convert DB rows into objects validate_return_items can read
+            class ItemLike:
+                def __init__(self, product_id, return_qty):
+                    self.product_id  = product_id
+                    self.return_qty  = return_qty
+                    self.refund_amount = None  # skip price check on approval
+
+            items_to_validate = [
+                ItemLike(row.product_id, row.return_qty)
+                for row in item_rows
+            ]
+
+            error = validate_return_items(
+                db, str(purchase_return.pur_id),
+                str(business_id), items_to_validate,
+                exclude_return_id=return_id
+            )
+            if error:
+                return error_response(error, status_code=400)
+
+            # Reduce stock only if restock=true
+            if data.restock:
+                for row in item_rows:
+                    product_id = str(row.product_id)
+                    return_qty = row.return_qty
+
+                    # Get current stock
+                    product = db.execute(text("""
+                        SELECT prod_stock_qty
+                        FROM products
+                        WHERE prod_id      = CAST(:product_id AS uuid)
+                          AND business_id  = CAST(:business_id AS uuid)
+                    """), {
+                        "product_id":  product_id,
+                        "business_id": str(business_id)
+                    }).fetchone()
+
+                    if not product:
+                        db.rollback()
+                        return error_response(
+                            f"Product {product_id} not found",
+                            status_code=404
+                        )
+
+                    prev_stock = product.prod_stock_qty
+                    new_stock  = prev_stock - return_qty
+
+                    # Block if not enough stock
+                    if new_stock < 0:
+                        db.rollback()
+                        return error_response(
+                            f"Product {product_id}: insufficient stock to return "
+                            f"{return_qty} units (current stock: {prev_stock})",
+                            status_code=400
+                        )
+
+                    # Reduce stock
+                    db.execute(text("""
+                        UPDATE products
+                        SET prod_stock_qty = :new_stock
+                        WHERE prod_id      = CAST(:product_id AS uuid)
+                          AND business_id  = CAST(:business_id AS uuid)
+                    """), {
+                        "new_stock":   new_stock,
+                        "product_id":  product_id,
+                        "business_id": str(business_id)
+                    })
+
+                    # Record stock movement
+                    # move_qty is negative → stock going OUT to supplier
+                    db.execute(text("""
+                        INSERT INTO stock_movements
+                            (product_id, business_id, move_type,
+                             move_qty, move_prev_stock,
+                             reference_type, reference_id)
+                        VALUES (
+                            CAST(:product_id AS uuid),
+                            CAST(:business_id AS uuid),
+                            'purchase_return',
+                            :move_qty, :prev_stock,
+                            'purchase_return',
+                            CAST(:return_id AS uuid)
+                        )
+                    """), {
+                        "product_id":  product_id,
+                        "business_id": str(business_id),
+                        "move_qty":    -return_qty,
+                        "prev_stock":  prev_stock,
+                        "return_id":   return_id
+                    })
+
+        # Update the return header
+        db.execute(text("""
+            UPDATE purchase_returns
+            SET return_status   = :status,
+                restock         = :restock,
+                stock_updated   = :stock_updated,
+                rejected_reason = :rejected_reason,
+                approved_by     = CASE WHEN :status = 'approved'
+                                       THEN CAST(:approved_by AS uuid)
+                                       ELSE NULL END,
+                approved_at     = CASE WHEN :status = 'approved'
+                                       THEN NOW()
+                                       ELSE NULL END
+            WHERE return_id    = CAST(:return_id AS uuid)
+              AND business_id  = CAST(:business_id AS uuid)
+        """), {
+            "status":          data.return_status,
+            "restock":         data.restock,
+            "stock_updated":   data.restock and data.return_status == "approved",
+            "rejected_reason": data.rejected_reason,
+            "approved_by":     str(user_id),
+            "return_id":       return_id,
+            "business_id":     str(business_id)
+        })
+
+        db.commit()
+
+        # Refresh and return updated record
+        purchase_return = db.query(PurchaseReturn).filter(
+            PurchaseReturn.return_id == return_id
+        ).first()
+        items = fetch_return_items(db, return_id)
+
+        return success_response({
+            "message": f"Purchase return {data.return_status} successfully",
+            "return":  return_to_dict(purchase_return, items)
+        })
+
+    except Exception as e:
+        db.rollback()
+        return error_response(str(e), status_code=500)
+
+
+# ─────────────────────────────────────────────
+# DELETE /purchase-returns/{return_id}
+# Only pending returns can be deleted
+# ─────────────────────────────────────────────
+@router.delete("/{return_id}")
+def delete_purchase_return(
+    return_id: str,
+    current_user: dict = Depends(verify_token),
+    db: Session = Depends(get_db)
+):
+    business_id = current_user["business_id"]
+
+    purchase_return = db.query(PurchaseReturn).filter(
+        PurchaseReturn.return_id == return_id,
+        PurchaseReturn.business_id == business_id
+    ).first()
+
+    if not purchase_return:
+        return error_response("Purchase return not found", status_code=404)
+
+    if purchase_return.return_status != "pending":
+        return error_response(
+            f"Cannot delete a return with status "
+            f"'{purchase_return.return_status}'. "
+            "Only pending returns can be deleted.",
+            status_code=400
+        )
+
+    try:
+        # Delete items first (FK constraint)
+        db.execute(text("""
+            DELETE FROM purchase_return_items
+            WHERE return_id = CAST(:return_id AS uuid)
+        """), {"return_id": return_id})
+
+        # Delete header
+        db.execute(text("""
+            DELETE FROM purchase_returns
+            WHERE return_id   = CAST(:return_id AS uuid)
+              AND business_id = CAST(:business_id AS uuid)
+        """), {
+            "return_id":   return_id,
+            "business_id": str(business_id)
+        })
+
+        db.commit()
+        return success_response(
+            {"message": "Purchase return deleted successfully"}
+        )
+
+    except Exception as e:
+        db.rollback()
+        return error_response(str(e), status_code=500)

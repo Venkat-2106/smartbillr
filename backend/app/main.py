@@ -2,7 +2,11 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.middleware.auth import verify_token
 from app.utils.response import success_response, error_response
-from app.routers import business, category, customer, supplier, product, sale, payment, purchase, stock, expense, sales_return
+from app.routers import (
+    business, category, customer, supplier,
+    product, sale, payment, purchase,
+    stock, expense, sales_return, purchase_return
+)
 import os
 
 app = FastAPI(
@@ -36,7 +40,7 @@ app.include_router(purchase.router)
 app.include_router(stock.router)
 app.include_router(expense.router)
 app.include_router(sales_return.router)
-
+app.include_router(purchase_return.router)
 
 @app.get("/")
 def root():

@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { setupInterceptors } from './api/interceptors'
+import Providers from './app/providers'
 import './index.css'
 import App from './App'
 
@@ -9,6 +10,8 @@ setupInterceptors()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <Providers>
+      <App />
+    </Providers>
   </StrictMode>,
 )

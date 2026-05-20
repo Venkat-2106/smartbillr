@@ -1,25 +1,17 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import LoginPage from '../features/auth/pages/LoginPage'
 
-// Layouts
-// import DashboardLayout from './layouts/DashboardLayout'
-// import AuthLayout from './layouts/AuthLayout'
-
-// Pages — we'll uncomment these as we build each feature
-// import LoginPage from '../features/auth/pages/LoginPage'
-// import DashboardPage from '../features/dashboard/pages/DashboardPage'
-
-// Temporary placeholder page
 function ComingSoon({ name }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      minHeight: '100vh', flexDirection: 'column', gap: '0.5rem',
-      fontFamily: 'Inter, sans-serif', background: 'var(--color-background)'
+      minHeight: '100vh', fontFamily: 'Inter, sans-serif',
+      background: 'var(--color-background)',
     }}>
       <div style={{
         background: 'var(--color-card)', padding: '2rem 3rem',
         borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)',
-        boxShadow: 'var(--shadow-md)', textAlign: 'center'
+        boxShadow: 'var(--shadow-md)', textAlign: 'center',
       }}>
         <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🚧</p>
         <h2 style={{ color: 'var(--color-text-primary)', fontWeight: '700', fontSize: '1.1rem' }}>
@@ -37,10 +29,10 @@ export default function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Auth routes */}
-        <Route path="/login" element={<ComingSoon name="Login Page" />} />
+        {/* Auth */}
+        <Route path="/login" element={<LoginPage />} />
 
-        {/* App routes */}
+        {/* App routes — placeholders for now */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<ComingSoon name="Dashboard" />} />
         <Route path="/categories" element={<ComingSoon name="Categories" />} />
@@ -55,8 +47,6 @@ export default function AppRouter() {
         <Route path="/stock" element={<ComingSoon name="Stock" />} />
         <Route path="/reports" element={<ComingSoon name="Reports" />} />
         <Route path="/settings" element={<ComingSoon name="Settings" />} />
-
-        {/* Catch-all — redirect unknown URLs to dashboard */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>

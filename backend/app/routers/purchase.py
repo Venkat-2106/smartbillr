@@ -11,6 +11,10 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from decimal import Decimal
 import uuid
+from pydantic import BaseModel
+
+class PurchaseStatusUpdate(BaseModel):
+    status: str
 
 router = APIRouter(prefix="/purchases", tags=["Purchases"])
 
@@ -526,10 +530,11 @@ def get_purchase(
 @router.patch("/{pur_id}/status")
 def update_purchase_status(
     pur_id: str,
-    status: str,
+    body: PurchaseStatusUpdate,       # ← reads from JSON body now
     current_user: dict = Depends(verify_token),
     db: Session = Depends(get_db)
 ):
+    status = body.status              # ← add this line at the top of the function
     allowed = ["pending", "paid", "partial"]
     if status not in allowed:
         return error_response(f"Status must be one of: {allowed}", 400)

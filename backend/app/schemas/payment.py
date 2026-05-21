@@ -20,7 +20,7 @@ class PaymentCreate(BaseModel):
     @field_validator("payment_method")
     @classmethod
     def valid_payment_method(cls, v):
-        allowed = ["cash", "card", "upi", "bank_transfer", "cheque", "other", "split", "adjustment"]
+        allowed = ["cash", "upi", "card", "bank", "split", "adjustment"]
         if v is not None and v not in allowed:
             raise ValueError(f"Payment method must be one of: {allowed}")
         return v

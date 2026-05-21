@@ -5,7 +5,7 @@ from app.utils.response import success_response, error_response
 from app.routers import (
     business, category, customer, supplier,
     product, sale, payment, purchase,
-    stock, expense, sales_return, purchase_return
+    stock, expense, sales_return, purchase_return, profiles
 )
 import os
 
@@ -18,7 +18,7 @@ app = FastAPI(
 # FIX: CORS origins now read from environment variable instead of hardcoded localhost only.
 # Set ALLOWED_ORIGINS in .env as a comma-separated list:
 # ALLOWED_ORIGINS=https://app.smartbillr.com,http://localhost:3000
-_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
 ALLOWED_ORIGINS = [origin.strip() for origin in _raw_origins.split(",")]
 
 app.add_middleware(
@@ -41,6 +41,7 @@ app.include_router(stock.router)
 app.include_router(expense.router)
 app.include_router(sales_return.router)
 app.include_router(purchase_return.router)
+app.include_router(profiles.router)
 
 @app.get("/")
 def root():

@@ -1,26 +1,51 @@
 import { create } from 'zustand'
 
-const useAuthStore = create((set) => ({
-  // STATE — what we store
-  token: localStorage.getItem('token') || null,
-  user: JSON.parse(localStorage.getItem('user') || 'null'),
-  business_id: localStorage.getItem('business_id') || null,
-  isAuthenticated: !!localStorage.getItem('token'),
+// ─── Helper: safely parse JSON from localStorage ─────────
+function load(key) {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
 
-  // ACTION — called after successful login
-  setAuth: (token, user, business_id) => {
+// ─── Zustand Auth Store ──────────────────────────────────
+// ALL three pieces are persisted in localStorage so they
+// survive page refresh without needing to re-fetch.
+//
+//   token    → JWT string
+//   business → { business_name, ... } from /businesses/me
+//   profile  → { full_name, role, ... } from /profiles/me
+
+const useAuthStore = create((set) => ({
+  token:    localStorage.getItem('token')   || null,
+  user:     load('sb_user')                 || null,
+  business: load('sb_business')            || null,
+  profile:  load('sb_profile')             || null,
+
+  setAuth: (token, user, business) => {
     localStorage.setItem('token', token)
-    localStorage.setItem('user', JSON.stringify(user))
-    localStorage.setItem('business_id', business_id)
-    set({ token, user, business_id, isAuthenticated: true })
+    localStorage.setItem('sb_user', JSON.stringify(user))
+    set({ token, user, business })
   },
 
-  // ACTION — called on logout
+  setBusiness: (business) => {
+    localStorage.setItem('sb_business', JSON.stringify(business))
+    set({ business })
+  },
+
+  setProfile: (profile) => {
+    localStorage.setItem('sb_profile', JSON.stringify(profile))
+    set({ profile })
+  },
+
   clearAuth: () => {
     localStorage.removeItem('token')
-    localStorage.removeItem('user')
-    localStorage.removeItem('business_id')
-    set({ token: null, user: null, business_id: null, isAuthenticated: false })
+    localStorage.removeItem('sb_user')
+    localStorage.removeItem('sb_business')
+    localStorage.removeItem('sb_profile')
+    set({ token: null, user: null, business: null, profile: null })
   },
 }))
 

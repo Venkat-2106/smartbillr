@@ -1,10 +1,22 @@
+// src/app/router.jsx
+//
+// CHANGES FROM EXISTING:
+//   1. Added /unauthorized route (public — anyone can land here)
+//   2. Sensitive routes now wrapped in ProtectedRoute with permission prop
+//      instead of all routes sharing one global ProtectedRoute
+//   3. ComingSoon component and all other routes unchanged
+//   4. Added /staff route (was missing)
+
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import DashboardLayout from './layouts/DashboardLayout'
 import LoginPage from '../features/auth/pages/LoginPage'
+import ResetPasswordPage from '../features/auth/pages/ResetPasswordPage'
+import UnauthorizedPage from '../features/auth/pages/UnauthorizedPage'
 import ProtectedRoute from '../features/auth/components/ProtectedRoute'
+import DashboardPage from '../features/dashboard/pages/DashboardPage'
 
-// ─── Premium "Coming Soon" placeholder ───────────────────
-// Used for pages not yet built. Looks like a real page — not a dev stub.
+// ─── Premium "Coming Soon" placeholder ───────────────────────────────────────
+// Unchanged from existing — kept exactly as-is
 function ComingSoon({ name }) {
   return (
     <div style={{ animation: 'fadeUp 0.22s cubic-bezier(0.22,1,0.36,1) both' }}>
@@ -15,7 +27,6 @@ function ComingSoon({ name }) {
         }
       `}</style>
 
-      {/* Page header */}
       <div style={{ marginBottom: 32 }}>
         <h1 style={{
           fontSize: 28, fontWeight: 800, color: '#0F172A',
@@ -28,7 +39,6 @@ function ComingSoon({ name }) {
         </p>
       </div>
 
-      {/* Main card */}
       <div style={{
         background: '#FFFFFF',
         border: '1px solid #E2E8F0',
@@ -36,8 +46,6 @@ function ComingSoon({ name }) {
         boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.05)',
         overflow: 'hidden',
       }}>
-
-        {/* Fake toolbar */}
         <div style={{
           padding: '16px 24px',
           borderBottom: '1px solid #F1F5F9',
@@ -46,14 +54,12 @@ function ComingSoon({ name }) {
           justifyContent: 'space-between',
           gap: 12,
         }}>
-          {/* Search skeleton */}
           <div style={{
             height: 36, width: 240,
             background: '#F8FAFC',
             border: '1px solid #E2E8F0',
             borderRadius: 9,
           }} />
-          {/* Button skeleton */}
           <div style={{
             height: 36, width: 120,
             background: 'linear-gradient(135deg, #4F46E5, #6366F1)',
@@ -62,7 +68,6 @@ function ComingSoon({ name }) {
           }} />
         </div>
 
-        {/* Empty state */}
         <div style={{
           padding: '80px 32px',
           textAlign: 'center',
@@ -71,7 +76,6 @@ function ComingSoon({ name }) {
           alignItems: 'center',
           gap: 16,
         }}>
-          {/* Icon circle */}
           <div style={{
             width: 72, height: 72,
             borderRadius: '50%',
@@ -99,7 +103,6 @@ function ComingSoon({ name }) {
             </p>
           </div>
 
-          {/* Step badge */}
           <div style={{
             marginTop: 8,
             display: 'inline-flex',
@@ -121,15 +124,18 @@ function ComingSoon({ name }) {
   )
 }
 
+// ─── Router ───────────────────────────────────────────────────────────────────
 export default function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
 
-        {/* Public route */}
-        <Route path="/login" element={<LoginPage />} />
+        {/* Public routes — no auth needed */}
+        <Route path="/login"          element={<LoginPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/unauthorized"   element={<UnauthorizedPage />} />
 
-        {/* Protected routes — all wrapped in DashboardLayout */}
+        {/* Protected routes — all inside DashboardLayout */}
         <Route
           path="/"
           element={
@@ -139,21 +145,86 @@ export default function AppRouter() {
           }
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard"        element={<ComingSoon name="Dashboard" />} />
-          <Route path="sales"            element={<ComingSoon name="Sales" />} />
-          <Route path="sales/new"        element={<ComingSoon name="Create Sale" />} />
-          <Route path="purchases"        element={<ComingSoon name="Purchases" />} />
-          <Route path="payments"         element={<ComingSoon name="Payments" />} />
-          <Route path="customers"        element={<ComingSoon name="Customers" />} />
-          <Route path="suppliers"        element={<ComingSoon name="Suppliers" />} />
-          <Route path="products"         element={<ComingSoon name="Products" />} />
-          <Route path="categories"       element={<ComingSoon name="Categories" />} />
-          <Route path="stock"            element={<ComingSoon name="Stock" />} />
-          <Route path="expenses"         element={<ComingSoon name="Expenses" />} />
-          <Route path="sales-returns"    element={<ComingSoon name="Sales Returns" />} />
-          <Route path="purchase-returns" element={<ComingSoon name="Purchase Returns" />} />
-          <Route path="reports"          element={<ComingSoon name="Reports" />} />
-          <Route path="settings"         element={<ComingSoon name="Settings" />} />
+
+          {/* ── All roles ──────────────────────────────────────────────── */}
+          <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="sales"     element={<ComingSoon name="Sales" />} />
+          <Route path="sales/new" element={<ComingSoon name="Create Sale" />} />
+          <Route path="payments"  element={<ComingSoon name="Payments" />} />
+          <Route path="customers" element={<ComingSoon name="Customers" />} />
+          <Route path="products"  element={<ComingSoon name="Products" />} />
+          <Route path="stock"     element={<ComingSoon name="Stock" />} />
+
+          {/* Sales returns — all roles (staff can only see their own, enforced backend) */}
+          <Route path="sales-returns" element={<ComingSoon name="Sales Returns" />} />
+
+          {/* ── Manager + Admin ────────────────────────────────────────── */}
+          <Route
+            path="purchases"
+            element={
+              <ProtectedRoute permission="purchases.view">
+                <ComingSoon name="Purchases" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="suppliers"
+            element={
+              <ProtectedRoute permission="suppliers.manage">
+                <ComingSoon name="Suppliers" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="categories"
+            element={
+              <ProtectedRoute permission="products.edit">
+                <ComingSoon name="Categories" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="expenses"
+            element={
+              <ProtectedRoute permission="expenses.manage">
+                <ComingSoon name="Expenses" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="purchase-returns"
+            element={
+              <ProtectedRoute permission="purchase_returns.manage">
+                <ComingSoon name="Purchase Returns" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="reports"
+            element={
+              <ProtectedRoute permission="reports.view">
+                <ComingSoon name="Reports" />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ── Admin only ─────────────────────────────────────────────── */}
+          <Route
+            path="settings"
+            element={
+              <ProtectedRoute permission="settings.manage">
+                <ComingSoon name="Settings" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="staff"
+            element={
+              <ProtectedRoute permission="staff.manage">
+                <ComingSoon name="Staff" />
+              </ProtectedRoute>
+            }
+          />
         </Route>
 
         {/* Catch-all */}

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import get_db
-from app.middleware.auth import verify_token
+from app.middleware.rbac import require_permission
 from app.utils.response import success_response, error_response
 from app.schemas.business import BusinessCreate, BusinessUpdate, BusinessResponse
 from app.models.business import Business
@@ -16,7 +16,7 @@ router = APIRouter(
 # ─── GET MY BUSINESS ───────────────────────────────────────────
 @router.get("/me")
 def get_my_business(
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("dashboard.view")),
     db: Session = Depends(get_db)
 ):
     business = db.query(Business).filter(
@@ -34,7 +34,7 @@ def get_my_business(
 @router.put("/me")
 def update_my_business(
     payload: BusinessUpdate,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("settings.manage")),
     db: Session = Depends(get_db)
 ):
     business = db.query(Business).filter(
@@ -59,7 +59,7 @@ def update_my_business(
 # ─── GET ALL STAFF OF MY BUSINESS ──────────────────────────────
 @router.get("/staff")
 def get_staff(
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("settings.manage")),
     db: Session = Depends(get_db)
 ):
     result = db.execute(

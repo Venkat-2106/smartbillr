@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
-from app.middleware.auth import verify_token
+from app.middleware.rbac import require_permission
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryResponse
@@ -23,7 +23,7 @@ router = APIRouter(
 @router.post("/")
 def create_category(
     payload: CategoryCreate,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("products.edit")),
     db: Session = Depends(get_db)
 ):
     # Block duplicate category names within the same business (case-insensitive)
@@ -54,7 +54,7 @@ def create_category(
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
 def get_categories(
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("products.view")),
     pagination: dict = Depends(paginate),
     db: Session = Depends(get_db)
 ):
@@ -88,7 +88,7 @@ def get_categories(
 @router.get("/{category_id}")
 def get_category(
     category_id:  str,
-    current_user: dict    = Depends(verify_token),
+    current_user: dict = Depends(require_permission("products.view")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -170,7 +170,7 @@ def get_category(
 def update_category(
     category_id: str,
     payload: CategoryUpdate,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("products.edit")),
     db: Session = Depends(get_db)
 ):
     category = db.query(Category).filter(
@@ -227,7 +227,7 @@ def update_category(
 @router.delete("/{category_id}")
 def delete_category(
     category_id: str,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("products.edit")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]

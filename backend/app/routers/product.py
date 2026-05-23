@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
-from app.middleware.auth import verify_token
+from app.middleware.rbac import require_permission
 from app.models.product import Product
 from app.models.category import Category
 from app.schemas.product import ProductCreate, ProductUpdate
@@ -58,7 +58,7 @@ def row_to_dict(row):
 @router.post("/")
 def create_product(
     data: ProductCreate,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("products.edit")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -107,7 +107,7 @@ def create_product(
 # ─────────────────────────────────────────
 @router.get("/")
 def get_all_products(
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("products.view")),
     db: Session = Depends(get_db),
     pagination: dict = Depends(paginate)
 ):
@@ -179,7 +179,7 @@ def get_all_products(
 @router.get("/{prod_id}")
 def get_product(
     prod_id: str,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("products.view")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -412,7 +412,7 @@ def get_product(
 def update_product(
     prod_id: str,
     data: ProductUpdate,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("products.edit")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -463,7 +463,7 @@ def update_product(
 @router.delete("/{prod_id}")
 def delete_product(
     prod_id: str,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("products.edit")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]

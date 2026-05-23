@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
-from app.middleware.auth import verify_token
+from app.middleware.rbac import require_permission
 from app.models.customer import Customer
 from app.schemas.customer import CustomerCreate, CustomerUpdate
 from app.utils.response import success_response, error_response
@@ -39,7 +39,7 @@ def customer_to_dict(c) -> dict:
 @router.post("/")
 def create_customer(
     data:         CustomerCreate,
-    current_user: dict    = Depends(verify_token),
+    current_user: dict = Depends(require_permission("customers.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -84,7 +84,7 @@ def create_customer(
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
 def get_all_customers(
-    current_user: dict          = Depends(verify_token),
+    current_user: dict = Depends(require_permission("customers.manage")),
     db:           Session       = Depends(get_db),
     pagination:   dict          = Depends(paginate),
     phone:        Optional[str] = Query(default=None, description="Search customer by phone number")
@@ -125,7 +125,7 @@ def get_all_customers(
 @router.get("/search/phone")
 def search_customer_by_phone(
     phone:        str,
-    current_user: dict    = Depends(verify_token),
+    current_user: dict = Depends(require_permission("customers.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -153,7 +153,7 @@ def search_customer_by_phone(
 @router.get("/{cust_id}")
 def get_customer(
     cust_id:      str,
-    current_user: dict    = Depends(verify_token),
+    current_user: dict = Depends(require_permission("customers.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -315,7 +315,7 @@ def get_customer(
 def update_customer(
     cust_id:      str,
     data:         CustomerUpdate,
-    current_user: dict    = Depends(verify_token),
+    current_user: dict = Depends(require_permission("customers.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -362,7 +362,7 @@ def update_customer(
 @router.delete("/{cust_id}")
 def delete_customer(
     cust_id:      str,
-    current_user: dict    = Depends(verify_token),
+    current_user: dict = Depends(require_permission("customers.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]

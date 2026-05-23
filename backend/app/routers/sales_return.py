@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
-from app.middleware.auth import verify_token
+from app.middleware.rbac import require_permission
 from app.models.sales_return import SalesReturn
 from app.models.sale import Sale
 from app.schemas.sales_return import SalesReturnCreate, SalesReturnUpdate
@@ -133,7 +133,7 @@ def validate_return_items(db: Session, sale_id: str, items, exclude_return_id: s
 @router.post("/")
 def create_sales_return(
     data: SalesReturnCreate,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("sales_returns.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -266,7 +266,7 @@ def create_sales_return(
 # ─────────────────────────────────────────
 @router.get("/")
 def get_all_sales_returns(
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("sales_returns.manage")),
     db: Session = Depends(get_db),
     pagination: dict = Depends(paginate)
 ):
@@ -297,7 +297,7 @@ def get_all_sales_returns(
 @router.get("/{return_id}")
 def get_sales_return(
     return_id: str,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("sales_returns.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -324,7 +324,7 @@ def get_sales_return(
 def update_sales_return(
     return_id: str,
     data: SalesReturnUpdate,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("sales_returns.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -404,7 +404,7 @@ def update_sales_return(
 @router.delete("/{return_id}")
 def delete_sales_return(
     return_id: str,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("sales_returns.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]

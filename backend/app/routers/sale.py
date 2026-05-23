@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from decimal import Decimal
 from app.database import get_db
-from app.middleware.auth import verify_token
+from app.middleware.rbac import require_permission, get_current_user_with_permissions
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
 from app.models.product import Product
@@ -62,11 +62,11 @@ def generate_invoice_number(db: Session, business_id: str) -> str:
 @router.post("/")
 def create_sale(
     data: SaleCreate,
-    user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("sales.create")),
     db: Session = Depends(get_db)
 ):
-    business_id = user["business_id"]
-    user_id     = user["user_id"]
+    business_id = current_user["business_id"]
+    user_id     = current_user["user_id"]
 
     try:
         # ── Step 1 — Validate products and check stock ──────────────────────
@@ -258,11 +258,11 @@ def create_sale(
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
 def get_sales(
-    user       = Depends(verify_token),
+    current_user: dict = Depends(require_permission("sales.view")),
     db: Session = Depends(get_db),
     pagination: dict = Depends(paginate)
 ):
-    business_id = user["business_id"]
+    business_id = current_user["business_id"]
 
     total = db.query(func.count(Sale.sales_id)).filter(
         Sale.business_id == business_id,
@@ -333,7 +333,7 @@ def get_sales(
 @router.get("/{sales_id}")
 def get_sale(
     sales_id: str,
-    user = Depends(verify_token),
+    current_user: dict = Depends(require_permission("sales.view")),
     db: Session = Depends(get_db)
 ):
     sale = db.execute(
@@ -348,7 +348,7 @@ def get_sale(
               AND business_id  = CAST(:bid AS uuid)
               AND is_deleted   = false
         """),
-        {"sid": sales_id, "bid": user["business_id"]}
+        {"sid": sales_id, "bid": current_user["business_id"]}
     ).fetchone()
 
     if not sale:
@@ -438,7 +438,7 @@ def get_sale(
 def update_payment_status(
     sales_id: str,
     body: SaleStatusUpdate,
-    user = Depends(verify_token),
+    current_user: dict = Depends(require_permission("sales.edit")),
     db: Session = Depends(get_db)
 ):
     allowed = ["pending", "paid", "partial"]
@@ -449,7 +449,7 @@ def update_payment_status(
 
     sale = db.query(Sale).filter(
         Sale.sales_id    == sales_id,
-        Sale.business_id == user["business_id"],
+        Sale.business_id == current_user["business_id"],
         Sale.is_deleted  == False
     ).first()
 
@@ -490,7 +490,7 @@ def update_payment_status(
             # (write-off, rounding, etc.)
             record_payment_and_sync(
                 db              = db,
-                business_id     = user["business_id"],
+                business_id     = current_user["business_id"],
                 sale_id         = sales_id,
                 sale_final      = sale_final,
                 payment_amount  = remaining,
@@ -552,12 +552,12 @@ def update_payment_status(
 @router.delete("/{sales_id}")
 def delete_sale(
     sales_id: str,
-    user = Depends(verify_token),
+    current_user : dict = Depends(require_permission("sales.delete")),
     db: Session = Depends(get_db)
 ):
     sale = db.query(Sale).filter(
         Sale.sales_id    == sales_id,
-        Sale.business_id == user["business_id"],
+        Sale.business_id == current_user["business_id"],
         Sale.is_deleted  == False
     ).first()
 

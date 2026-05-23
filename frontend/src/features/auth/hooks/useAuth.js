@@ -1,50 +1,53 @@
+// src/features/auth/hooks/useAuth.js
+//
+// CHANGES FROM EXISTING:
+//   - useLogin: after /profiles/me response, call setPermissions(profile.permissions)
+//     to explicitly store permissions in the store
+//   - Added response shape guard: /profiles/me returns { success, data: { ... } }
+//   - Everything else (useForgotPassword, useResetPassword, useLogout) unchanged
+
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { loginWithEmail } from '../api/authApi'
 import useAuthStore from '../../../store/authStore'
 import api from '../../../api/axios'
+import supabase from '../../../lib/supabaseClient'
 
+// ─── useLogin ─────────────────────────────────────────────────────────────────
 export function useLogin() {
   const [isLoading, setIsLoading] = useState(false)
-  const { setAuth, setBusiness, setProfile } = useAuthStore()
+  const { setAuth, setBusiness, setProfile, setPermissions } = useAuthStore()
   const navigate = useNavigate()
 
   async function login(email, password) {
     setIsLoading(true)
     try {
-
-      // ── Step 1: Get JWT from Supabase ──────────────────
-      // Supabase returns: { access_token, user: { id, email } }
       const supabaseData = await loginWithEmail(email, password)
       const token = supabaseData.access_token
       const user  = supabaseData.user
 
-      // ── Step 2: Store token so axios interceptor can attach it ──
       localStorage.setItem('token', token)
-      setAuth(token, user, null)
+      setAuth(token, user)
 
-      // ── Step 3: Fetch business name from FastAPI ───────
-      // GET /businesses/me → { business_name, country_code, ... }
-      
+      // Fetch business
       try {
         const bizRes = await api.get('/businesses/me')
-        if (bizRes.data?.business_name) {
-          setBusiness(bizRes.data)
-        }
+        const biz = bizRes.data?.data || bizRes.data
+        if (biz) setBusiness(biz)
       } catch (bizErr) {
         console.warn('Could not load business profile:', bizErr.message)
       }
 
-      // ── Step 4: Fetch real profile name from FastAPI ───
-      // GET /profiles/me → { full_name, role, ... }
-      // This gives us the real name from the profiles table
-      // instead of falling back to the email address
-
+      // Fetch profile + permissions
       try {
         const profileRes = await api.get('/profiles/me')
-        if (profileRes.data?.full_name) {
-          setProfile(profileRes.data)
+        // Backend returns { success: true, data: { full_name, role, permissions, ... } }
+        const profile = profileRes.data?.data || profileRes.data
+        if (profile) {
+          setProfile(profile)
+          // Explicitly store permissions so they are always in sync
+          setPermissions(profile.permissions ?? [])
         }
       } catch (profileErr) {
         console.warn('Could not load user profile:', profileErr.message)
@@ -55,11 +58,14 @@ export function useLogin() {
 
     } catch (err) {
       localStorage.removeItem('token')
+
       const message =
         err.response?.data?.error_description ||
         err.response?.data?.message           ||
+        err.response?.data?.msg               ||
         err.message                           ||
         'Login failed. Check your email and password.'
+
       toast.error(message)
     } finally {
       setIsLoading(false)
@@ -69,6 +75,8 @@ export function useLogin() {
   return { login, isLoading }
 }
 
+// ─── useLogout ────────────────────────────────────────────────────────────────
+// Unchanged from existing — clearAuth() already clears permissions
 export function useLogout() {
   const clearAuth = useAuthStore((state) => state.clearAuth)
   const navigate  = useNavigate()
@@ -80,4 +88,75 @@ export function useLogout() {
   }
 
   return { logout }
+}
+
+// ─── useForgotPassword ────────────────────────────────────────────────────────
+// Unchanged from existing
+export function useForgotPassword() {
+  const [isLoading, setIsLoading] = useState(false)
+
+  async function sendResetEmail(email) {
+    if (!email || !/\S+@\S+\.\S+/.test(email)) {
+      toast.error('Enter your email address first, then click Forgot password')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      try {
+        await api.get('/profiles/check-email', { params: { email } })
+      } catch (checkErr) {
+        if (checkErr.response?.status === 404) {
+          toast.error('This email is not registered with SmartBillr')
+          return
+        }
+        toast.error('Could not verify email. Make sure the backend is running.')
+        return
+      }
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+
+      if (error) throw error
+
+      toast.success('Password reset link sent — check your inbox')
+
+    } catch (err) {
+      toast.error(err.message || 'Could not send reset email. Try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return { sendResetEmail, isLoading }
+}
+
+// ─── useResetPassword ─────────────────────────────────────────────────────────
+// Unchanged from existing
+export function useResetPassword() {
+  const [isLoading, setIsLoading] = useState(false)
+  const navigate = useNavigate()
+
+  async function resetPassword(newPassword) {
+    if (!newPassword || newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) throw error
+
+      toast.success('Password updated — please sign in')
+      navigate('/login')
+    } catch (err) {
+      toast.error(err.message || 'Could not update password. The link may have expired.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return { resetPassword, isLoading }
 }

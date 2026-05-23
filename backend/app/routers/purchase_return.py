@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
-from app.middleware.auth import verify_token
+from app.middleware.rbac import require_permission
 from app.models.purchase_return import PurchaseReturn
 from app.schemas.purchase_return import PurchaseReturnCreate, PurchaseReturnUpdate
 from app.utils.response import success_response, error_response
@@ -155,7 +155,7 @@ def validate_return_items(
 @router.post("/")
 def create_purchase_return(
     data: PurchaseReturnCreate,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("purchase_returns.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -351,7 +351,7 @@ def create_purchase_return(
 # ─────────────────────────────────────────────
 @router.get("/")
 def get_all_purchase_returns(
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("purchase_returns.manage")),
     db: Session = Depends(get_db),
     pagination: dict = Depends(paginate)
 ):
@@ -382,7 +382,7 @@ def get_all_purchase_returns(
 @router.get("/{return_id}")
 def get_purchase_return(
     return_id: str,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("purchase_returns.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -408,7 +408,7 @@ def get_purchase_return(
 def update_purchase_return(
     return_id: str,
     data: PurchaseReturnUpdate,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("purchase_returns.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -589,7 +589,7 @@ def update_purchase_return(
 @router.delete("/{return_id}")
 def delete_purchase_return(
     return_id: str,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("purchase_returns.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]

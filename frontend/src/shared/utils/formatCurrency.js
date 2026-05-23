@@ -14,9 +14,11 @@ export function formatCurrency(amount, countryCode = 'IN') {
     IN: { locale: 'en-IN', currency: 'INR' },
     US: { locale: 'en-US', currency: 'USD' },
     GB: { locale: 'en-GB', currency: 'GBP' },
-    AE: { locale: 'ar-AE', currency: 'AED' },
-    SG: { locale: 'en-SG', currency: 'SGD' },
     AU: { locale: 'en-AU', currency: 'AUD' },
+    CA: { locale: 'en-CA', currency: 'CAD' },
+    SG: { locale: 'en-SG', currency: 'SGD' },
+    AE: { locale: 'ar-AE', currency: 'AED' },
+    EU: { locale: 'de-DE', currency: 'EUR' },
   }
 
   const { locale, currency } = currencyMap[countryCode] || currencyMap['IN']

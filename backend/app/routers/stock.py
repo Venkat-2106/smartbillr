@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
-from app.middleware.auth import verify_token
+from app.middleware.rbac import require_permission
 from app.models.stock import StockMovement, LowStockAlert
 from app.models.product import Product
 from app.schemas.stock import StockAdjustment
@@ -55,7 +55,7 @@ def alert_to_dict(a):
 # ─────────────────────────────────────────
 @router.get("/movements")
 def get_all_movements(
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("stock.view")),
     db: Session = Depends(get_db),
     pagination: dict = Depends(paginate)
 ):
@@ -86,7 +86,7 @@ def get_all_movements(
 @router.get("/movements/{move_id}")
 def get_movement(
     move_id: str,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("stock.view")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -107,7 +107,7 @@ def get_movement(
 # ─────────────────────────────────────────
 @router.get("/current")
 def get_current_stock(
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("stock.view")),
     db: Session = Depends(get_db),
     pagination: dict = Depends(paginate)
 ):
@@ -162,7 +162,7 @@ def get_current_stock(
 @router.post("/adjust")
 def adjust_stock(
     data: StockAdjustment,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("stock.adjust")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -283,7 +283,7 @@ def adjust_stock(
 # ─────────────────────────────────────────
 @router.get("/alerts")
 def get_low_stock_alerts(
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("stock.view")),
     db: Session = Depends(get_db),
     pagination: dict = Depends(paginate)
 ):
@@ -314,7 +314,7 @@ def get_low_stock_alerts(
 @router.put("/alerts/{alert_id}/read")
 def mark_alert_read(
     alert_id: str,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("stock.view")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]

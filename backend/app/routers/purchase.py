@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
-from app.middleware.auth import verify_token
+from app.middleware.rbac import require_permission
 from app.models.purchase import Purchase
 from app.models.product import Product
 from app.models.supplier import Supplier
@@ -145,7 +145,7 @@ def purchase_item_to_dict(row):
 @router.post("/")
 def create_purchase(
     data: PurchaseCreate,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("purchases.create")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -352,7 +352,7 @@ def create_purchase(
 # ─────────────────────────────────────────
 @router.get("/")
 def get_all_purchases(
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("purchases.view")),
     db: Session = Depends(get_db),
     pagination: dict = Depends(paginate)
 ):
@@ -400,7 +400,7 @@ def get_all_purchases(
 @router.get("/{pur_id}")
 def get_purchase(
     pur_id: str,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("purchases.view")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -531,7 +531,7 @@ def get_purchase(
 def update_purchase_status(
     pur_id: str,
     body: PurchaseStatusUpdate,       # ← reads from JSON body now
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("purchases.edit")),
     db: Session = Depends(get_db)
 ):
     status = body.status              # ← add this line at the top of the function
@@ -631,7 +631,7 @@ def update_purchase_status(
 @router.delete("/{pur_id}")
 def delete_purchase(
     pur_id: str,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("purchases.delete")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]

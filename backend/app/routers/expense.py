@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.database import get_db
-from app.middleware.auth import verify_token
+from app.middleware.rbac import require_permission
 from app.models.expense import Expense
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate
 from app.utils.response import success_response, error_response
@@ -34,7 +34,7 @@ def expense_to_dict(e):
 @router.post("/")
 def create_expense(
     data: ExpenseCreate,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("expenses.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -64,7 +64,7 @@ def create_expense(
 # ─────────────────────────────────────────
 @router.get("/")
 def get_all_expenses(
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("expenses.manage")),
     db: Session = Depends(get_db),
     pagination: dict = Depends(paginate)
 ):
@@ -97,7 +97,7 @@ def get_all_expenses(
 @router.get("/{expense_id}")
 def get_expense(
     expense_id: str,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("expenses.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -121,7 +121,7 @@ def get_expense(
 def update_expense(
     expense_id: str,
     data: ExpenseUpdate,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("expenses.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -160,7 +160,7 @@ def update_expense(
 @router.delete("/{expense_id}")
 def delete_expense(
     expense_id: str,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(require_permission("expenses.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]

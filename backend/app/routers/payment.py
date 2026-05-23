@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
-from app.middleware.auth import verify_token
+from app.middleware.rbac import require_permission
 from app.models.payment import Payment
 from app.models.sale import Sale
 from app.schemas.payment import PaymentCreate
@@ -70,7 +70,7 @@ def payment_to_dict(p) -> dict:
 @router.post("/")
 def create_payment(
     data:         PaymentCreate,
-    current_user: dict    = Depends(verify_token),
+    current_user: dict = Depends(require_permission("payments.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -185,7 +185,7 @@ def create_payment(
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
 def get_all_payments(
-    current_user: dict    = Depends(verify_token),
+    current_user: dict = Depends(require_permission("payments.manage")),
     db:           Session = Depends(get_db),
     pagination:   dict    = Depends(paginate)
 ):
@@ -224,7 +224,7 @@ def get_all_payments(
 @router.get("/sale/{sale_id}")
 def get_payments_by_sale(
     sale_id:      str,
-    current_user: dict    = Depends(verify_token),
+    current_user: dict = Depends(require_permission("payments.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -275,7 +275,7 @@ def get_payments_by_sale(
 @router.get("/{payment_id}")
 def get_payment(
     payment_id:   str,
-    current_user: dict    = Depends(verify_token),
+    current_user: dict = Depends(require_permission("payments.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]

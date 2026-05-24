@@ -14,6 +14,7 @@ import ResetPasswordPage from '../features/auth/pages/ResetPasswordPage'
 import UnauthorizedPage from '../features/auth/pages/UnauthorizedPage'
 import ProtectedRoute from '../features/auth/components/ProtectedRoute'
 import DashboardPage from '../features/dashboard/pages/DashboardPage'
+import CategoriesPage from '../features/categories/pages/CategoriesPage'
 
 // ─── Premium "Coming Soon" placeholder ───────────────────────────────────────
 // Unchanged from existing — kept exactly as-is
@@ -178,8 +179,8 @@ export default function AppRouter() {
           <Route
             path="categories"
             element={
-              <ProtectedRoute permission="products.edit">
-                <ComingSoon name="Categories" />
+              <ProtectedRoute permission="products.view">
+                <CategoriesPage />
               </ProtectedRoute>
             }
           />

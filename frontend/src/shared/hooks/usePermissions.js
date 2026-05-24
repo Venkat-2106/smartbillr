@@ -10,7 +10,7 @@
 //   if (can("sales.create")) { ... }
 //   if (isAdmin) { ... }
 
-import useAuthStore from '@/store/authStore'
+import useAuthStore from "../../store/authStore";
 
 export function usePermissions() {
   const permissions = useAuthStore(s => s.permissions)

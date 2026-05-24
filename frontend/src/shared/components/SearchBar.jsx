@@ -17,7 +17,7 @@
 //   <SearchBar value={q} onChange={setQ} onSearch={val => refetch with val} />
 
 import { useEffect, useRef } from 'react'
-import useDebounce from '../hooks/useDebounce'
+import { useDebounce } from '../hooks/useDebounce'
 
 // Magnifier icon (inline SVG — no heroicons dependency needed here)
 function SearchIcon({ size = 15, color = 'currentColor' }) {

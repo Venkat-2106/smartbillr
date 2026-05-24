@@ -1,29 +1,3 @@
-// src/shared/components/ConfirmDialog.jsx
-//
-// A focused "are you sure?" modal used for destructive actions.
-// Lighter than a full Modal — just icon + title + message + two buttons.
-//
-// Props:
-//   open        → boolean
-//   onClose     → function — called on cancel or backdrop click
-//   onConfirm   → function — called when user clicks the confirm button
-//   title       → heading text (default: "Are you sure?")
-//   message     → body text describing what will happen
-//   confirmText → label for the confirm button (default: "Confirm")
-//   cancelText  → label for the cancel button (default: "Cancel")
-//   variant     → 'danger' | 'warning' (default: 'danger') — controls confirm button color
-//   loading     → shows spinner on confirm button while async action runs
-//
-// Usage:
-//   <ConfirmDialog
-//     open={showDelete}
-//     onClose={() => setShowDelete(false)}
-//     onConfirm={handleDelete}
-//     title="Delete category?"
-//     message="This will deactivate the category and all linked products."
-//     confirmText="Yes, delete"
-//     loading={isDeleting}
-//   />
 
 import { useEffect, useCallback } from 'react'
 import Button from './Button'
@@ -101,8 +75,8 @@ export default function ConfirmDialog({
             borderRadius: 18,
             boxShadow: 'var(--shadow-elevated, 0 20px 60px rgba(0,0,0,0.18))',
             width: '100%',
-            maxWidth: 400,
-            padding: '28px 24px 24px',
+            maxWidth: 420,
+            padding: '28px 28px 24px',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -110,6 +84,7 @@ export default function ConfirmDialog({
             gap: 12,
             animation: 'confirm-in 0.2s cubic-bezier(0.34,1.26,0.64,1)',
             pointerEvents: 'auto',
+            boxSizing: 'border-box',
           }}
         >
           {/* Icon */}
@@ -122,6 +97,7 @@ export default function ConfirmDialog({
             justifyContent: 'center',
             fontSize: 22,
             marginBottom: 4,
+            flexShrink: 0,
             boxShadow: variant === 'danger'
               ? '0 4px 14px rgba(239,68,68,0.3)'
               : '0 4px 14px rgba(245,158,11,0.3)',
@@ -137,6 +113,7 @@ export default function ConfirmDialog({
             color: 'var(--text-primary)',
             letterSpacing: '-0.3px',
             fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
+            wordBreak: 'break-word',
           }}>
             {title}
           </h3>
@@ -149,7 +126,6 @@ export default function ConfirmDialog({
               color: 'var(--text-muted)',
               fontWeight: 400,
               lineHeight: 1.55,
-              maxWidth: 300,
               fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
             }}>
               {message}
@@ -162,24 +138,26 @@ export default function ConfirmDialog({
             gap: 10,
             marginTop: 8,
             width: '100%',
+            boxSizing: 'border-box',
           }}>
             <Button
               variant="secondary"
-              fullWidth
               onClick={onClose}
               disabled={loading}
+              style={{ flex: 1, minWidth: 0 }}
             >
               {cancelText}
             </Button>
             <Button
               variant={variant === 'warning' ? 'primary' : 'danger'}
-              fullWidth
               onClick={onConfirm}
               loading={loading}
+              style={{ flex: 1, minWidth: 0 }}
             >
               {confirmText}
             </Button>
           </div>
+
         </div>
       </div>
     </>

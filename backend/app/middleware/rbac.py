@@ -28,41 +28,27 @@
 #   - Every endpoint is self-documenting about what access it requires
 #   - One place to audit all authorization logic
 #   - Future: custom roles per business, time-limited permissions, etc.
+#
+# ─── WHY load_permissions() WAS REMOVED ─────────────────────────────────────
+#
+#   verify_token() in auth.py already loads the full permissions set using
+#   STRING_AGG in a single query, and stores it in the returned dict under
+#   the key "permissions".
+#
+#   The old fallback pattern:
+#       user_permissions = current_user.get("permissions")
+#       if user_permissions is None:
+#           user_permissions = load_permissions(...)    ← second DB query
+#
+#   Was dead code. current_user["permissions"] is ALWAYS populated by
+#   verify_token. The fallback fired a redundant DB query on a path that
+#   was never actually reached, and load_permissions used INNER JOINs
+#   (vs LEFT JOINs in verify_token) so it was also inconsistent.
+#
+#   Removing it makes the auth flow simpler and strictly faster.
 
 from fastapi import HTTPException, Depends
-from sqlalchemy.orm import Session
-from sqlalchemy import text
-from app.database import get_db
 from app.middleware.auth import verify_token
-from typing import Set
-
-
-def load_permissions(user_id: str, db: Session) -> Set[str]:
-    """
-    Load all permission codes for a given user from the DB.
-
-    Query path:
-        profiles.id → profiles.role_id → role_permissions → permissions.code
-
-    Returns a set of permission code strings, e.g.:
-        {"sales.view", "sales.create", "dashboard.view", ...}
-
-    WHY a set: O(1) lookup — checking "sales.create" in a set of 20 items
-    is instant regardless of how many permissions exist.
-    """
-    rows = db.execute(
-        text("""
-            SELECT perm.code
-            FROM profiles p
-            JOIN role_permissions rp ON rp.role_id = p.role_id
-            JOIN permissions perm   ON perm.id = rp.permission_id
-            WHERE p.id = :user_id
-              AND p.is_active = true
-        """),
-        {"user_id": user_id}
-    ).fetchall()
-
-    return {row.code for row in rows}
 
 
 def require_permission(permission_code: str):
@@ -85,27 +71,20 @@ def require_permission(permission_code: str):
 
     The route can then do additional in-route checks using the permissions set
     without hitting the DB again.
+
+    PERFORMANCE NOTE:
+        verify_token already loaded all permissions in one DB query.
+        This function just reads from that result — zero extra DB queries.
     """
     def dependency(
         current_user: dict = Depends(verify_token),
-        db: Session = Depends(get_db),
     ) -> dict:
-        # verify_token already loaded permissions — use them if available.
-        # This avoids a redundant DB query in most cases.
-        user_permissions = current_user.get("permissions")
-        if user_permissions is None:
-            user_permissions = load_permissions(current_user["user_id"], db)
-
-        if permission_code not in user_permissions:
+        if permission_code not in current_user["permissions"]:
             raise HTTPException(
                 status_code=403,
                 detail=f"Access denied. Required permission: '{permission_code}'"
             )
-
-        return {
-            **current_user,
-            "permissions": user_permissions,
-        }
+        return current_user
 
     return dependency
 
@@ -121,19 +100,13 @@ def require_any_permission(*permission_codes: str):
     """
     def dependency(
         current_user: dict = Depends(verify_token),
-        db: Session = Depends(get_db),
     ) -> dict:
-        user_permissions = current_user.get("permissions")
-        if user_permissions is None:
-            user_permissions = load_permissions(current_user["user_id"], db)
-
-        if not any(code in user_permissions for code in permission_codes):
+        if not any(code in current_user["permissions"] for code in permission_codes):
             raise HTTPException(
                 status_code=403,
                 detail=f"Access denied. Required one of: {list(permission_codes)}"
             )
-
-        return {**current_user, "permissions": user_permissions}
+        return current_user
 
     return dependency
 
@@ -149,27 +122,20 @@ def require_all_permissions(*permission_codes: str):
     """
     def dependency(
         current_user: dict = Depends(verify_token),
-        db: Session = Depends(get_db),
     ) -> dict:
-        user_permissions = current_user.get("permissions")
-        if user_permissions is None:
-            user_permissions = load_permissions(current_user["user_id"], db)
-
-        missing = [code for code in permission_codes if code not in user_permissions]
+        missing = [code for code in permission_codes if code not in current_user["permissions"]]
         if missing:
             raise HTTPException(
                 status_code=403,
                 detail=f"Access denied. Missing permissions: {missing}"
             )
-
-        return {**current_user, "permissions": user_permissions}
+        return current_user
 
     return dependency
 
 
 def get_current_user_with_permissions(
     current_user: dict = Depends(verify_token),
-    db: Session = Depends(get_db),
 ) -> dict:
     """
     Use this when a route needs to check permissions manually inside the
@@ -184,9 +150,9 @@ def get_current_user_with_permissions(
 
     This is the "soft check" pattern — no automatic 403, your code decides
     what to include or exclude based on what the user is allowed to see.
-    """
-    user_permissions = current_user.get("permissions")
-    if user_permissions is None:
-        user_permissions = load_permissions(current_user["user_id"], db)
 
-    return {**current_user, "permissions": user_permissions}
+    PERFORMANCE NOTE:
+        verify_token already loaded all permissions. This is a pass-through.
+        Zero extra DB queries.
+    """
+    return current_user

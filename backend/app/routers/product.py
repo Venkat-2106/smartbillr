@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
@@ -9,21 +9,29 @@ from app.schemas.product import ProductCreate, ProductUpdate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from sqlalchemy.exc import IntegrityError
+from typing import Optional
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
 
 # ── Helper: fetch full product including generated prod_profit ──
+# Also joins categories to get category_name and profiles for last_updated_by
 def get_product_with_profit(db: Session, prod_id):
     row = db.execute(
         text("""
-            SELECT prod_id, business_id, category_id, prod_name,
-                   prod_sell_price, prod_cost_price, prod_profit,
-                   prod_stock_qty, prod_low_stock_alert, tax_rate,
-                   tax_code, barcode, unit, is_deleted,
-                   prod_created_at, updated_at
-            FROM products
-            WHERE prod_id = :prod_id
+            SELECT
+                p.prod_id, p.business_id, p.category_id, p.prod_name,
+                p.prod_sell_price, p.prod_cost_price, p.prod_profit,
+                p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
+                p.tax_code, p.barcode, p.unit, p.is_deleted,
+                p.prod_created_at, p.updated_at,
+                p.updated_by,
+                c.category_name,
+                pr.full_name AS last_updated_by
+            FROM products p
+            LEFT JOIN categories c ON c.category_id = p.category_id
+            LEFT JOIN profiles  pr ON pr.id = p.updated_by
+            WHERE p.prod_id = :prod_id
         """),
         {"prod_id": str(prod_id)}
     ).fetchone()
@@ -33,22 +41,25 @@ def get_product_with_profit(db: Session, prod_id):
 # ── Helper: format product row as dict ───────────────────────────────
 def row_to_dict(row):
     return {
-        "prod_id":            str(row.prod_id),
-        "business_id":        str(row.business_id),
-        "category_id":        str(row.category_id) if row.category_id else None,
-        "prod_name":          row.prod_name,
-        "prod_sell_price":    float(row.prod_sell_price),
-        "prod_cost_price":    float(row.prod_cost_price),
-        "prod_profit":        float(row.prod_profit) if row.prod_profit is not None else None,
-        "prod_stock_qty":     row.prod_stock_qty,
+        "prod_id":              str(row.prod_id),
+        "business_id":          str(row.business_id),
+        "category_id":          str(row.category_id) if row.category_id else None,
+        "category_name":        row.category_name if row.category_name else None,
+        "prod_name":            row.prod_name,
+        "prod_sell_price":      float(row.prod_sell_price),
+        "prod_cost_price":      float(row.prod_cost_price),
+        "prod_profit":          float(row.prod_profit) if row.prod_profit is not None else None,
+        "prod_stock_qty":       row.prod_stock_qty,
         "prod_low_stock_alert": row.prod_low_stock_alert,
-        "tax_rate":           float(row.tax_rate) if row.tax_rate is not None else 0,
-        "tax_code":           row.tax_code,
-        "barcode":            row.barcode,
-        "unit":               row.unit,
-        "is_deleted":         row.is_deleted,
-        "prod_created_at":    str(row.prod_created_at) if row.prod_created_at else None,
-        "updated_at":         str(row.updated_at) if row.updated_at else None
+        "tax_rate":             float(row.tax_rate) if row.tax_rate is not None else 0,
+        "tax_code":             row.tax_code,
+        "barcode":              row.barcode,
+        "unit":                 row.unit,
+        "is_deleted":           row.is_deleted,
+        "prod_created_at":      str(row.prod_created_at) if row.prod_created_at else None,
+        "updated_at":           str(row.updated_at) if row.updated_at else None,
+        "updated_by":           str(row.updated_by) if row.updated_by else None,
+        "last_updated_by":      row.last_updated_by if row.last_updated_by else None,
     }
 
 
@@ -84,7 +95,8 @@ def create_product(
         tax_rate=data.tax_rate,
         tax_code=data.tax_code,
         barcode=data.barcode,
-        unit=data.unit
+        unit=data.unit,
+        # updated_by is NULL on create — only set when the product is later edited
     )
 
     try:
@@ -105,36 +117,58 @@ def create_product(
 # ─────────────────────────────────────────
 # GET /products → Get all products
 # ─────────────────────────────────────────
+# Now joins categories for category_name and profiles for last_updated_by
 @router.get("/")
 def get_all_products(
-    current_user: dict = Depends(require_permission("products.view")),
-    db: Session = Depends(get_db),
-    pagination: dict = Depends(paginate)
+    current_user: dict          = Depends(require_permission("products.view")),
+    db:           Session       = Depends(get_db),
+    pagination:   dict          = Depends(paginate),
+    search:       Optional[str] = Query(default=None, description="Search by name or barcode")
 ):
     business_id = current_user["business_id"]
 
-    total = db.query(func.count(Product.prod_id)).filter(
-        Product.business_id == business_id,
-        Product.is_deleted == False
+    # Server-side search — ILIKE on name and barcode
+    search_sql = ""
+    params = {
+        "business_id": business_id,
+        "offset": pagination["offset"],
+        "limit":  pagination["limit"]
+    }
+    if search and search.strip():
+        search_sql = "AND (p.prod_name ILIKE :search OR p.barcode ILIKE :search)"
+        params["search"] = f"%{search.strip()}%"
+
+    total = db.execute(
+        text(f"""
+            SELECT COUNT(*)
+            FROM products p
+            WHERE p.business_id = CAST(:business_id AS uuid)
+              AND p.is_deleted = false
+              {search_sql}
+        """),
+        params
     ).scalar()
 
     rows = db.execute(
-        text("""
-            SELECT prod_id, business_id, category_id, prod_name,
-                   prod_sell_price, prod_cost_price, prod_profit,
-                   prod_stock_qty, prod_low_stock_alert, tax_rate,
-                   tax_code, barcode, unit, is_deleted,
-                   prod_created_at, updated_at
-            FROM products
-            WHERE business_id = :business_id
-              AND is_deleted = false
+        text(f"""
+            SELECT
+                p.prod_id, p.business_id, p.category_id, p.prod_name,
+                p.prod_sell_price, p.prod_cost_price, p.prod_profit,
+                p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
+                p.tax_code, p.barcode, p.unit, p.is_deleted,
+                p.prod_created_at, p.updated_at, p.updated_by,
+                c.category_name,
+                pr.full_name AS last_updated_by
+            FROM products p
+            LEFT JOIN categories c  ON c.category_id = p.category_id
+            LEFT JOIN profiles  pr  ON pr.id = p.updated_by
+            WHERE p.business_id = CAST(:business_id AS uuid)
+              AND p.is_deleted   = false
+              {search_sql}
+            ORDER BY p.prod_name ASC
             OFFSET :offset LIMIT :limit
         """),
-        {
-            "business_id": business_id,
-            "offset": pagination["offset"],
-            "limit":  pagination["limit"]
-        }
+        params
     ).fetchall()
 
     return success_response(
@@ -149,32 +183,6 @@ def get_all_products(
 
 # ══════════════════════════════════════════════════════════════════
 # GET /products/{prod_id} → Get one product WITH full history
-#
-# Returns two history sections alongside the product details:
-#
-# 1. stock_history → from stock_movements table
-#    Every time this product's stock changed and WHY:
-#    sale, purchase, adjustment, sales_return, purchase_return
-#    Ordered latest first.
-#    Shows: move_type, move_qty (+/-), stock before, stock after,
-#           what caused it (reference_type + reference_id), notes, when
-#
-# 2. price_history → from audit_logs table
-#    Every time prod_sell_price or prod_cost_price changed.
-#    The audit_log trigger stores a full JSONB snapshot of old_data
-#    and new_data on every UPDATE to the products table. We compare
-#    those snapshots to extract only price-related changes.
-#    Ordered latest first.
-#    Shows: what changed (sell price / cost price / both),
-#           old value, new value, who changed it, when
-#
-# WHY two separate sources:
-#   Stock movements → have their own dedicated table with rich context
-#                     (move_type tells you if it was a sale or purchase)
-#   Price changes   → live inside audit_logs as JSON snapshots because
-#                     products table has no price-history table
-#                     The trigger already captures every UPDATE — we
-#                     just filter for rows where price columns changed
 # ══════════════════════════════════════════════════════════════════
 @router.get("/{prod_id}")
 def get_product(
@@ -187,15 +195,21 @@ def get_product(
     # ── Step 1: Fetch core product details ───────────────────────────────────
     row = db.execute(
         text("""
-            SELECT prod_id, business_id, category_id, prod_name,
-                   prod_sell_price, prod_cost_price, prod_profit,
-                   prod_stock_qty, prod_low_stock_alert, tax_rate,
-                   tax_code, barcode, unit, is_deleted,
-                   prod_created_at, updated_at
-            FROM products
-            WHERE prod_id    = CAST(:prod_id AS uuid)
-              AND business_id = CAST(:bid AS uuid)
-              AND is_deleted  = false
+            SELECT
+                p.prod_id, p.business_id, p.category_id, p.prod_name,
+                p.prod_sell_price, p.prod_cost_price, p.prod_profit,
+                p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
+                p.tax_code, p.barcode, p.unit, p.is_deleted,
+                p.prod_created_at, p.updated_at,
+                p.updated_by,
+                c.category_name,
+                pr.full_name AS last_updated_by
+            FROM products p
+            LEFT JOIN categories c  ON c.category_id = p.category_id
+            LEFT JOIN profiles  pr  ON pr.id = p.updated_by
+            WHERE p.prod_id     = CAST(:prod_id AS uuid)
+              AND p.business_id = CAST(:bid AS uuid)
+              AND p.is_deleted  = false
         """),
         {"prod_id": prod_id, "bid": business_id}
     ).fetchone()
@@ -204,18 +218,6 @@ def get_product(
         return error_response("Product not found", status_code=404)
 
     # ── Step 2: Fetch stock movement history ─────────────────────────────────
-    # Every row in stock_movements for this product = one stock event.
-    # move_qty is positive when stock went UP, negative when it went DOWN.
-    # move_type tells you why it changed:
-    #   "sale"             → sold to a customer       (stock DOWN)
-    #   "purchase"         → received from supplier   (stock UP)
-    #   "adjustment"       → manual correction        (UP or DOWN)
-    #   "sales_return"     → customer returned goods  (stock UP)
-    #   "purchase_return"  → returned to supplier     (stock DOWN)
-    #
-    # We also fetch the creator's full_name from profiles by joining.
-    # If move_created_by is NULL (DB trigger row), we show "System".
-    # ─────────────────────────────────────────────────────────────────────────
     stock_rows = db.execute(
         text("""
             SELECT
@@ -242,16 +244,13 @@ def get_product(
 
     stock_history = []
     for s in stock_rows:
-        # Determine the direction label for the frontend to display clearly
         if s.move_qty > 0:
-            direction = "in"    # stock increased
+            direction = "in"
         elif s.move_qty < 0:
-            direction = "out"   # stock decreased
+            direction = "out"
         else:
-            direction = "none"  # no net change (e.g. set to same value)
+            direction = "none"
 
-        # Build a human-readable label for what caused this movement
-        # so the frontend can show "Sold via invoice" instead of "sale"
         type_label_map = {
             "sale":             "Sold to customer",
             "purchase":         "Received from supplier",
@@ -262,41 +261,23 @@ def get_product(
         event_label = type_label_map.get(s.move_type, s.move_type)
 
         stock_history.append({
-            "move_id":              str(s.move_id),
-            "event":                event_label,
-            "move_type":            s.move_type,
-            "direction":            direction,
-            "qty_changed":          abs(s.move_qty),     # always positive for display
-            "stock_before":         s.move_prev_stock,
-            "stock_after":          s.move_new_stock,
-            "reference_type":       s.reference_type,
-            "reference_id":         str(s.reference_id) if s.reference_id else None,
-            "sale_reference_id":    str(s.sale_reference_id) if s.sale_reference_id else None,
+            "move_id":               str(s.move_id),
+            "event":                 event_label,
+            "move_type":             s.move_type,
+            "direction":             direction,
+            "qty_changed":           abs(s.move_qty),
+            "stock_before":          s.move_prev_stock,
+            "stock_after":           s.move_new_stock,
+            "reference_type":        s.reference_type,
+            "reference_id":          str(s.reference_id) if s.reference_id else None,
+            "sale_reference_id":     str(s.sale_reference_id) if s.sale_reference_id else None,
             "purchase_reference_id": str(s.purchase_reference_id) if s.purchase_reference_id else None,
-            "notes":                s.move_notes,
-            "changed_by":           s.changed_by,
-            "changed_at":           str(s.move_created_at) if s.move_created_at else None
+            "notes":                 s.move_notes,
+            "changed_by":            s.changed_by,
+            "changed_at":            str(s.move_created_at) if s.move_created_at else None
         })
 
     # ── Step 3: Fetch price change history from audit_logs ───────────────────
-    # The audit trigger (fn_audit_log) fires on every UPDATE to the products
-    # table and stores a full JSONB snapshot of old_data and new_data.
-    #
-    # We filter audit_logs for:
-    #   table_name  = 'products'        → only product rows
-    #   record_id   = this prod_id      → only this specific product
-    #   action_type = 'update'          → only changes (not inserts/deletes)
-    #
-    # Then in Python we compare old_data vs new_data for the two price fields:
-    #   prod_sell_price  → selling price (what the customer pays)
-    #   prod_cost_price  → cost price (what you paid the supplier)
-    #
-    # WHY filter in Python not SQL:
-    # PostgreSQL can filter JSONB with ->>, but comparing two JSONB fields
-    # from the same row requires a subquery or lateral join which is complex.
-    # Since audit rows per product are small, filtering in Python is clean
-    # and readable — correctness over premature optimisation.
-    # ─────────────────────────────────────────────────────────────────────────
     audit_rows = db.execute(
         text("""
             SELECT
@@ -322,13 +303,11 @@ def get_product(
         old_data = a.old_data or {}
         new_data = a.new_data or {}
 
-        # Extract old and new values for each price field
         old_sell = old_data.get("prod_sell_price")
         new_sell = new_data.get("prod_sell_price")
         old_cost = old_data.get("prod_cost_price")
         new_cost = new_data.get("prod_cost_price")
 
-        # Convert to float safely — JSONB stores numbers as strings sometimes
         def to_float(v):
             try:
                 return float(v) if v is not None else None
@@ -340,15 +319,12 @@ def get_product(
         old_cost = to_float(old_cost)
         new_cost = to_float(new_cost)
 
-        # Only include this audit row if a price actually changed
-        # (audits fire on ALL updates — e.g. stock change, name change too)
         sell_changed = old_sell is not None and new_sell is not None and old_sell != new_sell
         cost_changed = old_cost is not None and new_cost is not None and old_cost != new_cost
 
         if not sell_changed and not cost_changed:
-            continue  # skip this audit row — no price change happened
+            continue
 
-        # Build a list of what specifically changed in this audit event
         changes = []
         if sell_changed:
             changes.append({
@@ -375,9 +351,6 @@ def get_product(
         })
 
     # ── Step 4: Build summary stats ──────────────────────────────────────────
-    # Quick stats derived from the history so the frontend doesn't have to
-    # calculate these itself from the raw arrays.
-    # ─────────────────────────────────────────────────────────────────────────
     total_sold     = sum(abs(s["qty_changed"]) for s in stock_history if s["move_type"] == "sale")
     total_received = sum(s["qty_changed"] for s in stock_history if s["move_type"] == "purchase")
     total_returned = sum(s["qty_changed"] for s in stock_history if s["move_type"] == "sales_return")
@@ -385,10 +358,8 @@ def get_product(
 
     # ── Step 5: Compose final response ──────────────────────────────────────
     return success_response({
-        # Core product details (unchanged from before)
         **row_to_dict(row),
 
-        # History summary — quick numbers at a glance
         "history_summary": {
             "total_units_sold":     total_sold,
             "total_units_received": total_received,
@@ -397,10 +368,7 @@ def get_product(
             "stock_event_count":    len(stock_history)
         },
 
-        # Full stock movement log — every stock up/down event
         "stock_history": stock_history,
-
-        # Full price change log — every sell/cost price edit
         "price_history": price_history
     })
 
@@ -408,6 +376,7 @@ def get_product(
 # ─────────────────────────────────────────
 # PUT /products/{prod_id} → Update product
 # ─────────────────────────────────────────
+# NEW: sets updated_by = current_user["user_id"] so we can track who last edited
 @router.put("/{prod_id}")
 def update_product(
     prod_id: str,
@@ -437,14 +406,17 @@ def update_product(
             return error_response("Category not found", status_code=404)
         product.category_id = data.category_id
 
-    if data.prod_name          is not None: product.prod_name          = data.prod_name
-    if data.prod_sell_price    is not None: product.prod_sell_price    = data.prod_sell_price
-    if data.prod_cost_price    is not None: product.prod_cost_price    = data.prod_cost_price
+    if data.prod_name            is not None: product.prod_name            = data.prod_name
+    if data.prod_sell_price      is not None: product.prod_sell_price      = data.prod_sell_price
+    if data.prod_cost_price      is not None: product.prod_cost_price      = data.prod_cost_price
     if data.prod_low_stock_alert is not None: product.prod_low_stock_alert = data.prod_low_stock_alert
-    if data.tax_rate           is not None: product.tax_rate           = data.tax_rate
-    if data.tax_code           is not None: product.tax_code           = data.tax_code
-    if data.barcode            is not None: product.barcode            = data.barcode
-    if data.unit               is not None: product.unit               = data.unit
+    if data.tax_rate             is not None: product.tax_rate             = data.tax_rate
+    if data.tax_code             is not None: product.tax_code             = data.tax_code
+    if data.barcode              is not None: product.barcode              = data.barcode
+    if data.unit                 is not None: product.unit                 = data.unit
+
+    # NEW: track who last updated this product
+    product.updated_by = current_user["user_id"]
 
     db.commit()
     db.refresh(product)

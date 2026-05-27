@@ -24,7 +24,7 @@ export default function Providers({ children }) {
         toastOptions={{
           duration: 3500,
           style: {
-            fontFamily: 'Inter, sans-serif',
+            fontFamily: "'Plus Jakarta Sans', sans-serif",
             fontSize: '0.875rem',
             borderRadius: '8px',
             boxShadow: '0 4px 16px rgba(0,0,0,0.10)',

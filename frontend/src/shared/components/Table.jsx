@@ -1,28 +1,28 @@
 // src/shared/components/Table.jsx
 //
-// A responsive data table with consistent styling.
-// Handles loading skeletons, empty state, and hover rows automatically.
+// Responsive data table with:
+//   - Sortable columns (pass sortable: true on column def)
+//   - Loading skeleton rows
+//   - Empty state
+//   - Hover rows
+//   - Optional row click
 //
-// Props:
-//   columns   → array of { key, label, width?, align?, render? }
-//               render(row) → JSX for custom cell rendering
-//   rows      → array of data objects
-//   loading   → boolean — shows skeleton rows while true
-//   emptyText → string shown when rows is empty (default message used if omitted)
-//   rowKey    → string key to use as React key (default: 'id')
-//   onRowClick → function(row) — makes rows clickable
+// Column def shape:
+//   {
+//     key,           → data key (also used as sort key)
+//     label,         → header text
+//     width?,        → CSS width
+//     align?,        → 'left' | 'right' | 'center'
+//     sortable?,     → true = clicking header triggers onSort
+//     wrap?,         → true = allow text wrap
+//     skeletonW?,    → skeleton width override e.g. '40%'
+//     render?,       → (row) => JSX
+//   }
 //
-// Usage:
-//   <Table
-//     columns={[
-//       { key: 'name',   label: 'Name' },
-//       { key: 'status', label: 'Status', render: row => <Badge status={row.status} dot /> },
-//       { key: 'amount', label: 'Amount', align: 'right' },
-//     ]}
-//     rows={data}
-//     loading={isLoading}
-//     rowKey="sale_id"
-//   />
+// Sort props (controlled externally — parent owns sort state):
+//   sortKey        → currently sorted column key (string)
+//   sortDir        → 'asc' | 'desc'
+//   onSort(key)    → called when a sortable header is clicked
 
 function Skeleton({ w = '60%', h = 13 }) {
   return (
@@ -36,6 +36,38 @@ function Skeleton({ w = '60%', h = 13 }) {
   )
 }
 
+function SortIcon({ active, dir }) {
+  const up   = active && dir === 'asc'
+  const down = active && dir === 'desc'
+
+  return (
+    <span style={{
+      display: 'inline-flex',
+      flexDirection: 'column',
+      gap: 1,
+      marginLeft: 5,
+      verticalAlign: 'middle',
+      opacity: active ? 1 : 0.35,
+      transition: 'opacity 0.14s',
+    }}>
+      {/* Up arrow */}
+      <svg width="7" height="5" viewBox="0 0 7 5" fill="none">
+        <path
+          d="M3.5 0.5L6.5 4.5H0.5L3.5 0.5Z"
+          fill={up ? 'var(--accent-600)' : 'var(--text-muted)'}
+        />
+      </svg>
+      {/* Down arrow */}
+      <svg width="7" height="5" viewBox="0 0 7 5" fill="none">
+        <path
+          d="M3.5 4.5L0.5 0.5H6.5L3.5 4.5Z"
+          fill={down ? 'var(--accent-600)' : 'var(--text-muted)'}
+        />
+      </svg>
+    </span>
+  )
+}
+
 export default function Table({
   columns = [],
   rows = [],
@@ -43,6 +75,10 @@ export default function Table({
   emptyText = 'No records found.',
   rowKey = 'id',
   onRowClick,
+  // Sort props (controlled by parent)
+  sortKey,
+  sortDir,
+  onSort,
 }) {
   const SKELETON_ROWS = 5
 
@@ -71,33 +107,51 @@ export default function Table({
                 background: 'var(--bg-subtle)',
                 borderBottom: '1px solid var(--border)',
               }}>
-                {columns.map(col => (
-                  <th
-                    key={col.key}
-                    style={{
-                      padding: '11px 20px',
-                      textAlign: col.align === 'right' ? 'right'
-                               : col.align === 'center' ? 'center' : 'left',
-                      fontSize: 10.5,
-                      fontWeight: 700,
-                      color: 'var(--text-muted)',
-                      letterSpacing: '0.08em',
-                      textTransform: 'uppercase',
-                      whiteSpace: 'nowrap',
-                      width: col.width || 'auto',
-                      fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
-                    }}
-                  >
-                    {col.label}
-                  </th>
-                ))}
+                {columns.map(col => {
+                  const isSorted  = sortKey === col.key
+                  const canSort   = col.sortable && onSort
+
+                  return (
+                    <th
+                      key={col.key}
+                      onClick={() => canSort && onSort(col.key)}
+                      style={{
+                        padding: '11px 20px',
+                        textAlign: col.align === 'right'  ? 'right'
+                                 : col.align === 'center' ? 'center' : 'left',
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        color: isSorted ? 'var(--accent-600)' : 'var(--text-muted)',
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        whiteSpace: 'nowrap',
+                        width: col.width || 'auto',
+                        fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
+                        cursor: canSort ? 'pointer' : 'default',
+                        userSelect: 'none',
+                        transition: 'color 0.14s',
+                      }}
+                      onMouseEnter={e => {
+                        if (canSort) e.currentTarget.style.color = 'var(--accent-600)'
+                      }}
+                      onMouseLeave={e => {
+                        if (canSort && !isSorted)
+                          e.currentTarget.style.color = 'var(--text-muted)'
+                      }}
+                    >
+                      {col.label}
+                      {col.sortable && (
+                        <SortIcon active={isSorted} dir={sortDir} />
+                      )}
+                    </th>
+                  )
+                })}
               </tr>
             </thead>
 
             {/* Body */}
             <tbody>
               {loading ? (
-                /* Skeleton rows */
                 [...Array(SKELETON_ROWS)].map((_, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
                     {columns.map((col, j) => (
@@ -108,7 +162,6 @@ export default function Table({
                   </tr>
                 ))
               ) : rows.length === 0 ? (
-                /* Empty state */
                 <tr>
                   <td
                     colSpan={columns.length}
@@ -124,7 +177,6 @@ export default function Table({
                   </td>
                 </tr>
               ) : (
-                /* Data rows */
                 rows.map((row, i) => (
                   <tr
                     key={row[rowKey] ?? i}

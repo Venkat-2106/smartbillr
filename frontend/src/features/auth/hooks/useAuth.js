@@ -27,7 +27,6 @@ export function useLogin() {
       const token = supabaseData.access_token
       const user  = supabaseData.user
 
-      localStorage.setItem('token', token)
       setAuth(token, user)
 
       // Fetch business
@@ -57,8 +56,6 @@ export function useLogin() {
       navigate('/dashboard')
 
     } catch (err) {
-      localStorage.removeItem('token')
-
       const message =
         err.response?.data?.error_description ||
         err.response?.data?.message           ||

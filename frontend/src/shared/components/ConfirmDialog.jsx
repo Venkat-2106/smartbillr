@@ -1,4 +1,3 @@
-
 import { useEffect, useCallback } from 'react'
 import Button from './Button'
 
@@ -20,11 +19,9 @@ export default function ConfirmDialog({
   useEffect(() => {
     if (open) {
       document.addEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = 'hidden'
     }
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = ''
     }
   }, [open, handleKeyDown])
 

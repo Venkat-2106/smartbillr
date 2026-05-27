@@ -384,9 +384,31 @@ def get_all_purchases(
         }
     ).fetchall()
 
+    # BATCH: fetch ALL items for this page in one query instead of N queries
+    pur_ids = [str(row.pur_id) for row in rows]
+    all_items = []
+    if pur_ids:
+        all_items = db.execute(
+            text("""
+                SELECT item_id, pur_id, product_id, pur_item_qty,
+                       item_unit_price, item_subtotal,
+                       gst_rate, cgst_amount, sgst_amount,
+                       igst_amount, pur_tax_total,
+                       item_tax_total, item_total_with_tax
+                FROM purchase_items
+                WHERE pur_id = ANY(CAST(:ids AS uuid[]))
+            """),
+            {"ids": "{" + ",".join(pur_ids) + "}"}
+        ).fetchall()
+
+    items_by_pur = {}
+    for it in all_items:
+        key = str(it.pur_id)
+        items_by_pur.setdefault(key, []).append(it)
+
     result = []
     for row in rows:
-        items = fetch_purchase_items(db, str(row.pur_id))
+        items = items_by_pur.get(str(row.pur_id), [])
         result.append(purchase_row_to_dict(row, items))
 
     return success_response(
@@ -457,22 +479,29 @@ def get_purchase(
         ORDER BY pr.return_created_at DESC
     """), {"pid": pur_id, "bid": business_id}).fetchall()
 
-    # Step 4 → Fetch items for each return and build returns list
-    returns = []
-    for ret in return_rows:
-        return_items = db.execute(text("""
+    # BATCH: fetch ALL return items for all returns in one query
+    ret_ids = [str(ret.return_id) for ret in return_rows]
+    all_ret_items = []
+    if ret_ids:
+        all_ret_items = db.execute(text("""
             SELECT
-                pri.return_item_id,
-                pri.return_id,
-                pri.product_id,
-                p.prod_name AS product_name,
-                pri.return_qty,
-                pri.refund_amount,
+                pri.return_item_id, pri.return_id,
+                pri.product_id, p.prod_name AS product_name,
+                pri.return_qty, pri.refund_amount,
                 pri.return_item_subtotal
             FROM purchase_return_items pri
             JOIN products p ON p.prod_id = pri.product_id
-            WHERE pri.return_id = :rid
-        """), {"rid": str(ret.return_id)}).fetchall()
+            WHERE pri.return_id = ANY(CAST(:ids AS uuid[]))
+        """), {"ids": "{" + ",".join(ret_ids) + "}"}).fetchall()
+
+    ret_items_by_return = {}
+    for ri in all_ret_items:
+        key = str(ri.return_id)
+        ret_items_by_return.setdefault(key, []).append(ri)
+
+    returns = []
+    for ret in return_rows:
+        return_items = ret_items_by_return.get(str(ret.return_id), [])
 
         ret_dict = {
             "return_id":         str(ret.return_id),

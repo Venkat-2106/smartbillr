@@ -24,7 +24,7 @@
 //
 // NOTE: Modal.Footer is a convenience sub-component — or pass footer prop directly.
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, Children, isValidElement } from 'react'
 
 const SIZE_MAP = {
   sm: 400,
@@ -71,15 +71,30 @@ export default function Modal({
   useEffect(() => {
     if (open) {
       document.addEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = 'hidden'
+      // Do NOT lock body scroll — the modal panel itself scrolls internally.
+      // Locking body scroll prevented scrolling inside the modal on some browsers.
     }
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = ''
     }
   }, [open, handleKeyDown])
 
   if (!open) return null
+
+  // Separate Modal.Footer children from body children so the footer
+  // always renders in the sticky slot — never inside the scrollable body.
+  // This means forms can keep <Modal.Footer> at the bottom of the form JSX
+  // without it scrolling away with the content.
+  const bodyChildren = []
+  const footerChildren = []
+  Children.forEach(children, (child) => {
+    if (isValidElement(child) && child.type === ModalFooter) {
+      footerChildren.push(child)
+    } else {
+      bodyChildren.push(child)
+    }
+  })
+  const stickyFooter = footerChildren.length > 0 ? footerChildren : null
 
   return (
     <>
@@ -216,11 +231,11 @@ export default function Modal({
             overflowY: 'auto',
             padding: '20px 24px',
           }}>
-            {children}
+            {bodyChildren}
           </div>
 
-          {/* Footer — from prop OR Modal.Footer child */}
-          {footer}
+          {/* Footer — sticky at bottom. Renders Modal.Footer children OR the footer prop */}
+          {stickyFooter || footer}
         </div>
       </div>
     </>

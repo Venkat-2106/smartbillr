@@ -243,7 +243,7 @@ export default function DashboardLayout() {
         </div>
       </aside>
 
-      <div style={{ flex: 1, marginLeft: W, transition: 'margin-left 0.2s var(--ease-out)', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <div style={{ flex: 1, minWidth: 0, marginLeft: W, transition: 'margin-left 0.2s var(--ease-out)', display: 'flex', flexDirection: 'column', minHeight: '100vh', overflowX: 'hidden' }}>
 
         {/* Topbar */}
         <header style={{ height: 60, background: 'var(--topbar-bg)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderBottom: '1px solid var(--topbar-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 32px', position: 'sticky', top: 0, zIndex: 50 }}>

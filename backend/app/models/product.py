@@ -10,14 +10,11 @@ class Product(Base):
     __tablename__ = "products"
 
     prod_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    # FIX: Added ForeignKey — DB has FK constraint to businesses.business_id
     business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=True)
-    # FIX: Added ForeignKey — DB has FK constraint to categories.category_id
     category_id = Column(UUID(as_uuid=True), ForeignKey("categories.category_id"), nullable=True)
     prod_name = Column(String(100), nullable=False)
     prod_sell_price = Column(Numeric(10, 2), nullable=False)
     prod_cost_price = Column(Numeric(10, 2), nullable=False)
-    # FIX: Added missing generated column — DB has GENERATED ALWAYS AS (prod_sell_price - prod_cost_price)
     prod_profit = Column(
         Numeric(10, 2),
         Computed("prod_sell_price - prod_cost_price", persisted=True),
@@ -32,3 +29,8 @@ class Product(Base):
     is_deleted = Column(Boolean, default=False)
     prod_created_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, nullable=True)
+    # updated_by: plain UUID — no ForeignKey() here because SQLAlchemy cannot resolve
+    # 'profiles' (it lives in Supabase auth schema, no ORM model for it).
+    # The FK constraint already exists in the DB from the SQL migration.
+    # We set this value directly in the PUT route and JOIN via raw SQL to get the name.
+    updated_by = Column(UUID(as_uuid=True), nullable=True)

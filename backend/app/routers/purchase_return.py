@@ -366,9 +366,27 @@ def get_all_purchase_returns(
     ).order_by(PurchaseReturn.return_created_at.desc()) \
      .offset(pagination["offset"]).limit(pagination["limit"]).all()
 
+    # BATCH: fetch all return items in one query
+    ret_ids = [str(r.return_id) for r in returns]
+    all_items = []
+    if ret_ids:
+        all_items = db.execute(text("""
+            SELECT pri.return_item_id, pri.return_id, pri.product_id,
+                   p.prod_name AS product_name,
+                   pri.return_qty, pri.refund_amount, pri.return_item_subtotal
+            FROM purchase_return_items pri
+            JOIN products p ON p.prod_id = pri.product_id
+            WHERE pri.return_id = ANY(CAST(:ids AS uuid[]))
+        """), {"ids": "{" + ",".join(ret_ids) + "}"}).fetchall()
+
+    items_by_ret = {}
+    for it in all_items:
+        key = str(it.return_id)
+        items_by_ret.setdefault(key, []).append(it)
+
     result = []
     for r in returns:
-        items = fetch_return_items(db, str(r.return_id))
+        items = items_by_ret.get(str(r.return_id), [])
         result.append(return_to_dict(r, items))
 
     return success_response(

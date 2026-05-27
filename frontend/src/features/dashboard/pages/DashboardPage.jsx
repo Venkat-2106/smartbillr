@@ -1,20 +1,13 @@
 // src/features/dashboard/pages/DashboardPage.jsx
 //
-// CHANGES FROM PREVIOUS VERSION:
-//   1. StatCard → unique premium gradient per card (not flat tinted icon)
-//   2. SalesTrendChart added — pure SVG, no external library
-//      - Accessible by ALL roles (uses /sales/ which all roles can read)
-//      - Filter: Weekly / Monthly / Yearly
-//   3. useSalesTrend hook imported from useDashboard
-//   4. useState added for trend period filter
-//
-// UNCHANGED:
-//   - hasPermission logic for financials
-//   - Recent Sales table and column visibility
-//   - All design tokens (var(--...))
-//   - DashboardLayout, routing, auth — nothing touched outside this file
+// FIXES IN THIS VERSION:
+//   ✅ FIX — Clicking the "Customers" stat card navigates to /customers
+//            StatCard now accepts an optional `onClick` prop.
+//            Only the Customers card has it — other cards remain non-clickable.
+//   All other logic, layout, styles, chart, and permissions unchanged.
 
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useDashboard, useSalesTrend } from '../hooks/useDashboard'
 import useAuthStore from '../../../store/authStore'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
@@ -33,11 +26,14 @@ function Skeleton({ w = '60%', h = 28 }) {
 }
 
 // ─── Stat Card (Premium Colored) ──────────────────────────────────────────────
-// Each card has a unique gradient defined in its `gradient` prop.
-// The icon sits on the gradient background; value + label are below.
-function StatCard({ label, value, sub, icon, gradient, loading }) {
+// FIX: Added optional `onClick` prop — shows pointer cursor + slight ring on hover
+// when clickable. Non-clickable cards (onClick=undefined) behave exactly as before.
+function StatCard({ label, value, sub, icon, gradient, loading, onClick }) {
+  const isClickable = typeof onClick === 'function'
+
   return (
     <div
+      onClick={onClick}
       style={{
         background: 'var(--bg-card)',
         border: '1px solid var(--border)',
@@ -51,11 +47,12 @@ function StatCard({ label, value, sub, icon, gradient, loading }) {
         minWidth: 0,
         overflow: 'hidden',
         position: 'relative',
+        cursor: isClickable ? 'pointer' : 'default',
       }}
       onMouseEnter={e => {
         e.currentTarget.style.transform = 'translateY(-3px)'
         e.currentTarget.style.boxShadow = 'var(--shadow-elevated)'
-        e.currentTarget.style.borderColor = 'var(--border-hover)'
+        e.currentTarget.style.borderColor = isClickable ? 'var(--accent-600)' : 'var(--border-hover)'
       }}
       onMouseLeave={e => {
         e.currentTarget.style.transform = 'translateY(0)'
@@ -105,6 +102,12 @@ function StatCard({ label, value, sub, icon, gradient, loading }) {
       <div>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
           {label}
+          {/* Small arrow hint for clickable cards */}
+          {isClickable && (
+            <span style={{ marginLeft: 5, fontSize: 11, color: 'var(--accent-600)', verticalAlign: 'middle' }}>
+              →
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 400 }}>
           {sub}
@@ -137,13 +140,11 @@ function Badge({ status }) {
 }
 
 // ─── Sales Trend Chart (pure SVG) ────────────────────────────────────────────
-// No recharts, no chart.js — just math + SVG paths.
-// Works for all roles since /sales/ is accessible to everyone.
 function SalesTrendChart({ period, onPeriodChange }) {
   const { data: points = [], isLoading } = useSalesTrend(period)
 
-  const W = 600   // viewBox width
-  const H = 180   // viewBox height
+  const W = 600
+  const H = 180
   const PAD_L = 56
   const PAD_R = 20
   const PAD_T = 20
@@ -154,7 +155,6 @@ function SalesTrendChart({ period, onPeriodChange }) {
 
   const maxVal = Math.max(...points.map(p => p.value), 1)
 
-  // Map data points to SVG coordinates
   const coords = points.map((p, i) => ({
     x: PAD_L + (i / Math.max(points.length - 1, 1)) * chartW,
     y: PAD_T + chartH - (p.value / maxVal) * chartH,
@@ -162,7 +162,6 @@ function SalesTrendChart({ period, onPeriodChange }) {
     value: p.value,
   }))
 
-  // Build smooth SVG path using cubic bezier curves
   function smoothPath(pts) {
     if (pts.length < 2) return ''
     let d = `M ${pts[0].x} ${pts[0].y}`
@@ -175,7 +174,6 @@ function SalesTrendChart({ period, onPeriodChange }) {
     return d
   }
 
-  // Filled area path (line + down to baseline + back)
   function areaPath(pts) {
     if (pts.length < 2) return ''
     const baseline = PAD_T + chartH
@@ -184,10 +182,7 @@ function SalesTrendChart({ period, onPeriodChange }) {
       + ` L ${pts[0].x} ${baseline} Z`
   }
 
-  // Y-axis label — for invoice counts, just show the integer
-  function fmtY(val) {
-    return String(Math.round(val))
-  }
+  function fmtY(val) { return String(Math.round(val)) }
 
   const yTicks = [0, maxVal / 2, maxVal]
 
@@ -206,29 +201,19 @@ function SalesTrendChart({ period, onPeriodChange }) {
       padding: '24px 24px 20px',
       marginBottom: 40,
     }}>
-      {/* Header row */}
       <div style={{
         display: 'flex', alignItems: 'center',
         justifyContent: 'space-between',
         marginBottom: 20, flexWrap: 'wrap', gap: 12,
       }}>
         <div>
-          <h2 style={{
-            fontSize: 15, fontWeight: 700,
-            color: 'var(--text-primary)',
-            margin: '0 0 3px',
-          }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 3px' }}>
             Sales Trend
           </h2>
-          <p style={{
-            fontSize: 12, color: 'var(--text-muted)',
-            margin: 0, fontWeight: 400,
-          }}>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, fontWeight: 400 }}>
             Invoices raised over time — all roles
           </p>
         </div>
-
-        {/* Period filter pills */}
         <div style={{
           display: 'flex', gap: 6,
           background: 'var(--bg-subtle)',
@@ -240,20 +225,13 @@ function SalesTrendChart({ period, onPeriodChange }) {
               key={p.key}
               onClick={() => onPeriodChange(p.key)}
               style={{
-                padding: '5px 14px',
-                borderRadius: 7,
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 12,
-                fontWeight: 600,
-                transition: 'all 0.15s',
+                padding: '5px 14px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                fontSize: 12, fontWeight: 600, transition: 'all 0.15s',
                 background: period === p.key
                   ? 'linear-gradient(135deg, var(--accent-600), var(--accent-500))'
                   : 'transparent',
                 color: period === p.key ? '#fff' : 'var(--text-secondary)',
-                boxShadow: period === p.key
-                  ? '0 2px 8px var(--accent-glow)'
-                  : 'none',
+                boxShadow: period === p.key ? '0 2px 8px var(--accent-glow)' : 'none',
               }}
             >
               {p.label}
@@ -262,15 +240,13 @@ function SalesTrendChart({ period, onPeriodChange }) {
         </div>
       </div>
 
-      {/* Chart area */}
       {isLoading ? (
         <div style={{ height: H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Skeleton w="80%" h={H - 60} />
         </div>
       ) : points.every(p => p.value === 0) ? (
         <div style={{
-          height: H,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          height: H, display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: 'var(--text-muted)', fontSize: 13.5,
         }}>
           No sales data for this period.
@@ -282,12 +258,10 @@ function SalesTrendChart({ period, onPeriodChange }) {
           style={{ width: '100%', height: 'auto', overflow: 'visible' }}
         >
           <defs>
-            {/* Gradient fill under the line */}
             <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--accent-500)" stopOpacity="0.18" />
+              <stop offset="0%"   stopColor="var(--accent-500)" stopOpacity="0.18" />
               <stop offset="100%" stopColor="var(--accent-500)" stopOpacity="0.01" />
             </linearGradient>
-            {/* Glow filter for the line */}
             <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
               <feGaussianBlur stdDeviation="3" result="coloredBlur" />
               <feMerge>
@@ -297,63 +271,28 @@ function SalesTrendChart({ period, onPeriodChange }) {
             </filter>
           </defs>
 
-          {/* Y-axis gridlines + labels */}
           {yTicks.map((tick, i) => {
             const y = PAD_T + chartH - (tick / maxVal) * chartH
             return (
               <g key={i}>
-                <line
-                  x1={PAD_L} y1={y} x2={W - PAD_R} y2={y}
-                  stroke="var(--border)" strokeWidth="1" strokeDasharray="4 4"
-                />
-                <text
-                  x={PAD_L - 8} y={y + 4}
-                  textAnchor="end"
-                  fontSize="10" fill="var(--text-muted)"
-                  fontFamily="var(--font-sans, 'Plus Jakarta Sans', sans-serif)"
-                >
+                <line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y} stroke="var(--border)" strokeWidth="1" strokeDasharray="4 4" />
+                <text x={PAD_L - 8} y={y + 4} textAnchor="end" fontSize="10" fill="var(--text-muted)"
+                  fontFamily="var(--font-sans, 'Plus Jakarta Sans', sans-serif)">
                   {fmtY(tick)}
                 </text>
               </g>
             )
           })}
 
-          {/* Area fill */}
-          <path
-            d={areaPath(coords)}
-            fill="url(#trendFill)"
-          />
+          <path d={areaPath(coords)} fill="url(#trendFill)" />
+          <path d={smoothPath(coords)} fill="none" stroke="var(--accent-600)" strokeWidth="2.5"
+            strokeLinecap="round" strokeLinejoin="round" filter="url(#glow)" />
 
-          {/* Main line */}
-          <path
-            d={smoothPath(coords)}
-            fill="none"
-            stroke="var(--accent-600)"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            filter="url(#glow)"
-          />
-
-          {/* X-axis labels + data points */}
           {coords.map((pt, i) => (
             <g key={i}>
-              {/* Dot */}
-              <circle
-                cx={pt.x} cy={pt.y} r={4}
-                fill="var(--accent-600)"
-                stroke="var(--bg-card)" strokeWidth="2"
-              />
-              {/* X label */}
-              <text
-                x={pt.x}
-                y={PAD_T + chartH + 20}
-                textAnchor="middle"
-                fontSize="10.5"
-                fill="var(--text-muted)"
-                fontFamily="var(--font-sans, 'Plus Jakarta Sans', sans-serif)"
-                fontWeight="500"
-              >
+              <circle cx={pt.x} cy={pt.y} r={4} fill="var(--accent-600)" stroke="var(--bg-card)" strokeWidth="2" />
+              <text x={pt.x} y={PAD_T + chartH + 20} textAnchor="middle" fontSize="10.5"
+                fill="var(--text-muted)" fontFamily="var(--font-sans, 'Plus Jakarta Sans', sans-serif)" fontWeight="500">
                 {pt.label}
               </text>
             </g>
@@ -371,15 +310,15 @@ export default function DashboardPage() {
   const hasPermission = useAuthStore(s => s.hasPermission)
   const country       = business?.business_country_code || 'IN'
 
-  // Period filter state for the trend chart (default: weekly)
+  // FIX: navigate for clickable cards
+  const navigate = useNavigate()
+
   const [trendPeriod, setTrendPeriod] = useState('weekly')
 
-  // Financial data is only visible to users with dashboard.financial permission.
-  // admin has it. manager and staff do not.
   const canSeeFinancials = hasPermission('dashboard.financial')
 
   // ── KPI cards — always visible (dashboard.view) ──────────────────────────
-  // Each card has a unique gradient for premium visual identity
+  // FIX: Customers card gets onClick → navigate('/customers')
   const kpiCards = [
     {
       label: 'Total Invoices',
@@ -391,9 +330,10 @@ export default function DashboardPage() {
     {
       label: 'Customers',
       value: data?.totalCustomers  ?? 0,
-      sub: 'Active accounts',
+      sub: 'Active accounts — click to view',
       icon: '👥',
       gradient: 'linear-gradient(135deg, #10B981, #059669)',
+      onClick: () => navigate('/customers'),
     },
     {
       label: 'Products',
@@ -436,17 +376,14 @@ export default function DashboardPage() {
     },
   ]
 
-  // Show financial cards first (if allowed), then KPI cards
   const visibleCards = canSeeFinancials
     ? [...financialCards, ...kpiCards]
     : kpiCards
 
-  // Recent Sales table columns — Amount column hidden without dashboard.financial
   const tableHeaders = canSeeFinancials
     ? ['Invoice No', 'Amount', 'Status', 'Date']
     : ['Invoice No', 'Status', 'Date']
 
-  // Skeleton column widths match the headers
   const skeletonWidths = canSeeFinancials
     ? ['70%', '100px', '60px', '90px']
     : ['70%', '60px', '90px']
@@ -462,11 +399,7 @@ export default function DashboardPage() {
 
       {/* ── Page header ── */}
       <div style={{ marginBottom: 40 }}>
-        <h1 style={{
-          fontSize: 24, fontWeight: 800,
-          color: 'var(--text-primary)',
-          letterSpacing: '-0.5px', margin: '0 0 6px',
-        }}>
+        <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px', margin: '0 0 6px' }}>
           Overview
         </h1>
         <p style={{ fontSize: 13.5, color: 'var(--text-muted)', margin: 0, fontWeight: 400 }}>
@@ -477,10 +410,8 @@ export default function DashboardPage() {
       {/* ── Error banner ── */}
       {isError && (
         <div style={{
-          background: 'var(--danger-bg)',
-          border: '1px solid var(--danger-border)',
-          borderRadius: 12, padding: '13px 18px',
-          color: 'var(--danger-text)',
+          background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
+          borderRadius: 12, padding: '13px 18px', color: 'var(--danger-text)',
           fontSize: 13.5, marginBottom: 32, fontWeight: 500,
         }}>
           ⚠️ Could not load data. Make sure the backend is running, then refresh.
@@ -500,16 +431,11 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Sales Trend Chart ── */}
-      {/* Accessible to all roles — no permission gate needed */}
       <SalesTrendChart period={trendPeriod} onPeriodChange={setTrendPeriod} />
 
       {/* ── Recent Sales header ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-        <h2 style={{
-          fontSize: 15, fontWeight: 700,
-          color: 'var(--text-primary)',
-          margin: 0,
-        }}>
+        <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
           Recent Sales
         </h2>
         <span style={{
@@ -534,19 +460,12 @@ export default function DashboardPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{
-                background: 'var(--bg-subtle)',
-                borderBottom: '1px solid var(--border)',
-              }}>
+              <tr style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border)' }}>
                 {tableHeaders.map(h => (
                   <th key={h} style={{
-                    padding: '12px 24px',
-                    textAlign: 'left',
-                    fontSize: 10.5, fontWeight: 700,
-                    color: 'var(--text-muted)',
-                    letterSpacing: '0.08em',
-                    textTransform: 'uppercase',
-                    whiteSpace: 'nowrap',
+                    padding: '12px 24px', textAlign: 'left',
+                    fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)',
+                    letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap',
                   }}>
                     {h}
                   </th>
@@ -578,40 +497,24 @@ export default function DashboardPage() {
                   <tr
                     key={sale.sales_id}
                     style={{
-                      borderBottom: i < data.recentSales.length - 1
-                        ? '1px solid var(--border)' : 'none',
+                      borderBottom: i < data.recentSales.length - 1 ? '1px solid var(--border)' : 'none',
                       transition: 'background 0.13s',
                     }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-subtle)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   >
-                    <td style={{
-                      padding: '16px 24px',
-                      fontSize: 13, fontWeight: 700,
-                      color: 'var(--accent-600)',
-                      letterSpacing: '0.01em',
-                    }}>
+                    <td style={{ padding: '16px 24px', fontSize: 13, fontWeight: 700, color: 'var(--accent-600)', letterSpacing: '0.01em' }}>
                       {sale.invoice_no}
                     </td>
-
-                    {/* Amount — only rendered for admin (dashboard.financial) */}
                     {canSeeFinancials && (
-                      <td style={{
-                        padding: '16px 24px',
-                        fontSize: 13.5, fontWeight: 600,
-                        color: 'var(--text-primary)',
-                      }}>
+                      <td style={{ padding: '16px 24px', fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
                         {formatCurrency(parseFloat(sale.sales_final_amount), country)}
                       </td>
                     )}
-
                     <td style={{ padding: '16px 24px' }}>
                       <Badge status={sale.sales_payment_status} />
                     </td>
-                    <td style={{
-                      padding: '16px 24px',
-                      fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 400,
-                    }}>
+                    <td style={{ padding: '16px 24px', fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 400 }}>
                       {formatDate(sale.sales_created_at)}
                     </td>
                   </tr>

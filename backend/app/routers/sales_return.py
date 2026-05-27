@@ -281,9 +281,29 @@ def get_all_sales_returns(
     ).order_by(SalesReturn.return_created_at.desc())\
      .offset(pagination["offset"]).limit(pagination["limit"]).all()
 
+    # BATCH: fetch all return items for this page in one query
+    ret_ids = [str(r.return_id) for r in returns]
+    all_items = []
+    if ret_ids:
+        all_items = db.execute(
+            text("""
+                SELECT return_item_id, return_id, product_id,
+                       return_qty, unit_price AS refund_amount,
+                       (return_qty * unit_price) AS return_item_subtotal
+                FROM sales_return_items
+                WHERE return_id = ANY(CAST(:ids AS uuid[]))
+            """),
+            {"ids": "{" + ",".join(ret_ids) + "}"}
+        ).fetchall()
+
+    items_by_ret = {}
+    for it in all_items:
+        key = str(it.return_id)
+        items_by_ret.setdefault(key, []).append(it)
+
     result = []
     for r in returns:
-        items = fetch_return_items(db, str(r.return_id))
+        items = items_by_ret.get(str(r.return_id), [])
         result.append(return_to_dict(r, items))
 
     return success_response(

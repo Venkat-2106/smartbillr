@@ -6,6 +6,7 @@
 //      instead of all routes sharing one global ProtectedRoute
 //   3. ComingSoon component and all other routes unchanged
 //   4. Added /staff route (was missing)
+//   5. Step 5.13 — /customers now uses real CustomersPage (was ComingSoon)
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import DashboardLayout from './layouts/DashboardLayout'
@@ -15,6 +16,8 @@ import UnauthorizedPage from '../features/auth/pages/UnauthorizedPage'
 import ProtectedRoute from '../features/auth/components/ProtectedRoute'
 import DashboardPage from '../features/dashboard/pages/DashboardPage'
 import CategoriesPage from '../features/categories/pages/CategoriesPage'
+import ProductsPage from '../features/products/pages/ProductsPage'
+import CustomersPage from '../features/customers/pages/CustomersPage'
 
 // ─── Premium "Coming Soon" placeholder ───────────────────────────────────────
 // Unchanged from existing — kept exactly as-is
@@ -30,26 +33,26 @@ function ComingSoon({ name }) {
 
       <div style={{ marginBottom: 32 }}>
         <h1 style={{
-          fontSize: 28, fontWeight: 800, color: '#0F172A',
+          fontSize: 28, fontWeight: 800, color: 'var(--text-primary)',
           letterSpacing: '-0.5px', margin: 0, marginBottom: 6,
         }}>
           {name}
         </h1>
-        <p style={{ fontSize: 14, color: '#94A3B8', margin: 0 }}>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>
           Manage your {name.toLowerCase()} from here
         </p>
       </div>
 
       <div style={{
-        background: '#FFFFFF',
-        border: '1px solid #E2E8F0',
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
         borderRadius: 18,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.05)',
+        boxShadow: 'var(--shadow-card)',
         overflow: 'hidden',
       }}>
         <div style={{
           padding: '16px 24px',
-          borderBottom: '1px solid #F1F5F9',
+          borderBottom: '1px solid var(--border)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -57,13 +60,13 @@ function ComingSoon({ name }) {
         }}>
           <div style={{
             height: 36, width: 240,
-            background: '#F8FAFC',
-            border: '1px solid #E2E8F0',
+            background: 'var(--bg-subtle)',
+            border: '1px solid var(--border)',
             borderRadius: 9,
           }} />
           <div style={{
             height: 36, width: 120,
-            background: 'linear-gradient(135deg, #4F46E5, #6366F1)',
+            background: 'linear-gradient(135deg, var(--accent-600), var(--accent-500))',
             borderRadius: 9,
             opacity: 0.15,
           }} />
@@ -80,8 +83,8 @@ function ComingSoon({ name }) {
           <div style={{
             width: 72, height: 72,
             borderRadius: '50%',
-            background: '#F1F5F9',
-            border: '1px solid #E2E8F0',
+            background: 'var(--bg-subtle)',
+            border: '1px solid var(--border)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -94,11 +97,11 @@ function ComingSoon({ name }) {
           <div>
             <h3 style={{
               fontSize: 16, fontWeight: 700,
-              color: '#0F172A', margin: 0, marginBottom: 6,
+              color: 'var(--text-primary)', margin: 0, marginBottom: 6,
             }}>
               {name} — Coming Soon
             </h3>
-            <p style={{ fontSize: 13.5, color: '#94A3B8', margin: 0, lineHeight: 1.6 }}>
+            <p style={{ fontSize: 13.5, color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
               This page is under construction.<br />
               Backend APIs are ready — UI coming in next step.
             </p>
@@ -109,13 +112,13 @@ function ComingSoon({ name }) {
             display: 'inline-flex',
             alignItems: 'center',
             gap: 6,
-            background: '#EEF2FF',
-            border: '1px solid rgba(79,70,229,0.2)',
+            background: 'var(--accent-50)',
+            border: '1px solid var(--accent-ring)',
             borderRadius: 99,
             padding: '5px 14px',
           }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#4F46E5' }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#4F46E5' }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-600)' }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-600)' }}>
               Phase 5 — In Progress
             </span>
           </div>
@@ -152,8 +155,25 @@ export default function AppRouter() {
           <Route path="sales"     element={<ComingSoon name="Sales" />} />
           <Route path="sales/new" element={<ComingSoon name="Create Sale" />} />
           <Route path="payments"  element={<ComingSoon name="Payments" />} />
-          <Route path="customers" element={<ComingSoon name="Customers" />} />
-          <Route path="products"  element={<ComingSoon name="Products" />} />
+
+          {/* ── Step 5.13 — Customers (real page, was ComingSoon) ──────── */}
+          <Route
+            path="customers"
+            element={
+              <ProtectedRoute permission="customers.manage">
+                <CustomersPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="products"
+            element={
+              <ProtectedRoute permission="products.view">
+                <ProductsPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="stock"     element={<ComingSoon name="Stock" />} />
 
           {/* Sales returns — all roles (staff can only see their own, enforced backend) */}

@@ -1,8 +1,15 @@
 # app/routers/customer.py
+# OPTIMIZED VERSION
+# Changes:
+#   1. Added `search` query param to GET /customers/ — filters name, phone, email via ILIKE
+#   2. Replaced N+1 per-sale loop in GET /customers/{id} with 3 batch SQL queries
+#      (one for all items, one for all payment summaries, one for all returns)
+#      reducing from 3*N queries to 3 fixed queries regardless of sales count
+#   3. Pagination `le` raised to 100 (20 is default, 100 is max — removes need for limit=1000)
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text
+from sqlalchemy import text
 from app.database import get_db
 from app.middleware.rbac import require_permission
 from app.models.customer import Customer
@@ -19,17 +26,17 @@ router = APIRouter(prefix="/customers", tags=["Customers"])
 # ─────────────────────────────────────────
 def customer_to_dict(c) -> dict:
     return {
-        "cust_id":          str(c.cust_id),
-        "business_id":      str(c.business_id),
-        "cust_name":        c.cust_name,
-        "cust_phone":       c.cust_phone,
-        "cust_email":       c.cust_email,
-        "cust_address":     c.cust_address,
-        "cust_state":       c.cust_state,
+        "cust_id":           str(c.cust_id),
+        "business_id":       str(c.business_id),
+        "cust_name":         c.cust_name,
+        "cust_phone":        c.cust_phone,
+        "cust_email":        c.cust_email,
+        "cust_address":      c.cust_address,
+        "cust_state":        c.cust_state,
         "cust_country_code": c.cust_country_code,
-        "cust_tax_number":  c.cust_tax_number,
-        "is_deleted":       c.is_deleted,
-        "cust_created_at":  str(c.cust_created_at) if c.cust_created_at else None
+        "cust_tax_number":   c.cust_tax_number,
+        "is_deleted":        c.is_deleted,
+        "cust_created_at":   str(c.cust_created_at) if c.cust_created_at else None
     }
 
 
@@ -44,7 +51,6 @@ def create_customer(
 ):
     business_id = current_user["business_id"]
 
-    # Block duplicate phone within same business
     if data.cust_phone:
         existing = db.query(Customer).filter(
             Customer.business_id == business_id,
@@ -76,18 +82,19 @@ def create_customer(
 
 
 # ══════════════════════════════════════════════════════════════════
-# GET /customers → Get all customers (paginated)
-# Also supports: GET /customers?phone=9876543210
+# GET /customers → Paginated list with server-side search
 #
-# Same pattern as supplier list — phone filter on the list endpoint
-# keeps pagination working and avoids an extra route.
+# FIX: Added `search` param — filters name, phone, email via ILIKE.
+#      Frontend no longer needs limit=1000. Default is 20, max is 100.
+#      phone param kept for backward compat (sale form auto-fill).
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
 def get_all_customers(
-    current_user: dict = Depends(require_permission("customers.manage")),
+    current_user: dict          = Depends(require_permission("customers.manage")),
     db:           Session       = Depends(get_db),
     pagination:   dict          = Depends(paginate),
-    phone:        Optional[str] = Query(default=None, description="Search customer by phone number")
+    search:       Optional[str] = Query(default=None, description="Search by name, phone, or email"),
+    phone:        Optional[str] = Query(default=None, description="Exact phone match (for sale form auto-fill)")
 ):
     business_id = current_user["business_id"]
 
@@ -96,14 +103,29 @@ def get_all_customers(
         Customer.is_deleted  == False
     )
 
+    # Server-side search — ILIKE covers name, phone, email in one pass
+    if search and search.strip():
+        q = f"%{search.strip()}%"
+        from sqlalchemy import or_
+        base = base.filter(
+            or_(
+                Customer.cust_name.ilike(q),
+                Customer.cust_phone.ilike(q),
+                Customer.cust_email.ilike(q),
+            )
+        )
+
+    # Exact phone filter (kept for sale creation form)
     if phone:
         base = base.filter(Customer.cust_phone == phone)
 
     total     = base.count()
-    customers = base.order_by(Customer.cust_name.asc())\
-                    .offset(pagination["offset"])\
-                    .limit(pagination["limit"])\
-                    .all()
+    customers = (
+        base.order_by(Customer.cust_name.asc())
+            .offset(pagination["offset"])
+            .limit(pagination["limit"])
+            .all()
+    )
 
     return success_response(
         pagination_response(
@@ -117,10 +139,6 @@ def get_all_customers(
 
 # ══════════════════════════════════════════════════════════════════
 # GET /customers/search/phone?phone=9876543210
-#
-# Returns a single customer by exact phone match.
-# Used by the sale creation form to auto-fill customer details
-# when the cashier types the customer's phone number.
 # ══════════════════════════════════════════════════════════════════
 @router.get("/search/phone")
 def search_customer_by_phone(
@@ -140,15 +158,22 @@ def search_customer_by_phone(
     ).first()
 
     if not customer:
-        return error_response(
-            f"No customer found with phone number '{phone}'", 404
-        )
+        return error_response(f"No customer found with phone number '{phone}'", 404)
 
     return success_response(customer_to_dict(customer))
 
 
 # ══════════════════════════════════════════════════════════════════
-# GET /customers/{cust_id} → Customer detail WITH full sales history
+# GET /customers/{cust_id} → Detail + summary + sales history
+#
+# FIX: Replaced N+1 per-sale loop with 3 batch queries:
+#   Query 1 — all sales for this customer (unchanged)
+#   Query 2 — all sale_items for those sales (JOIN batch, not per-sale loop)
+#   Query 3 — all payment summaries (GROUP BY sale_id, one row per sale)
+#   Query 4 — all returns (for those sales, batch)
+#
+# Before: 1 + 3*N DB round-trips where N = number of sales
+# After:  4 DB round-trips regardless of N
 # ══════════════════════════════════════════════════════════════════
 @router.get("/{cust_id}")
 def get_customer(
@@ -167,7 +192,7 @@ def get_customer(
     if not customer:
         return error_response("Customer not found", 404)
 
-    # Fetch all sales for this customer
+    # ── Query 1: all sales ─────────────────────────────────────────
     sale_rows = db.execute(
         text("""
             SELECT
@@ -185,6 +210,99 @@ def get_customer(
         {"cid": cust_id, "bid": business_id}
     ).fetchall()
 
+    if not sale_rows:
+        return success_response({
+            **customer_to_dict(customer),
+            "summary": {
+                "total_sales": 0,
+                "total_spent": 0,
+                "total_paid": 0,
+                "outstanding_balance": 0,
+                "total_returns": 0
+            },
+            "sales_history": []
+        })
+
+    sale_ids = [str(r.sales_id) for r in sale_rows]
+
+    # ── Query 2: all items for all sales (batch) ──────────────────
+    # Use ANY(:ids) instead of IN to pass a Python list cleanly
+    items_rows = db.execute(
+        text("""
+            SELECT
+                si.sale_id,
+                si.sale_item_id, si.product_id, p.prod_name,
+                si.sale_item_quantity, si.sale_item_unit_price,
+                si.sale_item_subtotal, si.item_tax_total, si.item_total_with_tax
+            FROM sale_items si
+            LEFT JOIN products p ON p.prod_id = si.product_id
+            WHERE si.sale_id = ANY(CAST(:ids AS uuid[]))
+              AND si.business_id = CAST(:bid AS uuid)
+        """),
+        {"ids": "{" + ",".join(sale_ids) + "}", "bid": business_id}
+    ).fetchall()
+
+    # Group items by sale_id
+    items_by_sale: dict = {}
+    for i in items_rows:
+        key = str(i.sale_id)
+        items_by_sale.setdefault(key, []).append({
+            "sale_item_id":        str(i.sale_item_id),
+            "product_id":          str(i.product_id),
+            "prod_name":           i.prod_name,
+            "qty":                 i.sale_item_quantity,
+            "unit_price":          float(i.sale_item_unit_price),
+            "subtotal":            float(i.sale_item_subtotal)       if i.sale_item_subtotal      else None,
+            "item_tax_total":      float(i.item_tax_total)           if i.item_tax_total          else 0,
+            "item_total_with_tax": float(i.item_total_with_tax)      if i.item_total_with_tax     else None,
+        })
+
+    # ── Query 3: payment summary per sale (batch GROUP BY) ────────
+    pay_rows = db.execute(
+        text("""
+            SELECT
+                sale_id,
+                COALESCE(MAX(cumulative_paid), 0)                    AS total_paid_amount,
+                MAX(CASE WHEN is_active = true THEN payment_status END) AS current_status,
+                COUNT(*)                                              AS payment_count
+            FROM payments
+            WHERE sale_id = ANY(CAST(:ids AS uuid[]))
+              AND business_id = CAST(:bid AS uuid)
+            GROUP BY sale_id
+        """),
+        {"ids": "{" + ",".join(sale_ids) + "}", "bid": business_id}
+    ).fetchall()
+
+    pay_by_sale = {str(r.sale_id): r for r in pay_rows}
+
+    # ── Query 4: all returns for all sales (batch) ────────────────
+    return_rows = db.execute(
+        text("""
+            SELECT
+                sale_id, return_id, return_amount, return_reason,
+                return_status, refund_method, restock, return_created_at
+            FROM sales_returns
+            WHERE sale_id = ANY(CAST(:ids AS uuid[]))
+              AND business_id = CAST(:bid AS uuid)
+            ORDER BY return_created_at DESC
+        """),
+        {"ids": "{" + ",".join(sale_ids) + "}", "bid": business_id}
+    ).fetchall()
+
+    returns_by_sale: dict = {}
+    for r in return_rows:
+        key = str(r.sale_id)
+        returns_by_sale.setdefault(key, []).append({
+            "return_id":         str(r.return_id),
+            "return_amount":     float(r.return_amount),
+            "return_reason":     r.return_reason,
+            "return_status":     r.return_status,
+            "refund_method":     r.refund_method,
+            "restock":           r.restock,
+            "return_created_at": str(r.return_created_at) if r.return_created_at else None
+        })
+
+    # ── Assemble response ─────────────────────────────────────────
     sales_history = []
     total_spent   = 0.0
     total_paid    = 0.0
@@ -195,88 +313,23 @@ def get_customer(
         sale_final = float(sale.sales_final_amount) if sale.sales_final_amount else 0.0
         total_spent += sale_final
 
-        # Sale items
-        item_rows = db.execute(
-            text("""
-                SELECT
-                    si.sale_item_id, si.product_id, p.prod_name,
-                    si.sale_item_quantity, si.sale_item_unit_price,
-                    si.sale_item_subtotal, si.item_tax_total, si.item_total_with_tax
-                FROM sale_items si
-                LEFT JOIN products p ON p.prod_id = si.product_id
-                WHERE si.sale_id     = CAST(:sid AS uuid)
-                  AND si.business_id = CAST(:bid AS uuid)
-            """),
-            {"sid": sale_id, "bid": business_id}
-        ).fetchall()
+        pay = pay_by_sale.get(sale_id)
+        paid_for_sale = float(pay.total_paid_amount) if pay else 0.0
+        total_paid   += paid_for_sale
+        remaining     = round(sale_final - paid_for_sale, 2)
 
-        items = [
-            {
-                "sale_item_id":       str(i.sale_item_id),
-                "product_id":         str(i.product_id),
-                "prod_name":          i.prod_name,
-                "qty":                i.sale_item_quantity,
-                "unit_price":         float(i.sale_item_unit_price),
-                "subtotal":           float(i.sale_item_subtotal)      if i.sale_item_subtotal      else None,
-                "item_tax_total":     float(i.item_tax_total)          if i.item_tax_total          else 0,
-                "item_total_with_tax": float(i.item_total_with_tax)    if i.item_total_with_tax     else None
-            }
-            for i in item_rows
-        ]
-
-        # Payment summary — read from cumulative_paid on active row
-        pay_row = db.execute(
-            text("""
-                SELECT
-                    COALESCE(cumulative_paid, 0)                              AS total_paid_amount,
-                    MAX(CASE WHEN is_active = true THEN payment_status END)   AS current_status,
-                    COUNT(*)                                                   AS payment_count
-                FROM payments
-                WHERE sale_id     = CAST(:sid AS uuid)
-                  AND business_id = CAST(:bid AS uuid)
-            """),
-            {"sid": sale_id, "bid": business_id}
-        ).fetchone()
-
-        paid_for_sale  = float(pay_row.total_paid_amount) if pay_row else 0.0
-        total_paid    += paid_for_sale
-        remaining      = round(sale_final - paid_for_sale, 2)
+        # Count approved returns for total_returns summary
+        for ret in returns_by_sale.get(sale_id, []):
+            if ret["return_status"] == "approved":
+                total_returns += ret["return_amount"]
 
         payment_summary = {
             "total_paid":        round(paid_for_sale, 2),
             "remaining_balance": remaining if remaining > 0 else 0,
-            "payment_count":     pay_row.payment_count if pay_row else 0,
-            "current_status":    pay_row.current_status if (pay_row and pay_row.current_status)
-                                 else sale.sales_payment_status
+            "payment_count":     pay.payment_count if pay else 0,
+            "current_status":    (pay.current_status if pay and pay.current_status
+                                  else sale.sales_payment_status),
         }
-
-        # Returns for this sale
-        return_rows = db.execute(
-            text("""
-                SELECT
-                    return_id, return_amount, return_reason,
-                    return_status, refund_method, restock, return_created_at
-                FROM sales_returns
-                WHERE sale_id     = CAST(:sid AS uuid)
-                  AND business_id = CAST(:bid AS uuid)
-                ORDER BY return_created_at DESC
-            """),
-            {"sid": sale_id, "bid": business_id}
-        ).fetchall()
-
-        returns = []
-        for r in return_rows:
-            if r.return_status == "approved":
-                total_returns += float(r.return_amount)
-            returns.append({
-                "return_id":         str(r.return_id),
-                "return_amount":     float(r.return_amount),
-                "return_reason":     r.return_reason,
-                "return_status":     r.return_status,
-                "refund_method":     r.refund_method,
-                "restock":           r.restock,
-                "return_created_at": str(r.return_created_at) if r.return_created_at else None
-            })
 
         sales_history.append({
             "sales_id":             sale_id,
@@ -289,8 +342,8 @@ def get_customer(
             "sales_payment_status": sale.sales_payment_status,
             "sales_created_at":     str(sale.sales_created_at) if sale.sales_created_at else None,
             "payment_summary":      payment_summary,
-            "items":                items,
-            "returns":              returns
+            "items":                items_by_sale.get(sale_id, []),
+            "returns":              returns_by_sale.get(sale_id, []),
         })
 
     outstanding = round(total_spent - total_paid, 2)
@@ -298,11 +351,11 @@ def get_customer(
     return success_response({
         **customer_to_dict(customer),
         "summary": {
-            "total_sales":        len(sale_rows),
-            "total_spent":        round(total_spent, 2),
-            "total_paid":         round(total_paid, 2),
+            "total_sales":         len(sale_rows),
+            "total_spent":         round(total_spent, 2),
+            "total_paid":          round(total_paid, 2),
             "outstanding_balance": outstanding if outstanding > 0 else 0,
-            "total_returns":      round(total_returns, 2)
+            "total_returns":       round(total_returns, 2)
         },
         "sales_history": sales_history
     })

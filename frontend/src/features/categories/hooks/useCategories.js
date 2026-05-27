@@ -1,4 +1,8 @@
 // src/features/categories/hooks/useCategories.js
+//
+// FIX: Changed limit=500 → limit=100 (matches paginate() le=100 cap).
+// Categories are typically small (<50 per business) so limit=100 covers all.
+// Search remains client-side since the backend has no search param for categories.
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -10,29 +14,39 @@ import {
   deleteCategory,
 } from '../api/categoriesApi'
 
-// ── Query key factory ────────────────────────────────────────────────────────
 const KEYS = {
-  all:  ['categories'],
-  list: (page) => ['categories', 'list', page],
+  all:    ['categories'],
+  list:   (page) => ['categories', 'list', page],
+  search: ['categories', 'all'],
 }
 
-// ── List hook ────────────────────────────────────────────────────────────────
-// Fetches paginated categories from the server.
-// Filters client-side by search string (backend has no search param).
 export function useCategories() {
   const [page, setPage]     = useState(1)
   const [search, setSearch] = useState('')
 
-  const query = useQuery({
+  const isSearching = search.trim().length > 0
+
+  // Normal paginated query (used when NOT searching)
+  const pagedQuery = useQuery({
     queryKey: KEYS.list(page),
     queryFn:  () => fetchCategories({ page, limit: 20 }),
     keepPreviousData: true,
     staleTime: 30_000,
+    enabled:  !isSearching,
   })
 
-  // Client-side filter by category_name (case-insensitive)
-  const allItems = query.data?.items ?? []
-  const filtered = search.trim()
+  // Full-dataset query for search — limit=100 (backend max, categories are small)
+  const allQuery = useQuery({
+    queryKey: KEYS.search,
+    queryFn:  () => fetchCategories({ page: 1, limit: 100 }),
+    staleTime: 30_000,
+    enabled:  isSearching,
+  })
+
+  const activeQuery = isSearching ? allQuery : pagedQuery
+  const allItems    = activeQuery.data?.items ?? []
+
+  const filtered = isSearching
     ? allItems.filter(c =>
         c.category_name.toLowerCase().includes(search.trim().toLowerCase())
       )
@@ -40,21 +54,18 @@ export function useCategories() {
 
   return {
     categories: filtered,
-    // Hide pagination while searching — filtered results are already all visible
-    pagination:  search.trim() ? null : (query.data?.pagination ?? null),
+    pagination: isSearching ? null : (pagedQuery.data?.pagination ?? null),
     page,
     setPage,
     search,
     setSearch,
-    isLoading:   query.isLoading,
-    isError:     query.isError,
+    isLoading:  activeQuery.isLoading,
+    isError:    activeQuery.isError,
   }
 }
 
-// ── Create mutation ──────────────────────────────────────────────────────────
 export function useCreateCategory() {
   const qc = useQueryClient()
-
   return useMutation({
     mutationFn: createCategory,
     onSuccess: () => {
@@ -62,16 +73,13 @@ export function useCreateCategory() {
       toast.success('Category created')
     },
     onError: (err) => {
-      const msg = err?.response?.data?.message || 'Could not create category'
-      toast.error(msg)
+      toast.error(err?.response?.data?.message || 'Could not create category')
     },
   })
 }
 
-// ── Update mutation ──────────────────────────────────────────────────────────
 export function useUpdateCategory() {
   const qc = useQueryClient()
-
   return useMutation({
     mutationFn: ({ id, payload }) => updateCategory(id, payload),
     onSuccess: () => {
@@ -79,16 +87,13 @@ export function useUpdateCategory() {
       toast.success('Category updated')
     },
     onError: (err) => {
-      const msg = err?.response?.data?.message || 'Could not update category'
-      toast.error(msg)
+      toast.error(err?.response?.data?.message || 'Could not update category')
     },
   })
 }
 
-// ── Delete mutation ──────────────────────────────────────────────────────────
 export function useDeleteCategory() {
   const qc = useQueryClient()
-
   return useMutation({
     mutationFn: deleteCategory,
     onSuccess: (data) => {
@@ -101,8 +106,7 @@ export function useDeleteCategory() {
       }
     },
     onError: (err) => {
-      const msg = err?.response?.data?.message || 'Could not delete category'
-      toast.error(msg)
+      toast.error(err?.response?.data?.message || 'Could not delete category')
     },
   })
 }

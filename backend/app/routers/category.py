@@ -40,17 +40,20 @@ def create_category(
         category_id=uuid.uuid4(),
         business_id=current_user["business_id"],
         category_name=payload.category_name
+        # updated_by stays NULL on create — only set on edits
     )
 
     db.add(new_category)
     db.commit()
     db.refresh(new_category)
 
-    return success_response(CategoryResponse.from_orm(new_category).dict(), 201)
+    # Return with last_updated_by included (will be None on create)
+    return success_response(_category_to_dict(new_category, last_updated_by=None), 201)
 
 
 # ══════════════════════════════════════════════════════════════════
 # GET /categories → All categories (paginated)
+# NEW: joins profiles to get last_updated_by name
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
 def get_categories(
@@ -58,14 +61,45 @@ def get_categories(
     pagination: dict = Depends(paginate),
     db: Session = Depends(get_db)
 ):
-    base_query = db.query(Category).filter(
-        Category.business_id == current_user["business_id"],
-        Category.is_deleted  == False
-    )
+    business_id = current_user["business_id"]
 
-    total      = base_query.count()
-    categories = base_query.offset(pagination["offset"]).limit(pagination["limit"]).all()
-    data       = [CategoryResponse.from_orm(c).dict() for c in categories]
+    total = db.query(func.count(Category.category_id)).filter(
+        Category.business_id == business_id,
+        Category.is_deleted  == False
+    ).scalar()
+
+    rows = db.execute(
+        text("""
+            SELECT
+                c.category_id, c.business_id, c.category_name,
+                c.is_deleted, c.created_at, c.updated_by,
+                p.full_name AS last_updated_by
+            FROM categories c
+            LEFT JOIN profiles p ON p.id = c.updated_by
+            WHERE c.business_id = CAST(:bid AS uuid)
+              AND c.is_deleted   = false
+            ORDER BY c.category_name ASC
+            OFFSET :offset LIMIT :limit
+        """),
+        {
+            "bid":    business_id,
+            "offset": pagination["offset"],
+            "limit":  pagination["limit"],
+        }
+    ).fetchall()
+
+    data = [
+        {
+            "category_id":    str(r.category_id),
+            "business_id":    str(r.business_id),
+            "category_name":  r.category_name,
+            "is_deleted":     r.is_deleted,
+            "created_at":     str(r.created_at) if r.created_at else None,
+            "updated_by":     str(r.updated_by) if r.updated_by else None,
+            "last_updated_by": r.last_updated_by if r.last_updated_by else None,
+        }
+        for r in rows
+    ]
 
     return success_response(
         pagination_response(
@@ -79,11 +113,6 @@ def get_categories(
 
 # ══════════════════════════════════════════════════════════════════
 # GET /categories/{category_id} → Category detail WITH product list
-#
-# Returns the category plus every product under it, with:
-#   is_low_stock → true when prod_stock_qty <= prod_low_stock_alert
-#   stock_value  → cost_price × stock_qty per product
-#   summary      → totals for the frontend header card
 # ══════════════════════════════════════════════════════════════════
 @router.get("/{category_id}")
 def get_category(
@@ -165,6 +194,7 @@ def get_category(
 
 # ══════════════════════════════════════════════════════════════════
 # PUT /categories/{category_id} → Update category name
+# NEW: sets updated_by = current_user["user_id"]
 # ══════════════════════════════════════════════════════════════════
 @router.put("/{category_id}")
 def update_category(
@@ -198,31 +228,23 @@ def update_category(
     for field, value in update_data.items():
         setattr(category, field, value)
 
+    # NEW: track who last updated this category
+    category.updated_by = current_user["user_id"]
+
     db.commit()
     db.refresh(category)
 
-    return success_response(CategoryResponse.from_orm(category).dict())
+    # Fetch the updater's name to return in response
+    updated_by_name = db.execute(
+        text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
+        {"uid": str(category.updated_by)}
+    ).scalar()
+
+    return success_response(_category_to_dict(category, last_updated_by=updated_by_name))
 
 
 # ══════════════════════════════════════════════════════════════════
 # DELETE /categories/{category_id} → Soft delete with CASCADE
-#
-# FIX: When a category is deactivated (soft-deleted), all products
-# under that category are also soft-deleted automatically.
-#
-# WHY cascade is needed:
-#   A product with a deleted category is an orphan — it shows in
-#   product lists but has no category context. The shopkeeper
-#   can't see or manage it from the category page. It pollutes
-#   search results and reports.
-#
-# WHY NOT a DB-level CASCADE:
-#   A DB ON DELETE CASCADE would permanently delete or null-out the
-#   category_id on products. We use soft-delete everywhere (is_deleted=true),
-#   so we handle this in the API layer with a targeted UPDATE.
-#
-# Response includes products_deactivated count so the frontend
-# can warn the user: "This will also deactivate 5 products."
 # ══════════════════════════════════════════════════════════════════
 @router.delete("/{category_id}")
 def delete_category(
@@ -242,7 +264,6 @@ def delete_category(
         return error_response("Category not found", 404)
 
     # Step 1 — Count active products that will be deactivated
-    # We read this BEFORE doing the UPDATE so we can report accurate count.
     affected_count_row = db.execute(
         text("""
             SELECT COUNT(*) AS cnt
@@ -257,8 +278,6 @@ def delete_category(
     affected_count = int(affected_count_row.cnt) if affected_count_row else 0
 
     # Step 2 — Soft-delete all active products under this category
-    # WHY raw SQL: faster than loading all Product ORM objects one by one.
-    # One UPDATE statement touches all matching rows in a single DB round-trip.
     db.execute(
         text("""
             UPDATE products
@@ -278,3 +297,16 @@ def delete_category(
         "message":              "Category deleted successfully",
         "products_deactivated": affected_count
     })
+
+
+# ── Private helper: uniform category dict with last_updated_by ──────────────
+def _category_to_dict(category: Category, last_updated_by=None):
+    return {
+        "category_id":    str(category.category_id),
+        "business_id":    str(category.business_id),
+        "category_name":  category.category_name,
+        "is_deleted":     category.is_deleted,
+        "created_at":     str(category.created_at) if category.created_at else None,
+        "updated_by":     str(category.updated_by) if category.updated_by else None,
+        "last_updated_by": last_updated_by,
+    }

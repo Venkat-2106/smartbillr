@@ -183,10 +183,14 @@ export const SUPPLIER_CSV_COLUMNS = [
   { key: 'supp_email',        label: 'Email' },
   { key: 'supp_address',      label: 'Address' },
   { key: 'supp_state',        label: 'State' },
-  { key: 'supp_country_code', label: 'Country Code' },
-  { key: 'supp_tax_number',   label: 'Tax / GST Number' },
-  { key: 'supp_created_at',   label: 'Created Date',
-    format: (val) => val ? new Date(val).toLocaleDateString('en-IN') : '' },
+  { key: 'supp_country_code', label: 'Country' },
+  { key: 'supp_tax_number',   label: 'Tax Number' },
+  {
+    key: 'updated_at',
+    label: 'Last Updated',
+    format: (val) => (val ? new Date(val).toLocaleDateString('en-IN') : ''),
+  },
+  { key: 'last_updated_by', label: 'Last Updated By' },
 ];
 
 /** Column config for Products export */

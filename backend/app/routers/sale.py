@@ -269,57 +269,81 @@ def get_sales(
         Sale.is_deleted  == False
     ).scalar()
 
-    sales = db.query(Sale).filter(
-        Sale.business_id == business_id,
-        Sale.is_deleted  == False
-    ).order_by(Sale.sales_created_at.desc()
-    ).offset(pagination["offset"]).limit(pagination["limit"]).all()
-
-    # ── FIX: Fetch cumulative_paid for all sales in ONE query ────────────────
-    # Instead of N separate queries (one per sale), we fetch ALL active
-    # payment rows for this business in a single query and build a lookup map.
-    # This is an O(1) DB roundtrip regardless of how many sales are on the page.
-    payment_rows = db.execute(
+    # ── Raw SQL with LEFT JOIN customers → gets customer_name in one query ───
+    # WHY raw SQL here: SQLAlchemy ORM query(Sale) returns ORM objects that
+    # don't carry JOIN columns. Raw SQL lets us SELECT s.*, c.cust_name in
+    # one round-trip without a separate N+1 customer lookup loop.
+    sales_rows = db.execute(
         text("""
-            SELECT sale_id,
-                   COALESCE(cumulative_paid, 0) AS total_paid,
-                   payment_status
-            FROM payments
-            WHERE business_id = CAST(:bid AS uuid)
-              AND is_active    = true
+            SELECT s.sales_id, s.invoice_no, s.customer_id,
+                   c.cust_name        AS customer_name,
+                   s.sales_total_amount, s.sales_final_amount,
+                   s.tax_total,
+                   s.sales_payment_status, s.sales_payment_method,
+                   s.sales_created_at
+            FROM sales s
+            LEFT JOIN customers c ON c.cust_id = s.customer_id
+            WHERE s.business_id = CAST(:bid AS uuid)
+              AND s.is_deleted  = false
+            ORDER BY s.sales_created_at DESC
+            OFFSET :offset LIMIT :limit
         """),
-        {"bid": business_id}
+        {
+            "bid":    business_id,
+            "offset": pagination["offset"],
+            "limit":  pagination["limit"]
+        }
     ).fetchall()
 
-    # Build a map: sale_id → {total_paid, payment_status}
-    payment_map = {
-        str(row.sale_id): {
-            "total_paid":     float(row.total_paid),
-            "payment_status": row.payment_status
+    # ── Scope payment lookup to only the IDs on this page ───────────────────
+    # WHY: fetching ALL payments for the business is wasteful at scale.
+    # We only need payment info for the sales currently visible on screen.
+    sale_ids = [str(r.sales_id) for r in sales_rows]
+
+    payment_map = {}
+    if sale_ids:
+        placeholders = ", ".join([f"CAST(:id_{i} AS uuid)" for i in range(len(sale_ids))])
+        id_params    = {f"id_{i}": sid for i, sid in enumerate(sale_ids)}
+        payment_rows = db.execute(
+            text(f"""
+                SELECT sale_id,
+                       COALESCE(cumulative_paid, 0) AS total_paid,
+                       payment_status
+                FROM payments
+                WHERE sale_id IN ({placeholders})
+                  AND is_active = true
+            """),
+            id_params
+        ).fetchall()
+        payment_map = {
+            str(row.sale_id): {
+                "total_paid":     float(row.total_paid),
+                "payment_status": row.payment_status
+            }
+            for row in payment_rows
         }
-        for row in payment_rows
-    }
 
     result = []
-    for s in sales:
-        sale_id_str   = str(s.sales_id)
-        sale_final    = float(s.sales_final_amount) if s.sales_final_amount else 0.0
-        pay_info      = payment_map.get(sale_id_str, {"total_paid": 0.0, "payment_status": s.sales_payment_status})
-        total_paid    = pay_info["total_paid"]
-        remaining     = round(sale_final - total_paid, 2)
+    for r in sales_rows:
+        sale_id_str = str(r.sales_id)
+        sale_final  = float(r.sales_final_amount) if r.sales_final_amount else 0.0
+        pay_info    = payment_map.get(sale_id_str, {"total_paid": 0.0, "payment_status": r.sales_payment_status})
+        total_paid  = pay_info["total_paid"]
+        remaining   = round(sale_final - total_paid, 2)
 
         result.append({
             "sales_id":             sale_id_str,
-            "invoice_no":           s.invoice_no,
-            "customer_id":          str(s.customer_id) if s.customer_id else None,
-            "sales_total_amount":   str(s.sales_total_amount),
-            "sales_final_amount":   str(s.sales_final_amount) if s.sales_final_amount else None,
-            "sales_payment_status": s.sales_payment_status,
-            "sales_payment_method": s.sales_payment_method,
-            # ── NEW fields for the shopkeeper dashboard ──
+            "invoice_no":           r.invoice_no,
+            "customer_id":          str(r.customer_id) if r.customer_id else None,
+            "customer_name":        r.customer_name or None,
+            "sales_total_amount":   str(r.sales_total_amount),
+            "sales_final_amount":   str(r.sales_final_amount) if r.sales_final_amount else None,
+            "tax_total":            str(r.tax_total) if r.tax_total else None,
+            "sales_payment_status": r.sales_payment_status,
+            "sales_payment_method": r.sales_payment_method,
             "total_paid":           round(total_paid, 2),
             "remaining_balance":    remaining if remaining > 0 else 0,
-            "sales_created_at":     str(s.sales_created_at)
+            "sales_created_at":     str(r.sales_created_at)
         })
 
     return success_response(
@@ -338,15 +362,18 @@ def get_sale(
 ):
     sale = db.execute(
         text("""
-            SELECT sales_id, business_id, customer_id, invoice_no,
-                   sales_total_amount, sales_discount,
-                   cgst_total, sgst_total, igst_total, tax_total,
-                   sales_final_amount, sales_payment_method,
-                   sales_payment_status, sales_created_at
-            FROM sales
-            WHERE sales_id    = CAST(:sid AS uuid)
-              AND business_id  = CAST(:bid AS uuid)
-              AND is_deleted   = false
+            SELECT s.sales_id, s.business_id, s.customer_id,
+                   c.cust_name        AS customer_name,
+                   s.invoice_no,
+                   s.sales_total_amount, s.sales_discount,
+                   s.cgst_total, s.sgst_total, s.igst_total, s.tax_total,
+                   s.sales_final_amount, s.sales_payment_method,
+                   s.sales_payment_status, s.sales_created_at
+            FROM sales s
+            LEFT JOIN customers c ON c.cust_id = s.customer_id
+            WHERE s.sales_id    = CAST(:sid AS uuid)
+              AND s.business_id = CAST(:bid AS uuid)
+              AND s.is_deleted  = false
         """),
         {"sid": sales_id, "bid": current_user["business_id"]}
     ).fetchone()
@@ -356,12 +383,14 @@ def get_sale(
 
     items = db.execute(
         text("""
-            SELECT sale_item_id, product_id,
-                   sale_item_quantity, sale_item_unit_price,
-                   sale_item_subtotal, cgst_amount, sgst_amount,
-                   igst_amount, tax_amount, item_tax_total, item_total_with_tax
-            FROM sale_items
-            WHERE sale_id = CAST(:sid AS uuid)
+            SELECT si.sale_item_id, si.product_id,
+                   p.prod_name         AS product_name,
+                   si.sale_item_quantity, si.sale_item_unit_price,
+                   si.sale_item_subtotal, si.cgst_amount, si.sgst_amount,
+                   si.igst_amount, si.tax_amount, si.item_tax_total, si.item_total_with_tax
+            FROM sale_items si
+            LEFT JOIN products p ON p.prod_id = si.product_id
+            WHERE si.sale_id = CAST(:sid AS uuid)
         """),
         {"sid": sales_id}
     ).fetchall()
@@ -386,6 +415,7 @@ def get_sale(
         {
             "sale_item_id":        str(i.sale_item_id),
             "product_id":          str(i.product_id),
+            "product_name":        i.product_name or "Unknown Product",
             "sale_item_quantity":  i.sale_item_quantity,
             "sale_item_unit_price": str(i.sale_item_unit_price),
             "sale_item_subtotal":  str(i.sale_item_subtotal) if i.sale_item_subtotal else None,
@@ -403,6 +433,7 @@ def get_sale(
         "sales_id":              str(sale.sales_id),
         "invoice_no":            sale.invoice_no,
         "customer_id":           str(sale.customer_id) if sale.customer_id else None,
+        "customer_name":         sale.customer_name or None,
         "sales_total_amount":    str(sale.sales_total_amount),
         "sales_discount":        str(sale.sales_discount),
         "cgst_total":            str(sale.cgst_total) if sale.cgst_total else None,

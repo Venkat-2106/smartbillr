@@ -662,9 +662,10 @@ export default function DashboardPage() {
     {
       label: 'Products',
       value: data?.total_products ?? 0,
-      sub: 'Items in catalogue',
+      sub: 'Active products — click to view',
       icon: '📦',
       gradient: 'linear-gradient(135deg, #F59E0B, #F97316)',
+      onClick: () => navigate('/products')
     },
     {
       label: 'Pending Payments',

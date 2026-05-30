@@ -19,6 +19,8 @@ import CategoriesPage from '../features/categories/pages/CategoriesPage'
 import ProductsPage from '../features/products/pages/ProductsPage'
 import CustomersPage from '../features/customers/pages/CustomersPage'
 import SuppliersPage from '../features/suppliers/pages/SuppliersPage';
+import SalesPage      from '../features/sales/pages/SalesPage';
+import CreateSalePage from '../features/sales/pages/CreateSalePage';
 
 
 // ─── Premium "Coming Soon" placeholder ───────────────────────────────────────
@@ -154,9 +156,23 @@ export default function AppRouter() {
 
           {/* ── All roles ──────────────────────────────────────────────── */}
           <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="sales"     element={<ComingSoon name="Sales" />} />
-          <Route path="sales/new" element={<ComingSoon name="Create Sale" />} />
           <Route path="payments"  element={<ComingSoon name="Payments" />} />
+          <Route
+            path="/sales"
+            element={
+              <ProtectedRoute permission="sales.view">
+                <SalesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/sales/new"
+            element={
+              <ProtectedRoute permission="sales.view">
+                <CreateSalePage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* ── Step 5.13 — Customers (real page, was ComingSoon) ──────── */}
           <Route

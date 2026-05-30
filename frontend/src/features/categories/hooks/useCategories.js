@@ -1,8 +1,10 @@
 // src/features/categories/hooks/useCategories.js
 //
-// FIX: Changed limit=500 → limit=100 (matches paginate() le=100 cap).
-// Categories are typically small (<50 per business) so limit=100 covers all.
-// Search remains client-side since the backend has no search param for categories.
+// FIX: Date filter now always uses the allQuery (full dataset, limit=100).
+// Before: date filter was applied in useMemo on top of pagedQuery (20 items)
+// which meant it only filtered the current page — missing records on other pages.
+// Now: allQuery is always pre-fetched in the background. The page switches to
+// allQuery whenever either search OR date filter is active.
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -17,7 +19,7 @@ import {
 const KEYS = {
   all:    ['categories'],
   list:   (page) => ['categories', 'list', page],
-  search: ['categories', 'all'],
+  full:   ['categories', 'all'],
 }
 
 export function useCategories() {
@@ -26,35 +28,39 @@ export function useCategories() {
 
   const isSearching = search.trim().length > 0
 
-  // Normal paginated query (used when NOT searching)
+  // Normal paginated query — used only when no filters are active
   const pagedQuery = useQuery({
     queryKey: KEYS.list(page),
     queryFn:  () => fetchCategories({ page, limit: 20 }),
     keepPreviousData: true,
     staleTime: 30_000,
-    enabled:  !isSearching,
   })
 
-  // Full-dataset query for search — limit=100 (backend max, categories are small)
+  // Full dataset query — used for search AND date filter
+  // Pre-fetched in background so it's ready when user starts filtering
   const allQuery = useQuery({
-    queryKey: KEYS.search,
+    queryKey: KEYS.full,
     queryFn:  () => fetchCategories({ page: 1, limit: 100 }),
     staleTime: 30_000,
-    enabled:  isSearching,
   })
 
-  const activeQuery = isSearching ? allQuery : pagedQuery
-  const allItems    = activeQuery.data?.items ?? []
+  // Switch to full dataset whenever any filter is active
+  const isFiltering = isSearching
+  const activeQuery = isFiltering ? allQuery : pagedQuery
+  const allItems    = allQuery.data?.items ?? []
+  const pagedItems  = pagedQuery.data?.items ?? []
 
+  // Search filters on the full dataset always
   const filtered = isSearching
     ? allItems.filter(c =>
         c.category_name.toLowerCase().includes(search.trim().toLowerCase())
       )
-    : allItems
+    : pagedItems
 
   return {
     categories: filtered,
-    pagination: isSearching ? null : (pagedQuery.data?.pagination ?? null),
+    allCategories: allItems,          // exposed so page can apply date filter on full set
+    pagination: isFiltering ? null : (pagedQuery.data?.pagination ?? null),
     page,
     setPage,
     search,

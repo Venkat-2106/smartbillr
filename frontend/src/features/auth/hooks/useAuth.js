@@ -32,7 +32,7 @@ export function useLogin() {
       // Fetch business
       try {
         const bizRes = await api.get('/businesses/me')
-        const biz = bizRes.data?.data || bizRes.data
+        const biz = bizRes.data
         if (biz) setBusiness(biz)
       } catch (bizErr) {
         console.warn('Could not load business profile:', bizErr.message)
@@ -41,8 +41,8 @@ export function useLogin() {
       // Fetch profile + permissions
       try {
         const profileRes = await api.get('/profiles/me')
-        // Backend returns { success: true, data: { full_name, role, permissions, ... } }
-        const profile = profileRes.data?.data || profileRes.data
+        // Backend returns data directly — no wrapper
+        const profile = profileRes.data
         if (profile) {
           setProfile(profile)
           // Explicitly store permissions so they are always in sync

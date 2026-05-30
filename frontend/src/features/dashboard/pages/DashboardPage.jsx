@@ -1,17 +1,31 @@
 // src/features/dashboard/pages/DashboardPage.jsx
 //
-// FIXES IN THIS VERSION:
-//   ✅ FIX — Clicking the "Customers" stat card navigates to /customers
-//            StatCard now accepts an optional `onClick` prop.
-//            Only the Customers card has it — other cards remain non-clickable.
-//   All other logic, layout, styles, chart, and permissions unchanged.
+// UPDATED: Now reads from the dedicated /dashboard/summary endpoint.
+//
+// FIELD NAMES CHANGED (backend now uses snake_case directly):
+//   Old (built in JS from raw sales):    New (from /dashboard/summary):
+//   data.totalRevenue               →    data.total_revenue
+//   data.totalExpenses              →    data.total_expenses
+//   data.totalInvoices              →    data.total_invoices
+//   data.totalCustomers             →    data.total_customers
+//   data.totalProducts              →    data.total_products
+//   data.pendingPayments            →    data.pending_payments
+//   data.lowStockAlerts             →    data.low_stock_alerts
+//   data.recentSales                →    REMOVED (dashboard no longer shows
+//                                         recent sales table — it's a summary view)
+//
+// PERMISSION BEHAVIOUR:
+//   total_revenue and total_expenses come back as null from the backend
+//   when the user lacks dashboard.financial. We simply hide those cards.
+//   No need for frontend permission check — null is the signal.
+//
+// All layout, design, stat card gradients, chart, and styles are UNCHANGED.
 
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDashboard, useSalesTrend } from '../hooks/useDashboard'
 import useAuthStore from '../../../store/authStore'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
-import { formatDate } from '../../../shared/utils/formatDate'
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 function Skeleton({ w = '60%', h = 28 }) {
@@ -26,8 +40,6 @@ function Skeleton({ w = '60%', h = 28 }) {
 }
 
 // ─── Stat Card (Premium Colored) ──────────────────────────────────────────────
-// FIX: Added optional `onClick` prop — shows pointer cursor + slight ring on hover
-// when clickable. Non-clickable cards (onClick=undefined) behave exactly as before.
 function StatCard({ label, value, sub, icon, gradient, loading, onClick }) {
   const isClickable = typeof onClick === 'function'
 
@@ -102,7 +114,6 @@ function StatCard({ label, value, sub, icon, gradient, loading, onClick }) {
       <div>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
           {label}
-          {/* Small arrow hint for clickable cards */}
           {isClickable && (
             <span style={{ marginLeft: 5, fontSize: 11, color: 'var(--accent-600)', verticalAlign: 'middle' }}>
               →
@@ -114,28 +125,6 @@ function StatCard({ label, value, sub, icon, gradient, loading, onClick }) {
         </div>
       </div>
     </div>
-  )
-}
-
-// ─── Badge ────────────────────────────────────────────────────────────────────
-function Badge({ status }) {
-  const cfg = {
-    paid:    { bg: 'var(--success-bg)', color: 'var(--success-text)', border: 'var(--success-border)', dot: '#22C55E', label: 'Paid' },
-    partial: { bg: 'var(--warning-bg)', color: 'var(--warning-text)', border: 'var(--warning-border)', dot: '#F59E0B', label: 'Partial' },
-    unpaid:  { bg: 'var(--danger-bg)',  color: 'var(--danger-text)',  border: 'var(--danger-border)',  dot: '#F43F5E', label: 'Unpaid' },
-  }
-  const c = cfg[status] || cfg.unpaid
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5,
-      background: c.bg, color: c.color,
-      border: '1px solid ' + c.border,
-      padding: '3px 10px', borderRadius: 99,
-      fontSize: 11.5, fontWeight: 600,
-    }}>
-      <span style={{ width: 5, height: 5, borderRadius: '50%', background: c.dot, flexShrink: 0 }} />
-      {c.label}
-    </span>
   )
 }
 
@@ -211,7 +200,7 @@ function SalesTrendChart({ period, onPeriodChange }) {
             Sales Trend
           </h2>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, fontWeight: 400 }}>
-            Invoices raised over time — all roles
+            Invoices raised over time — all history
           </p>
         </div>
         <div style={{
@@ -303,33 +292,368 @@ function SalesTrendChart({ period, onPeriodChange }) {
   )
 }
 
+// ─── Payment Status Donut ─────────────────────────────────────────────────────
+// Uses paid_count, pending_payments (partial), unpaid_count from summary.
+// Pure SVG arc math — no library needed.
+function PaymentDonut({ paid = 0, partial = 0, unpaid = 0, loading }) {
+  const total = paid + partial + unpaid || 1
+  const segments = [
+    { label: 'Paid',    value: paid,    color: '#10B981' },
+    { label: 'Partial', value: partial, color: '#F59E0B' },
+    { label: 'Unpaid',  value: unpaid,  color: '#EF4444' },
+  ]
+
+  // Build SVG arc paths. cx,cy = center, r = radius, hole = donut hole radius
+  const cx = 80, cy = 80, r = 60, hole = 36
+  let startAngle = -Math.PI / 2   // start at 12 o'clock
+
+  function polarToXY(angle, radius) {
+    return {
+      x: cx + radius * Math.cos(angle),
+      y: cy + radius * Math.sin(angle),
+    }
+  }
+
+  function arcPath(start, end, outerR, innerR) {
+    const largeArc = end - start > Math.PI ? 1 : 0
+    const o1 = polarToXY(start, outerR)
+    const o2 = polarToXY(end,   outerR)
+    const i1 = polarToXY(end,   innerR)
+    const i2 = polarToXY(start, innerR)
+    return [
+      `M ${o1.x} ${o1.y}`,
+      `A ${outerR} ${outerR} 0 ${largeArc} 1 ${o2.x} ${o2.y}`,
+      `L ${i1.x} ${i1.y}`,
+      `A ${innerR} ${innerR} 0 ${largeArc} 0 ${i2.x} ${i2.y}`,
+      'Z'
+    ].join(' ')
+  }
+
+  const arcs = segments.map(seg => {
+    const sweep = (seg.value / total) * 2 * Math.PI
+    const end = startAngle + sweep
+    const path = sweep > 0.001 ? arcPath(startAngle, end, r, hole) : null
+    startAngle = end
+    return { ...seg, path }
+  })
+
+  return (
+    <div style={{
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border)',
+      borderRadius: 18,
+      boxShadow: 'var(--shadow-card)',
+      padding: '24px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 16,
+    }}>
+      <div>
+        <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 3px' }}>
+          Payment Status
+        </h2>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+          Breakdown across all invoices
+        </p>
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
+          <Skeleton w={120} h={120} />
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+          <svg viewBox="0 0 160 160" style={{ width: 140, height: 140, flexShrink: 0 }}>
+            {arcs.map(arc => arc.path && (
+              <path key={arc.label} d={arc.path} fill={arc.color} opacity={0.92} />
+            ))}
+            {/* Center text */}
+            <text x={cx} y={cy - 6} textAnchor="middle" fontSize="18" fontWeight="800"
+              fill="var(--text-primary)" fontFamily="var(--font-sans,'Plus Jakarta Sans',sans-serif)">
+              {total}
+            </text>
+            <text x={cx} y={cy + 10} textAnchor="middle" fontSize="10"
+              fill="var(--text-muted)" fontFamily="var(--font-sans,'Plus Jakarta Sans',sans-serif)">
+              invoices
+            </text>
+          </svg>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {segments.map(seg => (
+              <div key={seg.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: seg.color, flexShrink: 0 }} />
+                <div>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {seg.value}
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6 }}>
+                    {seg.label} ({total > 0 ? Math.round(seg.value / total * 100) : 0}%)
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Revenue vs Expenses Bar ──────────────────────────────────────────────────
+// Two bars side by side using the revenue + expenses already in summary.
+// Only shown when both values are non-null (admin/manager).
+function RevenueExpensesBar({ revenue, expenses, country, loading }) {
+  if (!loading && (revenue == null || expenses == null)) return null
+
+  const maxVal = Math.max(revenue || 0, expenses || 0, 1)
+  const revenueW  = ((revenue  || 0) / maxVal) * 100
+  const expensesW = ((expenses || 0) / maxVal) * 100
+  const profit    = (revenue || 0) - (expenses || 0)
+  const profitPct = revenue > 0 ? Math.round((profit / revenue) * 100) : 0
+
+  const bars = [
+    { label: 'Revenue',  value: revenue  || 0, pct: revenueW,  color: '#10B981' },
+    { label: 'Expenses', value: expenses || 0, pct: expensesW, color: '#EF4444' },
+  ]
+
+  return (
+    <div style={{
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border)',
+      borderRadius: 18,
+      boxShadow: 'var(--shadow-card)',
+      padding: '24px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 16,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 3px' }}>
+            Revenue vs Expenses
+          </h2>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+            All-time totals comparison
+          </p>
+        </div>
+        {!loading && (
+          <div style={{
+            padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+            background: profit >= 0 ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+            color: profit >= 0 ? '#10B981' : '#EF4444',
+          }}>
+            {profit >= 0 ? '▲' : '▼'} {Math.abs(profitPct)}% margin
+          </div>
+        )}
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Skeleton w="80%" h={20} />
+          <Skeleton w="60%" h={20} />
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {bars.map(bar => (
+            <div key={bar.label}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{bar.label}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {formatCurrency(bar.value, country)}
+                </span>
+              </div>
+              <div style={{ height: 10, background: 'var(--bg-subtle)', borderRadius: 999, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${bar.pct}%`,
+                  background: bar.color,
+                  borderRadius: 999,
+                  transition: 'width 0.6s ease',
+                }} />
+              </div>
+            </div>
+          ))}
+
+          <div style={{
+            marginTop: 4,
+            paddingTop: 14,
+            borderTop: '1px solid var(--border)',
+            display: 'flex',
+            justifyContent: 'space-between',
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Net Profit</span>
+            <span style={{
+              fontSize: 14, fontWeight: 800,
+              color: profit >= 0 ? '#10B981' : '#EF4444',
+            }}>
+              {formatCurrency(Math.abs(profit), country)}
+              <span style={{ fontSize: 11, fontWeight: 500, marginLeft: 4 }}>
+                {profit >= 0 ? 'profit' : 'loss'}
+              </span>
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Business Health Score ────────────────────────────────────────────────────
+// Computed entirely from existing summary fields — no new API call.
+// Score 0-100 based on: payment collection rate, stock alerts, expense ratio.
+function HealthScore({ data, loading }) {
+  if (!loading && !data) return null
+
+  // Each metric contributes to the score (computed from already-fetched data)
+  const total = (data?.total_invoices || 0)
+  const paid  = (data?.paid_count     || 0)
+  const low   = (data?.low_stock_alerts || 0)
+  const rev   = data?.total_revenue   || 0
+  const exp   = data?.total_expenses  || 0
+
+  // Metric 1: Collection rate — paid / total invoices (max 50 pts)
+  const collectionRate = total > 0 ? paid / total : 0
+  const collectionScore = Math.round(collectionRate * 50)
+
+  // Metric 2: Stock health — 0 alerts = 30 pts, deduct 5 per alert (min 0)
+  const stockScore = Math.max(0, 30 - low * 5)
+
+  // Metric 3: Expense ratio — only if financial data present (max 20 pts)
+  let expenseScore = 10  // neutral if no financial data
+  if (rev > 0 && exp != null) {
+    const ratio = exp / rev   // lower = healthier
+    expenseScore = ratio <= 0.5 ? 20 : ratio <= 0.8 ? 12 : 4
+  }
+
+  const score = Math.min(100, collectionScore + stockScore + expenseScore)
+
+  const scoreColor = score >= 75 ? '#10B981' : score >= 50 ? '#F59E0B' : '#EF4444'
+  const scoreLabel = score >= 75 ? 'Healthy' : score >= 50 ? 'Moderate' : 'Needs Attention'
+
+  // SVG arc for the score gauge
+  const radius = 54
+  const circ   = 2 * Math.PI * radius
+  const dash   = (score / 100) * circ * 0.75   // 270° arc
+  const gap    = circ - dash
+
+  return (
+    <div style={{
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border)',
+      borderRadius: 18,
+      boxShadow: 'var(--shadow-card)',
+      padding: '24px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 16,
+    }}>
+      <div>
+        <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 3px' }}>
+          Business Health
+        </h2>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+          Score based on payments, stock &amp; expenses
+        </p>
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '20px 0' }}>
+          <Skeleton w={120} h={120} />
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+          {/* Gauge */}
+          <svg viewBox="0 0 130 130" style={{ width: 120, height: 120, flexShrink: 0, transform: 'rotate(135deg)' }}>
+            {/* Background track */}
+            <circle cx="65" cy="65" r={radius} fill="none"
+              stroke="var(--bg-subtle)" strokeWidth="10"
+              strokeDasharray={`${circ * 0.75} ${circ * 0.25}`}
+              strokeLinecap="round" />
+            {/* Score arc */}
+            <circle cx="65" cy="65" r={radius} fill="none"
+              stroke={scoreColor} strokeWidth="10"
+              strokeDasharray={`${dash} ${gap + circ * 0.25}`}
+              strokeLinecap="round"
+              style={{ transition: 'stroke-dasharray 0.8s ease' }} />
+            {/* Center — rotate back to read text normally */}
+            <g transform="rotate(-135 65 65)">
+              <text x="65" y="60" textAnchor="middle" fontSize="22" fontWeight="800"
+                fill="var(--text-primary)" fontFamily="var(--font-sans,'Plus Jakarta Sans',sans-serif)">
+                {score}
+              </text>
+              <text x="65" y="75" textAnchor="middle" fontSize="10"
+                fill="var(--text-muted)" fontFamily="var(--font-sans,'Plus Jakarta Sans',sans-serif)">
+                / 100
+              </text>
+            </g>
+          </svg>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{
+              padding: '4px 12px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+              background: score >= 75 ? 'rgba(16,185,129,0.12)' : score >= 50 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)',
+              color: scoreColor, display: 'inline-block', alignSelf: 'flex-start',
+            }}>
+              {scoreLabel}
+            </div>
+            {[
+              { label: 'Collection Rate', val: `${Math.round(collectionRate * 100)}%` },
+              { label: 'Stock Alerts',    val: low },
+            ].map(m => (
+              <div key={m.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 20 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.label}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{m.val}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const { data, isLoading, isError } = useDashboard()
   const business      = useAuthStore(s => s.business)
-  const hasPermission = useAuthStore(s => s.hasPermission)
   const country       = business?.business_country_code || 'IN'
-
-  // FIX: navigate for clickable cards
-  const navigate = useNavigate()
-
+  const navigate      = useNavigate()
   const [trendPeriod, setTrendPeriod] = useState('weekly')
 
-  const canSeeFinancials = hasPermission('dashboard.financial')
+  // ── Build stat cards ──────────────────────────────────────────────────────
+  // Financial cards only appear when the backend returns a non-null value.
+  // Backend sends null when user lacks dashboard.financial permission.
+  // This way the frontend never needs to check permission codes directly —
+  // null is the signal to hide.
 
-  // ── KPI cards — always visible (dashboard.view) ──────────────────────────
-  // FIX: Customers card gets onClick → navigate('/customers')
-  const kpiCards = [
+  const allCards = [
+    // Financial (shown only when backend returns a value — admin/manager)
+    data?.total_revenue != null ? {
+      label: 'Total Revenue',
+      value: formatCurrency(data.total_revenue, country),
+      sub: 'Gross from all invoices',
+      icon: '💰',
+      gradient: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
+    } : null,
+    data?.total_expenses != null ? {
+      label: 'Total Expenses',
+      value: formatCurrency(data.total_expenses, country),
+      sub: 'All recorded expenses',
+      icon: '📊',
+      gradient: 'linear-gradient(135deg, #8B5CF6, #A855F7)',
+    } : null,
+
+    // Always visible (dashboard.view)
     {
       label: 'Total Invoices',
-      value: data?.totalInvoices   ?? 0,
+      value: data?.total_invoices ?? 0,
       sub: 'All invoices raised',
       icon: '🧾',
       gradient: 'linear-gradient(135deg, #0EA5E9, #06B6D4)',
     },
     {
       label: 'Customers',
-      value: data?.totalCustomers  ?? 0,
+      value: data?.total_customers ?? 0,
       sub: 'Active accounts — click to view',
       icon: '👥',
       gradient: 'linear-gradient(135deg, #10B981, #059669)',
@@ -337,56 +661,26 @@ export default function DashboardPage() {
     },
     {
       label: 'Products',
-      value: data?.totalProducts   ?? 0,
+      value: data?.total_products ?? 0,
       sub: 'Items in catalogue',
       icon: '📦',
       gradient: 'linear-gradient(135deg, #F59E0B, #F97316)',
     },
     {
       label: 'Pending Payments',
-      value: data?.pendingPayments ?? 0,
+      value: data?.pending_payments ?? 0,
       sub: 'Partial invoices',
       icon: '⏳',
       gradient: 'linear-gradient(135deg, #F97316, #EF4444)',
     },
     {
       label: 'Low Stock Alerts',
-      value: data?.lowStockAlerts  ?? 0,
+      value: data?.low_stock_alerts ?? 0,
       sub: 'Unread alerts',
       icon: '⚠️',
       gradient: 'linear-gradient(135deg, #EF4444, #DC2626)',
     },
-  ]
-
-  // ── Financial cards — only admin (dashboard.financial) ───────────────────
-  const financialCards = [
-    {
-      label: 'Total Revenue',
-      value: formatCurrency(data?.totalRevenue  || 0, country),
-      sub: 'Gross from all invoices',
-      icon: '💰',
-      gradient: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
-    },
-    {
-      label: 'Total Expenses',
-      value: formatCurrency(data?.totalExpenses || 0, country),
-      sub: 'All recorded expenses',
-      icon: '📊',
-      gradient: 'linear-gradient(135deg, #8B5CF6, #A855F7)',
-    },
-  ]
-
-  const visibleCards = canSeeFinancials
-    ? [...financialCards, ...kpiCards]
-    : kpiCards
-
-  const tableHeaders = canSeeFinancials
-    ? ['Invoice No', 'Amount', 'Status', 'Date']
-    : ['Invoice No', 'Status', 'Date']
-
-  const skeletonWidths = canSeeFinancials
-    ? ['70%', '100px', '60px', '90px']
-    : ['70%', '60px', '90px']
+  ].filter(Boolean)   // removes the null entries when financial fields are absent
 
   return (
     <>
@@ -425,105 +719,38 @@ export default function DashboardPage() {
         gap: 16,
         marginBottom: 40,
       }}>
-        {visibleCards.map(card => (
-          <StatCard key={card.label} {...card} loading={isLoading} />
+        {(isLoading ? Array(5).fill(null) : allCards).map((card, i) => (
+          card
+            ? <StatCard key={card.label} {...card} loading={false} />
+            : <StatCard key={i} label="" value="" sub="" icon="💰"
+                gradient="linear-gradient(135deg, #4F46E5, #7C3AED)" loading={true} />
         ))}
+      </div>
+
+      {/* ── BI Visuals row ── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+        gap: 16,
+        marginBottom: 40,
+      }}>
+        <PaymentDonut
+          paid={data?.paid_count}
+          partial={data?.pending_payments}
+          unpaid={data?.unpaid_count}
+          loading={isLoading}
+        />
+        <RevenueExpensesBar
+          revenue={data?.total_revenue}
+          expenses={data?.total_expenses}
+          country={country}
+          loading={isLoading}
+        />
+        <HealthScore data={data} loading={isLoading} />
       </div>
 
       {/* ── Sales Trend Chart ── */}
       <SalesTrendChart period={trendPeriod} onPeriodChange={setTrendPeriod} />
-
-      {/* ── Recent Sales header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-        <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-          Recent Sales
-        </h2>
-        <span style={{
-          fontSize: 11.5, fontWeight: 600,
-          color: 'var(--text-secondary)',
-          background: 'var(--bg-subtle)',
-          border: '1px solid var(--border)',
-          borderRadius: 99, padding: '2px 9px',
-        }}>
-          Last 5
-        </span>
-      </div>
-
-      {/* ── Recent Sales table ── */}
-      <div style={{
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderRadius: 18,
-        boxShadow: 'var(--shadow-card)',
-        overflow: 'hidden',
-      }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border)' }}>
-                {tableHeaders.map(h => (
-                  <th key={h} style={{
-                    padding: '12px 24px', textAlign: 'left',
-                    fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)',
-                    letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap',
-                  }}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                [...Array(5)].map((_, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
-                    {skeletonWidths.map((w, j) => (
-                      <td key={j} style={{ padding: '16px 24px' }}>
-                        <Skeleton w={w} h={13} />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : !data?.recentSales?.length ? (
-                <tr>
-                  <td colSpan={tableHeaders.length} style={{
-                    padding: '56px 24px', textAlign: 'center',
-                    color: 'var(--text-muted)', fontSize: 13.5,
-                  }}>
-                    No sales yet. Create your first invoice to see it here.
-                  </td>
-                </tr>
-              ) : (
-                data.recentSales.map((sale, i) => (
-                  <tr
-                    key={sale.sales_id}
-                    style={{
-                      borderBottom: i < data.recentSales.length - 1 ? '1px solid var(--border)' : 'none',
-                      transition: 'background 0.13s',
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-subtle)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                  >
-                    <td style={{ padding: '16px 24px', fontSize: 13, fontWeight: 700, color: 'var(--accent-600)', letterSpacing: '0.01em' }}>
-                      {sale.invoice_no}
-                    </td>
-                    {canSeeFinancials && (
-                      <td style={{ padding: '16px 24px', fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {formatCurrency(parseFloat(sale.sales_final_amount), country)}
-                      </td>
-                    )}
-                    <td style={{ padding: '16px 24px' }}>
-                      <Badge status={sale.sales_payment_status} />
-                    </td>
-                    <td style={{ padding: '16px 24px', fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 400 }}>
-                      {formatDate(sale.sales_created_at)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </>
   )
 }

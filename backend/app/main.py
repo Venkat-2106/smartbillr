@@ -4,8 +4,9 @@ from app.middleware.auth import verify_token
 from app.utils.response import success_response, error_response
 from app.routers import (
     business, category, customer, supplier,
-    product, sale, payment, purchase,staff,
-    stock, expense, sales_return, purchase_return, profiles
+    product, sale, payment, purchase, staff,
+    stock, expense, sales_return, purchase_return, profiles,
+    dashboard   # ← NEW: dedicated dashboard aggregation router
 )
 import os
 
@@ -42,7 +43,8 @@ app.include_router(expense.router)
 app.include_router(sales_return.router)
 app.include_router(purchase_return.router)
 app.include_router(profiles.router)
-app.include_router(staff.router)  
+app.include_router(staff.router)
+app.include_router(dashboard.router)   # ← NEW
 
 @app.get("/")
 def root():

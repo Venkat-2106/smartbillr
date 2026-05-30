@@ -53,7 +53,7 @@ def create_category(
 
 # ══════════════════════════════════════════════════════════════════
 # GET /categories → All categories (paginated)
-# NEW: joins profiles to get last_updated_by name
+# Joins profiles to get last_updated_by name + returns updated_at
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
 def get_categories(
@@ -72,7 +72,7 @@ def get_categories(
         text("""
             SELECT
                 c.category_id, c.business_id, c.category_name,
-                c.is_deleted, c.created_at, c.updated_by,
+                c.is_deleted, c.created_at, c.updated_at, c.updated_by,
                 p.full_name AS last_updated_by
             FROM categories c
             LEFT JOIN profiles p ON p.id = c.updated_by
@@ -95,6 +95,7 @@ def get_categories(
             "category_name":  r.category_name,
             "is_deleted":     r.is_deleted,
             "created_at":     str(r.created_at) if r.created_at else None,
+            "updated_at":     str(r.updated_at) if r.updated_at else None,
             "updated_by":     str(r.updated_by) if r.updated_by else None,
             "last_updated_by": r.last_updated_by if r.last_updated_by else None,
         }
@@ -182,6 +183,7 @@ def get_category(
         "category_name": category.category_name,
         "is_deleted":    category.is_deleted,
         "created_at":    str(category.created_at) if category.created_at else None,
+        "updated_at":    str(category.updated_at) if category.updated_at else None,
         "summary": {
             "total_products":     total_products,
             "low_stock_count":    low_stock_count,
@@ -194,7 +196,8 @@ def get_category(
 
 # ══════════════════════════════════════════════════════════════════
 # PUT /categories/{category_id} → Update category name
-# NEW: sets updated_by = current_user["user_id"]
+# Sets updated_by = current_user["user_id"]
+# DB trigger automatically sets updated_at on commit
 # ══════════════════════════════════════════════════════════════════
 @router.put("/{category_id}")
 def update_category(
@@ -228,7 +231,8 @@ def update_category(
     for field, value in update_data.items():
         setattr(category, field, value)
 
-    # NEW: track who last updated this category
+    # Track who last updated this category
+    # updated_at is set automatically by DB trigger trg_categories_updated_at
     category.updated_by = current_user["user_id"]
 
     db.commit()
@@ -299,7 +303,7 @@ def delete_category(
     })
 
 
-# ── Private helper: uniform category dict with last_updated_by ──────────────
+# ── Private helper: uniform category dict with updated_at + last_updated_by ──
 def _category_to_dict(category: Category, last_updated_by=None):
     return {
         "category_id":    str(category.category_id),
@@ -307,6 +311,7 @@ def _category_to_dict(category: Category, last_updated_by=None):
         "category_name":  category.category_name,
         "is_deleted":     category.is_deleted,
         "created_at":     str(category.created_at) if category.created_at else None,
+        "updated_at":     str(category.updated_at) if category.updated_at else None,
         "updated_by":     str(category.updated_by) if category.updated_by else None,
         "last_updated_by": last_updated_by,
     }

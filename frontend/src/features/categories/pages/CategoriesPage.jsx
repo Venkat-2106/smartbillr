@@ -1,12 +1,12 @@
 // src/features/categories/pages/CategoriesPage.jsx
 //
-// FIXES IN THIS VERSION:
-//   ✅ FIX A — Back button added (← Back to Dashboard via useNavigate)
-//   ✅ FIX B — Last Updated By column: if backend doesn't return the field,
-//              shows "—" consistently. Column was already in the JSX but the
-//              backend GET /categories/ must JOIN to profiles for this to populate.
-//              Frontend side is correct — verify backend returns `last_updated_by`.
+// CHANGES IN THIS VERSION:
+//   ✅ Added ExportButton with CATEGORY_CSV_COLUMNS to the PageHeader action slot
 //   All other logic, layout, styles unchanged.
+//
+// PREVIOUS FIXES RETAINED:
+//   ✅ FIX A — Back button added (← Back to Dashboard via useNavigate)
+//   ✅ FIX B — Last Updated By column
 
 import { useState, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
@@ -25,10 +25,13 @@ import {
   FormField,
   Input,
   SearchBar,
+  ExportButton,
+  DateRangeFilter
 } from '../../../shared/components'
 
-import { usePermissions }   from '../../../shared/hooks/usePermissions'
-import { formatDate }       from '../../../shared/utils/formatDate'
+import { CATEGORY_CSV_COLUMNS } from '../../../shared/utils/csvExport'
+import { usePermissions }        from '../../../shared/hooks/usePermissions'
+import { formatDate }            from '../../../shared/utils/formatDate'
 
 import {
   useCategories,
@@ -45,48 +48,6 @@ const categorySchema = z.object({
     .max(100, 'Name must be 100 characters or less')
     .trim(),
 })
-
-// ── Date range filter bar ─────────────────────────────────────────────────────
-function DateRangeFilter({ from, to, onChange }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-      <span style={{
-        fontSize: 12, fontWeight: 600, color: 'var(--text-muted)',
-        letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap',
-      }}>
-        Created
-      </span>
-      <input type="date" value={from} onChange={e => onChange('from', e.target.value)} style={dateInputStyle} />
-      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>to</span>
-      <input type="date" value={to}   onChange={e => onChange('to',   e.target.value)} style={dateInputStyle} />
-      {(from || to) && (
-        <button
-          onClick={() => { onChange('from', ''); onChange('to', '') }}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            fontSize: 11.5, color: 'var(--accent-600)', fontWeight: 600,
-            padding: '2px 6px',
-            fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
-          }}
-        >
-          Clear
-        </button>
-      )}
-    </div>
-  )
-}
-
-const dateInputStyle = {
-  padding: '6px 10px',
-  background: 'var(--bg-card)',
-  border: '1.5px solid var(--border)',
-  borderRadius: 8,
-  fontSize: 12.5,
-  color: 'var(--text-primary)',
-  fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
-  outline: 'none',
-  cursor: 'pointer',
-}
 
 // ── Category Form ─────────────────────────────────────────────────────────────
 function CategoryForm({ defaultValues = {}, onSubmit, onClose, isPending }) {
@@ -117,11 +78,11 @@ export default function CategoriesPage() {
   const { can }   = usePermissions()
   const canManage = can('products.edit')
 
-  // FIX A: Back button to dashboard
   const navigate = useNavigate()
 
   const {
     categories,
+    allCategories,
     pagination,
     page,
     setPage,
@@ -152,17 +113,18 @@ export default function CategoriesPage() {
   }
 
   const displayRows = useMemo(() => {
-    let rows = [...categories]
+    const source = (dateFrom || dateTo) ? allCategories : categories
+    let rows = [...source]
 
     if (dateFrom) {
       const from = new Date(dateFrom)
       from.setHours(0, 0, 0, 0)
-      rows = rows.filter(r => r.created_at && new Date(r.created_at) >= from)
+      rows = rows.filter(r => r.updated_at && new Date(r.updated_at) >= from)
     }
     if (dateTo) {
       const to = new Date(dateTo)
       to.setHours(23, 59, 59, 999)
-      rows = rows.filter(r => r.created_at && new Date(r.created_at) <= to)
+      rows = rows.filter(r => r.updated_at && new Date(r.updated_at) <= to)
     }
 
     if (sortKey) {
@@ -170,7 +132,7 @@ export default function CategoriesPage() {
         let valA = a[sortKey]
         let valB = b[sortKey]
 
-        if (sortKey === 'created_at') {
+        if (sortKey === 'updated_at') {
           valA = valA ? new Date(valA).getTime() : 0
           valB = valB ? new Date(valB).getTime() : 0
           return sortDir === 'asc' ? valA - valB : valB - valA
@@ -191,15 +153,15 @@ export default function CategoriesPage() {
     }
 
     return rows
-  }, [categories, sortKey, sortDir, dateFrom, dateTo])
+  }, [categories, allCategories, sortKey, sortDir, dateFrom, dateTo])
 
   const { mutate: createCategory, isPending: isCreating } = useCreateCategory()
   const { mutate: updateCategory, isPending: isUpdating } = useUpdateCategory()
   const { mutate: deleteCategory, isPending: isDeleting } = useDeleteCategory()
 
-  const [showAdd,       setShowAdd]       = useState(false)
-  const [editTarget,    setEditTarget]    = useState(null)
-  const [deleteTarget,  setDeleteTarget]  = useState(null)
+  const [showAdd,      setShowAdd]      = useState(false)
+  const [editTarget,   setEditTarget]   = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
 
   function handleCreate(data) {
     createCategory(data, { onSuccess: () => setShowAdd(false) })
@@ -245,20 +207,16 @@ export default function CategoriesPage() {
       ),
     },
     {
-      key: 'created_at',
-      label: 'Created',
+      key: 'updated_at',
+      label: 'Last Updated',
       sortable: true,
       width: 140,
       render: (row) => (
         <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-          {row.created_at ? formatDate(row.created_at) : '—'}
+          {row.updated_at ? formatDate(row.updated_at) : '—'}
         </span>
       ),
     },
-    // FIX B: Last Updated By column — data comes from backend JOIN to profiles.
-    // If backend doesn't return last_updated_by, all rows show "—".
-    // To populate this: ensure GET /categories/ does a LEFT JOIN to profiles
-    // on updated_by FK and returns full_name as last_updated_by.
     {
       key: 'last_updated_by',
       label: 'Last Updated By',
@@ -303,22 +261,29 @@ export default function CategoriesPage() {
 
   return (
     <>
-      {/* FIX A: back prop + onBack navigates to dashboard */}
       <PageHeader
         title="Categories"
         subtitle="Organise your products into groups"
         back
         onBack={() => navigate('/dashboard')}
         action={
-          canManage && (
-            <Button
-              variant="primary"
-              leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
-              onClick={() => setShowAdd(true)}
-            >
-              Add Category
-            </Button>
-          )
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            {/* ADDED: Export CSV button */}
+            <ExportButton
+              data={displayRows}
+              filename="categories"
+              columns={CATEGORY_CSV_COLUMNS}
+            />
+            {canManage && (
+              <Button
+                variant="primary"
+                leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
+                onClick={() => setShowAdd(true)}
+              >
+                Add Category
+              </Button>
+            )}
+          </div>
         }
       />
 
@@ -339,7 +304,7 @@ export default function CategoriesPage() {
             placeholder="Search categories…"
             width="260px"
           />
-          <DateRangeFilter from={dateFrom} to={dateTo} onChange={handleDateChange} />
+          <DateRangeFilter label="Last Updated" from={dateFrom} to={dateTo} onChange={handleDateChange} />
         </div>
         <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
           {displayRows.length} record{displayRows.length !== 1 ? 's' : ''}

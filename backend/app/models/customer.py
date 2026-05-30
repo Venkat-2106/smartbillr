@@ -20,3 +20,10 @@ class Customer(Base):
     is_deleted = Column(Boolean, default=False)
     # FIX: DB type is timestamp without time zone — was incorrectly String
     cust_created_at = Column(DateTime, nullable=True, server_default=text("now()"))
+    # DB trigger trg_customers_updated_at fires on every UPDATE and sets this automatically.
+    # We declare it here so SQLAlchemy can read the value after commit (via db.refresh()).
+    updated_at = Column(DateTime, nullable=True, server_default=text("now()"))
+    # updated_by: plain UUID — no ForeignKey() declared here (same pattern as Category).
+    # The FK constraint exists in DB: REFERENCES profiles(id) ON DELETE SET NULL.
+    # We set this in PUT route and JOIN via raw SQL to get the name.
+    updated_by = Column(UUID(as_uuid=True), nullable=True)

@@ -6,6 +6,11 @@
 #      (one for all items, one for all payment summaries, one for all returns)
 #      reducing from 3*N queries to 3 fixed queries regardless of sales count
 #   3. Pagination `le` raised to 100 (20 is default, 100 is max — removes need for limit=1000)
+#   4. [NEW] customer_to_dict now returns updated_at + last_updated_by
+#   5. [NEW] GET /customers/ batch-resolves last_updated_by names via profiles JOIN
+#   6. [NEW] PUT /customers/{id} sets updated_by = current_user["user_id"],
+#            fetches updater name, returns it in response
+#            (DB trigger trg_customers_updated_at auto-sets updated_at on commit)
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -23,8 +28,9 @@ router = APIRouter(prefix="/customers", tags=["Customers"])
 
 # ─────────────────────────────────────────
 # HELPER — Format customer as dict
+# Accepts optional last_updated_by name string (resolved by caller via JOIN).
 # ─────────────────────────────────────────
-def customer_to_dict(c) -> dict:
+def customer_to_dict(c, last_updated_by=None) -> dict:
     return {
         "cust_id":           str(c.cust_id),
         "business_id":       str(c.business_id),
@@ -36,7 +42,10 @@ def customer_to_dict(c) -> dict:
         "cust_country_code": c.cust_country_code,
         "cust_tax_number":   c.cust_tax_number,
         "is_deleted":        c.is_deleted,
-        "cust_created_at":   str(c.cust_created_at) if c.cust_created_at else None
+        "cust_created_at":   str(c.cust_created_at) if c.cust_created_at else None,
+        "updated_at":        str(c.updated_at)      if c.updated_at      else None,
+        "updated_by":        str(c.updated_by)      if c.updated_by      else None,
+        "last_updated_by":   last_updated_by,
     }
 
 
@@ -69,6 +78,7 @@ def create_customer(
         cust_state        = data.cust_state,
         cust_country_code = data.cust_country_code,
         cust_tax_number   = data.cust_tax_number
+        # updated_by stays NULL on create — only set when customer is later edited
     )
 
     db.add(new_customer)
@@ -85,8 +95,9 @@ def create_customer(
 # GET /customers → Paginated list with server-side search
 #
 # FIX: Added `search` param — filters name, phone, email via ILIKE.
-#      Frontend no longer needs limit=1000. Default is 20, max is 100.
 #      phone param kept for backward compat (sale form auto-fill).
+# NEW: Batch-resolves last_updated_by names via LEFT JOIN to profiles.
+#      No N+1 — one SQL query returns all names at once.
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
 def get_all_customers(
@@ -119,21 +130,76 @@ def get_all_customers(
     if phone:
         base = base.filter(Customer.cust_phone == phone)
 
-    total     = base.count()
-    customers = (
-        base.order_by(Customer.cust_name.asc())
-            .offset(pagination["offset"])
-            .limit(pagination["limit"])
-            .all()
-    )
+    total = base.count()
+
+    # Use raw SQL for the list so we can LEFT JOIN profiles in one query
+    # and resolve last_updated_by names without an N+1 loop.
+    # We replicate the same filters in SQL.
+    search_clause = ""
+    phone_clause  = ""
+    params: dict  = {
+        "bid":    business_id,
+        "offset": pagination["offset"],
+        "limit":  pagination["limit"],
+    }
+
+    if search and search.strip():
+        search_clause = """
+            AND (
+                c.cust_name  ILIKE :search_q
+             OR c.cust_phone ILIKE :search_q
+             OR c.cust_email ILIKE :search_q
+            )
+        """
+        params["search_q"] = f"%{search.strip()}%"
+
+    if phone:
+        phone_clause = "AND c.cust_phone = :exact_phone"
+        params["exact_phone"] = phone
+
+    rows = db.execute(
+        text(f"""
+            SELECT
+                c.cust_id, c.business_id,
+                c.cust_name, c.cust_phone, c.cust_email,
+                c.cust_address, c.cust_state, c.cust_country_code,
+                c.cust_tax_number, c.is_deleted,
+                c.cust_created_at, c.updated_at, c.updated_by,
+                p.full_name AS last_updated_by
+            FROM customers c
+            LEFT JOIN profiles p ON p.id = c.updated_by
+            WHERE c.business_id = CAST(:bid AS uuid)
+              AND c.is_deleted   = false
+              {search_clause}
+              {phone_clause}
+            ORDER BY c.cust_name ASC
+            OFFSET :offset LIMIT :limit
+        """),
+        params
+    ).fetchall()
+
+    data = [
+        {
+            "cust_id":           str(r.cust_id),
+            "business_id":       str(r.business_id),
+            "cust_name":         r.cust_name,
+            "cust_phone":        r.cust_phone,
+            "cust_email":        r.cust_email,
+            "cust_address":      r.cust_address,
+            "cust_state":        r.cust_state,
+            "cust_country_code": r.cust_country_code,
+            "cust_tax_number":   r.cust_tax_number,
+            "is_deleted":        r.is_deleted,
+            "cust_created_at":   str(r.cust_created_at) if r.cust_created_at else None,
+            "updated_at":        str(r.updated_at)      if r.updated_at      else None,
+            "updated_by":        str(r.updated_by)      if r.updated_by      else None,
+            "last_updated_by":   r.last_updated_by      if r.last_updated_by else None,
+        }
+        for r in rows
+    ]
 
     return success_response(
-        pagination_response(
-            [customer_to_dict(c) for c in customers],
-            total,
-            pagination["page"],
-            pagination["limit"]
-        )
+        pagination_response(data, total, pagination["page"], pagination["limit"])
     )
 
 
@@ -226,7 +292,6 @@ def get_customer(
     sale_ids = [str(r.sales_id) for r in sale_rows]
 
     # ── Query 2: all items for all sales (batch) ──────────────────
-    # Use ANY(:ids) instead of IN to pass a Python list cleanly
     items_rows = db.execute(
         text("""
             SELECT
@@ -363,6 +428,8 @@ def get_customer(
 
 # ══════════════════════════════════════════════════════════════════
 # PUT /customers/{cust_id} → Update customer
+# NEW: sets updated_by = current_user["user_id"]
+#      DB trigger trg_customers_updated_at auto-sets updated_at on commit
 # ══════════════════════════════════════════════════════════════════
 @router.put("/{cust_id}")
 def update_customer(
@@ -400,12 +467,22 @@ def update_customer(
     if data.cust_country_code is not None: customer.cust_country_code = data.cust_country_code
     if data.cust_tax_number   is not None: customer.cust_tax_number   = data.cust_tax_number
 
+    # Track who last updated this customer
+    # updated_at is set automatically by DB trigger trg_customers_updated_at
+    customer.updated_by = current_user["user_id"]
+
     db.commit()
     db.refresh(customer)
 
+    # Fetch the updater's name to return in response
+    updated_by_name = db.execute(
+        text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
+        {"uid": str(customer.updated_by)}
+    ).scalar()
+
     return success_response({
         "message":  "Customer updated successfully",
-        "customer": customer_to_dict(customer)
+        "customer": customer_to_dict(customer, last_updated_by=updated_by_name)
     })
 
 

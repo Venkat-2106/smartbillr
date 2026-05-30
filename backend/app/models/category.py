@@ -12,6 +12,9 @@ class Category(Base):
     category_name = Column(String(50), nullable=False)
     is_deleted = Column(Boolean, default=False)
     created_at = Column(DateTime, nullable=True, server_default=text("now()"))
+    # DB trigger trg_categories_updated_at fires on every UPDATE and sets this automatically.
+    # We declare it here so SQLAlchemy can read the value after commit (via db.refresh()).
+    updated_at = Column(DateTime, nullable=True, server_default=text("now()"))
     # updated_by: plain UUID — no ForeignKey() here because SQLAlchemy cannot resolve
     # 'profiles' (it lives in Supabase auth schema, no ORM model for it).
     # The FK constraint already exists in the DB from the SQL migration.

@@ -137,18 +137,50 @@ function LogoutDialog({ onConfirm, onCancel }) {
   )
 }
 
+// ── FIX: NavItem hover now uses React useState instead of direct DOM style mutation.
+// Before: onMouseEnter/Leave mutated e.currentTarget.style directly — fragile,
+//         breaks when React re-renders the element and wipes the inline styles.
+// After:  hovering sets a boolean state → style object reacts cleanly.
+//         Active state from React Router's isActive is checked via a separate
+//         style prop argument — no string inspection of background values needed.
 function NavItem({ item, collapsed }) {
+  const [hovered, setHovered] = useState(false)
+
   return (
-    <NavLink to={item.path} title={collapsed ? item.label : undefined}
-      style={({ isActive }) => ({ display: 'flex', alignItems: 'center', gap: collapsed?0:9, justifyContent: collapsed?'center':'flex-start', padding: collapsed?'10px':'8px 10px', borderRadius: 9, marginBottom: 1, textDecoration: 'none', color: isActive?'var(--accent-sidebar-text)':'var(--sb-text-muted)', background: isActive?'var(--accent-sidebar-active)':'transparent', border: `1px solid ${isActive?'var(--accent-sidebar-border)':'transparent'}`, transition: 'all 0.13s' })}
-      onMouseEnter={e => { if (!e.currentTarget.style.background.includes('active')) { e.currentTarget.style.background='var(--sb-hover-bg)'; e.currentTarget.style.color='var(--sb-hover-text)' }}}
-      onMouseLeave={e => { if (!e.currentTarget.style.background.includes('active')) { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='var(--sb-text-muted)' }}}
+    <NavLink
+      to={item.path}
+      title={collapsed ? item.label : undefined}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={({ isActive }) => ({
+        display: 'flex',
+        alignItems: 'center',
+        gap: collapsed ? 0 : 9,
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        padding: collapsed ? '10px' : '8px 10px',
+        borderRadius: 9,
+        marginBottom: 1,
+        textDecoration: 'none',
+        // Active state takes priority over hover state
+        color: isActive
+          ? 'var(--accent-sidebar-text)'
+          : hovered
+          ? 'var(--sb-hover-text)'
+          : 'var(--sb-text-muted)',
+        background: isActive
+          ? 'var(--accent-sidebar-active)'
+          : hovered
+          ? 'var(--sb-hover-bg)'
+          : 'transparent',
+        border: `1px solid ${isActive ? 'var(--accent-sidebar-border)' : 'transparent'}`,
+        transition: 'all 0.13s',
+      })}
     >
       {({ isActive }) => (<>
-        <span style={{ color: isActive?'var(--accent-sidebar-icon)':'inherit', display: 'flex' }}>
+        <span style={{ color: isActive ? 'var(--accent-sidebar-icon)' : 'inherit', display: 'flex' }}>
           <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d={item.icon}/></svg>
         </span>
-        {!collapsed && <span style={{ fontSize: '0.8rem', fontWeight: isActive?650:450, color: isActive?'var(--sb-text-primary)':'inherit', letterSpacing: isActive?'-0.15px':'-0.05px', whiteSpace: 'nowrap' }}>{item.label}</span>}
+        {!collapsed && <span style={{ fontSize: '0.8rem', fontWeight: isActive ? 650 : 450, color: isActive ? 'var(--sb-text-primary)' : 'inherit', letterSpacing: isActive ? '-0.15px' : '-0.05px', whiteSpace: 'nowrap' }}>{item.label}</span>}
       </>)}
     </NavLink>
   )

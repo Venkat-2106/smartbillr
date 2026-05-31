@@ -42,34 +42,35 @@ function Skeleton({ w = '60%', h = 28 }) {
 // ─── Stat Card (Premium Colored) ──────────────────────────────────────────────
 function StatCard({ label, value, sub, icon, gradient, loading, onClick }) {
   const isClickable = typeof onClick === 'function'
+  // FIX: hover was handled via direct DOM mutation (onMouseEnter set
+  // e.currentTarget.style.transform / boxShadow directly). React wipes those
+  // inline styles whenever the component re-renders (e.g. when dashboard data
+  // loads), causing the hover effect to snap off while the mouse is still hovering.
+  // Fix: one boolean state drives all three style values declaratively.
+  const [hovered, setHovered] = useState(false)
 
   return (
     <div
       onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
+        border: `1px solid ${hovered
+          ? (isClickable ? 'var(--accent-600)' : 'var(--border-hover)')
+          : 'var(--border)'}`,
         borderRadius: 18,
         padding: '22px 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 16,
-        boxShadow: 'var(--shadow-card)',
+        boxShadow: hovered ? 'var(--shadow-elevated)' : 'var(--shadow-card)',
+        transform: hovered ? 'translateY(-3px)' : 'translateY(0)',
         transition: 'transform 0.18s var(--ease-out), box-shadow 0.18s var(--ease-out), border-color 0.18s',
         minWidth: 0,
         overflow: 'hidden',
         position: 'relative',
         cursor: isClickable ? 'pointer' : 'default',
-      }}
-      onMouseEnter={e => {
-        e.currentTarget.style.transform = 'translateY(-3px)'
-        e.currentTarget.style.boxShadow = 'var(--shadow-elevated)'
-        e.currentTarget.style.borderColor = isClickable ? 'var(--accent-600)' : 'var(--border-hover)'
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.boxShadow = 'var(--shadow-card)'
-        e.currentTarget.style.borderColor = 'var(--border)'
       }}
     >
       {/* Subtle top gradient stripe */}

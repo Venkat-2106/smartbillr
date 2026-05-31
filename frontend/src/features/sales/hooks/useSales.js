@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { toast } from 'react-hot-toast';
-import { fetchSales, updateSaleStatus } from '../api/salesApi';
+import { fetchSales, updateSaleStatus, fetchAllSalesForExport } from '../api/salesApi';
 
 const PAGE_SIZE = 20;
 
@@ -39,6 +39,29 @@ export function useSales() {
 
   // Reset page when status changes
   useEffect(() => { setPage(1); }, [statusFilter]);
+
+  // ── CSV export state ──────────────────────────────────────────────────────
+  // Export is lazy: we fetch all matching rows ONLY when the button is clicked.
+  // debouncedSearch is declared above so this closure captures it safely.
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const allRows = await fetchAllSalesForExport({
+        search:    debouncedSearch || undefined,
+        status:    statusFilter    || undefined,
+        date_from: dateFrom        || undefined,
+        date_to:   dateTo          || undefined,
+      });
+      return allRows;
+    } catch {
+      toast.error('Export failed — please try again');
+      return [];
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // ── React Query — server-side fetch ──────────────────────────────────────
   // queryKey includes page + search + status so any change triggers a refetch.
@@ -126,13 +149,12 @@ export function useSales() {
   return {
     // Data
     sales,
-    // FIX: exportData exports all rows returned by the server for the current
-    // filters (search + status + date range). Because sales uses server-side
-    // pagination (20 rows per page), this exports the current page only.
-    // To export all matching records the user should narrow filters first,
-    // then export. A full multi-page export would require a separate API call
-    // with limit=1000 — tracked as a future improvement.
-    exportData: sales,
+    // FIX: exportData removed — export is now lazy via handleExport().
+    // handleExport() fetches ALL matching rows (up to 1000) with the current
+    // active filters, so the CSV always contains the full result set,
+    // not just the 20 rows currently visible on screen.
+    isExporting,
+    handleExport,
     isLoading: isLoading || isFetching,
     hasData: !!serverData,   // true once first load completes — drives skeleton vs table
     isError,

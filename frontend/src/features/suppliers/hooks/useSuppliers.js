@@ -76,15 +76,19 @@ export function useSuppliers() {
     return rows;
   }, [allSuppliers, debouncedSearch, dateFrom, dateTo, sortKey, sortDir]);
 
-  const totalItems      = filtered.length;
-  const totalPages      = Math.ceil(totalItems / PAGE_SIZE);
+  const { totalItems, totalPages, paginated } = useMemo(() => {
+    const totalItems = filtered.length;
+    const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+    const activeSearch     = !!debouncedSearch;
+    const activeDateFilter = !!(dateFrom || dateTo);
+    const paginated = (activeSearch || activeDateFilter)
+      ? filtered
+      : filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    return { totalItems, totalPages, paginated };
+  }, [filtered, page, debouncedSearch, dateFrom, dateTo]);
+
   const activeSearch    = !!debouncedSearch;
   const activeDateFilter = !!(dateFrom || dateTo);
-
-  // Show all filtered rows when a filter is active; paginate otherwise
-  const paginated = (activeSearch || activeDateFilter)
-    ? filtered
-    : filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // ── Sort handler ─────────────────────────────────────────────────────────
   const handleSort = (key) => {

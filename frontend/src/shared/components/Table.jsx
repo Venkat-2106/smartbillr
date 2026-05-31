@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, memo } from 'react'
 
 function Skeleton({ w = '60%', h = 13 }) {
   return (
@@ -42,7 +42,7 @@ function SortIcon({ active, dir }) {
   )
 }
 
-export default function Table({
+function Table({
   columns = [],
   rows = [],
   loading = false,
@@ -63,6 +63,7 @@ export default function Table({
   // Fix: hoveredCol holds the key of the currently hovered <th>. The color
   // is derived from state in the style object — React manages it cleanly.
   const [hoveredCol, setHoveredCol] = useState(null)
+  const [hoveredRow, setHoveredRow] = useState(null)
 
   return (
     <>
@@ -161,16 +162,13 @@ export default function Table({
                   <tr
                     key={row[rowKey] ?? i}
                     onClick={() => onRowClick?.(row)}
+                    onMouseEnter={() => setHoveredRow(row[rowKey] ?? i)}
+                    onMouseLeave={() => setHoveredRow(null)}
                     style={{
                       borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none',
                       cursor: onRowClick ? 'pointer' : 'default',
                       transition: 'background 0.12s',
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.background = 'var(--bg-subtle)'
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.background = 'transparent'
+                      background: hoveredRow === (row[rowKey] ?? i) ? 'var(--bg-subtle)' : 'transparent',
                     }}
                   >
                     {columns.map(col => (
@@ -200,3 +198,9 @@ export default function Table({
     </>
   )
 }
+
+// FIX: Wrap with React.memo so Table only re-renders when its own props change.
+// Without memo, every keystroke in a SearchBar (which updates parent state) caused
+// Table to re-render even when rows and columns were identical — noticeable lag on
+// large datasets. memo eliminates those redundant renders.
+export default memo(Table)

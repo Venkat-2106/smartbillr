@@ -32,7 +32,11 @@ def supplier_to_dict(s) -> dict:
         "supp_country_code": s.supp_country_code,
         "supp_tax_number":   s.supp_tax_number,
         "is_deleted":        s.is_deleted,
-        "supp_created_at":   str(s.supp_created_at) if s.supp_created_at else None
+        "supp_created_at":   str(s.supp_created_at) if s.supp_created_at else None,
+        # FIX: return updated_at so frontend can sort/filter by Last Updated.
+        # DB has updated_at on suppliers (trigger trg_suppliers_updated_at auto-sets it).
+        # DB does NOT have updated_by on suppliers, so last_updated_by is not returned.
+        "updated_at":        str(s.updated_at) if s.updated_at else None,
     }
 
 
@@ -114,7 +118,7 @@ def get_all_suppliers(
         base = base.filter(Supplier.supp_phone == phone)
 
     total     = base.count()
-    suppliers = base.order_by(Supplier.supp_name.asc())\
+    suppliers = base.order_by(Supplier.updated_at.desc())\
                     .offset(pagination["offset"])\
                     .limit(pagination["limit"])\
                     .all()

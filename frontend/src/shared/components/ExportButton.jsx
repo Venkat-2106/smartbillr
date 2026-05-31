@@ -27,12 +27,16 @@
 //   />
 //
 // PROPS:
-//   data       {Array}  - Records to export (use filtered/sorted data — what user sees)
-//   filename   {string} - Base filename (date appended automatically, e.g. "customers_2025-08-15.csv")
-//   columns    {Array}  - Column definitions from csvExport.js
-//   disabled   {bool}   - Disable the button (optional)
-//   label      {string} - Button text (default: "Export CSV")
+//   data       {Array}    - Records to export (pre-loaded — for client-side pages)
+//   onFetch    {Function} - Async function returning rows (for server-paginated pages
+//                          like Sales where all rows must be fetched on demand)
+//   filename   {string}  - Base filename (date appended automatically)
+//   columns    {Array}   - Column definitions from csvExport.js
+//   disabled   {bool}    - Disable the button (optional)
+//   label      {string}  - Button text (default: "Export CSV")
+//   loading    {bool}    - External loading state (shows spinner on button)
 
+import { useState } from 'react';
 import { exportToCSV } from '../utils/csvExport';
 import Button from './Button';
 import toast from 'react-hot-toast';
@@ -58,36 +62,56 @@ function DownloadIcon() {
 
 export default function ExportButton({
   data = [],
+  onFetch = null,        // async () => rows[]  — used by server-paginated pages
   filename = 'export',
   columns = [],
   disabled = false,
   label = 'Export CSV',
 }) {
-  function handleExport() {
-    if (!data || data.length === 0) {
+  const [fetching, setFetching] = useState(false);
+
+  async function handleExport() {
+    let rows = data;
+
+    // If an async fetch function was provided, call it to get all rows
+    if (onFetch) {
+      setFetching(true);
+      try {
+        rows = await onFetch();
+      } catch {
+        toast.error('Export failed — could not load data');
+        setFetching(false);
+        return;
+      }
+      setFetching(false);
+    }
+
+    if (!rows || rows.length === 0) {
       toast.error('No data to export');
       return;
     }
 
     try {
-      exportToCSV(data, filename, columns);
-      // Small success feedback
-      toast.success(`Exported ${data.length} records to CSV`);
+      exportToCSV(rows, filename, columns);
+      toast.success(`Exported ${rows.length} records to CSV`);
     } catch (err) {
       console.error('[ExportButton] Export failed:', err);
       toast.error('Export failed. Please try again.');
     }
   }
 
+  const isDisabled = disabled || fetching || (!onFetch && data.length === 0);
+
   return (
     <Button
       variant="outline"
       onClick={handleExport}
-      disabled={disabled || data.length === 0}
+      loading={fetching}
+      disabled={isDisabled}
       style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
     >
-      <DownloadIcon />
-      {label}
+      {!fetching && <DownloadIcon />}
+      {fetching ? 'Exporting...' : label}
     </Button>
   );
 }

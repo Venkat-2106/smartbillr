@@ -31,3 +31,4 @@ export { default as DateRangeFilter } from './DateRangeFilter';
 export { default as StateDropdown }  from './StateDropdown';   // Country-aware state/province picker
 export { default as ExportButton }   from './ExportButton';    // One-click CSV export for any list page
 export { default as SkeletonTable }  from './SkeletonTable';  // Animated loading placeholder for tables
+export { default as ErrorBoundary }  from './ErrorBoundary';  // Catches render errors, shows fallback UI

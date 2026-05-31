@@ -559,7 +559,6 @@ export default function CreateSalePage() {
             {/* Line items card */}
             <SectionCard
               title="Line Items"
-              action={<Button variant="secondary" size="sm" onClick={addItem}>+ Add Item</Button>}
             >
               {/* Barcode input */}
               <div style={{ marginBottom: 16 }}>

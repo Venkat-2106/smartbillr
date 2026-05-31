@@ -38,7 +38,23 @@ export const updateSaleStatus = async (id, payment_status) => {
   return res.data;
 };
 
-// ── Customers for the Create Invoice dropdown ─────────────────────────────
+// ── Export: fetch ALL matching sales (up to 1000) for CSV download ────────
+// The normal fetchSales call is paginated (20 rows). This call uses limit=1000
+// and passes the same active filters so the exported file matches what the
+// user is currently viewing — not just the current page.
+export const fetchAllSalesForExport = async ({ search, status, date_from, date_to } = {}) => {
+  const res = await api.get('/sales', {
+    params: {
+      page:      1,
+      limit:     1000,
+      search:    search    || undefined,
+      status:    status    || undefined,
+      date_from: date_from || undefined,
+      date_to:   date_to   || undefined,
+    },
+  });
+  return res.data?.items ?? [];
+};
 export const fetchCustomersForSale = async () => {
   const res = await api.get('/customers', { params: { limit: 100 } });
   const data = res.data;

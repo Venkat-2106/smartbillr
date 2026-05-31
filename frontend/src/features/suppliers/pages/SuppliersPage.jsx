@@ -169,18 +169,11 @@ export default function SuppliersPage() {
         </span>
       ),
     },
-    {
-      key: 'last_updated_by',
-      label: 'Last Updated By',
-      sortable: false,
-      width: 150,
-      render: (row) =>
-        row.last_updated_by
-          ? <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: 500 }}>
-              {row.last_updated_by}
-            </span>
-          : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>,
-    },
+    // NOTE: last_updated_by column intentionally omitted.
+    // The suppliers table has no updated_by column in the DB (unlike customers/
+    // categories/products). The trigger auto-sets updated_at but does not track
+    // which user made the change, so this column cannot be populated.
+    //
     // Actions column — only when user can manage
     ...(canManage ? [{
       key: 'actions',

@@ -142,9 +142,12 @@ export function useCustomers() {
 
 
   // ── PAGINATION ──────────────────────────────────────────────────────────
-  const totalItems = filtered.length
-  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE))
-  const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const { totalItems, totalPages, paginated } = useMemo(() => {
+    const totalItems = filtered.length
+    const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE))
+    const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+    return { totalItems, totalPages, paginated }
+  }, [filtered, page])
 
 
   // ── EVENT HANDLERS ──────────────────────────────────────────────────────

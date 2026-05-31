@@ -21,7 +21,7 @@ export default function SalesPage() {
   const location = useLocation();
 
   const {
-    sales, exportData, isLoading, hasData, isError,
+    sales, isLoading, hasData, isError,
     totalItems, totalPages,
     search, setSearch,
     statusFilter, setStatusFilter,
@@ -31,6 +31,7 @@ export default function SalesPage() {
     page, setPage,
     drawerSale, setDrawerSale,
     statusMutation,
+    isExporting, handleExport,
   } = useSales();
 
   // ── Auto-open drawer after invoice creation ──────────────────────────────
@@ -155,7 +156,7 @@ export default function SalesPage() {
         action={
           <div style={{ display: 'flex', gap: 10 }}>
             <ExportButton
-              data={exportData}
+              onFetch={handleExport}
               filename="sales"
               columns={SALES_CSV_COLUMNS}
             />

@@ -32,7 +32,7 @@ export function useCategories() {
   const pagedQuery = useQuery({
     queryKey: KEYS.list(page),
     queryFn:  () => fetchCategories({ page, limit: 20 }),
-    keepPreviousData: true,
+    placeholderData: (prev) => prev,
     staleTime: 30_000,
   })
 

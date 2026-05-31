@@ -24,9 +24,6 @@ function useTheme() {
   return { theme, setTheme, accent, setAccent }
 }
 
-// ── NAV — each item declares required permission ──────────────────────────────
-// Sidebar filters this list using hasPermission() from authStore.
-// Backend enforces the same permission independently on every API call.
 const NAV = [
   { label: 'Overview', items: [
     { label: 'Dashboard', path: '/dashboard', permission: 'dashboard.view',
@@ -137,15 +134,101 @@ function LogoutDialog({ onConfirm, onCancel }) {
   )
 }
 
-// ── FIX: NavItem hover now uses React useState instead of direct DOM style mutation.
-// Before: onMouseEnter/Leave mutated e.currentTarget.style directly — fragile,
-//         breaks when React re-renders the element and wipes the inline styles.
-// After:  hovering sets a boolean state → style object reacts cleanly.
-//         Active state from React Router's isActive is checked via a separate
-//         style prop argument — no string inspection of background values needed.
+// ── FIX 5: IconButton — topbar icon buttons (bell, theme switcher)
+// Uses React useState for hover instead of DOM mutation.
+// Design is identical to the original — same dimensions, colors, border, radius.
+function IconButton({ onClick, children, style = {} }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background:   hovered ? 'var(--bg-hover)'    : 'var(--bg-subtle)',
+        border:       `1px solid ${hovered ? 'var(--border-hover)' : 'var(--border)'}`,
+        borderRadius: 'var(--r-md)',
+        width: 34, height: 34,
+        cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'var(--text-secondary)',
+        transition: 'all 0.13s',
+        ...style,
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+// ── FIX 5: UserPill — topbar user chip (avatar + name + role + chevron)
+// Uses React useState for hover instead of DOM mutation.
+// Design is identical to the original.
+function UserPill({ initials, userName, userRole }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 9,
+        background:   hovered ? 'var(--bg-hover)'    : 'var(--bg-subtle)',
+        border:       `1px solid ${hovered ? 'var(--border-hover)' : 'var(--border)'}`,
+        borderRadius: 'var(--r-lg)',
+        padding: '4px 12px 4px 4px',
+        cursor: 'pointer',
+        transition: 'all 0.13s',
+      }}
+    >
+      <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--accent-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+        {initials}
+      </div>
+      <div>
+        <p style={{ fontSize: '0.74rem', fontWeight: 650, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.1px', lineHeight: 1.3, textTransform: 'capitalize' }}>
+          {userName}
+        </p>
+        <p style={{ fontSize: '0.62rem', color: 'var(--text-muted)', margin: 0 }}>
+          {userRole}
+        </p>
+      </div>
+      <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="var(--text-muted)" strokeWidth={2.5} style={{ marginLeft: 2 }}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
+      </svg>
+    </div>
+  )
+}
+
+// ── FIX 5: LogoutButton — sidebar footer logout icon
+// Uses React useState for hover instead of DOM mutation.
+// Design is identical to the original — same red tint colors.
+function LogoutButton({ onClick }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background:   hovered ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.07)',
+        border:       '1px solid rgba(239,68,68,0.12)',
+        borderRadius: 7,
+        width: 28, height: 28,
+        cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: '#F87171', flexShrink: 0,
+        transition: 'background 0.13s',
+      }}
+    >
+      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+      </svg>
+    </button>
+  )
+}
+
+// ── FIX 2 (from NavItem fix — already in your codebase, unchanged here)
 function NavItem({ item, collapsed }) {
   const [hovered, setHovered] = useState(false)
-
   return (
     <NavLink
       to={item.path}
@@ -161,7 +244,6 @@ function NavItem({ item, collapsed }) {
         borderRadius: 9,
         marginBottom: 1,
         textDecoration: 'none',
-        // Active state takes priority over hover state
         color: isActive
           ? 'var(--accent-sidebar-text)'
           : hovered
@@ -201,16 +283,17 @@ export default function DashboardLayout() {
   const initials     = userName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
   const hour         = new Date().getHours()
   const greeting     = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+
+  // FIX 4: memoized — only recalculates when the URL actually changes
   const currentPage = useMemo(() =>
-  NAV.flatMap(s => s.items)
-    .find(item => location.pathname.startsWith(item.path))
-    ?.label || 'Dashboard',
-  [location.pathname]
-)
+    NAV.flatMap(s => s.items)
+      .find(item => location.pathname.startsWith(item.path))
+      ?.label || 'Dashboard',
+    [location.pathname]
+  )
 
   function handleLogout() { clearAuth(); toast.success('Signed out successfully'); navigate('/login') }
 
-  // Filter nav: only show items this user has permission for
   const visibleNav = NAV
     .map(section => ({ ...section, items: section.items.filter(item => hasPermission(item.permission)) }))
     .filter(section => section.items.length > 0)
@@ -220,6 +303,7 @@ export default function DashboardLayout() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: "'Plus Jakarta Sans', -apple-system, sans-serif", background: 'var(--bg-page)' }}>
 
+      {/* ── SIDEBAR ── */}
       <aside style={{ width: W, minHeight: '100vh', background: 'var(--sb-bg)', display: 'flex', flexDirection: 'column', position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 100, transition: 'width 0.2s var(--ease-out)', overflow: 'hidden', borderRight: '1px solid var(--sb-border)' }}>
 
         {/* Logo */}
@@ -248,7 +332,7 @@ export default function DashboardLayout() {
           </div>
         )}
 
-        {/* Nav — permission filtered */}
+        {/* Nav */}
         <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: collapsed?'10px 8px':'6px 8px', scrollbarWidth: 'none' }}>
           {visibleNav.map(section => (
             <div key={section.label} style={{ marginBottom: 2 }}>
@@ -268,9 +352,8 @@ export default function DashboardLayout() {
                 <p style={{ fontSize: '0.75rem', fontWeight: 650, color: 'var(--sb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0, textTransform: 'capitalize' }}>{userName}</p>
                 <p style={{ fontSize: '0.6rem', color: 'var(--sb-text-muted)', margin: 0 }}>{userRole}</p>
               </div>
-              <button onClick={() => setShowLogout(true)} style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.12)', borderRadius: 7, width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F87171', flexShrink: 0, transition: 'background 0.13s' }} onMouseEnter={e => e.currentTarget.style.background='rgba(239,68,68,0.15)'} onMouseLeave={e => e.currentTarget.style.background='rgba(239,68,68,0.07)'}>
-                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-              </button>
+              {/* FIX 5: replaced DOM-mutation button with LogoutButton component */}
+              <LogoutButton onClick={() => setShowLogout(true)} />
             </div>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -280,6 +363,7 @@ export default function DashboardLayout() {
         </div>
       </aside>
 
+      {/* ── MAIN CONTENT ── */}
       <div style={{ flex: 1, minWidth: 0, marginLeft: W, transition: 'margin-left 0.2s var(--ease-out)', display: 'flex', flexDirection: 'column', minHeight: '100vh', overflowX: 'hidden' }}>
 
         {/* Topbar */}
@@ -289,30 +373,37 @@ export default function DashboardLayout() {
             <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0, marginTop: 1 }}>{currentPage} · {businessName}</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+
+            {/* Search bar — unchanged */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', padding: '0 12px', height: 34, minWidth: 200, cursor: 'text', transition: 'border-color 0.13s' }} onMouseEnter={e => e.currentTarget.style.borderColor='var(--border-hover)'} onMouseLeave={e => e.currentTarget.style.borderColor='var(--border)'}>
               <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="var(--text-muted)" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', flex: 1 }}>Search...</span>
               <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 5px', fontFamily: "'DM Mono', monospace" }}>⌘K</span>
             </div>
-            <button style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', width: 34, height: 34, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', position: 'relative', transition: 'all 0.13s' }} onMouseEnter={e => { e.currentTarget.style.background='var(--bg-hover)'; e.currentTarget.style.borderColor='var(--border-hover)' }} onMouseLeave={e => { e.currentTarget.style.background='var(--bg-subtle)'; e.currentTarget.style.borderColor='var(--border)' }}>
-              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.9}><path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+
+            {/* FIX 5: Bell — replaced DOM-mutation button with IconButton */}
+            <IconButton style={{ position: 'relative' }}>
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.9}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+              </svg>
               <span style={{ position: 'absolute', top: 8, right: 9, width: 5, height: 5, background: 'var(--accent-600)', borderRadius: '50%', border: '1.5px solid var(--topbar-bg)' }} />
-            </button>
+            </IconButton>
+
             <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
+
+            {/* FIX 5: Theme switcher — replaced DOM-mutation button with IconButton */}
             <div style={{ position: 'relative' }}>
-              <button onClick={() => setShowTheme(v => !v)} style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', width: 34, height: 34, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', transition: 'all 0.13s' }} onMouseEnter={e => { e.currentTarget.style.background='var(--bg-hover)'; e.currentTarget.style.borderColor='var(--border-hover)' }} onMouseLeave={e => { e.currentTarget.style.background='var(--bg-subtle)'; e.currentTarget.style.borderColor='var(--border)' }}>
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.9}><path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
-              </button>
+              <IconButton onClick={() => setShowTheme(v => !v)}>
+                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.9}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>
+                </svg>
+              </IconButton>
               {showTheme && <ThemePanel theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} onClose={() => setShowTheme(false)} />}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: 'var(--r-lg)', padding: '4px 12px 4px 4px', cursor: 'pointer', transition: 'all 0.13s' }} onMouseEnter={e => { e.currentTarget.style.background='var(--bg-hover)'; e.currentTarget.style.borderColor='var(--border-hover)' }} onMouseLeave={e => { e.currentTarget.style.background='var(--bg-subtle)'; e.currentTarget.style.borderColor='var(--border)' }}>
-              <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--accent-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 700, color: '#fff', flexShrink: 0 }}>{initials}</div>
-              <div>
-                <p style={{ fontSize: '0.74rem', fontWeight: 650, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.1px', lineHeight: 1.3, textTransform: 'capitalize' }}>{userName}</p>
-                <p style={{ fontSize: '0.62rem', color: 'var(--text-muted)', margin: 0 }}>{userRole}</p>
-              </div>
-              <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="var(--text-muted)" strokeWidth={2.5} style={{ marginLeft: 2 }}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/></svg>
-            </div>
+
+            {/* FIX 5: User pill — replaced DOM-mutation div with UserPill component */}
+            <UserPill initials={initials} userName={userName} userRole={userRole} />
+
           </div>
         </header>
 

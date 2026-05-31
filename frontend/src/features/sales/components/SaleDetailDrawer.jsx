@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   XMarkIcon,
@@ -7,6 +7,7 @@ import {
   CalendarDaysIcon,
   CreditCardIcon,
   BanknotesIcon,
+  PrinterIcon,
 } from '@heroicons/react/24/outline';
 import { fetchSale } from '../api/salesApi';
 import { Badge, Button, Spinner } from '../../../shared/components';
@@ -26,12 +27,25 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
 
   // Fetch full detail (includes items array)
   // WHY sale.sales_id: backend returns "sales_id" (not "sale_id")
-  const { data: detail, isLoading } = useQuery({
+  const { data: detail, isLoading, isError } = useQuery({
     queryKey: ['sale', sale?.sales_id],
     queryFn:  () => fetchSale(sale.sales_id),
     enabled:  !!sale?.sales_id,
     staleTime: 2 * 60 * 1000,
   });
+
+  // ── Auto-print ────────────────────────────────────────────────────────────
+  // When the drawer is opened with _autoPrint = true (set by CreateSalePage
+  // after a successful invoice creation), open the browser print dialog
+  // automatically once the detail data has loaded.
+  // WHY a timeout: the browser needs one render cycle after data loads
+  // before window.print() can see the fully rendered invoice content.
+  useEffect(() => {
+    if (!isLoading && detail && sale?._autoPrint) {
+      const timer = setTimeout(() => window.print(), 350);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, detail, sale?._autoPrint]);
 
   if (!sale) return null;
 
@@ -46,6 +60,14 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
   const sgst          = detail?.sgst_total             ?? 0;
   const igst          = detail?.igst_total             ?? 0;
   const items         = detail?.items                  ?? [];
+
+  // ── Print handler ─────────────────────────────────────────────────────────
+  // Uses browser's native print dialog.
+  // The @media print CSS in index.css controls what is visible on paper.
+  // No new API call — prints from the already-cached detail query data.
+  const handlePrint = () => {
+    window.print();
+  };
 
   const handleStatusSave = () => {
     statusMutation.mutate(
@@ -72,16 +94,19 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
       />
 
       {/* Drawer panel */}
-      <div style={{
-        position: 'fixed', top: 0, right: 0,
-        height: '100vh', width: 520, maxWidth: '95vw',
-        background: 'var(--bg-card)',
-        borderLeft: '1px solid var(--border)',
-        boxShadow: '-8px 0 40px rgba(0,0,0,0.14)',
-        zIndex: 1001,
-        display: 'flex', flexDirection: 'column',
-        overflow: 'hidden',
-      }}>
+      <div
+        className="invoice-print-area"
+        style={{
+          position: 'fixed', top: 0, right: 0,
+          height: '100vh', width: 520, maxWidth: '95vw',
+          background: 'var(--bg-card)',
+          borderLeft: '1px solid var(--border)',
+          boxShadow: '-8px 0 40px rgba(0,0,0,0.14)',
+          zIndex: 1001,
+          display: 'flex', flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
 
         {/* Header */}
         <div style={{
@@ -107,17 +132,50 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'var(--bg-page)', border: '1px solid var(--border)',
-              cursor: 'pointer', padding: 6, borderRadius: 8,
-              color: 'var(--text-muted)', flexShrink: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <XMarkIcon style={{ width: 18, height: 18 }} />
-          </button>
+
+          {/* Header right: Print button + Close button */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {/* Print button — disabled until detail has loaded */}
+            <button
+              onClick={handlePrint}
+              disabled={isLoading || !!isError}
+              title="Print Invoice"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                background: 'var(--bg-page)', border: '1px solid var(--border)',
+                cursor: isLoading || isError ? 'not-allowed' : 'pointer',
+                padding: '6px 12px', borderRadius: 8,
+                color: isLoading || isError ? 'var(--text-muted)' : 'var(--text-secondary)',
+                fontSize: 12.5, fontWeight: 600,
+                fontFamily: 'inherit',
+                opacity: isLoading || isError ? 0.5 : 1,
+                transition: 'background 0.12s',
+              }}
+              onMouseEnter={e => {
+                if (!isLoading && !isError)
+                  e.currentTarget.style.background = 'var(--bg-hover)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'var(--bg-page)';
+              }}
+            >
+              <PrinterIcon style={{ width: 15, height: 15 }} />
+              Print
+            </button>
+
+            {/* Close button */}
+            <button
+              onClick={onClose}
+              style={{
+                background: 'var(--bg-page)', border: '1px solid var(--border)',
+                cursor: 'pointer', padding: 6, borderRadius: 8,
+                color: 'var(--text-muted)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <XMarkIcon style={{ width: 18, height: 18 }} />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable body */}
@@ -125,6 +183,18 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
           {isLoading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
               <Spinner size="md" />
+            </div>
+          ) : isError ? (
+            // ── Error state — was missing in original ──
+            <div style={{
+              padding: '20px 16px',
+              background: 'var(--danger-bg, #FEF2F2)',
+              border: '1px solid var(--danger-border, #FCA5A5)',
+              borderRadius: 12,
+              fontSize: 13.5, color: 'var(--danger-text, #B91C1C)',
+              fontWeight: 500, lineHeight: 1.5,
+            }}>
+              ⚠️ Could not load invoice details. Close and click the invoice again.
             </div>
           ) : (
             <>
@@ -256,7 +326,8 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                 )}
               </DrawerSection>
 
-              {/* Notes */}
+              {/* Notes — sales table has no notes column, so this only renders
+                  if somehow notes appears in future. Kept from original as-is. */}
               {(detail?.notes || sale.notes) && (
                 <DrawerSection title="Notes">
                   <div style={{
@@ -275,7 +346,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
   );
 }
 
-/* ─── Helper sub-components ──────────────────────────────────────────────── */
+/* ─── Helper sub-components (unchanged from original) ────────────────────── */
 function DrawerSection({ title, children }) {
   return (
     <div style={{ marginBottom: 20 }}>

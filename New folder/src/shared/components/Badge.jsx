@@ -1,0 +1,137 @@
+// src/shared/components/Badge.jsx
+//
+// A status pill badge. Supports preset variants AND custom color via `color` prop.
+//
+// Preset variants (pass as `variant` prop):
+//   success  → green   (paid, active, approved, in_stock)
+//   warning  → amber   (partial, pending, low_stock)
+//   danger   → red     (unpaid, inactive, rejected, cancelled)
+//   info     → blue    (draft, processing)
+//   purple   → purple  (admin)
+//   neutral  → gray    (default, unknown)
+//
+// Usage:
+//   <Badge variant="success" label="Paid" />
+//   <Badge variant="danger"  label="Unpaid" dot />
+//   <Badge variant="warning" label="Partial" dot />
+//
+// Common alias shortcuts (pass `status` instead of `variant` + `label`):
+//   <Badge status="paid" />       → green  "Paid"
+//   <Badge status="unpaid" />     → red    "Unpaid"
+//   <Badge status="partial" />    → amber  "Partial"
+//   <Badge status="active" />     → green  "Active"
+//   <Badge status="inactive" />   → red    "Inactive"
+//   <Badge status="approved" />   → green  "Approved"
+//   <Badge status="pending" />    → amber  "Pending"
+//   <Badge status="cancelled" />  → red    "Cancelled"
+//   <Badge status="draft" />      → blue   "Draft"
+//   <Badge status="admin" />      → purple "Admin"
+//   <Badge status="manager" />    → blue   "Manager"
+//   <Badge status="staff" />      → neutral "Staff"
+
+const VARIANTS = {
+  success: {
+    bg: 'var(--success-bg,  rgba(34,197,94,0.12))',
+    color:  'var(--success-text,  #16A34A)',
+    border: 'var(--success-border,rgba(34,197,94,0.25))',
+    dot:    '#22C55E',
+  },
+  warning: {
+    bg: 'var(--warning-bg,  rgba(245,158,11,0.12))',
+    color:  'var(--warning-text,  #D97706)',
+    border: 'var(--warning-border,rgba(245,158,11,0.25))',
+    dot:    '#F59E0B',
+  },
+  danger: {
+    bg: 'var(--danger-bg,   rgba(239,68,68,0.10))',
+    color:  'var(--danger-text,   #DC2626)',
+    border: 'var(--danger-border, rgba(239,68,68,0.22))',
+    dot:    '#EF4444',
+  },
+  info: {
+    bg: 'rgba(14,165,233,0.10)',
+    color:  '#0284C7',
+    border: 'rgba(14,165,233,0.22)',
+    dot:    '#0EA5E9',
+  },
+  purple: {
+    bg: 'rgba(139,92,246,0.10)',
+    color:  '#7C3AED',
+    border: 'rgba(139,92,246,0.22)',
+    dot:    '#8B5CF6',
+  },
+  neutral: {
+    bg: 'var(--bg-subtle)',
+    color:  'var(--text-secondary)',
+    border: 'var(--border)',
+    dot:    'var(--text-muted)',
+  },
+}
+
+// Map status shortcut → { variant, label }
+const STATUS_MAP = {
+  paid:        { variant: 'success', label: 'Paid'      },
+  unpaid:      { variant: 'danger',  label: 'Unpaid'    },
+  partial:     { variant: 'warning', label: 'Partial'   },
+  active:      { variant: 'success', label: 'Active'    },
+  inactive:    { variant: 'danger',  label: 'Inactive'  },
+  approved:    { variant: 'success', label: 'Approved'  },
+  pending:     { variant: 'warning', label: 'Pending'   },
+  cancelled:   { variant: 'danger',  label: 'Cancelled' },
+  draft:       { variant: 'info',    label: 'Draft'     },
+  processing:  { variant: 'info',    label: 'Processing'},
+  admin:       { variant: 'purple',  label: 'Admin'     },
+  manager:     { variant: 'info',    label: 'Manager'   },
+  staff:       { variant: 'neutral', label: 'Staff'     },
+  in_stock:    { variant: 'success', label: 'In Stock'  },
+  low_stock:   { variant: 'warning', label: 'Low Stock' },
+  out_of_stock:{ variant: 'danger',  label: 'Out of Stock' },
+  rejected:    { variant: 'danger',  label: 'Rejected'  },
+  unread:      { variant: 'warning', label: 'Unread'    },
+  read:        { variant: 'neutral', label: 'Read'      },
+}
+
+export default function Badge({
+  status,
+  variant: variantProp,
+  label: labelProp,
+  dot = false,
+  size = 'md',
+}) {
+  // Resolve from status shortcut OR explicit variant+label
+  const resolved = status ? STATUS_MAP[status] : null
+  const variant  = variantProp || resolved?.variant || 'neutral'
+  const label    = labelProp   || resolved?.label   || status || '—'
+
+  const c = VARIANTS[variant] || VARIANTS.neutral
+
+  const sizeStyle = size === 'sm'
+    ? { fontSize: 10.5, padding: '2px 8px',  gap: 4 }
+    : { fontSize: 11.5, padding: '3px 10px', gap: 5 }
+
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      background: c.bg,
+      color: c.color,
+      border: `1px solid ${c.border}`,
+      borderRadius: 99,
+      fontWeight: 600,
+      fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
+      whiteSpace: 'nowrap',
+      lineHeight: 1,
+      ...sizeStyle,
+    }}>
+      {dot && (
+        <span style={{
+          width: 5, height: 5,
+          borderRadius: '50%',
+          background: c.dot,
+          flexShrink: 0,
+        }} />
+      )}
+      {label}
+    </span>
+  )
+}

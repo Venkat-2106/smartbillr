@@ -1,10 +1,10 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useSales } from '../hooks/useSales';
 import SaleDetailDrawer from '../components/SaleDetailDrawer';
 import {
   Button, Table, Badge, SearchBar,
-  Pagination, PageHeader, DateRangeFilter, ExportButton,
+  Pagination, PageHeader, DateRangeFilter, ExportButton, SkeletonTable,
 } from '../../../shared/components';
 import { selectStyle }       from '../../../shared/components/FormField';
 import { SALES_CSV_COLUMNS } from '../../../shared/utils/csvExport';
@@ -18,9 +18,10 @@ const STATUS_LABEL   = { paid: 'Paid',    partial: 'Partial', pending: 'Unpaid' 
 
 export default function SalesPage() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const {
-    sales, exportData, isLoading, isError,
+    sales, exportData, isLoading, hasData, isError,
     totalItems, totalPages,
     search, setSearch,
     statusFilter, setStatusFilter,
@@ -31,6 +32,29 @@ export default function SalesPage() {
     drawerSale, setDrawerSale,
     statusMutation,
   } = useSales();
+
+  // ── Auto-open drawer after invoice creation ──────────────────────────────
+  // CreateSalePage navigates here with:
+  //   state = { openInvoice: sales_id, autoPrint: true, invoiceNo: "INV-001" }
+  //
+  // We open the drawer immediately with the minimal data we have (just the ID
+  // and the _autoPrint flag). SaleDetailDrawer fetches the full detail via
+  // useQuery and then auto-triggers window.print() once loaded.
+  //
+  // WHY window.history.replaceState: clears the navigation state so that a
+  // page refresh doesn't re-open the drawer and trigger print again.
+  useEffect(() => {
+    if (location.state?.openInvoice) {
+      setDrawerSale({
+        sales_id:   location.state.openInvoice,
+        invoice_no: location.state.invoiceNo || '',
+        _autoPrint: location.state.autoPrint === true,
+      });
+      // Clear state immediately so refresh doesn't re-trigger
+      window.history.replaceState({}, '');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount only — location.state is stable at mount time
 
   // ── Column definitions ───────────────────────────────────────────────────
   const columns = [
@@ -201,10 +225,12 @@ export default function SalesPage() {
           </div>
         )}
 
-        <Table
+        {isLoading && !hasData
+          ? <SkeletonTable rows={10} columns={7} />
+          : <Table
           columns={columns}
           rows={sales}
-          loading={isLoading}
+          loading={false}
           rowKey="sales_id"
           sortKey={sortKey}
           sortDir={sortDir}
@@ -215,7 +241,7 @@ export default function SalesPage() {
               ? 'No invoices match your current filters.'
               : 'No sales yet. Click "+ New Invoice" to create your first one.'
           }
-        />
+        />}
 
         {!anyFilterActive && totalPages > 1 && (
           <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)' }}>

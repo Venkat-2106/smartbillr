@@ -532,3 +532,51 @@ body {
   white-space: nowrap;
   border: 0;
 }
+
+/* ─────────────────────────────────────────
+   PRINT STYLES
+   Controls what appears when the user clicks
+   "Print Invoice" in SaleDetailDrawer.
+   Everything is hidden except .invoice-print-area.
+───────────────────────────────────────── */
+@media print {
+  /* Hide all page chrome: sidebar, topbar, backdrop, everything else */
+  body > * {
+    display: none !important;
+  }
+
+  /* Show only the drawer panel which carries class="invoice-print-area" */
+  .invoice-print-area {
+    display: flex !important;
+    flex-direction: column;
+
+    /* Reset fixed positioning for print — browser lays it out as normal flow */
+    position: static !important;
+    height: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+
+    /* Force light colors for printing regardless of current theme */
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+
+  /* Make the scrollable body expand fully for print */
+  .invoice-print-area > div:last-child {
+    overflow: visible !important;
+    flex: unset !important;
+  }
+
+  /* Hide action buttons inside the drawer when printing */
+  .invoice-print-area button {
+    display: none !important;
+  }
+
+  /* Page setup */
+  @page {
+    size: A4 portrait;
+    margin: 18mm 16mm;
+  }
+}

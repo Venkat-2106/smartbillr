@@ -55,6 +55,19 @@ class SaleCreate(BaseModel):
     sales_discount: Optional[Decimal] = Decimal("0")
     sales_payment_method: Optional[str] = None
     sales_payment_status: Optional[str] = "pending"
+
+    # paid_amount: sent only when sales_payment_status = "partial".
+    # Records how much the customer paid upfront at invoice creation time.
+    # The DB has no notes column on the sales table — intentionally absent.
+    paid_amount: Optional[Decimal] = None
+
+    # allow_stock_override: sent as True only after the cashier confirms the
+    # stock override dialog in the frontend.
+    # Default False → normal stock check applies.
+    # When True → over-stock items are allowed through and a manual adjustment
+    # stock movement record is written in Step 5.5 of the router.
+    allow_stock_override: bool = False
+
     items: List[SaleItemCreate]
 
     @field_validator("items")
@@ -86,6 +99,14 @@ class SaleCreate(BaseModel):
         allowed = ["pending", "paid", "partial"]
         if v is not None and v not in allowed:
             raise ValueError(f"Payment status must be one of: {allowed}")
+        return v
+
+    @field_validator("paid_amount")
+    @classmethod
+    def paid_amount_must_be_positive(cls, v):
+        # Allow None (not provided), but if provided must be > 0
+        if v is not None and v <= 0:
+            raise ValueError("Paid amount must be greater than zero")
         return v
 
 

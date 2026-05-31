@@ -1,28 +1,4 @@
-// src/shared/components/Table.jsx
-//
-// Responsive data table with:
-//   - Sortable columns (pass sortable: true on column def)
-//   - Loading skeleton rows
-//   - Empty state
-//   - Hover rows
-//   - Optional row click
-//
-// Column def shape:
-//   {
-//     key,           → data key (also used as sort key)
-//     label,         → header text
-//     width?,        → CSS width
-//     align?,        → 'left' | 'right' | 'center'
-//     sortable?,     → true = clicking header triggers onSort
-//     wrap?,         → true = allow text wrap
-//     skeletonW?,    → skeleton width override e.g. '40%'
-//     render?,       → (row) => JSX
-//   }
-//
-// Sort props (controlled externally — parent owns sort state):
-//   sortKey        → currently sorted column key (string)
-//   sortDir        → 'asc' | 'desc'
-//   onSort(key)    → called when a sortable header is clicked
+import { useState } from 'react'
 
 function Skeleton({ w = '60%', h = 13 }) {
   return (
@@ -50,14 +26,12 @@ function SortIcon({ active, dir }) {
       opacity: active ? 1 : 0.35,
       transition: 'opacity 0.14s',
     }}>
-      {/* Up arrow */}
       <svg width="7" height="5" viewBox="0 0 7 5" fill="none">
         <path
           d="M3.5 0.5L6.5 4.5H0.5L3.5 0.5Z"
           fill={up ? 'var(--accent-600)' : 'var(--text-muted)'}
         />
       </svg>
-      {/* Down arrow */}
       <svg width="7" height="5" viewBox="0 0 7 5" fill="none">
         <path
           d="M3.5 4.5L0.5 0.5H6.5L3.5 4.5Z"
@@ -75,12 +49,20 @@ export default function Table({
   emptyText = 'No records found.',
   rowKey = 'id',
   onRowClick,
-  // Sort props (controlled by parent)
   sortKey,
   sortDir,
   onSort,
 }) {
-  const SKELETON_ROWS = 5
+  const SKELETON_ROWS = 8
+
+  // FIX: Track hovered column via React state instead of direct DOM mutation.
+  // Previously: onMouseEnter/Leave set e.currentTarget.style.color directly.
+  // Problem: React wipes inline styles on re-render (e.g. when user types in
+  // SearchBar), causing the hover color to snap off while the mouse is still
+  // on the header.
+  // Fix: hoveredCol holds the key of the currently hovered <th>. The color
+  // is derived from state in the style object — React manages it cleanly.
+  const [hoveredCol, setHoveredCol] = useState(null)
 
   return (
     <>
@@ -108,20 +90,25 @@ export default function Table({
                 borderBottom: '1px solid var(--border)',
               }}>
                 {columns.map(col => {
-                  const isSorted  = sortKey === col.key
-                  const canSort   = col.sortable && onSort
+                  const isSorted = sortKey === col.key
+                  const canSort  = col.sortable && onSort
+                  // Header text is accent if: currently sorted OR being hovered (and sortable)
+                  const isHighlighted = isSorted || (canSort && hoveredCol === col.key)
 
                   return (
                     <th
                       key={col.key}
                       onClick={() => canSort && onSort(col.key)}
+                      onMouseEnter={() => canSort && setHoveredCol(col.key)}
+                      onMouseLeave={() => setHoveredCol(null)}
                       style={{
                         padding: '11px 20px',
                         textAlign: col.align === 'right'  ? 'right'
                                  : col.align === 'center' ? 'center' : 'left',
                         fontSize: 10.5,
                         fontWeight: 700,
-                        color: isSorted ? 'var(--accent-600)' : 'var(--text-muted)',
+                        // FIX: color now derived from state — never from DOM mutation
+                        color: isHighlighted ? 'var(--accent-600)' : 'var(--text-muted)',
                         letterSpacing: '0.08em',
                         textTransform: 'uppercase',
                         whiteSpace: 'nowrap',
@@ -130,13 +117,6 @@ export default function Table({
                         cursor: canSort ? 'pointer' : 'default',
                         userSelect: 'none',
                         transition: 'color 0.14s',
-                      }}
-                      onMouseEnter={e => {
-                        if (canSort) e.currentTarget.style.color = 'var(--accent-600)'
-                      }}
-                      onMouseLeave={e => {
-                        if (canSort && !isSorted)
-                          e.currentTarget.style.color = 'var(--text-muted)'
                       }}
                     >
                       {col.label}

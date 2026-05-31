@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import toast from 'react-hot-toast'
@@ -201,7 +201,12 @@ export default function DashboardLayout() {
   const initials     = userName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
   const hour         = new Date().getHours()
   const greeting     = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
-  const currentPage  = NAV.flatMap(s => s.items).find(item => location.pathname.startsWith(item.path))?.label || 'Dashboard'
+  const currentPage = useMemo(() =>
+  NAV.flatMap(s => s.items)
+    .find(item => location.pathname.startsWith(item.path))
+    ?.label || 'Dashboard',
+  [location.pathname]
+)
 
   function handleLogout() { clearAuth(); toast.success('Signed out successfully'); navigate('/login') }
 

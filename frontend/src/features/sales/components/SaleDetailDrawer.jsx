@@ -38,14 +38,14 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
   // When the drawer is opened with _autoPrint = true (set by CreateSalePage
   // after a successful invoice creation), open the browser print dialog
   // automatically once the detail data has loaded.
-  // WHY a timeout: the browser needs one render cycle after data loads
-  // before window.print() can see the fully rendered invoice content.
+  // FIX: also checks isError — if the query failed, print is skipped and
+  // the error state in the drawer body explains what happened.
   useEffect(() => {
-    if (!isLoading && detail && sale?._autoPrint) {
+    if (!isLoading && !isError && detail && sale?._autoPrint) {
       const timer = setTimeout(() => window.print(), 350);
       return () => clearTimeout(timer);
     }
-  }, [isLoading, detail, sale?._autoPrint]);
+  }, [isLoading, isError, detail, sale?._autoPrint]);
 
   if (!sale) return null;
 

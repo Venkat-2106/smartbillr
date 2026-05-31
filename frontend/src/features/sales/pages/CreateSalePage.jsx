@@ -250,17 +250,35 @@ export default function CreateSalePage() {
       item._id === id ? { ...item, [field]: value } : item
     ));
 
-  // ── Running totals ────────────────────────────────────────────────────────
+  // ── Running totals (matches backend sales_final_amount formula exactly) ──
+  // Backend formula: sales_total_amount - sales_discount + tax_total
+  //   sales_total_amount = sum of (unit_price × qty)   ← what customer actually pays
+  //   sales_discount     = sum of (prod_sell_price - unit_price) × qty per item
+  //                        (auto-discount when staff sells below MRP)
+  //   tax_total          = sum of (unit_price × qty × tax_rate%)
+  // Grand Total = subtotal - autoDiscount + taxTotal
+  // This matches sales_final_amount so the printed invoice is always consistent.
   const totals = useMemo(() => {
-    let subtotal = 0, taxTotal = 0;
+    let subtotal     = 0;
+    let taxTotal     = 0;
+    let autoDiscount = 0;
     items.forEach(item => {
       const s = (Number(item.unit_price) || 0) * (Number(item.quantity) || 0);
       const t = s * ((Number(item.tax_rate) || 0) / 100);
       subtotal += s;
       taxTotal += t;
+
+      // Calculate auto-discount: price reduction from MRP
+      const product = products.find(p => p.prod_id === item.product_id);
+      if (product) {
+        const mrp  = Number(product.prod_sell_price) || 0;
+        const diff = mrp - (Number(item.unit_price) || 0);
+        if (diff > 0) autoDiscount += diff * (Number(item.quantity) || 0);
+      }
     });
-    return { subtotal, taxTotal, grandTotal: subtotal + taxTotal };
-  }, [items]);
+    const grandTotal = subtotal - autoDiscount + taxTotal;
+    return { subtotal, taxTotal, autoDiscount, grandTotal };
+  }, [items, products]);
 
   // ── Partial payment validation ────────────────────────────────────────────
   const parsedPaidAmount = Number(paidAmount) || 0;
@@ -730,6 +748,13 @@ export default function CreateSalePage() {
             <SectionCard title="Order Summary">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <SummaryRow label="Subtotal"   value={formatCurrency(totals.subtotal)} />
+                {totals.autoDiscount > 0 && (
+                  <SummaryRow
+                    label="Discount"
+                    value={<span style={{ color: '#059669' }}>−{formatCurrency(totals.autoDiscount)}</span>}
+                    muted
+                  />
+                )}
                 <SummaryRow label="Tax"        value={formatCurrency(totals.taxTotal)} muted />
                 <div style={{ borderTop: '1.5px solid var(--border)', paddingTop: 12, marginTop: 2 }}>
                   <SummaryRow label="Grand Total" value={formatCurrency(totals.grandTotal)} bold />

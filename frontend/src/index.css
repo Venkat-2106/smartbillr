@@ -574,9 +574,16 @@ body {
     display: none !important;
   }
 
-  /* Page setup */
+  /* Page setup — default A4 for laser/inkjet printers */
   @page {
     size: A4 portrait;
     margin: 18mm 16mm;
+  }
+
+  /* Thermal receipt printer override (80mm roll paper) */
+  /* To print to a thermal printer, select paper size "80mm" in the print dialog */
+  @page :first {
+    size: 80mm auto;
+    margin: 4mm;
   }
 }

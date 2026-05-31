@@ -29,6 +29,7 @@ from sqlalchemy import text
 from app.database import get_db
 from app.middleware.rbac import require_permission, get_current_user_with_permissions
 from app.utils.response import success_response, error_response
+import datetime
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -198,7 +199,6 @@ def get_dashboard_trend(
         ).fetchall()
 
         # Format labels as short weekday names (Mon, Tue, …)
-        import datetime
         days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
         result = [
             {

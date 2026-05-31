@@ -287,14 +287,28 @@ def create_sale(
         # must SUM them from sale_items and write them back to sales.
         # Without this, sales_final_amount (generated column) would compute
         # wrong totals because it reads the header tax columns.
+        #
+        # FIX: Replaced 4 correlated subqueries with a single-scan CTE.
+        # Old approach scanned sale_items 4× (once per tax column) = 4 × N rows.
+        # New approach scans sale_items ONCE, aggregates all 4 columns together,
+        # then joins the result into the UPDATE — always exactly N row reads.
         db.execute(
             text("""
                 UPDATE sales
                 SET
-                    cgst_total = COALESCE((SELECT SUM(cgst_amount) FROM sale_items WHERE sale_id = CAST(:sid AS uuid)), 0),
-                    sgst_total = COALESCE((SELECT SUM(sgst_amount) FROM sale_items WHERE sale_id = CAST(:sid AS uuid)), 0),
-                    igst_total = COALESCE((SELECT SUM(igst_amount) FROM sale_items WHERE sale_id = CAST(:sid AS uuid)), 0),
-                    tax_total  = COALESCE((SELECT SUM(tax_amount)  FROM sale_items WHERE sale_id = CAST(:sid AS uuid)), 0)
+                    cgst_total = x.c,
+                    sgst_total = x.s,
+                    igst_total = x.i,
+                    tax_total  = x.t
+                FROM (
+                    SELECT
+                        COALESCE(SUM(cgst_amount), 0) AS c,
+                        COALESCE(SUM(sgst_amount), 0) AS s,
+                        COALESCE(SUM(igst_amount), 0) AS i,
+                        COALESCE(SUM(tax_amount),  0) AS t
+                    FROM sale_items
+                    WHERE sale_id = CAST(:sid AS uuid)
+                ) x
                 WHERE sales_id = CAST(:sid AS uuid)
             """),
             {"sid": new_sale_id}
@@ -385,8 +399,10 @@ def get_sales(
     current_user: dict = Depends(require_permission("sales.view")),
     db: Session = Depends(get_db),
     pagination: dict = Depends(paginate),
-    search: str = Query(None),
-    status: str = Query(None),
+    search:     str = Query(None),
+    status:     str = Query(None),
+    date_from:  str = Query(None),   # ISO date string e.g. "2025-03-01"
+    date_to:    str = Query(None),   # ISO date string e.g. "2025-03-31"
 ):
     business_id = current_user["business_id"]
 
@@ -408,6 +424,14 @@ def get_sales(
     if status and status != "all":
         extra_where += " AND s.sales_payment_status = :status"
         params["status"] = status
+
+    if date_from:
+        extra_where += " AND s.sales_created_at >= :date_from"
+        params["date_from"] = date_from
+
+    if date_to:
+        extra_where += " AND s.sales_created_at <= :date_to"
+        params["date_to"] = f"{date_to}T23:59:59"
 
     # Count query — must apply the same filters so total is accurate
     count_sql = f"""

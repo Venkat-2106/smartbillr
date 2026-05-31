@@ -4,16 +4,18 @@ import api from '../../../api/axios';
 // FIX: was hardcoded { limit: 100 } with no search/status support.
 // Now accepts { page, limit, search, status } and passes them as axios params.
 // undefined values are automatically omitted by axios (no empty query strings).
-export const fetchSales = async ({ page = 1, limit = 20, search, status } = {}) => {
+export const fetchSales = async ({ page = 1, limit = 20, search, status, date_from, date_to } = {}) => {
   const res = await api.get('/sales', {
     params: {
       page,
       limit,
-      search:  search  || undefined,   // don't send empty string
-      status:  status  || undefined,   // don't send empty string / "all"
+      search:    search    || undefined,
+      status:    status    || undefined,
+      date_from: date_from || undefined,
+      date_to:   date_to   || undefined,
     },
   });
-  return res.data;  // shape: { items: [...], pagination: { total, page, limit, total_pages, ... } }
+  return res.data;
 };
 
 // ── Single sale detail with items ─────────────────────────────────────────

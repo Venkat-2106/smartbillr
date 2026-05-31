@@ -7,7 +7,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,              // if API fails, try once more (not forever)
-      staleTime: 1000 * 30,  // data stays "fresh" for 30 seconds
+      staleTime: 5 * 60 * 1000,  // data stays "fresh" for 5 minutes
       refetchOnWindowFocus: false, // don't refetch just because user switches tabs
     },
   },

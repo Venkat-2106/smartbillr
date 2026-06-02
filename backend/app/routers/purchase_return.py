@@ -248,9 +248,10 @@ def create_purchase_return(
                 "refund_amount":  float(item.refund_amount)
             })
 
-        db.commit()
-        
         # Step 6 → If created as approved + restock → reduce stock immediately
+        # NOTE: db.commit() intentionally moved to AFTER Step 6 so that the
+        # return header, return items, and stock updates are all one atomic
+        # transaction. If stock update fails, nothing is committed.
         if data.return_status == "approved" and data.restock:
             for item in data.items:
                 product_id = str(item.product_id)

@@ -671,7 +671,7 @@ export default function DashboardPage() {
     {
       label: 'Pending Payments',
       value: data?.pending_payments ?? 0,
-      sub: 'Partial invoices',
+      sub: 'Unpaid + partially paid invoices',
       icon: '⏳',
       gradient: 'linear-gradient(135deg, #F97316, #EF4444)',
     },
@@ -738,8 +738,8 @@ export default function DashboardPage() {
       }}>
         <PaymentDonut
           paid={data?.paid_count}
-          partial={data?.pending_payments}
-          unpaid={data?.unpaid_count}
+          partial={data?.partial_count}
+          unpaid={data?.pending_count}
           loading={isLoading}
         />
         <RevenueExpensesBar

@@ -7,9 +7,13 @@ import {
   fetchCustomersForSale,
   fetchProductsForSale,
 } from '../api/salesApi';
+import { createCustomer } from '../../customers/api/customersApi';
 import { Button, PageHeader, FormField, Spinner, Modal } from '../../../shared/components';
+import StateDropdown from '../../../shared/components/StateDropdown';
 import { selectStyle } from '../../../shared/components/FormField';
 import { formatCurrency } from '../../../shared/utils/formatCurrency';
+import { COUNTRIES } from '../../../shared/data/countries';
+import useAuthStore from '../../../store/authStore';
 
 // Unique ID for each line item row (client-side only, never sent to backend)
 const newItem = () => ({
@@ -23,6 +27,9 @@ const newItem = () => ({
 export default function CreateSalePage() {
   const navigate    = useNavigate();
   const queryClient = useQueryClient();
+
+  // Read business defaults for customer pre-fill
+  const business = useAuthStore((s) => s.business);
 
   // ── Form state ───────────────────────────────────────────────────────────
   const [customerId,    setCustomerId]    = useState('');
@@ -41,6 +48,15 @@ export default function CreateSalePage() {
   const [barcodeInput, setBarcodeInput] = useState('');
   const [barcodeError, setBarcodeError] = useState('');
   const barcodeRef = useRef(null);
+
+  // ── Add New Customer mini-modal state ────────────────────────────────────
+  const [showAddCustModal, setShowAddCustModal] = useState(false);
+  const [newCustName,      setNewCustName]      = useState('');
+  const [newCustPhone,     setNewCustPhone]     = useState('');
+  const [newCustEmail,     setNewCustEmail]     = useState('');
+  const [newCustCountry,   setNewCustCountry]   = useState('');
+  const [newCustState,     setNewCustState]     = useState('');
+  const [addCustLoading,   setAddCustLoading]   = useState(false);
 
   // ── Stock override dialog state ───────────────────────────────────────────
   // stockErrors: the list returned by backend when stock is insufficient.
@@ -114,6 +130,59 @@ export default function CreateSalePage() {
     setSelectedCustName('');
     setCustSearch('');
     setCustDropOpen(false);
+  };
+
+  // ── Add New Customer handler ────────────────────────────────────────────
+  const handleOpenAddCust = () => {
+    setCustDropOpen(false);
+    // Pre-fill name with whatever the user typed in the search box
+    setNewCustName(custSearch.trim());
+    setNewCustPhone('');
+    setNewCustEmail('');
+    // Default country and state to the business's own values — user can change them
+    setNewCustCountry(business?.business_country_code || '');
+    setNewCustState(business?.business_state || '');
+    setShowAddCustModal(true);
+  };
+
+  const handleAddNewCustomer = async () => {
+    const name = newCustName.trim();
+    if (!name) {
+      toast.error('Customer name is required');
+      return;
+    }
+    setAddCustLoading(true);
+    try {
+      const res = await createCustomer({
+        cust_name:         name,
+        cust_phone:        newCustPhone.trim()   || undefined,
+        cust_email:        newCustEmail.trim()   || undefined,
+        cust_country_code: newCustCountry        || undefined,
+        cust_state:        newCustState.trim()   || undefined,
+      });
+      // Backend returns { message, customer: { cust_id, cust_name, ... } }
+      // Unwrap the nested customer object before using it
+      const created = res.customer;
+      // Auto-select the newly created customer
+      handleCustSelect({
+        cust_id:    created.cust_id,
+        cust_name:  created.cust_name,
+        cust_phone: created.cust_phone || '',
+      });
+      // Refresh the customer list so this customer appears next time
+      queryClient.invalidateQueries({ queryKey: ['customers-for-sale'] });
+      toast.success(`Customer "${created.cust_name}" created and selected`);
+      setShowAddCustModal(false);
+      setNewCustName('');
+      setNewCustPhone('');
+      setNewCustEmail('');
+      setNewCustCountry('');
+      setNewCustState('');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to create customer');
+    } finally {
+      setAddCustLoading(false);
+    }
   };
 
   // ── Barcode scan handler ─────────────────────────────────────────────────
@@ -311,7 +380,7 @@ export default function CreateSalePage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ padding: '36px 40px', maxWidth: 1400, margin: '0 auto' }}>
+    <>
 
       <PageHeader
         title="New Invoice"
@@ -334,6 +403,92 @@ export default function CreateSalePage() {
           </div>
         }
       />
+
+      {/* ── Add New Customer Mini-Modal ─────────────────────────────────────── */}
+      <Modal
+        open={showAddCustModal}
+        onClose={() => {
+          setShowAddCustModal(false);
+          setNewCustName(''); setNewCustPhone(''); setNewCustEmail('');
+          setNewCustCountry(''); setNewCustState('');
+        }}
+        title="Add New Customer"
+        subtitle="Quickly add a customer and select them for this invoice"
+        size="sm"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <FormField label="Full Name *">
+            <input
+              type="text"
+              value={newCustName}
+              onChange={e => setNewCustName(e.target.value)}
+              placeholder="Customer name"
+              autoFocus
+              style={{ ...selectStyle }}
+            />
+          </FormField>
+          <FormField label="Phone">
+            <input
+              type="tel"
+              value={newCustPhone}
+              onChange={e => setNewCustPhone(e.target.value)}
+              placeholder="Phone number (optional)"
+              style={{ ...selectStyle }}
+            />
+          </FormField>
+          <FormField label="Email">
+            <input
+              type="email"
+              value={newCustEmail}
+              onChange={e => setNewCustEmail(e.target.value)}
+              placeholder="Email address (optional)"
+              style={{ ...selectStyle }}
+            />
+          </FormField>
+          <FormField label="Country">
+            <select
+              value={newCustCountry}
+              onChange={e => {
+                setNewCustCountry(e.target.value);
+                setNewCustState('');   // reset state when country changes
+              }}
+              style={{ ...selectStyle }}
+            >
+              <option value="">— Select Country —</option>
+              {COUNTRIES.map(c => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+          </FormField>
+          <StateDropdown
+            label="State / Province"
+            countryCode={newCustCountry}
+            value={newCustState}
+            onChange={val => setNewCustState(val)}
+          />
+        </div>
+        <Modal.Footer>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setShowAddCustModal(false);
+              setNewCustName(''); setNewCustPhone(''); setNewCustEmail('');
+              setNewCustCountry(''); setNewCustState('');
+            }}
+            disabled={addCustLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleAddNewCustomer}
+            loading={addCustLoading}
+            disabled={!newCustName.trim()}
+          >
+            Create & Select
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       {/* ── Stock Override Dialog ──────────────────────────────────────────── */}
       {/* Opens automatically when backend returns INSUFFICIENT_STOCK.         */}
@@ -527,6 +682,24 @@ export default function CreateSalePage() {
                           Walk-in Customer (no account)
                         </span>
                       </div>
+                      {/* + Add New Customer button — always visible at bottom of dropdown */}
+                      <div
+                        onMouseDown={handleOpenAddCust}
+                        style={{
+                          ...dropItemStyle,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          color: 'var(--accent-600)',
+                          fontWeight: 600,
+                          fontSize: 13,
+                          borderBottom: '1px solid var(--border)',
+                        }}
+                      >
+                        <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
+                        Add New Customer
+                      </div>
+
                       {filteredCustomers.length === 0 ? (
                         <div style={{ padding: '10px 14px', fontSize: 12.5, color: 'var(--text-muted)' }}>
                           No customers match "{custSearch}"
@@ -776,7 +949,7 @@ export default function CreateSalePage() {
 
             <SectionCard title="Payment">
               <FormField label="Payment Method" style={{ marginBottom: 14 }}>
-                <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} style={selectStyle}>
+                <select className="sb-select" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} style={selectStyle}>
                   <option value="cash">Cash</option>
                   <option value="card">Card</option>
                   <option value="upi">UPI</option>
@@ -848,7 +1021,7 @@ export default function CreateSalePage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -874,11 +1047,13 @@ function SummaryRow({ label, value, bold, muted }) {
       <span style={{ fontSize: 13.5, color: muted ? 'var(--text-muted)' : 'var(--text-secondary)' }}>
         {label}
       </span>
-      <span style={{
-        fontSize: bold ? 16 : 13.5,
-        fontWeight: bold ? 700 : 500,
-        color: bold ? 'var(--text-primary)' : 'var(--text-secondary)',
-      }}>
+      <span
+        style={{
+          fontSize: bold ? 16 : 13.5,
+          fontWeight: bold ? 700 : 500,
+          color: bold ? 'var(--text-primary)' : 'var(--text-secondary)',
+        }}
+      >
         {value}
       </span>
     </div>

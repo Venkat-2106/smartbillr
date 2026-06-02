@@ -95,23 +95,29 @@ export default function FormField({
 //   import FormField, { selectStyle } from '../../../shared/components/FormField'
 //   <select style={selectStyle} {...register('status')}>...</select>
 //
+// ─── selectStyle — used by all pages via <select style={selectStyle} className="sb-select">
+// className="sb-select" is required to get :hover and :focus ring from index.css.
+// The inline style handles base appearance; the CSS class handles pseudo-states.
 export const selectStyle = {
   width: '100%',
-  padding: '9px 12px',
+  padding: '9px 36px 9px 12px',
   background: 'var(--bg-card)',
   border: '1.5px solid var(--border)',
   borderRadius: 10,
   fontSize: 13.5,
-  fontWeight: 400,
+  fontWeight: 500,
   color: 'var(--text-primary)',
   fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
   outline: 'none',
   cursor: 'pointer',
   appearance: 'none',
-  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236B7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
+  WebkitAppearance: 'none',
+  // Accent-colored chevron — matches --accent-500 (purple default)
+  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236366F1' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E")`,
   backgroundRepeat: 'no-repeat',
-  backgroundPosition: 'right 12px center',
-  paddingRight: 32,
+  backgroundPosition: 'right 10px center',
+  backgroundSize: '16px 16px',
+  transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
 }
 
 // ─── Shared textarea style ────────────────────────────────────────────────────

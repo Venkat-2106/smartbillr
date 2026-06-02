@@ -8,9 +8,19 @@ import {
   IdentificationIcon,
   CalendarDaysIcon,
   UserIcon,
+  PrinterIcon,
 } from '@heroicons/react/24/outline';
+import {
+  buildPrintHeader,
+  buildPrintWatermark,
+  buildPrintFooter,
+  buildPrintMetaGrid,
+  buildPrintSectionTitle,
+  triggerPrint,
+} from '../../../shared/utils/printUtils';
+import useAuthStore from '../../../store/authStore';
 
-// Local date formatter
+// Local date formatter (matches the rest of the drawer)
 const fmtDate = (dt) => {
   if (!dt) return '—';
   return new Date(dt).toLocaleDateString('en-IN', {
@@ -18,8 +28,51 @@ const fmtDate = (dt) => {
   });
 };
 
+// ── Print builder ─────────────────────────────────────────────────────────────
+function buildSupplierPrintHTML(business, supplier) {
+  const metaContact = [
+    { label: 'Phone',           value: supplier.supp_phone || '—' },
+    { label: 'Email',           value: supplier.supp_email || '—' },
+    { label: 'State / Province',value: supplier.supp_state || '—' },
+    { label: 'Country',         value: supplier.supp_country_code || '—' },
+    { label: 'Address',         value: supplier.supp_address || '—' },
+  ];
+
+  const metaRecord = [
+    { label: 'Tax / GSTIN / VAT', value: supplier.supp_tax_number || '—' },
+    { label: 'Added On',          value: fmtDate(supplier.supp_created_at) },
+    { label: 'Last Updated',      value: fmtDate(supplier.updated_at) },
+    { label: 'Last Updated By',   value: supplier.last_updated_by || '—' },
+  ];
+
+  return `
+    ${buildPrintWatermark()}
+    ${buildPrintHeader(business)}
+
+    <!-- Supplier name -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:24px;font-weight:900;color:#111827;letter-spacing:-0.5px;line-height:1.1;">${supplier.supp_name}</div>
+      <div style="font-size:11.5px;color:#9ca3af;margin-top:5px;">Supplier Profile</div>
+    </div>
+
+    ${buildPrintSectionTitle('Contact Information')}
+    ${buildPrintMetaGrid(metaContact, 3)}
+
+    ${buildPrintSectionTitle('Tax & Record Information')}
+    ${buildPrintMetaGrid(metaRecord, 2)}
+
+    ${buildPrintFooter()}
+  `;
+}
+
 export default function SupplierDetailDrawer({ supplier, onClose }) {
   if (!supplier) return null;
+
+  function handlePrint() {
+    const business = useAuthStore.getState().business;
+    const html = buildSupplierPrintHTML(business, supplier);
+    triggerPrint(html);
+  }
 
   return (
     <>
@@ -74,17 +127,37 @@ export default function SupplierDetailDrawer({ supplier, onClose }) {
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            style={{
-              background: 'var(--bg-page)', border: '1px solid var(--border)',
-              cursor: 'pointer', padding: 6, borderRadius: 8,
-              color: 'var(--text-muted)', flexShrink: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <XMarkIcon style={{ width: 18, height: 18 }} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {/* Print button */}
+            <button
+              onClick={handlePrint}
+              title="Print supplier profile"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                background: 'var(--bg-page)', border: '1px solid var(--border)',
+                cursor: 'pointer', padding: '6px 12px', borderRadius: 8,
+                color: 'var(--text-secondary)', fontSize: 12.5, fontWeight: 600,
+                fontFamily: 'inherit', transition: 'background 0.12s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-page)'; }}
+            >
+              <PrinterIcon style={{ width: 15, height: 15 }} />
+              Print
+            </button>
+
+            <button
+              onClick={onClose}
+              style={{
+                background: 'var(--bg-page)', border: '1px solid var(--border)',
+                cursor: 'pointer', padding: 6, borderRadius: 8,
+                color: 'var(--text-muted)', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <XMarkIcon style={{ width: 18, height: 18 }} />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable body */}

@@ -14,19 +14,118 @@ import { Badge, Button, Spinner } from '../../../shared/components';
 import { selectStyle } from '../../../shared/components/FormField';
 import { formatCurrency } from '../../../shared/utils/formatCurrency';
 import { formatDate }     from '../../../shared/utils/formatDate';
+import {
+  buildPrintHeader,
+  buildPrintWatermark,
+  buildPrintFooter,
+  triggerPrint,
+} from '../../../shared/utils/printUtils';
+import useAuthStore from '../../../store/authStore';
 
-// Badge variant per status — backend sends "pending" not "unpaid"
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' };
 const STATUS_LABEL   = { paid: 'Paid',    partial: 'Partial', pending: 'Unpaid' };
 
-export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
-  // Local state for immediate visual feedback after status update
-  const [displayStatus,  setDisplayStatus]  = useState(sale?.sales_payment_status || 'pending');
-  const [editingStatus,  setEditingStatus]  = useState(false);
-  const [newStatus,      setNewStatus]      = useState(sale?.sales_payment_status || 'paid');
+// ── Payment status badge helper (for print — literal hex, no CSS vars) ────────
+function paymentStatusBadge(status) {
+  const map = {
+    paid:    { color: '#10B981', bg: '#D1FAE5', label: 'Fully Paid' },
+    partial: { color: '#F59E0B', bg: '#FEF3C7', label: 'Partially Paid' },
+    pending: { color: '#EF4444', bg: '#FEE2E2', label: 'Unpaid' },
+  };
+  const s = map[status] || { color: '#6b7280', bg: '#f3f4f6', label: status || '—' };
+  return `<span style="font-size:11px;font-weight:700;color:${s.color};background:${s.bg};padding:3px 10px;border-radius:20px;letter-spacing:0.03em;">${s.label}</span>`;
+}
 
-  // Fetch full detail (includes items array)
-  // WHY sale.sales_id: backend returns "sales_id" (not "sale_id")
+function buildInvoiceHTML(business, detail, sale, items, cgst, sgst, igst, subtotal, taxTotal, finalAmount, totalPaid, remaining) {
+  const payStatus = detail?.sales_payment_status || sale.sales_payment_status || 'pending';
+  const payMethod = (detail?.sales_payment_method || sale.sales_payment_method || '—')
+    .replace(/_/g, ' ').toUpperCase();
+
+  const gstBreakdown = (cgst > 0 || sgst > 0 || igst > 0) ? `
+    <tr><td style="padding:5px 0;color:#6b7280;font-size:12px;">CGST</td><td style="padding:5px 0;text-align:right;font-size:12px;">${formatCurrency(cgst)}</td></tr>
+    <tr><td style="padding:5px 0;color:#6b7280;font-size:12px;">SGST</td><td style="padding:5px 0;text-align:right;font-size:12px;">${formatCurrency(sgst)}</td></tr>
+    ${igst > 0 ? `<tr><td style="padding:5px 0;color:#6b7280;font-size:12px;">IGST</td><td style="padding:5px 0;text-align:right;font-size:12px;">${formatCurrency(igst)}</td></tr>` : ''}
+  ` : '';
+
+  const itemRows = items.map((item, i) => `
+    <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'};">
+      <td style="padding:9px 8px;font-size:12px;color:#111827;">${item.product_name || 'Product'}</td>
+      <td style="padding:9px 8px;text-align:center;font-size:12px;color:#374151;">${item.sale_item_quantity}</td>
+      <td style="padding:9px 8px;text-align:right;font-size:12px;color:#374151;">${formatCurrency(item.sale_item_unit_price)}</td>
+      <td style="padding:9px 8px;text-align:right;font-size:12px;color:#374151;">${Number(item.item_tax_total) > 0 ? formatCurrency(item.item_tax_total) : '—'}</td>
+      <td style="padding:9px 8px;text-align:right;font-size:12px;font-weight:700;color:#111827;">${formatCurrency(item.item_total_with_tax)}</td>
+    </tr>
+  `).join('');
+
+  return `
+    ${buildPrintWatermark()}
+    ${buildPrintHeader(business)}
+
+    <!-- Invoice title row -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;">
+      <div>
+        <div style="font-size:26px;font-weight:900;color:#111827;letter-spacing:-1px;line-height:1;">INVOICE</div>
+        <div style="font-size:15px;font-weight:700;color:#4F46E5;margin-top:6px;letter-spacing:0.02em;">${sale.invoice_no || ''}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:2px;">Invoice Date</div>
+        <div style="font-size:13px;font-weight:600;color:#111827;">${formatDate(detail?.sales_created_at || sale.sales_created_at)}</div>
+        <div style="margin-top:10px;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:4px;">Payment Status</div>
+        ${paymentStatusBadge(payStatus)}
+        <div style="margin-top:8px;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:2px;">Payment Method</div>
+        <div style="font-size:12.5px;font-weight:600;color:#374151;">${payMethod}</div>
+      </div>
+    </div>
+
+    <!-- Bill To -->
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px 18px;margin-bottom:22px;">
+      <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Bill To</div>
+      <div style="font-size:15px;font-weight:700;color:#111827;">${detail?.customer_name || sale.customer_name || 'Walk-in Customer'}</div>
+    </div>
+
+    <!-- Items table -->
+    <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+      <thead>
+        <tr style="border-bottom:2px solid #111827;background:#f9fafb;">
+          <th style="text-align:left;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Item</th>
+          <th style="text-align:center;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Qty</th>
+          <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Rate</th>
+          <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Tax</th>
+          <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Total</th>
+        </tr>
+      </thead>
+      <tbody>${itemRows}</tbody>
+    </table>
+
+    <!-- Totals block -->
+    <div style="display:flex;justify-content:flex-end;margin-bottom:32px;">
+      <table style="min-width:280px;">
+        <tr><td style="padding:5px 0;color:#6b7280;font-size:12px;">Subtotal</td><td style="padding:5px 0;text-align:right;font-size:12px;">${formatCurrency(subtotal)}</td></tr>
+        ${gstBreakdown}
+        <tr><td style="padding:5px 0;color:#6b7280;font-size:12px;">Tax Total</td><td style="padding:5px 0;text-align:right;font-size:12px;">${formatCurrency(taxTotal)}</td></tr>
+        <tr style="border-top:2px solid #111827;">
+          <td style="padding:10px 0 6px;font-size:16px;font-weight:900;color:#111827;">Grand Total</td>
+          <td style="padding:10px 0 6px;text-align:right;font-size:16px;font-weight:900;color:#111827;">${formatCurrency(finalAmount)}</td>
+        </tr>
+        ${totalPaid > 0 ? `<tr><td style="padding:4px 0;color:#10B981;font-size:12px;font-weight:600;">Amount Paid</td><td style="padding:4px 0;text-align:right;font-size:12px;color:#10B981;font-weight:600;">${formatCurrency(totalPaid)}</td></tr>` : ''}
+        ${remaining > 0 ? `<tr><td style="padding:4px 0;color:#EF4444;font-size:12.5px;font-weight:700;">Balance Due</td><td style="padding:4px 0;text-align:right;font-size:12.5px;color:#EF4444;font-weight:700;">${formatCurrency(remaining)}</td></tr>` : ''}
+      </table>
+    </div>
+
+    <!-- Thank you note -->
+    <div style="text-align:center;padding:14px;background:#f9fafb;border-radius:8px;font-size:12px;color:#6b7280;font-style:italic;margin-bottom:8px;">
+      Thank you for your business!
+    </div>
+
+    ${buildPrintFooter()}
+  `;
+}
+
+export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
+  const [displayStatus, setDisplayStatus] = useState(sale?.sales_payment_status || 'pending');
+  const [editingStatus, setEditingStatus] = useState(false);
+  const [newStatus,     setNewStatus]     = useState(sale?.sales_payment_status || 'paid');
+
   const { data: detail, isLoading, isError } = useQuery({
     queryKey: ['sale', sale?.sales_id],
     queryFn:  () => fetchSale(sale.sales_id),
@@ -34,42 +133,38 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
     staleTime: 2 * 60 * 1000,
   });
 
-  // ── Auto-print ────────────────────────────────────────────────────────────
-  // When the drawer is opened with _autoPrint = true (set by CreateSalePage
-  // after a successful invoice creation), open the browser print dialog
-  // automatically once the detail data has loaded.
-  // FIX: also checks isError — if the query failed, print is skipped and
-  // the error state in the drawer body explains what happened.
+  // Auto-print after create
   useEffect(() => {
     if (!isLoading && !isError && detail && sale?._autoPrint) {
-      const timer = setTimeout(() => window.print(), 350);
+      const timer = setTimeout(() => handlePrint(), 350);
       return () => clearTimeout(timer);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, isError, detail, sale?._autoPrint]);
 
   if (!sale) return null;
 
-  // Prefer detailed data; fall back to list row data
-  // WHY sales_total_amount: backend has no "subtotal" field — use sales_total_amount
-  const subtotal      = detail?.sales_total_amount     ?? sale.sales_total_amount ?? 0;
-  const taxTotal      = detail?.tax_total              ?? sale.tax_total          ?? 0;
-  const finalAmount   = detail?.sales_final_amount     ?? sale.sales_final_amount ?? 0;
-  const totalPaid     = detail?.total_paid             ?? 0;
-  const remaining     = detail?.remaining_balance      ?? 0;
-  const cgst          = detail?.cgst_total             ?? 0;
-  const sgst          = detail?.sgst_total             ?? 0;
-  const igst          = detail?.igst_total             ?? 0;
-  const items         = detail?.items                  ?? [];
+  const subtotal    = detail?.sales_total_amount  ?? sale.sales_total_amount ?? 0;
+  const taxTotal    = detail?.tax_total            ?? sale.tax_total          ?? 0;
+  const finalAmount = detail?.sales_final_amount   ?? sale.sales_final_amount ?? 0;
+  const totalPaid   = detail?.total_paid           ?? 0;
+  const remaining   = detail?.remaining_balance    ?? 0;
+  const cgst        = detail?.cgst_total           ?? 0;
+  const sgst        = detail?.sgst_total           ?? 0;
+  const igst        = detail?.igst_total           ?? 0;
+  const items       = detail?.items                ?? [];
 
-  // ── Print handler ─────────────────────────────────────────────────────────
-  // Uses browser's native print dialog.
-  // The @media print CSS in index.css controls what is visible on paper.
-  // No new API call — prints from the already-cached detail query data.
-  const handlePrint = () => {
-    window.print();
-  };
+  function handlePrint() {
+    if (!detail && !sale) return;
+    const business = useAuthStore.getState().business;
+    const html = buildInvoiceHTML(
+      business, detail, sale, items, cgst, sgst, igst,
+      subtotal, taxTotal, finalAmount, totalPaid, remaining
+    );
+    triggerPrint(html);
+  }
 
-  const handleStatusSave = () => {
+  function handleStatusSave() {
     statusMutation.mutate(
       { id: sale.sales_id, status: newStatus },
       {
@@ -79,7 +174,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
         },
       }
     );
-  };
+  }
 
   return (
     <>
@@ -93,9 +188,8 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
         }}
       />
 
-      {/* Drawer panel */}
+      {/* Drawer panel — no longer needs invoice-print-area class */}
       <div
-        className="invoice-print-area"
         style={{
           position: 'fixed', top: 0, right: 0,
           height: '100vh', width: 520, maxWidth: '95vw',
@@ -107,7 +201,6 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
           overflow: 'hidden',
         }}
       >
-
         {/* Header */}
         <div style={{
           padding: '22px 24px',
@@ -133,9 +226,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
             </div>
           </div>
 
-          {/* Header right: Print button + Close button */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            {/* Print button — disabled until detail has loaded */}
             <button
               onClick={handlePrint}
               disabled={isLoading || !!isError}
@@ -151,19 +242,12 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                 opacity: isLoading || isError ? 0.5 : 1,
                 transition: 'background 0.12s',
               }}
-              onMouseEnter={e => {
-                if (!isLoading && !isError)
-                  e.currentTarget.style.background = 'var(--bg-hover)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'var(--bg-page)';
-              }}
+              onMouseEnter={e => { if (!isLoading && !isError) e.currentTarget.style.background = 'var(--bg-hover)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-page)'; }}
             >
               <PrinterIcon style={{ width: 15, height: 15 }} />
               Print
             </button>
-
-            {/* Close button */}
             <button
               onClick={onClose}
               style={{
@@ -185,7 +269,6 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
               <Spinner size="md" />
             </div>
           ) : isError ? (
-            // ── Error state — was missing in original ──
             <div style={{
               padding: '20px 16px',
               background: 'var(--danger-bg, #FEF2F2)',
@@ -198,7 +281,6 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
             </div>
           ) : (
             <>
-              {/* Invoice details */}
               <DrawerSection title="Invoice Details">
                 <InfoRow icon={<UserIcon />}         label="Customer"
                   value={detail?.customer_name || sale.customer_name || 'Walk-in'} />
@@ -219,7 +301,6 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                     />
                   }
                 />
-                {/* Inline status editor */}
                 {editingStatus && (
                   <div style={{
                     padding: '12px 14px',
@@ -227,6 +308,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                     display: 'flex', gap: 8, alignItems: 'center',
                   }}>
                     <select
+                      className="sb-select"
                       value={newStatus}
                       onChange={e => setNewStatus(e.target.value)}
                       style={{ ...selectStyle, flex: 1, fontSize: 13, padding: '8px 10px' }}
@@ -248,7 +330,6 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                 )}
               </DrawerSection>
 
-              {/* Update status button */}
               {!editingStatus && (
                 <div style={{ marginBottom: 20 }}>
                   <Button
@@ -263,7 +344,6 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                 </div>
               )}
 
-              {/* Line items */}
               {items.length > 0 && (
                 <DrawerSection title={`Line Items (${items.length})`}>
                   {items.map((item, idx) => (
@@ -292,7 +372,6 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                 </DrawerSection>
               )}
 
-              {/* Tax breakdown — only show if any GST exists */}
               {(cgst > 0 || sgst > 0 || igst > 0) && (
                 <DrawerSection title="Tax Breakdown">
                   {cgst > 0 && <InfoRow label="CGST" value={formatCurrency(cgst)} />}
@@ -301,7 +380,6 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                 </DrawerSection>
               )}
 
-              {/* Financial summary */}
               <DrawerSection title="Summary">
                 <InfoRow label="Subtotal"   value={formatCurrency(subtotal)} />
                 <InfoRow label="Tax Total"  value={formatCurrency(taxTotal)} />
@@ -326,8 +404,6 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                 )}
               </DrawerSection>
 
-              {/* Notes — sales table has no notes column, so this only renders
-                  if somehow notes appears in future. Kept from original as-is. */}
               {(detail?.notes || sale.notes) && (
                 <DrawerSection title="Notes">
                   <div style={{
@@ -346,7 +422,6 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
   );
 }
 
-/* ─── Helper sub-components (unchanged from original) ────────────────────── */
 function DrawerSection({ title, children }) {
   return (
     <div style={{ marginBottom: 20 }}>

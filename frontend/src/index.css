@@ -430,6 +430,22 @@ body {
 }
 
 /* ─────────────────────────────────────────
+   MODERN SELECT / DROPDOWN
+   Used by all pages via selectStyle + className="sb-select".
+   Inline styles handle base appearance; this class adds
+   the :hover and :focus states that inline styles cannot.
+───────────────────────────────────────── */
+.sb-select:hover {
+  border-color: var(--border-hover) !important;
+}
+.sb-select:focus {
+  border-color: var(--accent-600) !important;
+  box-shadow: 0 0 0 3px var(--accent-ring) !important;
+  background: var(--bg-input-focus) !important;
+  outline: none !important;
+}
+
+/* ─────────────────────────────────────────
    BADGES / STATUS PILLS
 ───────────────────────────────────────── */
 .badge {
@@ -535,55 +551,10 @@ body {
 
 /* ─────────────────────────────────────────
    PRINT STYLES
-   Controls what appears when the user clicks
-   "Print Invoice" in SaleDetailDrawer.
-   Everything is hidden except .invoice-print-area.
+   Both SaleDetailDrawer and CustomerDetailDrawer use the
+   #sb-print-root pattern: they write plain HTML with literal
+   colors into a hidden div in normal document flow, then call
+   window.print(). The @media print rules for #sb-print-root
+   are injected inline by getPrintRoot() in those components.
+   No global @media print rules are needed here.
 ───────────────────────────────────────── */
-@media print {
-  /* Hide all page chrome: sidebar, topbar, backdrop, everything else */
-  body > * {
-    display: none !important;
-  }
-
-  /* Show only the drawer panel which carries class="invoice-print-area" */
-  .invoice-print-area {
-    display: flex !important;
-    flex-direction: column;
-
-    /* Reset fixed positioning for print — browser lays it out as normal flow */
-    position: static !important;
-    height: auto !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    box-shadow: none !important;
-    border: none !important;
-
-    /* Force light colors for printing regardless of current theme */
-    background: #ffffff !important;
-    color: #111827 !important;
-  }
-
-  /* Make the scrollable body expand fully for print */
-  .invoice-print-area > div:last-child {
-    overflow: visible !important;
-    flex: unset !important;
-  }
-
-  /* Hide action buttons inside the drawer when printing */
-  .invoice-print-area button {
-    display: none !important;
-  }
-
-  /* Page setup — default A4 for laser/inkjet printers */
-  @page {
-    size: A4 portrait;
-    margin: 18mm 16mm;
-  }
-
-  /* Thermal receipt printer override (80mm roll paper) */
-  /* To print to a thermal printer, select paper size "80mm" in the print dialog */
-  @page :first {
-    size: 80mm auto;
-    margin: 4mm;
-  }
-}

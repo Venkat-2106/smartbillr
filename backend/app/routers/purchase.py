@@ -187,12 +187,17 @@ def create_purchase(
         tax_total    = Decimal("0")
         calculated_items = []
 
+        # Step 3 → Bulk product lookup (1 query for ALL items — same pattern as sale.py)
+        requested_ids = [str(item.product_id) for item in data.items]
+        products_bulk = db.query(Product).filter(
+            Product.prod_id.in_(requested_ids),
+            Product.business_id == business_id,
+            Product.is_deleted  == False
+        ).all()
+        product_cache = {str(p.prod_id): p for p in products_bulk}
+
         for item in data.items:
-            product = db.query(Product).filter(
-                Product.prod_id == item.product_id,
-                Product.business_id == business_id,
-                Product.is_deleted == False
-            ).first()
+            product = product_cache.get(str(item.product_id))
 
             if not product:
                 return error_response(
@@ -213,18 +218,18 @@ def create_purchase(
             tax_total    += tax_calc["pur_tax_total"]
 
             calculated_items.append({
-                "product_id":  str(item.product_id),
-                "quantity":    item.pur_item_qty,
-                "unit_price":  float(item.item_unit_price),
-                "tax_rate":    float(tax_rate),
-                "cgst_amount": float(tax_calc["cgst_amount"]),
-                "sgst_amount": float(tax_calc["sgst_amount"]),
-                "igst_amount": float(tax_calc["igst_amount"]),
-                "pur_tax_total": float(tax_calc["pur_tax_total"])
+                "product_id":   str(item.product_id),
+                "quantity":     item.pur_item_qty,
+                "unit_price":   str(item.item_unit_price),
+                "tax_rate":     str(tax_rate),
+                "cgst_amount":  str(tax_calc["cgst_amount"]),
+                "sgst_amount":  str(tax_calc["sgst_amount"]),
+                "igst_amount":  str(tax_calc["igst_amount"]),
+                "pur_tax_total": str(tax_calc["pur_tax_total"])
             })
 
         # Step 4 → Insert purchase header via raw SQL
-        discount   = float(data.pur_discount or Decimal("0"))
+        discount   = str(data.pur_discount or Decimal("0"))
         new_pur_id = str(uuid.uuid4())
 
         db.execute(
@@ -250,12 +255,12 @@ def create_purchase(
                 "pur_id":          new_pur_id,
                 "business_id":     business_id,
                 "supp_id":         str(data.supp_id) if data.supp_id else None,
-                "pur_total_amount": float(total_amount),
-                "pur_discount":    discount,
-                "pur_cgst_total":  float(cgst_total),
-                "pur_sgst_total":  float(sgst_total),
-                "pur_igst_total":  float(igst_total),
-                "pur_tax_total":   float(tax_total),
+                "pur_total_amount": str(total_amount),
+                "pur_discount":     discount,
+                "pur_cgst_total":   str(cgst_total),
+                "pur_sgst_total":   str(sgst_total),
+                "pur_igst_total":   str(igst_total),
+                "pur_tax_total":    str(tax_total),
                 "pur_payment_status": data.pur_payment_status,
                 "created_by":      user_id
             }

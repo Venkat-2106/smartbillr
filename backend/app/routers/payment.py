@@ -191,12 +191,16 @@ def get_all_payments(
 ):
     business_id = current_user["business_id"]
 
+# is_active=True → only the current snapshot row per sale (not historical rows).
+    # Historical rows (is_active=False) are accessible via GET /payments/sale/{id}.
     total = db.query(func.count(Payment.payment_id)).filter(
-        Payment.business_id == business_id
+        Payment.business_id == business_id,
+        Payment.is_active   == True
     ).scalar()
 
     payments = db.query(Payment).filter(
-        Payment.business_id == business_id
+        Payment.business_id == business_id,
+        Payment.is_active   == True
     ).order_by(Payment.payment_paid_at.desc())\
      .offset(pagination["offset"]).limit(pagination["limit"]).all()
 

@@ -200,7 +200,7 @@ export default function SuppliersPage() {
 
   /* ── Render ───────────────────────────────────────────────────────────── */
   return (
-    <div style={{ padding: '36px 40px', maxWidth: 1400, margin: '0 auto' }}>
+    <>
 
       <PageHeader
         title="Suppliers"
@@ -226,23 +226,13 @@ export default function SuppliersPage() {
         }
       />
 
-      {/* Card wrapper */}
+      {/* Toolbar */}
       <div style={{
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderRadius: 18,
-        boxShadow: 'var(--shadow-card)',
-        overflow: 'hidden',
+        display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 20,
+        gap: 12, flexWrap: 'wrap',
       }}>
-
-        {/* Toolbar */}
-        <div style={{
-          padding: '20px 24px',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex', alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12, flexWrap: 'wrap',
-        }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <SearchBar
               value={search}
@@ -264,7 +254,8 @@ export default function SuppliersPage() {
           />
         </div>
 
-        {/* ✅ KEY FIX: rows= not data=, no renderCell/renderActions props */}
+      <div style={{ overflowX: 'auto', width: '100%' }}>
+        {/* ✅ KEY FIX */}
         <Table
           columns={columns}
           rows={suppliers}
@@ -273,10 +264,7 @@ export default function SuppliersPage() {
           sortKey={sortKey}
           sortDir={sortDir}
           onSort={handleSort}
-          onRowClick={(row, e) => {
-            if (e.target.closest('button')) return;
-            setDrawerSupplier(row);
-          }}
+          onRowClick={(row) => setDrawerSupplier(row)}
           emptyText={
             activeSearch || activeDateFilter
               ? 'No suppliers match your current filters.'
@@ -284,13 +272,14 @@ export default function SuppliersPage() {
           }
         />
 
-        {/* Pagination — hidden when any filter is active */}
-        {!activeSearch && !activeDateFilter && totalPages > 1 && (
-          <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)' }}>
-            <Pagination page={page} totalPages={totalPages} onChange={setPage} />
-          </div>
-        )}
       </div>
+
+      {/* Pagination */}
+      {!activeSearch && !activeDateFilter && totalPages > 1 && (
+        <div style={{ marginTop: 16 }}>
+          <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+        </div>
+      )}
 
       {/* Detail drawer */}
       {drawerSupplier && (
@@ -334,7 +323,7 @@ export default function SuppliersPage() {
         confirmText="Yes, delete"
         loading={deleteMutation.isPending}
       />
-    </div>
+    </>
   );
 }
 
@@ -407,7 +396,7 @@ function SupplierForm({ form, onSubmit, onCancel, loading, submitLabel }) {
         </FormField>
         <FormField label="Country" error={errors.supp_country_code?.message}>
           {/* ✅ selectStyle used as plain OBJECT — not called as function */}
-          <select {...register('supp_country_code')} style={selectStyle}>
+          <select className="sb-select" {...register('supp_country_code')} style={selectStyle}>
             <option value="">— Select Country —</option>
             {COUNTRIES.map((c) => (
               <option

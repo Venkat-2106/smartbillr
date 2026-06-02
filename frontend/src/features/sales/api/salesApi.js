@@ -56,7 +56,7 @@ export const fetchAllSalesForExport = async ({ search, status, date_from, date_t
   return res.data?.items ?? [];
 };
 export const fetchCustomersForSale = async () => {
-  const res = await api.get('/customers', { params: { limit: 100 } });
+  const res = await api.get('/customers', { params: { limit: 500 } });
   const data = res.data;
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.items)) return data.items;
@@ -65,7 +65,7 @@ export const fetchCustomersForSale = async () => {
 
 // ── Products for line items in Create Invoice ─────────────────────────────
 export const fetchProductsForSale = async () => {
-  const res = await api.get('/products', { params: { limit: 100 } });
+  const res = await api.get('/products', { params: { limit: 500 } });
   const data = res.data;
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.items)) return data.items;

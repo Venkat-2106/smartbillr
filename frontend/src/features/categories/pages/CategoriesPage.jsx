@@ -39,6 +39,7 @@ import {
   useUpdateCategory,
   useDeleteCategory,
 } from '../hooks/useCategories'
+import CategoryDetailDrawer from '../components/CategoryDetailDrawer'
 
 // ── Zod schema ────────────────────────────────────────────────────────────────
 const categorySchema = z.object({
@@ -159,7 +160,8 @@ export default function CategoriesPage() {
   const { mutate: updateCategory, isPending: isUpdating } = useUpdateCategory()
   const { mutate: deleteCategory, isPending: isDeleting } = useDeleteCategory()
 
-  const [showAdd,      setShowAdd]      = useState(false)
+  const [showAdd,        setShowAdd]        = useState(false)
+  const [detailCategory, setDetailCategory] = useState(null)
   const [editTarget,   setEditTarget]   = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
 
@@ -330,6 +332,7 @@ export default function CategoriesPage() {
         sortKey={sortKey}
         sortDir={sortDir}
         onSort={handleSort}
+        onRowClick={(row) => setDetailCategory(row)}
         emptyText={
           activeFilters > 0
             ? 'No categories match your current filters.'
@@ -356,6 +359,13 @@ export default function CategoriesPage() {
           />
         )}
       </Modal>
+
+      {detailCategory && (
+        <CategoryDetailDrawer
+          category={detailCategory}
+          onClose={() => setDetailCategory(null)}
+        />
+      )}
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}

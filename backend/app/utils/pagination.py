@@ -1,12 +1,13 @@
 # app/utils/pagination.py
-# CHANGE: le raised from 500 → 100 to prevent accidental large fetches
-# while still allowing reasonable page sizes. Default remains 20.
+# limit cap: 500 max per page.
+# Default is 20 for list pages. Create Invoice uses 500 to load all
+# customers and products into the dropdown without server-side search.
 
 from fastapi import Query
 
 def paginate(
     page:  int = Query(default=1,  ge=1,        description="Page number"),
-    limit: int = Query(default=20, ge=1, le=100, description="Items per page (max 100)")
+    limit: int = Query(default=20, ge=1, le=500, description="Items per page (max 500)")
 ):
     offset = (page - 1) * limit
     return {

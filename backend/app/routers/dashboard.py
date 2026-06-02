@@ -48,8 +48,9 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 #   Query 1 — Sales aggregates:
 #     - total_invoices     = COUNT of all non-deleted sales
 #     - total_revenue      = SUM of sales_final_amount across ALL sales
-#     - pending_payments   = COUNT of sales where payment status = 'partial'
-#
+#     - pending_payments   = COUNT of all outstanding invoices ('pending' + 'partial')
+#     - partial_count      = COUNT of invoices where some payment was made
+#     - pending_count      = COUNT of invoices with zero payments (bill created, not paid yet)
 #   Query 2 — Expenses aggregate:
 #     - total_expenses     = SUM of expense_amount across ALL non-deleted expenses
 #
@@ -91,11 +92,12 @@ def get_dashboard_summary(
     main_row = db.execute(
         text("""
             SELECT
-                COUNT(*)                                                         AS total_invoices,
-                COALESCE(SUM(sales_final_amount), 0)                             AS total_revenue,
-                COUNT(*) FILTER (WHERE sales_payment_status = 'partial')         AS pending_payments,
-                COUNT(*) FILTER (WHERE sales_payment_status = 'paid')            AS paid_count,
-                COUNT(*) FILTER (WHERE sales_payment_status = 'unpaid')          AS unpaid_count,
+                COUNT(*)                                                              AS total_invoices,
+                COALESCE(SUM(sales_final_amount), 0)                                  AS total_revenue,
+                COUNT(*) FILTER (WHERE sales_payment_status IN ('pending','partial')) AS pending_payments,
+                COUNT(*) FILTER (WHERE sales_payment_status = 'partial')              AS partial_count,
+                COUNT(*) FILTER (WHERE sales_payment_status = 'pending')              AS pending_count,
+                COUNT(*) FILTER (WHERE sales_payment_status = 'paid')                 AS paid_count,
                 (SELECT COUNT(*) FROM customers
                   WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false) AS total_customers,
                 (SELECT COUNT(*) FROM products
@@ -127,9 +129,10 @@ def get_dashboard_summary(
     # come back as null and the frontend hides those stat cards.
     return success_response({
         "total_invoices":   int(main_row.total_invoices)      if main_row else 0,
-        "pending_payments": int(main_row.pending_payments)    if main_row else 0,
-        "paid_count":       int(main_row.paid_count)          if main_row else 0,
-        "unpaid_count":     int(main_row.unpaid_count)        if main_row else 0,
+        "pending_payments": int(main_row.pending_payments) if main_row else 0,
+        "partial_count":    int(main_row.partial_count)    if main_row else 0,
+        "pending_count":    int(main_row.pending_count)    if main_row else 0,
+        "paid_count":       int(main_row.paid_count)       if main_row else 0,
         "total_customers":  int(main_row.total_customers)     if main_row else 0,
         "total_products":   int(main_row.total_products)      if main_row else 0,
         "low_stock_alerts": int(main_row.low_stock_alerts)    if main_row else 0,

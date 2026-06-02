@@ -29,6 +29,16 @@ import { useCustomer } from '../hooks/useCustomers'
 import { formatDate }     from '../../../shared/utils/formatDate'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { COUNTRY_MAP }    from './CustomerForm'
+import {
+  buildPrintHeader,
+  buildPrintWatermark,
+  buildPrintFooter,
+  buildPrintMetaGrid,
+  buildPrintSectionTitle,
+  buildPrintTable,
+  triggerPrint,
+} from '../../../shared/utils/printUtils'
+import useAuthStore from '../../../store/authStore'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getInitials(name = '') {
@@ -126,136 +136,105 @@ export function DrawerOverlay({ open, onClick }) {
   )
 }
 
-// ── Print helper ──────────────────────────────────────────────────────────────
-// Writes plain HTML (literal colors, no CSS vars) into a hidden print node
-// that lives in normal document flow. The browser can print it correctly.
-//
-// IMPORTANT: This node must exist in index.html or be injected once.
-// We inject it lazily on first print call so no HTML changes are needed.
-function getPrintRoot() {
-  let el = document.getElementById('sb-print-root')
-  if (!el) {
-    el = document.createElement('div')
-    el.id = 'sb-print-root'
+// ── Print helpers ─────────────────────────────────────────────────────────────
+// Uses the shared printUtils framework — no duplication of getPrintRoot().
+// All print sections now include the store header, watermark, and footer.
 
-    // Hidden always — the @media print in index.css (or injected below) shows it
-    const style = document.createElement('style')
-    style.textContent = `
-      #sb-print-root { display: none; }
-      @media print {
-        body > *:not(#sb-print-root) { display: none !important; }
-        #sb-print-root {
-          display: block !important;
-          font-family: -apple-system, 'Plus Jakarta Sans', sans-serif;
-          color: #111;
-          background: #fff;
-          padding: 32px;
-          max-width: 700px;
-          margin: 0 auto;
-        }
-      }
-    `
-    document.head.appendChild(style)
-    document.body.appendChild(el)
-  }
-  return el
-}
-
-function buildPrintHTML(customer, summary, salesHistory) {
+function buildCustomerPrintHTML(business, customer, summary, salesHistory) {
   const country = COUNTRY_MAP[customer.cust_country_code] || customer.cust_country_code || '—'
 
+  const metaFields = [
+    { label: 'Phone',           value: customer.cust_phone || '—' },
+    { label: 'Email',           value: customer.cust_email || '—' },
+    { label: 'State',           value: customer.cust_state || '—' },
+    { label: 'Country',         value: country },
+    { label: 'GSTIN / Tax No.', value: customer.cust_tax_number || '—' },
+    { label: 'Customer Since',  value: new Date(customer.cust_created_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) },
+  ]
+  if (customer.cust_address) {
+    metaFields.push({ label: 'Address', value: customer.cust_address })
+  }
+
+  const totalSales    = summary ? summary.total_sales    : 0
+  const totalSpent    = summary ? summary.total_spent    : 0
+  const totalPaid     = summary ? summary.total_paid     : 0
+  const outstanding   = summary ? summary.outstanding_balance : 0
+  const outColor      = outstanding > 0 ? '#EF4444' : '#10B981'
+
   const summaryRows = summary ? `
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin:20px 0;">
-      <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;">
-        <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Total Sales</div>
-        <div style="font-size:20px;font-weight:700;color:#111;margin-top:4px;">${summary.total_sales}</div>
+    ${buildPrintSectionTitle('Financial Summary')}
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px;">
+      <div style="border:1.5px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Total Sales</div>
+        <div style="font-size:22px;font-weight:800;color:#111827;">${totalSales}</div>
       </div>
-      <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;">
-        <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Total Spent</div>
-        <div style="font-size:20px;font-weight:700;color:#4F46E5;margin-top:4px;">${formatCurrency(summary.total_spent)}</div>
+      <div style="border:1.5px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Total Spent</div>
+        <div style="font-size:22px;font-weight:800;color:#4F46E5;">${formatCurrency(totalSpent)}</div>
       </div>
-      <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;">
-        <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Total Paid</div>
-        <div style="font-size:20px;font-weight:700;color:#10B981;margin-top:4px;">${formatCurrency(summary.total_paid)}</div>
+      <div style="border:1.5px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Total Paid</div>
+        <div style="font-size:22px;font-weight:800;color:#10B981;">${formatCurrency(totalPaid)}</div>
       </div>
-      <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;">
-        <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Outstanding</div>
-        <div style="font-size:20px;font-weight:700;color:${summary.outstanding_balance > 0 ? '#EF4444' : '#10B981'};margin-top:4px;">${formatCurrency(summary.outstanding_balance)}</div>
+      <div style="border:1.5px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Outstanding</div>
+        <div style="font-size:22px;font-weight:800;color:${outColor};">${formatCurrency(outstanding)}</div>
       </div>
     </div>
   ` : ''
 
-  const salesRows = salesHistory.length > 0 ? `
-    <h3 style="font-size:13px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;margin:24px 0 12px;">Sales History</h3>
-    <table style="width:100%;border-collapse:collapse;font-size:12px;">
-      <thead>
-        <tr style="border-bottom:2px solid #e5e7eb;">
-          <th style="text-align:left;padding:8px 6px;font-weight:600;color:#374151;">Invoice</th>
-          <th style="text-align:left;padding:8px 6px;font-weight:600;color:#374151;">Date</th>
-          <th style="text-align:right;padding:8px 6px;font-weight:600;color:#374151;">Amount</th>
-          <th style="text-align:right;padding:8px 6px;font-weight:600;color:#374151;">Paid</th>
-          <th style="text-align:right;padding:8px 6px;font-weight:600;color:#374151;">Due</th>
-          <th style="text-align:center;padding:8px 6px;font-weight:600;color:#374151;">Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${salesHistory.map((sale, i) => {
-          const statusColor = paymentStatusColor(sale.payment_summary?.current_status)
-          const bgColor = i % 2 === 0 ? '#fff' : '#f9fafb'
-          return `
-          <tr style="border-bottom:1px solid #f3f4f6;background:${bgColor};">
-            <td style="padding:7px 6px;font-weight:600;color:#111;">${sale.invoice_no || '—'}</td>
-            <td style="padding:7px 6px;color:#6b7280;">${formatDate(sale.sales_created_at)}</td>
-            <td style="padding:7px 6px;text-align:right;font-weight:600;color:#111;">${formatCurrency(sale.sales_final_amount)}</td>
-            <td style="padding:7px 6px;text-align:right;color:#10B981;">${formatCurrency(sale.payment_summary?.total_paid || 0)}</td>
-            <td style="padding:7px 6px;text-align:right;color:${sale.payment_summary?.remaining_balance > 0 ? '#EF4444' : '#10B981'};">${formatCurrency(sale.payment_summary?.remaining_balance || 0)}</td>
-            <td style="padding:7px 6px;text-align:center;"><span style="font-size:10px;font-weight:600;text-transform:capitalize;color:${statusColor};background:${statusColor}18;padding:2px 8px;border-radius:4px;">${sale.payment_summary?.current_status || '—'}</span></td>
-          </tr>`
-        }).join('')}
-      </tbody>
-    </table>
-  ` : '<p style="color:#6b7280;font-size:13px;">No sales history.</p>'
+  // Build sales rows manually to avoid nested template literal issues
+  const salesRowsHTML = salesHistory.map((row, i) => {
+    const paid      = row.payment_summary?.total_paid || 0
+    const due       = row.payment_summary?.remaining_balance || 0
+    const status    = row.payment_summary?.current_status || '—'
+    const sColor    = paymentStatusColor(status)
+    const bg        = i % 2 === 0 ? '#ffffff' : '#f9fafb'
+    const dateStr   = new Date(row.sales_created_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
+    return `<tr style="background:${bg};">
+      <td style="padding:7px 8px;font-size:12px;color:#111827;text-align:left;">${row.invoice_no || '—'}</td>
+      <td style="padding:7px 8px;font-size:12px;color:#374151;text-align:left;">${dateStr}</td>
+      <td style="padding:7px 8px;font-size:12px;color:#111827;text-align:right;font-weight:600;">${formatCurrency(row.sales_final_amount)}</td>
+      <td style="padding:7px 8px;font-size:12px;color:#10B981;text-align:right;">${formatCurrency(paid)}</td>
+      <td style="padding:7px 8px;font-size:12px;color:#EF4444;text-align:right;">${formatCurrency(due)}</td>
+      <td style="padding:7px 8px;text-align:center;"><span style="font-size:10px;font-weight:700;text-transform:capitalize;color:${sColor};background:${sColor}18;padding:2px 8px;border-radius:4px;">${status}</span></td>
+    </tr>`
+  }).join('')
+
+  const salesTableHTML = salesHistory.length === 0
+    ? '<p style="font-size:12.5px;color:#9ca3af;padding:16px 0;">No sales history for this customer.</p>'
+    : `<table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #e5e7eb;">Invoice</th>
+            <th style="text-align:left;padding:8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #e5e7eb;">Date</th>
+            <th style="text-align:right;padding:8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #e5e7eb;">Amount</th>
+            <th style="text-align:right;padding:8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #e5e7eb;">Paid</th>
+            <th style="text-align:right;padding:8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #e5e7eb;">Due</th>
+            <th style="text-align:center;padding:8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #e5e7eb;">Status</th>
+          </tr>
+        </thead>
+        <tbody>${salesRowsHTML}</tbody>
+      </table>`
 
   return `
-    <div style="border-bottom:2px solid #e5e7eb;padding-bottom:20px;margin-bottom:20px;">
-      <div style="font-size:22px;font-weight:800;color:#111;letter-spacing:-0.5px;">${customer.cust_name}</div>
-      <div style="font-size:12px;color:#6b7280;margin-top:4px;">Customer Report · Printed ${new Date().toLocaleDateString()}</div>
+    ${buildPrintWatermark()}
+    ${buildPrintHeader(business)}
+
+    <div style="margin-bottom:20px;">
+      <div style="font-size:24px;font-weight:900;color:#111827;letter-spacing:-0.5px;line-height:1.1;">${customer.cust_name}</div>
+      <div style="font-size:11.5px;color:#9ca3af;margin-top:5px;">Customer Report</div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
-      <div>
-        <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">Phone</div>
-        <div style="font-size:13px;color:#111;font-weight:500;">${customer.cust_phone || '—'}</div>
-      </div>
-      <div>
-        <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">Email</div>
-        <div style="font-size:13px;color:#111;font-weight:500;">${customer.cust_email || '—'}</div>
-      </div>
-      <div>
-        <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">State</div>
-        <div style="font-size:13px;color:#111;font-weight:500;">${customer.cust_state || '—'}</div>
-      </div>
-      <div>
-        <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">Country</div>
-        <div style="font-size:13px;color:#111;font-weight:500;">${country}</div>
-      </div>
-      <div>
-        <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">GSTIN / Tax No.</div>
-        <div style="font-size:13px;color:#111;font-weight:500;">${customer.cust_tax_number || '—'}</div>
-      </div>
-      <div>
-        <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">Customer Since</div>
-        <div style="font-size:13px;color:#111;font-weight:500;">${formatDate(customer.cust_created_at)}</div>
-      </div>
-      ${customer.cust_address ? `
-      <div style="grid-column:1/-1;">
-        <div style="font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">Address</div>
-        <div style="font-size:13px;color:#111;font-weight:500;">${customer.cust_address}</div>
-      </div>` : ''}
-    </div>
+    ${buildPrintSectionTitle('Contact Information')}
+    ${buildPrintMetaGrid(metaFields, 3)}
 
     ${summaryRows}
-    ${salesRows}
+
+    ${buildPrintSectionTitle('Sales History (' + salesHistory.length + ' records)')}
+    ${salesTableHTML}
+
+    ${buildPrintFooter()}
   `
 }
 
@@ -269,19 +248,9 @@ export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManag
 
   function handlePrint() {
     if (!customer) return
-
-    // Get or create the dedicated print node in normal document flow
-    const printRoot = getPrintRoot()
-
-    // Write plain HTML with literal colors — no CSS vars, no React
-    printRoot.innerHTML = buildPrintHTML(customer, summary, salesHistory)
-
-    // Small delay to ensure DOM is painted before browser opens print dialog
-    setTimeout(() => {
-      window.print()
-      // Clear after printing so the div stays invisible
-      setTimeout(() => { printRoot.innerHTML = '' }, 500)
-    }, 100)
+    const business = useAuthStore.getState().business
+    const html = buildCustomerPrintHTML(business, customer, summary, salesHistory)
+    triggerPrint(html)
   }
 
   return (

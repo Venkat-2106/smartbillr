@@ -42,6 +42,7 @@ import {
   useUpdateProduct,
   useDeleteProduct,
 } from '../hooks/useProducts'
+import ProductDetailDrawer from '../components/ProductDetailDrawer'
 
 // ── Unit options ───────────────────────────────────────────────────────────────
 const UNITS = ['pcs', 'kg', 'g', 'litre', 'ml', 'box', 'pack', 'pair', 'set', 'dozen']
@@ -163,7 +164,7 @@ function AddProductForm({ onSubmit, onClose, isPending, categories }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
         <FormField label="Category" error={errors.category_id}>
-          <select {...register('category_id')} style={selectStyle}>
+          <select className="sb-select" {...register('category_id')} style={selectStyle}>
             <option value="">— No category —</option>
             {categories.map(c => (
               <option key={c.category_id} value={c.category_id}>{c.category_name}</option>
@@ -171,7 +172,7 @@ function AddProductForm({ onSubmit, onClose, isPending, categories }) {
           </select>
         </FormField>
         <FormField label="Unit" error={errors.unit}>
-          <select {...register('unit')} style={selectStyle}>
+          <select className="sb-select" {...register('unit')} style={selectStyle}>
             {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
           </select>
         </FormField>
@@ -246,7 +247,7 @@ function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categori
           <Input type="number" step="1" placeholder="10" {...register('prod_low_stock_alert')} />
         </FormField>
         <FormField label="Unit" error={errors.unit}>
-          <select {...register('unit')} style={selectStyle}>
+          <select className="sb-select" {...register('unit')} style={selectStyle}>
             {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
           </select>
         </FormField>
@@ -254,7 +255,7 @@ function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categori
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
         <FormField label="Category" error={errors.category_id}>
-          <select {...register('category_id')} style={selectStyle}>
+          <select className="sb-select" {...register('category_id')} style={selectStyle}>
             <option value="">— No category —</option>
             {categories.map(c => (
               <option key={c.category_id} value={c.category_id}>{c.category_name}</option>
@@ -380,9 +381,10 @@ export default function ProductsPage() {
   const { mutate: updateProduct, isPending: isUpdating } = useUpdateProduct()
   const { mutate: deleteProduct, isPending: isDeleting } = useDeleteProduct()
 
-  const [showAdd,      setShowAdd]      = useState(false)
-  const [editTarget,   setEditTarget]   = useState(null)
-  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [showAdd,        setShowAdd]        = useState(false)
+  const [editTarget,     setEditTarget]     = useState(null)
+  const [deleteTarget,   setDeleteTarget]   = useState(null)
+  const [detailProduct,  setDetailProduct]  = useState(null)
 
   function handleCreate(data) {
     const payload = {
@@ -629,6 +631,7 @@ export default function ProductsPage() {
           rows={displayRows}
           loading={isLoading}
           rowKey="prod_id"
+          onRowClick={(row) => setDetailProduct(row)}
           sortKey={sortKey}
           sortDir={sortDir}
           onSort={handleSort}
@@ -678,6 +681,14 @@ export default function ProductsPage() {
           />
         )}
       </Modal>
+
+      {/* Product detail drawer — opens on row click */}
+      {detailProduct && (
+        <ProductDetailDrawer
+          product={detailProduct}
+          onClose={() => setDetailProduct(null)}
+        />
+      )}
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}

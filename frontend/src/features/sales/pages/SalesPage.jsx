@@ -146,7 +146,7 @@ export default function SalesPage() {
     (activeSearch ? 1 : 0) + (activeDateFilter ? 1 : 0) + (activeStatusFilter ? 1 : 0);
 
   return (
-    <div style={{ padding: '36px 40px', maxWidth: 1400, margin: '0 auto' }}>
+    <>
 
       <PageHeader
         title="Sales"
@@ -167,22 +167,13 @@ export default function SalesPage() {
         }
       />
 
-      {/* Card */}
+      {/* Toolbar */}
       <div style={{
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderRadius: 18,
-        boxShadow: 'var(--shadow-card)',
-        overflow: 'hidden',
+        display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 20,
+        gap: 12, flexWrap: 'wrap',
       }}>
-
-        {/* Toolbar */}
-        <div style={{
-          padding: '20px 24px',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex', alignItems: 'center',
-          justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
-        }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <SearchBar
               value={search}
@@ -193,6 +184,7 @@ export default function SalesPage() {
             />
             {/* Payment status filter */}
             <select
+              className="sb-select"
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
               style={{ ...selectStyle, width: 'auto', padding: '9px 14px', fontSize: 13 }}
@@ -213,43 +205,44 @@ export default function SalesPage() {
             to={dateTo}
             onChange={handleDateChange}
           />
+      </div>
+
+      {isError && (
+        <div style={{
+          background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
+          borderRadius: 12, padding: '13px 18px', color: 'var(--danger-text)',
+          fontSize: 13.5, marginBottom: 20, fontWeight: 500,
+        }}>
+          ⚠️ Could not load sales. Check that the backend is running and refresh.
         </div>
+      )}
 
-        {isError && (
-          <div style={{
-            margin: 24,
-            background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-            borderRadius: 12, padding: '13px 18px', color: 'var(--danger-text)',
-            fontSize: 13.5, fontWeight: 500,
-          }}>
-            ⚠️ Could not load sales. Check that the backend is running and refresh.
-          </div>
-        )}
-
+      <div style={{ overflowX: 'auto', width: '100%' }}>
         {isLoading && !hasData
           ? <SkeletonTable rows={10} columns={7} />
           : <Table
-          columns={columns}
-          rows={sales}
-          loading={false}
-          rowKey="sales_id"
-          sortKey={sortKey}
-          sortDir={sortDir}
-          onSort={handleSort}
-          onRowClick={(row) => setDrawerSale(row)}
-          emptyText={
-            anyFilterActive
-              ? 'No invoices match your current filters.'
-              : 'No sales yet. Click "+ New Invoice" to create your first one.'
-          }
-        />}
-
-        {!anyFilterActive && totalPages > 1 && (
-          <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)' }}>
-            <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
-          </div>
-        )}
+              columns={columns}
+              rows={sales}
+              loading={false}
+              rowKey="sales_id"
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleSort}
+              onRowClick={(row) => setDrawerSale(row)}
+              emptyText={
+                anyFilterActive
+                  ? 'No invoices match your current filters.'
+                  : 'No sales yet. Click "+ New Invoice" to create your first one.'
+              }
+            />
+        }
       </div>
+
+      {!anyFilterActive && totalPages > 1 && (
+        <div style={{ marginTop: 16 }}>
+          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+        </div>
+      )}
 
       {/* Detail drawer */}
       {drawerSale && (
@@ -259,6 +252,6 @@ export default function SalesPage() {
           statusMutation={statusMutation}
         />
       )}
-    </div>
+    </>
   );
 }

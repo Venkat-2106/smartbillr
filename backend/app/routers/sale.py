@@ -204,7 +204,71 @@ def create_sale(
             }
         )
 
-        # ── Step 5 — Insert sale items via raw SQL ───────────────────────────
+        # ── Step 5 — Pre-insert adjustment for override items (RUNS FIRST) ────
+        # FIX: This block was previously placed AFTER sale_items inserts (Step 5.5).
+        # That was wrong: the DB trigger trg_sale_stock_movement fires on AFTER INSERT
+        # on each sale_item row. When stock is 0 and override=True, the trigger was
+        # seeing stock=0 and raising "Insufficient stock!" before the adjustment ran.
+        #
+        # Correct order:
+        #   1. Sale HEADER is already inserted (Step 4) → sale_reference_id FK works ✅
+        #   2. Insert adjustment stock_movement rows to ADD the shortfall qty first ← HERE
+        #   3. Insert sale_items → trigger fires → deducts correctly → stock goes to 0 or below
+        #
+        # move_type = 'adjustment' — allowed by DB CHECK constraint.
+        # move_qty  = shortfall (positive) → adds missing units so the trigger can deduct them.
+        # move_new_stock is GENERATED ALWAYS AS (move_prev_stock + move_qty) — never insert manually.
+        # sale_reference_id FK is satisfied: the sale header row exists from Step 4.
+        if override_items:
+            for ov in override_items:
+                product    = ov["product"]
+                avail      = ov["available_qty"]   # stock BEFORE this sale
+                shortfall  = ov["requested_qty"] - avail  # units we need to add first
+
+                # Add the shortfall back into stock so the trigger can deduct the full quantity
+                db.execute(
+                    text("""
+                        UPDATE products
+                        SET prod_stock_qty = prod_stock_qty + :shortfall
+                        WHERE prod_id = CAST(:product_id AS uuid)
+                    """),
+                    {
+                        "shortfall":   shortfall,
+                        "product_id":  str(product.prod_id),
+                    }
+                )
+
+                # Write the adjustment audit record
+                db.execute(
+                    text("""
+                        INSERT INTO stock_movements (
+                            business_id, product_id,
+                            move_type, move_qty, move_prev_stock,
+                            sale_reference_id, move_notes, move_created_by
+                        ) VALUES (
+                            CAST(:business_id AS uuid),
+                            CAST(:product_id  AS uuid),
+                            'adjustment',
+                            :move_qty,
+                            :move_prev_stock,
+                            CAST(:sale_ref AS uuid),
+                            :move_notes,
+                            CAST(:created_by AS uuid)
+                        )
+                    """),
+                    {
+                        "business_id":     business_id,
+                        "product_id":      str(product.prod_id),
+                        "move_qty":        shortfall,
+                        "move_prev_stock": avail,
+                        "sale_ref":        new_sale_id,
+                        "move_notes":      f"Manual stock adjustment during sale override — {shortfall} unit(s) added to fulfil order (stock was {avail}, needed {ov['requested_qty']})",
+                        "created_by":      user_id,
+                    }
+                )
+
+        # ── Step 5.5 — Insert sale items via raw SQL ─────────────────────────
+        # Runs AFTER the override adjustment above so the trigger sees enough stock.
         # WHY raw SQL: sale_item_subtotal, item_tax_total, item_total_with_tax
         # are GENERATED ALWAYS AS columns. We only insert quantity and unit_price.
         # The DB trigger trg_sale_stock_movement fires per item automatically:
@@ -232,54 +296,6 @@ def create_sale(
                     "unit_price":  str(item.sale_item_unit_price)
                 }
             )
-
-        # ── Step 5.5 — Manual stock adjustment for override items ─────────────
-        # WHY this runs BEFORE the sale_items INSERT loop but is numbered 5.5:
-        # Actually it runs AFTER sale_items are inserted. The DB trigger already
-        # deducted stock to negative. This step inserts an adjustment record into
-        # stock_movements so the audit trail is complete and shows exactly why
-        # stock went negative — it was an approved manual override by the user.
-        #
-        # move_type = 'adjustment' — allowed by DB CHECK constraint.
-        # move_qty = positive number (stock going from 0 toward negative is tracked
-        #            by the sale trigger itself; this record shows the override).
-        # move_new_stock is GENERATED ALWAYS AS (move_prev_stock + move_qty) —
-        #   NEVER insert it manually (same rule as sales_final_amount).
-        #
-        # NOTE: We insert this AFTER sale_items so the sale_reference_id FK is valid.
-        if override_items:
-            for ov in override_items:
-                product    = ov["product"]
-                avail      = ov["available_qty"]   # stock before this sale
-                shortfall  = ov["requested_qty"] - avail  # how many units were missing
-
-                db.execute(
-                    text("""
-                        INSERT INTO stock_movements (
-                            business_id, product_id,
-                            move_type, move_qty, move_prev_stock,
-                            sale_reference_id, move_notes, move_created_by
-                        ) VALUES (
-                            CAST(:business_id AS uuid),
-                            CAST(:product_id  AS uuid),
-                            'adjustment',
-                            :move_qty,
-                            :move_prev_stock,
-                            CAST(:sale_ref AS uuid),
-                            :move_notes,
-                            CAST(:created_by AS uuid)
-                        )
-                    """),
-                    {
-                        "business_id":    business_id,
-                        "product_id":     str(product.prod_id),
-                        "move_qty":       shortfall,      # units adjusted in
-                        "move_prev_stock": avail,         # was this before the sale
-                        "sale_ref":       new_sale_id,
-                        "move_notes":     f"Manual adjustment during sale — {shortfall} unit(s) added to fulfil order (stock was {avail}, needed {ov['requested_qty']})",
-                        "created_by":     user_id,
-                    }
-                )
 
         # ── Step 6 — Update sales header with summed tax totals ──────────────
         # The DB trigger fills cgst/sgst/igst on each sale_item row.

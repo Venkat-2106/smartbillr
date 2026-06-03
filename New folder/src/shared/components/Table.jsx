@@ -1,0 +1,206 @@
+import { useState, memo } from 'react'
+
+function Skeleton({ w = '60%', h = 13 }) {
+  return (
+    <div style={{
+      height: h,
+      width: w,
+      background: 'var(--bg-hover)',
+      borderRadius: 5,
+      animation: 'table-shimmer 1.5s ease-in-out infinite',
+    }} />
+  )
+}
+
+function SortIcon({ active, dir }) {
+  const up   = active && dir === 'asc'
+  const down = active && dir === 'desc'
+
+  return (
+    <span style={{
+      display: 'inline-flex',
+      flexDirection: 'column',
+      gap: 1,
+      marginLeft: 5,
+      verticalAlign: 'middle',
+      opacity: active ? 1 : 0.35,
+      transition: 'opacity 0.14s',
+    }}>
+      <svg width="7" height="5" viewBox="0 0 7 5" fill="none">
+        <path
+          d="M3.5 0.5L6.5 4.5H0.5L3.5 0.5Z"
+          fill={up ? 'var(--accent-600)' : 'var(--text-muted)'}
+        />
+      </svg>
+      <svg width="7" height="5" viewBox="0 0 7 5" fill="none">
+        <path
+          d="M3.5 4.5L0.5 0.5H6.5L3.5 4.5Z"
+          fill={down ? 'var(--accent-600)' : 'var(--text-muted)'}
+        />
+      </svg>
+    </span>
+  )
+}
+
+function Table({
+  columns = [],
+  rows = [],
+  loading = false,
+  emptyText = 'No records found.',
+  rowKey = 'id',
+  onRowClick,
+  sortKey,
+  sortDir,
+  onSort,
+}) {
+  const SKELETON_ROWS = 8
+
+  // FIX: Track hovered column via React state instead of direct DOM mutation.
+  // Previously: onMouseEnter/Leave set e.currentTarget.style.color directly.
+  // Problem: React wipes inline styles on re-render (e.g. when user types in
+  // SearchBar), causing the hover color to snap off while the mouse is still
+  // on the header.
+  // Fix: hoveredCol holds the key of the currently hovered <th>. The color
+  // is derived from state in the style object — React manages it cleanly.
+  const [hoveredCol, setHoveredCol] = useState(null)
+  const [hoveredRow, setHoveredRow] = useState(null)
+
+  return (
+    <>
+      <style>{`
+        @keyframes table-shimmer {
+          0%, 100% { opacity: 1 }
+          50%       { opacity: 0.4 }
+        }
+      `}</style>
+
+      <div style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderRadius: 18,
+        boxShadow: 'var(--shadow-card)',
+        overflow: 'hidden',
+      }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+
+            {/* Header */}
+            <thead>
+              <tr style={{
+                background: 'var(--bg-subtle)',
+                borderBottom: '1px solid var(--border)',
+              }}>
+                {columns.map(col => {
+                  const isSorted = sortKey === col.key
+                  const canSort  = col.sortable && onSort
+                  // Header text is accent if: currently sorted OR being hovered (and sortable)
+                  const isHighlighted = isSorted || (canSort && hoveredCol === col.key)
+
+                  return (
+                    <th
+                      key={col.key}
+                      onClick={() => canSort && onSort(col.key)}
+                      onMouseEnter={() => canSort && setHoveredCol(col.key)}
+                      onMouseLeave={() => setHoveredCol(null)}
+                      style={{
+                        padding: '11px 20px',
+                        textAlign: col.align === 'right'  ? 'right'
+                                 : col.align === 'center' ? 'center' : 'left',
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        // FIX: color now derived from state — never from DOM mutation
+                        color: isHighlighted ? 'var(--accent-600)' : 'var(--text-muted)',
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        whiteSpace: 'nowrap',
+                        width: col.width || 'auto',
+                        fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
+                        cursor: canSort ? 'pointer' : 'default',
+                        userSelect: 'none',
+                        transition: 'color 0.14s',
+                      }}
+                    >
+                      {col.label}
+                      {col.sortable && (
+                        <SortIcon active={isSorted} dir={sortDir} />
+                      )}
+                    </th>
+                  )
+                })}
+              </tr>
+            </thead>
+
+            {/* Body */}
+            <tbody>
+              {loading ? (
+                [...Array(SKELETON_ROWS)].map((_, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                    {columns.map((col, j) => (
+                      <td key={j} style={{ padding: '15px 20px' }}>
+                        <Skeleton w={col.skeletonW || '65%'} />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={columns.length}
+                    style={{
+                      padding: '56px 24px',
+                      textAlign: 'center',
+                      color: 'var(--text-muted)',
+                      fontSize: 13.5,
+                      fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
+                    }}
+                  >
+                    {emptyText}
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row, i) => (
+                  <tr
+                    key={row[rowKey] ?? i}
+                    onClick={() => onRowClick?.(row)}
+                    onMouseEnter={() => setHoveredRow(row[rowKey] ?? i)}
+                    onMouseLeave={() => setHoveredRow(null)}
+                    style={{
+                      borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none',
+                      cursor: onRowClick ? 'pointer' : 'default',
+                      transition: 'background 0.12s',
+                      background: hoveredRow === (row[rowKey] ?? i) ? 'var(--bg-subtle)' : 'transparent',
+                    }}
+                  >
+                    {columns.map(col => (
+                      <td
+                        key={col.key}
+                        style={{
+                          padding: '14px 20px',
+                          fontSize: 13.5,
+                          color: 'var(--text-primary)',
+                          fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
+                          whiteSpace: col.wrap ? 'normal' : 'nowrap',
+                          textAlign: col.align === 'right'  ? 'right'
+                                   : col.align === 'center' ? 'center' : 'left',
+                          verticalAlign: 'middle',
+                        }}
+                      >
+                        {col.render ? col.render(row) : (row[col.key] ?? '—')}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// FIX: Wrap with React.memo so Table only re-renders when its own props change.
+// Without memo, every keystroke in a SearchBar (which updates parent state) caused
+// Table to re-render even when rows and columns were identical — noticeable lag on
+// large datasets. memo eliminates those redundant renders.
+export default memo(Table)

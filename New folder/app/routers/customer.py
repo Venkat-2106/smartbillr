@@ -77,23 +77,17 @@ def create_customer(
         cust_address      = data.cust_address,
         cust_state        = data.cust_state,
         cust_country_code = data.cust_country_code,
-        cust_tax_number   = data.cust_tax_number,
-        updated_by        = current_user["user_id"]   # Track who created this customer
+        cust_tax_number   = data.cust_tax_number
+        # updated_by stays NULL on create — only set when customer is later edited
     )
 
     db.add(new_customer)
     db.commit()
     db.refresh(new_customer)
 
-    # Fetch the creator's name so the table shows it immediately after creation
-    creator_name = db.execute(
-        text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
-        {"uid": str(current_user["user_id"])}
-    ).scalar()
-
     return success_response({
         "message":  "Customer created successfully",
-        "customer": customer_to_dict(new_customer, last_updated_by=creator_name)
+        "customer": customer_to_dict(new_customer)
     }, status_code=201)
 
 

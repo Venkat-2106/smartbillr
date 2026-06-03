@@ -39,21 +39,16 @@ def create_category(
     new_category = Category(
         category_id=uuid.uuid4(),
         business_id=current_user["business_id"],
-        category_name=payload.category_name,
-        updated_by=current_user["user_id"]   # Track who created this category
+        category_name=payload.category_name
+        # updated_by stays NULL on create — only set on edits
     )
 
     db.add(new_category)
     db.commit()
     db.refresh(new_category)
 
-    # Fetch the creator's name so the table shows it immediately after creation
-    creator_name = db.execute(
-        text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
-        {"uid": str(current_user["user_id"])}
-    ).scalar()
-
-    return success_response(_category_to_dict(new_category, last_updated_by=creator_name), 201)
+    # Return with last_updated_by included (will be None on create)
+    return success_response(_category_to_dict(new_category, last_updated_by=None), 201)
 
 
 # ══════════════════════════════════════════════════════════════════

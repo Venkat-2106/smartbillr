@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, Text, Integer, Numeric, DateTime, ForeignKey, text
+from sqlalchemy import Column, String, Boolean, Text, Integer, Numeric, DateTime, ForeignKey
 from sqlalchemy.orm import column_property
 from sqlalchemy import Computed
 from sqlalchemy.dialects.postgresql import UUID
@@ -28,7 +28,7 @@ class Product(Base):
     unit = Column(Text, default="pcs")
     is_deleted = Column(Boolean, default=False)
     prod_created_at = Column(DateTime, nullable=True)
-    updated_at = Column(DateTime, nullable=True, server_default=text("now()"))
+    updated_at = Column(DateTime, nullable=True)
     # updated_by: plain UUID — no ForeignKey() here because SQLAlchemy cannot resolve
     # 'profiles' (it lives in Supabase auth schema, no ORM model for it).
     # The FK constraint already exists in the DB from the SQL migration.

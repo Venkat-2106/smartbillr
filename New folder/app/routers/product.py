@@ -96,7 +96,7 @@ def create_product(
         tax_code=data.tax_code,
         barcode=data.barcode,
         unit=data.unit,
-        updated_by=current_user["user_id"]   # Track who created this product
+        # updated_by is NULL on create — only set when the product is later edited
     )
 
     try:

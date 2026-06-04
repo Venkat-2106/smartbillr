@@ -172,23 +172,7 @@ export function buildPrintHeader(business = {}) {
  */
 export function buildPrintWatermark() {
   return `
-    <div style="
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%) rotate(-30deg);
-      font-size: 90px;
-      font-weight: 900;
-      color: #000000;
-      opacity: 0.06;
-      letter-spacing: 6px;
-      white-space: nowrap;
-      pointer-events: none;
-      z-index: 0;
-      user-select: none;
-    ">
-      SMARTBILLR
-    </div>
+    <div class="sb-watermark">SMARTBILLR</div>
   `;
 }
 

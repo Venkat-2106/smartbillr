@@ -2,6 +2,7 @@
 //
 // Opens when a user clicks a product row in ProductsPage.
 // Calls GET /products/{prod_id} and displays:
+//   - Record Activity  (Created On/By + Last Updated On/By)  ← NEW SECTION
 //   - Core product info (price, stock, category, tax)
 //   - History summary (units sold, received, returned, price changes)
 //   - Stock movement history (timeline)
@@ -43,23 +44,34 @@ function DirectionBadge({ direction, qty }) {
 }
 
 // ── Print builder ─────────────────────────────────────────────────────────────
+// Includes a dedicated "Audit Information" section matching the on-screen drawer.
 function buildProductPrintHTML(business, product, detail, summary, stockHistory, priceHistory) {
   const p = detail || product
 
+  // Product meta (category, tax, etc.) — no audit fields here
   const metaFields = [
-    { label: 'Category',      value: p.category_name || product.category_name || '—' },
-    { label: 'Unit',          value: p.unit || product.unit || 'pcs' },
-    { label: 'Barcode',       value: p.barcode || product.barcode || '—' },
-    { label: 'Tax Rate',      value: `${p.tax_rate ?? product.tax_rate ?? 0}%` },
-    { label: 'Tax Code',      value: p.tax_code || product.tax_code || '—' },
-    { label: 'Last Updated',  value: p.updated_at ? new Date(p.updated_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—' },
-    { label: 'Last Updated By', value: p.last_updated_by || '—' },
+    { label: 'Category',  value: p.category_name || product.category_name || '—' },
+    { label: 'Unit',      value: p.unit || product.unit || 'pcs' },
+    { label: 'Barcode',   value: p.barcode || product.barcode || '—' },
+    { label: 'Tax Rate',  value: `${p.tax_rate ?? product.tax_rate ?? 0}%` },
+    { label: 'Tax Code',  value: p.tax_code || product.tax_code || '—' },
+  ]
+
+  // Audit fields — separate section, matching CategoryDetailDrawer print pattern
+  const fmtPrintDate = (dt) =>
+    dt ? new Date(dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+
+  const auditFields = [
+    { label: 'Created On',       value: fmtPrintDate(p.prod_created_at || product.prod_created_at) },
+    { label: 'Created By',       value: p.created_by_name || product.created_by_name || '—' },
+    { label: 'Last Updated On',  value: fmtPrintDate(p.updated_at || product.updated_at) },
+    { label: 'Last Updated By',  value: p.last_updated_by || product.last_updated_by || '—' },
   ]
 
   const stockCols = [
-    { label: 'Event',   key: 'event',      align: 'left' },
-    { label: 'Change',  key: 'qty_changed', align: 'center', format: (v, row) => {
-        const isIn = row.direction === 'in'
+    { label: 'Event',   key: 'event',       align: 'left' },
+    { label: 'Change',  key: 'qty_changed',  align: 'center', format: (v, row) => {
+        const isIn  = row.direction === 'in'
         const color = isIn ? '#10B981' : '#EF4444'
         return `<span style="font-weight:700;color:${color};">${isIn ? '+' : '-'}${v}</span>`
       }
@@ -67,7 +79,7 @@ function buildProductPrintHTML(business, product, detail, summary, stockHistory,
     { label: 'Before',  key: 'stock_before', align: 'right' },
     { label: 'After',   key: 'stock_after',  align: 'right' },
     { label: 'By',      key: 'changed_by',   align: 'left' },
-    { label: 'Date',    key: 'changed_at',   align: 'left',  format: v => new Date(v).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) },
+    { label: 'Date',    key: 'changed_at',   align: 'left', format: v => fmtPrintDate(v) },
   ]
 
   return `
@@ -102,7 +114,10 @@ function buildProductPrintHTML(business, product, detail, summary, stockHistory,
     </div>
 
     ${buildPrintSectionTitle('Product Details')}
-    ${buildPrintMetaGrid(metaFields, 4)}
+    ${buildPrintMetaGrid(metaFields, 5)}
+
+    ${buildPrintSectionTitle('Audit Information')}
+    ${buildPrintMetaGrid(auditFields, 4)}
 
     ${stockHistory.length > 0 ? buildPrintSectionTitle(`Stock Movement History (${stockHistory.length} records)`) : ''}
     ${buildPrintTable(stockCols, stockHistory, '')}
@@ -128,7 +143,7 @@ function StatCard({ label, value, color }) {
   )
 }
 
-// ── InfoRow ───────────────────────────────────────────────────────────────────
+// ── InfoRow (list-style) ──────────────────────────────────────────────────────
 function InfoRow({ label, value, isLast }) {
   return (
     <div style={{
@@ -157,6 +172,63 @@ function Section({ title, children }) {
         borderRadius: 12, overflow: 'hidden',
       }}>
         {children}
+      </div>
+    </div>
+  )
+}
+
+// ── AuditGrid — 2×2 read-only audit info block ───────────────────────────────
+// Matches the pattern used in CategoryDetailDrawer exactly.
+function AuditGrid({ createdAt, createdBy, updatedAt, updatedBy }) {
+  return (
+    <div style={{
+      background: 'var(--bg-page)',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      padding: '14px 16px',
+      marginBottom: 24,
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: '12px 20px',
+    }}>
+      {/* Created On */}
+      <div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
+          Created On
+        </div>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+          {createdAt ? formatDate(createdAt) : '—'}
+        </div>
+      </div>
+
+      {/* Created By */}
+      <div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
+          Created By
+        </div>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+          {createdBy || '—'}
+        </div>
+      </div>
+
+      {/* Last Updated On */}
+      <div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
+          Last Updated On
+        </div>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+          {updatedAt ? formatDate(updatedAt) : '—'}
+        </div>
+      </div>
+
+      {/* Last Updated By */}
+      <div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
+          Last Updated By
+        </div>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+          {updatedBy || '—'}
+        </div>
       </div>
     </div>
   )
@@ -232,7 +304,7 @@ export default function ProductDetailDrawer({ product, onClose }) {
                 {product.prod_name}
               </h2>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0' }}>
-                Product History
+                Product Details
               </p>
             </div>
           </div>
@@ -281,11 +353,27 @@ export default function ProductDetailDrawer({ product, onClose }) {
               borderRadius: 12, fontSize: 13.5,
               color: 'var(--danger-text, #B91C1C)', fontWeight: 500,
             }}>
-              ⚠️ Could not load product history. Close and try again.
+              ⚠️ Could not load product details. Close and try again.
             </div>
           ) : (
             <>
-              {/* Core details */}
+              {/* ── Record Activity (audit section) ─────────────────────── */}
+              {/* This section is always shown, even while waiting for detail.
+                  Falls back to list-row data until detail loads. */}
+              <p style={{
+                fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase',
+                letterSpacing: '0.08em', color: 'var(--text-muted)', margin: '0 0 10px',
+              }}>
+                Record Activity
+              </p>
+              <AuditGrid
+                createdAt={detail?.prod_created_at || product.prod_created_at}
+                createdBy={detail?.created_by_name  || product.created_by_name}
+                updatedAt={detail?.updated_at        || product.updated_at}
+                updatedBy={detail?.last_updated_by   || product.last_updated_by}
+              />
+
+              {/* ── Core product details ─────────────────────────────────── */}
               <Section title="Product Details">
                 <InfoRow label="Selling Price"  value={formatCurrency(detail?.prod_sell_price ?? product.prod_sell_price)} />
                 <InfoRow label="Cost Price"     value={formatCurrency(detail?.prod_cost_price ?? product.prod_cost_price)} />
@@ -293,11 +381,10 @@ export default function ProductDetailDrawer({ product, onClose }) {
                 <InfoRow label="Category"       value={detail?.category_name || product.category_name || '—'} />
                 <InfoRow label="Unit"           value={detail?.unit || product.unit || 'pcs'} />
                 <InfoRow label="Tax Rate"       value={`${detail?.tax_rate ?? product.tax_rate ?? 0}%`} />
-                <InfoRow label="Barcode"        value={detail?.barcode || product.barcode || '—'} />
-                <InfoRow label="Last Updated"   value={formatDate(detail?.updated_at)} isLast />
+                <InfoRow label="Barcode"        value={detail?.barcode || product.barcode || '—'} isLast />
               </Section>
 
-              {/* Stock summary */}
+              {/* ── Stock summary cards ──────────────────────────────────── */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
                 <StatCard
                   label="Current Stock"
@@ -309,7 +396,7 @@ export default function ProductDetailDrawer({ product, onClose }) {
                 <StatCard label="Price Changes"   value={summary.price_change_count    ?? 0} />
               </div>
 
-              {/* Stock movement history */}
+              {/* ── Stock movement history ───────────────────────────────── */}
               {stockHistory.length > 0 ? (
                 <Section title={`Stock History (${stockHistory.length})`}>
                   {stockHistory.map((move, idx) => (
@@ -342,7 +429,7 @@ export default function ProductDetailDrawer({ product, onClose }) {
                 </Section>
               )}
 
-              {/* Price change history */}
+              {/* ── Price change history ─────────────────────────────────── */}
               {priceHistory.length > 0 && (
                 <Section title={`Price History (${priceHistory.length})`}>
                   {priceHistory.map((entry, idx) => (

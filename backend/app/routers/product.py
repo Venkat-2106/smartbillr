@@ -1,3 +1,17 @@
+# app/routers/product.py
+#
+# Audit fields tracked:
+#   created_by    → set in POST; never changed again
+#   prod_created_at → set in POST (DB DEFAULT now() is safety net)
+#   updated_by    → set in PUT; initially same as created_by on first save
+#   updated_at    → maintained automatically by DB trigger fn_set_updated_at
+#
+# Every read query that returns a product JOINs profiles TWICE:
+#   pr1 → resolves updated_by  → last_updated_by
+#   pr2 → resolves created_by  → created_by_name
+# This is a single efficient JOIN — no N+1 queries.
+
+from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
@@ -14,8 +28,9 @@ from typing import Optional
 router = APIRouter(prefix="/products", tags=["Products"])
 
 
-# ── Helper: fetch full product including generated prod_profit ──
-# Also joins categories to get category_name and profiles for last_updated_by
+# ── Helper: fetch one product row — all fields + both JOIN names ───────────
+# Used by POST (after insert), PUT (after update), and GET /{prod_id}.
+# Joins categories for category_name, profiles TWICE for audit names.
 def get_product_with_profit(db: Session, prod_id):
     row = db.execute(
         text("""
@@ -25,12 +40,14 @@ def get_product_with_profit(db: Session, prod_id):
                 p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
                 p.tax_code, p.barcode, p.unit, p.is_deleted,
                 p.prod_created_at, p.updated_at,
-                p.updated_by,
+                p.created_by,  p.updated_by,
                 c.category_name,
-                pr.full_name AS last_updated_by
+                pr1.full_name AS last_updated_by,
+                pr2.full_name AS created_by_name
             FROM products p
-            LEFT JOIN categories c ON c.category_id = p.category_id
-            LEFT JOIN profiles  pr ON pr.id = p.updated_by
+            LEFT JOIN categories c   ON c.category_id  = p.category_id
+            LEFT JOIN profiles   pr1 ON pr1.id = p.updated_by
+            LEFT JOIN profiles   pr2 ON pr2.id = p.created_by
             WHERE p.prod_id = :prod_id
         """),
         {"prod_id": str(prod_id)}
@@ -38,7 +55,8 @@ def get_product_with_profit(db: Session, prod_id):
     return row
 
 
-# ── Helper: format product row as dict ───────────────────────────────
+# ── Helper: format one product row as a dict ──────────────────────────────
+# Includes all four audit fields so every endpoint returns them consistently.
 def row_to_dict(row):
     return {
         "prod_id":              str(row.prod_id),
@@ -56,10 +74,13 @@ def row_to_dict(row):
         "barcode":              row.barcode,
         "unit":                 row.unit,
         "is_deleted":           row.is_deleted,
+        # ── Audit fields ──────────────────────────────────────────────────
         "prod_created_at":      str(row.prod_created_at) if row.prod_created_at else None,
-        "updated_at":           str(row.updated_at) if row.updated_at else None,
-        "updated_by":           str(row.updated_by) if row.updated_by else None,
-        "last_updated_by":      row.last_updated_by if row.last_updated_by else None,
+        "created_by":           str(row.created_by)  if row.created_by  else None,
+        "created_by_name":      row.created_by_name  if row.created_by_name  else None,
+        "updated_at":           str(row.updated_at)  if row.updated_at  else None,
+        "updated_by":           str(row.updated_by)  if row.updated_by  else None,
+        "last_updated_by":      row.last_updated_by  if row.last_updated_by  else None,
     }
 
 
@@ -85,18 +106,21 @@ def create_product(
             return error_response("Category not found", 404)
 
     new_product = Product(
-        business_id=business_id,
-        category_id=data.category_id,
-        prod_name=data.prod_name,
-        prod_sell_price=data.prod_sell_price,
-        prod_cost_price=data.prod_cost_price,
-        prod_stock_qty=data.prod_stock_qty,
-        prod_low_stock_alert=data.prod_low_stock_alert,
-        tax_rate=data.tax_rate,
-        tax_code=data.tax_code,
-        barcode=data.barcode,
-        unit=data.unit,
-        updated_by=current_user["user_id"]   # Track who created this product
+        business_id           = business_id,
+        category_id           = data.category_id,
+        prod_name             = data.prod_name,
+        prod_sell_price       = data.prod_sell_price,
+        prod_cost_price       = data.prod_cost_price,
+        prod_stock_qty        = data.prod_stock_qty,
+        prod_low_stock_alert  = data.prod_low_stock_alert,
+        tax_rate              = data.tax_rate,
+        tax_code              = data.tax_code,
+        barcode               = data.barcode,
+        unit                  = data.unit,
+        # ── Audit ─────────────────────────────────────────────────────────
+        prod_created_at       = datetime.utcnow(),   # explicit set; DB DEFAULT is fallback
+        created_by            = current_user["user_id"],
+        updated_by            = current_user["user_id"],  # same user on first save
     )
 
     try:
@@ -115,9 +139,8 @@ def create_product(
 
 
 # ─────────────────────────────────────────
-# GET /products → Get all products
+# GET /products → Get all products (paginated)
 # ─────────────────────────────────────────
-# Now joins categories for category_name and profiles for last_updated_by
 @router.get("/")
 def get_all_products(
     current_user: dict          = Depends(require_permission("products.view")),
@@ -127,7 +150,6 @@ def get_all_products(
 ):
     business_id = current_user["business_id"]
 
-    # Server-side search — ILIKE on name and barcode
     search_sql = ""
     params = {
         "business_id": business_id,
@@ -156,12 +178,15 @@ def get_all_products(
                 p.prod_sell_price, p.prod_cost_price, p.prod_profit,
                 p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
                 p.tax_code, p.barcode, p.unit, p.is_deleted,
-                p.prod_created_at, p.updated_at, p.updated_by,
+                p.prod_created_at, p.updated_at,
+                p.created_by, p.updated_by,
                 c.category_name,
-                pr.full_name AS last_updated_by
+                pr1.full_name AS last_updated_by,
+                pr2.full_name AS created_by_name
             FROM products p
-            LEFT JOIN categories c  ON c.category_id = p.category_id
-            LEFT JOIN profiles  pr  ON pr.id = p.updated_by
+            LEFT JOIN categories c   ON c.category_id  = p.category_id
+            LEFT JOIN profiles   pr1 ON pr1.id = p.updated_by
+            LEFT JOIN profiles   pr2 ON pr2.id = p.created_by
             WHERE p.business_id = CAST(:business_id AS uuid)
               AND p.is_deleted   = false
               {search_sql}
@@ -182,7 +207,7 @@ def get_all_products(
 
 
 # ══════════════════════════════════════════════════════════════════
-# GET /products/{prod_id} → Get one product WITH full history
+# GET /products/{prod_id} → Single product WITH full history
 # ══════════════════════════════════════════════════════════════════
 @router.get("/{prod_id}")
 def get_product(
@@ -192,7 +217,7 @@ def get_product(
 ):
     business_id = current_user["business_id"]
 
-    # ── Step 1: Fetch core product details ───────────────────────────────────
+    # ── Step 1: Core product details + both audit JOIN names ─────────────────
     row = db.execute(
         text("""
             SELECT
@@ -201,12 +226,14 @@ def get_product(
                 p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
                 p.tax_code, p.barcode, p.unit, p.is_deleted,
                 p.prod_created_at, p.updated_at,
-                p.updated_by,
+                p.created_by,  p.updated_by,
                 c.category_name,
-                pr.full_name AS last_updated_by
+                pr1.full_name AS last_updated_by,
+                pr2.full_name AS created_by_name
             FROM products p
-            LEFT JOIN categories c  ON c.category_id = p.category_id
-            LEFT JOIN profiles  pr  ON pr.id = p.updated_by
+            LEFT JOIN categories c   ON c.category_id  = p.category_id
+            LEFT JOIN profiles   pr1 ON pr1.id = p.updated_by
+            LEFT JOIN profiles   pr2 ON pr2.id = p.created_by
             WHERE p.prod_id     = CAST(:prod_id AS uuid)
               AND p.business_id = CAST(:bid AS uuid)
               AND p.is_deleted  = false
@@ -217,7 +244,7 @@ def get_product(
     if not row:
         return error_response("Product not found", status_code=404)
 
-    # ── Step 2: Fetch stock movement history ─────────────────────────────────
+    # ── Step 2: Stock movement history ──────────────────────────────────────
     stock_rows = db.execute(
         text("""
             SELECT
@@ -277,7 +304,7 @@ def get_product(
             "changed_at":            str(s.move_created_at) if s.move_created_at else None
         })
 
-    # ── Step 3: Fetch price change history from audit_logs ───────────────────
+    # ── Step 3: Price change history from audit_logs ─────────────────────────
     audit_rows = db.execute(
         text("""
             SELECT
@@ -328,18 +355,18 @@ def get_product(
         changes = []
         if sell_changed:
             changes.append({
-                "field":     "prod_sell_price",
-                "label":     "Selling Price",
-                "old_value": old_sell,
-                "new_value": new_sell,
+                "field":      "prod_sell_price",
+                "label":      "Selling Price",
+                "old_value":  old_sell,
+                "new_value":  new_sell,
                 "difference": round(new_sell - old_sell, 2)
             })
         if cost_changed:
             changes.append({
-                "field":     "prod_cost_price",
-                "label":     "Cost Price",
-                "old_value": old_cost,
-                "new_value": new_cost,
+                "field":      "prod_cost_price",
+                "label":      "Cost Price",
+                "old_value":  old_cost,
+                "new_value":  new_cost,
                 "difference": round(new_cost - old_cost, 2)
             })
 
@@ -350,13 +377,12 @@ def get_product(
             "changed_at": str(a.created_at) if a.created_at else None
         })
 
-    # ── Step 4: Build summary stats ──────────────────────────────────────────
+    # ── Step 4: Summary stats ────────────────────────────────────────────────
     total_sold     = sum(abs(s["qty_changed"]) for s in stock_history if s["move_type"] == "sale")
-    total_received = sum(s["qty_changed"] for s in stock_history if s["move_type"] == "purchase")
-    total_returned = sum(s["qty_changed"] for s in stock_history if s["move_type"] == "sales_return")
-    price_changes_count = len(price_history)
+    total_received = sum(s["qty_changed"]      for s in stock_history if s["move_type"] == "purchase")
+    total_returned = sum(s["qty_changed"]      for s in stock_history if s["move_type"] == "sales_return")
 
-    # ── Step 5: Compose final response ──────────────────────────────────────
+    # ── Step 5: Final response ───────────────────────────────────────────────
     return success_response({
         **row_to_dict(row),
 
@@ -364,19 +390,21 @@ def get_product(
             "total_units_sold":     total_sold,
             "total_units_received": total_received,
             "total_units_returned": total_returned,
-            "price_change_count":   price_changes_count,
+            "price_change_count":   len(price_history),
             "stock_event_count":    len(stock_history)
         },
 
-        "stock_history": stock_history,
-        "price_history": price_history
+        "stock_history":  stock_history,
+        "price_history":  price_history
     })
 
 
 # ─────────────────────────────────────────
 # PUT /products/{prod_id} → Update product
 # ─────────────────────────────────────────
-# NEW: sets updated_by = current_user["user_id"] so we can track who last edited
+# Sets updated_by = current_user["user_id"].
+# DB trigger fn_set_updated_at auto-sets updated_at on commit.
+# created_by is NEVER changed — it records the original creator.
 @router.put("/{prod_id}")
 def update_product(
     prod_id: str,
@@ -415,7 +443,7 @@ def update_product(
     if data.barcode              is not None: product.barcode              = data.barcode
     if data.unit                 is not None: product.unit                 = data.unit
 
-    # NEW: track who last updated this product
+    # Track who last updated — created_by is intentionally left unchanged
     product.updated_by = current_user["user_id"]
 
     db.commit()

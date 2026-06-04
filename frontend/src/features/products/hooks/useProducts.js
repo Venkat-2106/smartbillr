@@ -39,14 +39,14 @@ export function useProducts() {
     enabled:  !isSearching,
   })
 
-  // Full-dataset for search — limit=100 (backend max). Products per business
-  // rarely exceed 100 for small retail shops. If they do, backend search covers
-  // name/barcode, and category filter works on whatever is returned.
+  // Full-dataset query — always pre-fetched in background (same as useCategories pattern).
+  // Used for search filtering AND for CSV export (so export always gets all records,
+  // not just the 20 items currently visible on the paged table).
   const allQuery = useQuery({
     queryKey: KEYS.search,
     queryFn:  () => fetchProducts({ page: 1, limit: 100 }),
     staleTime: 30_000,
-    enabled:  isSearching,
+    // No 'enabled' condition — always fetch so export data is always available
   })
 
   const activeQuery = isSearching ? allQuery : pagedQuery
@@ -64,8 +64,9 @@ export function useProducts() {
     : allItems
 
   return {
-    products:   filtered,
-    pagination: isSearching ? null : (pagedQuery.data?.pagination ?? null),
+    products:    filtered,
+    allProducts: allQuery.data?.items ?? [],   // full unfiltered set — used by page for export
+    pagination:  isSearching ? null : (pagedQuery.data?.pagination ?? null),
     page,
     setPage,
     search,

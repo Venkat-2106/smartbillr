@@ -306,6 +306,7 @@ export default function ProductsPage() {
 
   const {
     products,
+    allProducts,
     pagination,
     page,
     setPage,
@@ -376,6 +377,26 @@ export default function ProductsPage() {
 
     return rows
   }, [products, sortKey, sortDir, dateFrom, dateTo])
+
+  // Export data — always the FULL allProducts set (up to 100) with current
+  // search + date filters applied, but never paginated.
+  const exportData = useMemo(() => {
+    let rows = [...allProducts]
+    const q = search.trim().toLowerCase()
+    if (q) rows = rows.filter(p =>
+      p.prod_name?.toLowerCase().includes(q) ||
+      p.category_name?.toLowerCase().includes(q)
+    )
+    if (dateFrom) {
+      const from = new Date(dateFrom); from.setHours(0, 0, 0, 0)
+      rows = rows.filter(r => r.updated_at && new Date(r.updated_at) >= from)
+    }
+    if (dateTo) {
+      const to = new Date(dateTo); to.setHours(23, 59, 59, 999)
+      rows = rows.filter(r => r.updated_at && new Date(r.updated_at) <= to)
+    }
+    return rows
+  }, [allProducts, search, dateFrom, dateTo])
 
   const { mutate: createProduct, isPending: isCreating } = useCreateProduct()
   const { mutate: updateProduct, isPending: isUpdating } = useUpdateProduct()
@@ -573,7 +594,7 @@ export default function ProductsPage() {
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             {/* ADDED: Export CSV button — shows current filtered/searched list */}
             <ExportButton
-              data={displayRows}
+              data={exportData}
               filename="products"
               columns={PRODUCT_CSV_COLUMNS}
             />

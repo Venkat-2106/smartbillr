@@ -185,14 +185,12 @@ export const SUPPLIER_CSV_COLUMNS = [
   { key: 'supp_state',        label: 'State' },
   { key: 'supp_country_code', label: 'Country' },
   { key: 'supp_tax_number',   label: 'Tax Number' },
-  {
-    key: 'updated_at',
-    label: 'Last Updated',
-    format: (val) => (val ? new Date(val).toLocaleDateString('en-IN') : ''),
-  },
-  // FIX: last_updated_by removed — suppliers table has NO updated_by column in DB.
-  // The DB trigger (trg_suppliers_updated_at) auto-sets updated_at but there is no
-  // updated_by FK on the suppliers table, so last_updated_by cannot be populated.
+  { key: 'updated_at',        label: 'Last Updated',
+    format: (val) => val ? new Date(val).toLocaleDateString('en-IN') : '' },
+  // DB now has updated_by column (migration done) — last_updated_by is returned
+  // by the GET /suppliers list via LEFT JOIN profiles on updated_by.
+  { key: 'last_updated_by',   label: 'Last Updated By',
+    format: (val) => val || '' },
 ];
 
 /** Column config for Products export */
@@ -207,24 +205,32 @@ export const PRODUCT_CSV_COLUMNS = [
     format: (val) => val ? `${val}%` : '0%' },
   { key: 'tax_code',            label: 'Tax Code' },
   { key: 'unit',                label: 'Unit' },
-  { key: 'barcode',         label: 'Barcode' },
-  // FIX: DB has updated_at + updated_by on products table.
-  // prod_created_at replaced with updated_at to match "Last Updated" column shown in UI.
-  // last_updated_by added — products router returns it via LEFT JOIN on profiles.
-  { key: 'updated_at',      label: 'Last Updated',
+  { key: 'barcode',             label: 'Barcode' },
+  // Audit columns — all four fields are returned by GET /products/ list
+  // via the double LEFT JOIN on profiles (pr1=updated_by, pr2=created_by).
+  { key: 'prod_created_at',     label: 'Created On',
     format: (val) => val ? new Date(val).toLocaleDateString('en-IN') : '' },
-  { key: 'last_updated_by', label: 'Last Updated By' },
+  { key: 'created_by_name',     label: 'Created By',
+    format: (val) => val || '' },
+  { key: 'updated_at',          label: 'Last Updated',
+    format: (val) => val ? new Date(val).toLocaleDateString('en-IN') : '' },
+  { key: 'last_updated_by',     label: 'Last Updated By',
+    format: (val) => val || '' },
 ];
 
 /** Column config for Categories export */
 export const CATEGORY_CSV_COLUMNS = [
-  { key: 'category_name', label: 'Category Name' },
-  // FIX: DB has updated_at + updated_by on categories table.
-  // created_at replaced with updated_at to match "Last Updated" column shown in UI.
-  // last_updated_by added — categories router returns it via LEFT JOIN on profiles.
+  { key: 'category_name',   label: 'Category Name' },
+  // Audit columns — all four fields are returned by GET /categories/ list
+  // via the double LEFT JOIN on profiles (p1=updated_by, p2=created_by).
+  { key: 'created_at',      label: 'Created On',
+    format: (val) => val ? new Date(val).toLocaleDateString('en-IN') : '' },
+  { key: 'created_by_name', label: 'Created By',
+    format: (val) => val || '' },
   { key: 'updated_at',      label: 'Last Updated',
     format: (val) => val ? new Date(val).toLocaleDateString('en-IN') : '' },
-  { key: 'last_updated_by', label: 'Last Updated By' },
+  { key: 'last_updated_by', label: 'Last Updated By',
+    format: (val) => val || '' },
 ];
 
 /** Column config for Expenses export */

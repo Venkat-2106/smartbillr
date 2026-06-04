@@ -27,10 +27,21 @@ class Product(Base):
     barcode = Column(Text, nullable=True)
     unit = Column(Text, default="pcs")
     is_deleted = Column(Boolean, default=False)
-    prod_created_at = Column(DateTime, nullable=True)
+
+    # ── Audit timestamps ──────────────────────────────────────────────────────
+    # prod_created_at: set explicitly in POST route. DB DEFAULT now() acts as
+    # safety net for inserts that omit it.
+    prod_created_at = Column(DateTime, nullable=True, server_default=text("now()"))
+
+    # updated_at: auto-maintained by the DB trigger fn_set_updated_at
+    # (BEFORE UPDATE on products). NEVER set this from Python.
     updated_at = Column(DateTime, nullable=True, server_default=text("now()"))
-    # updated_by: plain UUID — no ForeignKey() here because SQLAlchemy cannot resolve
-    # 'profiles' (it lives in Supabase auth schema, no ORM model for it).
-    # The FK constraint already exists in the DB from the SQL migration.
-    # We set this value directly in the PUT route and JOIN via raw SQL to get the name.
+
+    # ── Audit user references ─────────────────────────────────────────────────
+    # Plain UUIDs — no SQLAlchemy ForeignKey() because the profiles table lives
+    # in Supabase's auth schema and has no ORM model here.
+    # The FK constraints exist in the DB from the SQL migration.
+    # Values are set directly in POST/PUT routes; names are resolved via raw
+    # SQL JOINs on profiles in every read query.
+    created_by = Column(UUID(as_uuid=True), nullable=True)
     updated_by = Column(UUID(as_uuid=True), nullable=True)

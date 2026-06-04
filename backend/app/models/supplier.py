@@ -20,8 +20,10 @@ class Supplier(Base):
     supp_tax_number   = Column(String(50),  nullable=True)
     is_deleted        = Column(Boolean,     default=False)
     supp_created_at   = Column(DateTime,    nullable=True, server_default=text("now()"))
-    # FIX: DB has updated_at on suppliers table (trg_suppliers_updated_at fires BEFORE UPDATE).
-    # Model was missing this column — added so ORM can read it for sorting and serialization.
-    # DB has NO updated_by column on suppliers (unlike customers/categories/products),
-    # so last_updated_by tracking is not available for suppliers.
+    # DB trigger trg_suppliers_updated_at fires on every UPDATE and sets this automatically.
+    # We declare it here so SQLAlchemy can read the value after commit (via db.refresh()).
     updated_at        = Column(DateTime,    nullable=True, server_default=text("now()"))
+    # updated_by: plain UUID — no ForeignKey() declared here (same pattern as Category/Customer).
+    # The FK constraint exists in DB: REFERENCES profiles(id) ON DELETE SET NULL.
+    # We set this in POST/PUT routes and JOIN via raw SQL to get the name.
+    updated_by        = Column(UUID(as_uuid=True), nullable=True)

@@ -10,6 +10,7 @@ import { XMarkIcon, TagIcon, PrinterIcon } from '@heroicons/react/24/outline'
 import { fetchCategory } from '../api/categoriesApi'
 import { Spinner } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
+import { formatDate }      from '../../../shared/utils/formatDate'
 import {
   buildPrintHeader,
   buildPrintWatermark,
@@ -58,12 +59,20 @@ function StatCard({ label, value, color }) {
 
 // ── Main drawer ───────────────────────────────────────────────────────────────
 // ── Print builder ─────────────────────────────────────────────────────────────
-function buildCategoryPrintHTML(business, category, summary, products) {
+function buildCategoryPrintHTML(business, category, detail, summary, products) {
   const metaFields = [
     { label: 'Total Products', value: String(summary.total_products ?? 0) },
     { label: 'Stock Value',    value: formatCurrency(summary.total_stock_value ?? 0) },
     { label: 'Low Stock',      value: String(summary.low_stock_count ?? 0) },
     { label: 'Out of Stock',   value: String(summary.out_of_stock_count ?? 0) },
+  ]
+
+  // Activity fields — created + last updated
+  const activityFields = [
+    { label: 'Created On',       value: detail?.created_at      ? formatDate(detail.created_at)  : '—' },
+    { label: 'Created By',       value: detail?.created_by_name || '—' },
+    { label: 'Last Updated On',  value: detail?.updated_at      ? formatDate(detail.updated_at)  : '—' },
+    { label: 'Last Updated By',  value: detail?.last_updated_by || '—' },
   ]
 
   const prodCols = [
@@ -92,6 +101,9 @@ function buildCategoryPrintHTML(business, category, summary, products) {
       <div style="font-size:11.5px;color:#9ca3af;margin-top:5px;">Category Report</div>
     </div>
 
+    ${buildPrintSectionTitle('Activity')}
+    ${buildPrintMetaGrid(activityFields, 4)}
+
     ${buildPrintSectionTitle('Summary')}
     ${buildPrintMetaGrid(metaFields, 4)}
 
@@ -118,7 +130,7 @@ export default function CategoryDetailDrawer({ category, onClose }) {
   function handlePrint() {
     if (!category) return
     const business = useAuthStore.getState().business
-    const html = buildCategoryPrintHTML(business, category, summary, products)
+    const html = buildCategoryPrintHTML(business, category, detail, summary, products)
     triggerPrint(html)
   }
 
@@ -223,6 +235,58 @@ export default function CategoryDetailDrawer({ category, onClose }) {
             </div>
           ) : (
             <>
+              {/* ── Activity (created / updated metadata) ──────────────────── */}
+              <div style={{
+                background: 'var(--bg-page)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                padding: '14px 16px',
+                marginBottom: 20,
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '12px 20px',
+              }}>
+                {/* Created On */}
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
+                    Created On
+                  </div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {detail?.created_at ? formatDate(detail.created_at) : '—'}
+                  </div>
+                </div>
+
+                {/* Created By */}
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
+                    Created By
+                  </div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {detail?.created_by_name || '—'}
+                  </div>
+                </div>
+
+                {/* Last Updated On */}
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
+                    Last Updated On
+                  </div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {detail?.updated_at ? formatDate(detail.updated_at) : '—'}
+                  </div>
+                </div>
+
+                {/* Last Updated By */}
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
+                    Last Updated By
+                  </div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {detail?.last_updated_by || '—'}
+                  </div>
+                </div>
+              </div>
+
               {/* Summary stats */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
                 <StatCard label="Total Products"   value={summary.total_products     ?? 0} />

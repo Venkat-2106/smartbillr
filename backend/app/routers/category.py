@@ -40,7 +40,8 @@ def create_category(
         category_id=uuid.uuid4(),
         business_id=current_user["business_id"],
         category_name=payload.category_name,
-        updated_by=current_user["user_id"]   # Track who created this category
+        created_by=current_user["user_id"],   # Track who created this category
+        updated_by=current_user["user_id"],   # Initially same as created_by
     )
 
     db.add(new_category)
@@ -77,10 +78,13 @@ def get_categories(
         text("""
             SELECT
                 c.category_id, c.business_id, c.category_name,
-                c.is_deleted, c.created_at, c.updated_at, c.updated_by,
-                p.full_name AS last_updated_by
+                c.is_deleted, c.created_at, c.created_by,
+                c.updated_at, c.updated_by,
+                p1.full_name AS last_updated_by,
+                p2.full_name AS created_by_name
             FROM categories c
-            LEFT JOIN profiles p ON p.id = c.updated_by
+            LEFT JOIN profiles p1 ON p1.id = c.updated_by
+            LEFT JOIN profiles p2 ON p2.id = c.created_by
             WHERE c.business_id = CAST(:bid AS uuid)
               AND c.is_deleted   = false
             ORDER BY c.category_name ASC
@@ -95,14 +99,16 @@ def get_categories(
 
     data = [
         {
-            "category_id":    str(r.category_id),
-            "business_id":    str(r.business_id),
-            "category_name":  r.category_name,
-            "is_deleted":     r.is_deleted,
-            "created_at":     str(r.created_at) if r.created_at else None,
-            "updated_at":     str(r.updated_at) if r.updated_at else None,
-            "updated_by":     str(r.updated_by) if r.updated_by else None,
-            "last_updated_by": r.last_updated_by if r.last_updated_by else None,
+            "category_id":     str(r.category_id),
+            "business_id":     str(r.business_id),
+            "category_name":   r.category_name,
+            "is_deleted":      r.is_deleted,
+            "created_at":      str(r.created_at)  if r.created_at  else None,
+            "created_by":      str(r.created_by)  if r.created_by  else None,
+            "created_by_name": r.created_by_name  if r.created_by_name  else None,
+            "updated_at":      str(r.updated_at)  if r.updated_at  else None,
+            "updated_by":      str(r.updated_by)  if r.updated_by  else None,
+            "last_updated_by": r.last_updated_by  if r.last_updated_by  else None,
         }
         for r in rows
     ]
@@ -128,13 +134,26 @@ def get_category(
 ):
     business_id = current_user["business_id"]
 
-    category = db.query(Category).filter(
-        Category.category_id == category_id,
-        Category.business_id == business_id,
-        Category.is_deleted  == False
-    ).first()
+    # Raw SQL with two LEFT JOINs to get creator name + last updater name in one query
+    cat_row = db.execute(
+        text("""
+            SELECT
+                c.category_id, c.business_id, c.category_name, c.is_deleted,
+                c.created_at,  c.created_by,
+                c.updated_at,  c.updated_by,
+                p1.full_name AS created_by_name,
+                p2.full_name AS last_updated_by
+            FROM categories c
+            LEFT JOIN profiles p1 ON p1.id = c.created_by
+            LEFT JOIN profiles p2 ON p2.id = c.updated_by
+            WHERE c.category_id = CAST(:cid AS uuid)
+              AND c.business_id  = CAST(:bid AS uuid)
+              AND c.is_deleted   = false
+        """),
+        {"cid": category_id, "bid": str(business_id)}
+    ).fetchone()
 
-    if not category:
+    if not cat_row:
         return error_response("Category not found", 404)
 
     product_rows = db.execute(
@@ -149,7 +168,7 @@ def get_category(
               AND is_deleted   = false
             ORDER BY prod_name ASC
         """),
-        {"cid": category_id, "bid": business_id}
+        {"cid": category_id, "bid": str(business_id)}
     ).fetchall()
 
     products          = []
@@ -183,12 +202,16 @@ def get_category(
     out_of_stock    = sum(1 for p in products if p["prod_stock_qty"] == 0)
 
     return success_response({
-        "category_id":   str(category.category_id),
-        "business_id":   str(category.business_id),
-        "category_name": category.category_name,
-        "is_deleted":    category.is_deleted,
-        "created_at":    str(category.created_at) if category.created_at else None,
-        "updated_at":    str(category.updated_at) if category.updated_at else None,
+        "category_id":     str(cat_row.category_id),
+        "business_id":     str(cat_row.business_id),
+        "category_name":   cat_row.category_name,
+        "is_deleted":      cat_row.is_deleted,
+        "created_at":      str(cat_row.created_at)  if cat_row.created_at  else None,
+        "created_by":      str(cat_row.created_by)  if cat_row.created_by  else None,
+        "created_by_name": cat_row.created_by_name  or None,
+        "updated_at":      str(cat_row.updated_at)  if cat_row.updated_at  else None,
+        "updated_by":      str(cat_row.updated_by)  if cat_row.updated_by  else None,
+        "last_updated_by": cat_row.last_updated_by  or None,
         "summary": {
             "total_products":     total_products,
             "low_stock_count":    low_stock_count,

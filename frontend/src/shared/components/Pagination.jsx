@@ -16,7 +16,13 @@
 export default function Pagination({ pagination, onPageChange }) {
   if (!pagination) return null
 
-  const { page: current, pages: total } = pagination
+  // Backend sends: { page, total_pages, total, has_next, has_prev }
+  // Component previously read 'pages' which never existed → next was always enabled.
+  const current = pagination.page        ?? 1
+  const total   = pagination.total_pages ?? pagination.pages ?? 1   // fallback for safety
+  const hasNext = pagination.has_next    ?? (current < total)
+  const hasPrev = pagination.has_prev    ?? (current > 1)
+
   if (total <= 1) return null
 
   // Build page numbers to show: always show first, last, current ±1, and ellipsis
@@ -71,7 +77,7 @@ export default function Pagination({ pagination, onPageChange }) {
   }
 
   function NavBtn({ direction }) {
-    const isDisabled = direction === 'prev' ? current <= 1 : current >= total
+    const isDisabled = direction === 'prev' ? !hasPrev : !hasNext
     const label = direction === 'prev' ? '←' : '→'
     return (
       <button

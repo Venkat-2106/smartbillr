@@ -91,7 +91,7 @@ export default function SuppliersPage() {
   const activeFiltersCount =
     (activeSearch ? 1 : 0) + (activeDateFilter ? 1 : 0);
 
-  /* ── Column definitions — render functions INSIDE each column ───────── */
+  /* ── Column definitions ─────────────────────────────────────────────── */
   const columns = [
     {
       key: 'supp_name',
@@ -169,11 +169,21 @@ export default function SuppliersPage() {
         </span>
       ),
     },
-    // NOTE: last_updated_by column intentionally omitted.
-    // The suppliers table has no updated_by column in the DB (unlike customers/
-    // categories/products). The trigger auto-sets updated_at but does not track
-    // which user made the change, so this column cannot be populated.
-    //
+    {
+      key: 'last_updated_by',
+      label: 'Last Updated By',
+      sortable: false,
+      width: 160,
+      render: (row) => (
+        row.last_updated_by
+          ? (
+            <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: 500 }}>
+              {row.last_updated_by}
+            </span>
+          )
+          : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
+      ),
+    },
     // Actions column — only when user can manage
     ...(canManage ? [{
       key: 'actions',
@@ -255,7 +265,6 @@ export default function SuppliersPage() {
         </div>
 
       <div style={{ overflowX: 'auto', width: '100%' }}>
-        {/* ✅ KEY FIX */}
         <Table
           columns={columns}
           rows={suppliers}
@@ -271,7 +280,6 @@ export default function SuppliersPage() {
               : 'No suppliers yet. Add your first one to get started.'
           }
         />
-
       </div>
 
       {/* Pagination */}
@@ -395,7 +403,6 @@ function SupplierForm({ form, onSubmit, onCancel, loading, submitLabel }) {
           />
         </FormField>
         <FormField label="Country" error={errors.supp_country_code?.message}>
-          {/* ✅ selectStyle used as plain OBJECT — not called as function */}
           <select className="sb-select" {...register('supp_country_code')} style={selectStyle}>
             <option value="">— Select Country —</option>
             {COUNTRIES.map((c) => (

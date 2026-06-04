@@ -20,3 +20,6 @@ class Category(Base):
     # The FK constraint already exists in the DB from the SQL migration.
     # We set this value directly in the PUT route and JOIN via raw SQL to get the name.
     updated_by = Column(UUID(as_uuid=True), nullable=True)
+    # created_by: tracks who first created this category.
+    # Set in the POST route. FK constraint in DB: REFERENCES profiles(id) ON DELETE SET NULL.
+    created_by = Column(UUID(as_uuid=True), nullable=True)

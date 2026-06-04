@@ -156,6 +156,25 @@ export default function CategoriesPage() {
     return rows
   }, [categories, allCategories, sortKey, sortDir, dateFrom, dateTo])
 
+  // Export data — always the FULL allCategories set (up to 100) with current
+  // search + date filters applied, but never paginated.
+  // This ensures Export CSV always reflects ALL matching records, not just the
+  // 20 items currently visible on the table page.
+  const exportData = useMemo(() => {
+    let rows = [...allCategories]
+    const q = search.trim().toLowerCase()
+    if (q) rows = rows.filter(r => r.category_name?.toLowerCase().includes(q))
+    if (dateFrom) {
+      const from = new Date(dateFrom); from.setHours(0, 0, 0, 0)
+      rows = rows.filter(r => r.updated_at && new Date(r.updated_at) >= from)
+    }
+    if (dateTo) {
+      const to = new Date(dateTo); to.setHours(23, 59, 59, 999)
+      rows = rows.filter(r => r.updated_at && new Date(r.updated_at) <= to)
+    }
+    return rows
+  }, [allCategories, search, dateFrom, dateTo])
+
   const { mutate: createCategory, isPending: isCreating } = useCreateCategory()
   const { mutate: updateCategory, isPending: isUpdating } = useUpdateCategory()
   const { mutate: deleteCategory, isPending: isDeleting } = useDeleteCategory()
@@ -272,7 +291,7 @@ export default function CategoriesPage() {
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             {/* ADDED: Export CSV button */}
             <ExportButton
-              data={displayRows}
+              data={exportData}
               filename="categories"
               columns={CATEGORY_CSV_COLUMNS}
             />

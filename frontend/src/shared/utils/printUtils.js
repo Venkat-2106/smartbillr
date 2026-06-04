@@ -13,7 +13,7 @@
 //   This file centralises the entire print system:
 //     - getPrintRoot()         → the hidden print node (injected once)
 //     - buildPrintHeader()     → store name, address, GSTIN, phone, email
-//     - buildPrintWatermark()  → "SMARTBILLR" background text
+//     - buildPrintWatermark()  → "SmartBillr" diagonal background watermark
 //     - buildPrintFooter()     → "Printed from SmartBillr · Generated on …"
 //     - buildPrintMetaRow()    → one labelled field row (reusable)
 //     - buildPrintMetaGrid()   → 2-column grid of metadata fields
@@ -28,6 +28,20 @@
 //   → Solution: hidden <div id="sb-print-root"> in normal document flow.
 //      At print time everything else gets display:none. We write plain HTML
 //      with LITERAL hex colors. The browser can always render that.
+//
+// WATERMARK DESIGN NOTES:
+//   The .sb-watermark class is injected as part of getPrintRoot()'s <style>
+//   block so it lives in the same <style> tag as all other print rules.
+//   It uses:
+//     - position: fixed (covers the full physical page regardless of content length)
+//     - transform: rotate(-45deg) to produce the classic diagonal watermark
+//     - z-index: 0 so content (z-index: 1) sits on top
+//     - pointer-events: none so it never blocks clicks
+//     - opacity: 0.055 — visible but never distracting
+//     - font-size: 72px + letter-spacing for professional spread
+//     - color: #374151 (dark gray) gives good contrast on white paper
+//   The outer wrapper uses position:relative + z-index:1 so all content
+//   is always rendered above the watermark layer.
 //
 // HOW TO USE IN A COMPONENT:
 //   import { triggerPrint } from '../../../shared/utils/printUtils';
@@ -75,6 +89,21 @@ export function formatGeneratedOn() {
  * The style tag is injected ONCE. Subsequent calls just return the existing el.
  *
  * @page sets margins for A4. For thermal printing the margin collapses to 5mm.
+ *
+ * ── WATERMARK CSS ─────────────────────────────────────────────────────────
+ * .sb-watermark is defined here (not in index.css) so it lives alongside all
+ * other print-only rules in a single <style> block that is injected lazily.
+ *
+ * Design decisions:
+ *   position: fixed   → covers the FULL physical page, even on multi-page docs
+ *   top/left 50%      → centres the element relative to the page
+ *   transform:        → translate(-50%,-50%) centres it, rotate(-45deg) tilts it
+ *   z-index: 0        → watermark sits BELOW all content (content is z-index:1)
+ *   opacity: 0.055    → subtle — visible in print preview but never distracting
+ *   font-size: 72px   → large enough to fill the page width diagonally
+ *   letter-spacing    → spreads letters for a professional watermark look
+ *   pointer-events: none → never blocks interaction
+ *   white-space: nowrap  → prevents the word from wrapping mid-print
  */
 export function getPrintRoot() {
   let el = document.getElementById('sb-print-root');
@@ -85,8 +114,12 @@ export function getPrintRoot() {
     const style = document.createElement('style');
     style.textContent = `
       #sb-print-root { display: none; }
+
       @media print {
+        /* ── Hide everything on the page except our print node ── */
         body > *:not(#sb-print-root) { display: none !important; }
+
+        /* ── Print root base styles ── */
         #sb-print-root {
           display: block !important;
           font-family: 'Plus Jakarta Sans', -apple-system, Arial, sans-serif;
@@ -96,13 +129,66 @@ export function getPrintRoot() {
           margin: 0;
           width: 100%;
         }
+
+        /* ── Page margins for A4 / Letter ── */
         @page {
           size: auto;
           margin: 15mm 14mm;
         }
-        /* Page break helpers — apply class="sb-page-break" in HTML */
+
+        /* ── Page break helpers — apply class="sb-page-break" in HTML ── */
         .sb-page-break { page-break-before: always; }
         .sb-no-break   { page-break-inside: avoid; }
+
+        /* ── WATERMARK ────────────────────────────────────────────────────
+         *
+         * position: fixed   → Covers the full physical page area.
+         *                     'fixed' at print time means relative to the
+         *                     page box, not the viewport — this is what makes
+         *                     it appear on EVERY page of a multi-page print.
+         *
+         * top/left: 50%     → Start at the centre of the page.
+         * transform         → translate(-50%,-50%) recentres the element's
+         *                     own bounding box, then rotate(-45deg) produces
+         *                     the classic diagonal watermark angle.
+         *
+         * font-size: 72px   → Sized so "SmartBillr" spans most of an A4 page
+         *                     diagonally without getting clipped.
+         *
+         * letter-spacing    → Spreads letters apart — standard watermark look.
+         *
+         * opacity: 0.055    → Very subtle. Visible in print preview but never
+         *                     interferes with content readability.
+         *                     Range 0.04–0.08 is the professional sweet spot.
+         *
+         * color: #374151    → Dark gray (not black). Black at low opacity can
+         *                     print as faint gray on cheap printers; dark gray
+         *                     at 0.055 renders more consistently.
+         *
+         * z-index: 0        → Below content (content wrapper is z-index: 1).
+         *
+         * pointer-events: none → Watermark never intercepts clicks in preview.
+         *
+         * white-space: nowrap  → Never wrap "SmartBillr" onto two lines.
+         * ──────────────────────────────────────────────────────────────────*/
+        .sb-watermark {
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(-45deg);
+          font-family: 'Plus Jakarta Sans', -apple-system, Arial, sans-serif;
+          font-size: 72px;
+          font-weight: 900;
+          letter-spacing: 0.18em;
+          color: #374151;
+          opacity: 0.055;
+          z-index: 0;
+          pointer-events: none;
+          white-space: nowrap;
+          user-select: none;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
       }
     `;
     document.head.appendChild(style);
@@ -166,14 +252,21 @@ export function buildPrintHeader(business = {}) {
 }
 
 /**
- * Builds the "SMARTBILLR" background watermark.
- * Positioned absolutely behind all content.
- * 7% opacity — visible but does not interfere with readability.
+ * Builds the "SmartBillr" diagonal background watermark.
+ *
+ * Returns a single <div class="sb-watermark"> element.
+ * The actual styling for .sb-watermark lives in getPrintRoot()'s <style>
+ * block (injected into <head> once, on first print).
+ *
+ * IMPORTANT: triggerPrint() wraps the entire HTML in a
+ *   <div style="position: relative; z-index: 1; ...">
+ * so content always renders ABOVE the watermark (z-index: 0).
+ *
+ * Call this BEFORE buildPrintHeader() in your HTML string so the watermark
+ * div is first in the DOM — it renders behind everything due to z-index.
  */
 export function buildPrintWatermark() {
-  return `
-    <div class="sb-watermark">SMARTBILLR</div>
-  `;
+  return `<div class="sb-watermark">SmartBillr</div>`;
 }
 
 /**
@@ -345,14 +438,18 @@ export function buildPrintTable(columns, rows, emptyMessage = 'No records found.
  * Writes HTML into the print root and fires window.print().
  * Clears the node after printing so it stays invisible.
  *
+ * The inner wrapper uses position:relative + z-index:1 so all printed
+ * content sits ABOVE the .sb-watermark layer (which is z-index:0 / fixed).
+ *
  * @param {string} html  - Full inner HTML to print (use the builders above)
  */
 export function triggerPrint(html) {
   const printRoot = getPrintRoot();
 
-  // Wrap in a positioned container so the watermark is relative to the page
+  // The outer div is position:relative so the watermark (position:fixed, z-index:0)
+  // is layered behind, and all content (z-index:1) floats above it.
   printRoot.innerHTML = `
-    <div style="position: relative; max-width: 750px; margin: 0 auto;">
+    <div style="position: relative; z-index: 1; max-width: 750px; margin: 0 auto;">
       ${html}
     </div>
   `;

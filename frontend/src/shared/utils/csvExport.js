@@ -188,13 +188,32 @@ export const SUPPLIER_CSV_COLUMNS = [
   { key: 'supp_tax_number',   label: 'Tax Number' },
   { key: 'updated_at',        label: 'Last Updated',
     format: (val) => formatDateCSV(val) },
-  // DB now has updated_by column (migration done) — last_updated_by is returned
-  // by the GET /suppliers list via LEFT JOIN profiles on updated_by.
   { key: 'last_updated_by',   label: 'Last Updated By',
     format: (val) => val || '' },
 ];
 
-/** Column config for Products export */
+// ─── PRODUCT CSV COLUMNS — TWO VARIANTS ──────────────────────────────────────
+//
+// WHY TWO VARIANTS:
+//   Product profit data (cost price, profit amount) is gated by the
+//   'view_product_profit' permission. Staff users should not receive
+//   this data even via a CSV download.
+//
+//   ProductsPage.jsx reads canViewProfit = can('view_product_profit')
+//   and selects which column config to pass to ExportButton:
+//
+//     const csvColumns = canViewProfit
+//       ? PRODUCT_CSV_COLUMNS          ← admin / manager
+//       : PRODUCT_CSV_COLUMNS_NO_PROFIT ← staff
+//
+//   This ensures the exported file never contains columns the user
+//   is not permitted to see — even if they inspect the download.
+//
+// NOTE: The backend also strips these values from the API response
+// (returns null) when the user lacks the permission. So the CSV
+// column being absent is a second layer of protection, not the only one.
+
+/** Column config for Products export — WITH profit fields (admin + manager) */
 export const PRODUCT_CSV_COLUMNS = [
   { key: 'prod_name',           label: 'Product Name' },
   { key: 'prod_sell_price',     label: 'Sell Price' },
@@ -208,7 +227,29 @@ export const PRODUCT_CSV_COLUMNS = [
   { key: 'unit',                label: 'Unit' },
   { key: 'barcode',             label: 'Barcode' },
   // Audit columns — all four fields are returned by GET /products/ list
-  // via the double LEFT JOIN on profiles (pr1=updated_by, pr2=created_by).
+  { key: 'prod_created_at',     label: 'Created On',
+    format: (val) => formatDateCSV(val) },
+  { key: 'created_by_name',     label: 'Created By',
+    format: (val) => val || '' },
+  { key: 'updated_at',          label: 'Last Updated',
+    format: (val) => formatDateCSV(val) },
+  { key: 'last_updated_by',     label: 'Last Updated By',
+    format: (val) => val || '' },
+];
+
+/** Column config for Products export — WITHOUT profit fields (staff only) */
+export const PRODUCT_CSV_COLUMNS_NO_PROFIT = [
+  { key: 'prod_name',           label: 'Product Name' },
+  { key: 'prod_sell_price',     label: 'Sell Price' },
+  // prod_cost_price OMITTED — staff not permitted to see cost data
+  // prod_profit     OMITTED — staff not permitted to see profit data
+  { key: 'prod_stock_qty',      label: 'Stock Qty' },
+  { key: 'prod_low_stock_alert',label: 'Low Stock Alert' },
+  { key: 'tax_rate',            label: 'Tax Rate %',
+    format: (val) => val ? `${val}%` : '0%' },
+  { key: 'tax_code',            label: 'Tax Code' },
+  { key: 'unit',                label: 'Unit' },
+  { key: 'barcode',             label: 'Barcode' },
   { key: 'prod_created_at',     label: 'Created On',
     format: (val) => formatDateCSV(val) },
   { key: 'created_by_name',     label: 'Created By',
@@ -222,8 +263,6 @@ export const PRODUCT_CSV_COLUMNS = [
 /** Column config for Categories export */
 export const CATEGORY_CSV_COLUMNS = [
   { key: 'category_name',   label: 'Category Name' },
-  // Audit columns — all four fields are returned by GET /categories/ list
-  // via the double LEFT JOIN on profiles (p1=updated_by, p2=created_by).
   { key: 'created_at',      label: 'Created On',
     format: (val) => formatDateCSV(val) },
   { key: 'created_by_name', label: 'Created By',

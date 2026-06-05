@@ -1,12 +1,18 @@
 // src/features/products/pages/ProductsPage.jsx
 //
-// CHANGES IN THIS VERSION:
-//   ✅ Added ExportButton with PRODUCT_CSV_COLUMNS to the PageHeader action slot
-//   All other logic, layout, styles unchanged.
+// PROFIT PERMISSION CHANGES IN THIS VERSION:
+//   ✅ Removed: const isAdmin = profile?.is_admin === true
+//   ✅ Replaced with: const canViewProfit = can('view_product_profit')
+//   ✅ Cost Price column → gated by canViewProfit (was isAdmin)
+//   ✅ Profit column     → gated by canViewProfit (was isAdmin)
+//   ✅ Cost Price field in Edit form → gated by canViewProfit
+//      (staff cannot edit cost price because they can't see it)
+//   ✅ Export columns → profit fields included only when canViewProfit
 //
 // PREVIOUS FIXES RETAINED:
 //   ✅ FIX A — Tax Rate changed from dropdown to number textbox
 //   ✅ FIX B — Back button wired up (← Back to Dashboard via useNavigate)
+//   ✅ ExportButton with PRODUCT_CSV_COLUMNS in the PageHeader action slot
 
 import { useState, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
@@ -30,9 +36,8 @@ import {
   selectStyle,
 } from '../../../shared/components'
 
-import { PRODUCT_CSV_COLUMNS }  from '../../../shared/utils/csvExport'
+import { PRODUCT_CSV_COLUMNS, PRODUCT_CSV_COLUMNS_NO_PROFIT } from '../../../shared/utils/csvExport'
 import { usePermissions }       from '../../../shared/hooks/usePermissions'
-import useAuthStore              from '../../../store/authStore'
 import { formatDate }            from '../../../shared/utils/formatDate'
 import { fetchCategories }       from '../../categories/api/categoriesApi'
 
@@ -127,7 +132,10 @@ const dateInputStyle = {
 }
 
 // ── Add Product Form ──────────────────────────────────────────────────────────
-function AddProductForm({ onSubmit, onClose, isPending, categories }) {
+// canViewProfit prop controls whether the Cost Price field appears.
+// If staff cannot see cost price, they also cannot set it.
+// They must enter 0 (handled by the hidden default value in the schema).
+function AddProductForm({ onSubmit, onClose, isPending, categories, canViewProfit }) {
   const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(createSchema),
     defaultValues: {
@@ -135,6 +143,7 @@ function AddProductForm({ onSubmit, onClose, isPending, categories }) {
       prod_low_stock_alert: 10,
       tax_rate:             0,
       unit:                 'pcs',
+      prod_cost_price:      0,  // default so staff submission doesn't fail schema
     },
   })
 
@@ -144,13 +153,21 @@ function AddProductForm({ onSubmit, onClose, isPending, categories }) {
         <Input placeholder="e.g. Basmati Rice 5kg" autoFocus {...register('prod_name')} />
       </FormField>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+      {/* Selling Price is always visible — it's the public price on invoices */}
+      {/* Cost Price is hidden from staff — they lack view_product_profit */}
+      <div style={{ display: 'grid', gridTemplateColumns: canViewProfit ? '1fr 1fr' : '1fr', gap: 12, marginBottom: 16 }}>
         <FormField label="Selling Price" error={errors.prod_sell_price} required>
           <Input type="number" step="0.01" placeholder="0.00" {...register('prod_sell_price')} />
         </FormField>
-        <FormField label="Cost Price" error={errors.prod_cost_price} required>
-          <Input type="number" step="0.01" placeholder="0.00" {...register('prod_cost_price')} />
-        </FormField>
+        {canViewProfit && (
+          <FormField label="Cost Price" error={errors.prod_cost_price} required>
+            <Input type="number" step="0.01" placeholder="0.00" {...register('prod_cost_price')} />
+          </FormField>
+        )}
+        {/* Hidden input so Zod schema gets a value even when field is not shown */}
+        {!canViewProfit && (
+          <input type="hidden" value={0} {...register('prod_cost_price')} />
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
@@ -200,7 +217,7 @@ function AddProductForm({ onSubmit, onClose, isPending, categories }) {
 }
 
 // ── Edit Product Form ─────────────────────────────────────────────────────────
-function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categories }) {
+function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categories, canViewProfit }) {
   const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(editSchema),
     defaultValues,
@@ -233,13 +250,19 @@ function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categori
         <Input placeholder="e.g. Basmati Rice 5kg" autoFocus {...register('prod_name')} />
       </FormField>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+      {/* Selling Price always shown. Cost Price only if user can see profit. */}
+      <div style={{ display: 'grid', gridTemplateColumns: canViewProfit ? '1fr 1fr' : '1fr', gap: 12, marginBottom: 16 }}>
         <FormField label="Selling Price" error={errors.prod_sell_price} required>
           <Input type="number" step="0.01" placeholder="0.00" {...register('prod_sell_price')} />
         </FormField>
-        <FormField label="Cost Price" error={errors.prod_cost_price} required>
-          <Input type="number" step="0.01" placeholder="0.00" {...register('prod_cost_price')} />
-        </FormField>
+        {canViewProfit && (
+          <FormField label="Cost Price" error={errors.prod_cost_price} required>
+            <Input type="number" step="0.01" placeholder="0.00" {...register('prod_cost_price')} />
+          </FormField>
+        )}
+        {!canViewProfit && (
+          <input type="hidden" {...register('prod_cost_price')} />
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
@@ -297,11 +320,15 @@ function fmt(num) {
 export default function ProductsPage() {
   const { can }   = usePermissions()
   const canManage = can('products.edit')
+
+  // ── PERMISSION CHECK ────────────────────────────────────────────────────────
+  // This replaces the old: const isAdmin = profile?.is_admin === true
+  // We now check the actual permission code from the RBAC system.
+  // Admin and Manager both have this permission; Staff does not.
+  const canViewProfit = can('view_product_profit')
+  // ── END PERMISSION CHECK ────────────────────────────────────────────────────
+
   const categories = useCategoryOptions()
-
-  const profile = useAuthStore(s => s.profile)
-  const isAdmin = profile?.is_admin === true
-
   const navigate = useNavigate()
 
   const {
@@ -436,6 +463,11 @@ export default function ProductsPage() {
     })
   }
 
+  // ── Table columns ─────────────────────────────────────────────────────────
+  // Cost Price and Profit columns are conditionally added based on
+  // canViewProfit — the view_product_profit permission.
+  // The spread operator (...spread ? [col] : []) only adds the column
+  // when the user has the permission. If not, the columns are absent entirely.
   const columns = [
     {
       key:      'prod_name',
@@ -494,7 +526,11 @@ export default function ProductsPage() {
         </span>
       ),
     },
-    ...(isAdmin
+    // ── Profit-gated columns ─────────────────────────────────────────────────
+    // These two columns only appear when the user has 'view_product_profit'.
+    // The backend also returns null for these fields when the user lacks
+    // the permission, so even if this check is bypassed, the values are null.
+    ...(canViewProfit
       ? [
           {
             key:      'prod_cost_price',
@@ -502,9 +538,13 @@ export default function ProductsPage() {
             sortable: true,
             width:    110,
             render: (row) => (
-              <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                ₹{fmt(row.prod_cost_price)}
-              </span>
+              row.prod_cost_price != null
+                ? (
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    ₹{fmt(row.prod_cost_price)}
+                  </span>
+                )
+                : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
             ),
           },
           {
@@ -514,6 +554,7 @@ export default function ProductsPage() {
             width:    100,
             render: (row) => {
               const profit = row.prod_profit
+              if (profit == null) return <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
               const isNeg  = Number(profit) < 0
               return (
                 <span style={{ fontSize: 13, fontWeight: 600, color: isNeg ? '#EF4444' : '#10B981' }}>
@@ -524,6 +565,7 @@ export default function ProductsPage() {
           },
         ]
       : []),
+    // ── End profit-gated columns ─────────────────────────────────────────────
     {
       key:      'tax_rate',
       label:    'Tax',
@@ -583,6 +625,11 @@ export default function ProductsPage() {
   const activeSearch     = search.trim().length > 0
   const activeDateFilter = dateFrom || dateTo
 
+  // Choose which CSV column config to use based on profit permission.
+  // PRODUCT_CSV_COLUMNS         → includes cost price, profit, created_by_name
+  // PRODUCT_CSV_COLUMNS_NO_PROFIT → excludes those three columns
+  const csvColumns = canViewProfit ? PRODUCT_CSV_COLUMNS : PRODUCT_CSV_COLUMNS_NO_PROFIT
+
   return (
     <>
       <PageHeader
@@ -592,11 +639,10 @@ export default function ProductsPage() {
         onBack={() => navigate('/dashboard')}
         action={
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            {/* ADDED: Export CSV button — shows current filtered/searched list */}
             <ExportButton
               data={exportData}
               filename="products"
-              columns={PRODUCT_CSV_COLUMNS}
+              columns={csvColumns}
             />
             {canManage && (
               <Button
@@ -676,6 +722,7 @@ export default function ProductsPage() {
           onClose={() => setShowAdd(false)}
           isPending={isCreating}
           categories={categories}
+          canViewProfit={canViewProfit}
         />
       </Modal>
 
@@ -686,7 +733,7 @@ export default function ProductsPage() {
             defaultValues={{
               prod_name:            editTarget.prod_name,
               prod_sell_price:      editTarget.prod_sell_price,
-              prod_cost_price:      editTarget.prod_cost_price,
+              prod_cost_price:      editTarget.prod_cost_price ?? 0,
               prod_low_stock_alert: editTarget.prod_low_stock_alert,
               tax_rate:             editTarget.tax_rate ?? 0,
               tax_code:             editTarget.tax_code  ?? '',
@@ -699,6 +746,7 @@ export default function ProductsPage() {
             onClose={() => setEditTarget(null)}
             isPending={isUpdating}
             categories={categories}
+            canViewProfit={canViewProfit}
           />
         )}
       </Modal>

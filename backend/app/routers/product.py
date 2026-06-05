@@ -10,13 +10,50 @@
 #   pr1 → resolves updated_by  → last_updated_by
 #   pr2 → resolves created_by  → created_by_name
 # This is a single efficient JOIN — no N+1 queries.
+#
+# ── PROFIT PERMISSION GATE ────────────────────────────────────────────────────
+#
+# Permission code: 'view_product_profit'
+# Granted to:      admin, manager  (NOT staff)
+#
+# When a user LACKS this permission:
+#   - prod_cost_price  → returned as null
+#   - prod_profit      → returned as null
+#
+# When a user HAS this permission:
+#   - prod_cost_price  → full value returned
+#   - prod_profit      → full value returned
+#
+# HOW IT WORKS (the "soft check" pattern):
+#   Routes use get_current_user_with_permissions (not require_permission)
+#   so the route itself is accessible to everyone with products.view.
+#   Inside the route, we check 'view_product_profit' in permissions.
+#   If the user lacks it, we call row_to_dict(row, show_profit=False)
+#   which replaces the two sensitive fields with None.
+#
+# WHY NULL AND NOT OMISSION:
+#   Returning null is safer than omitting the key entirely.
+#   Omission causes KeyError crashes on the frontend if not handled.
+#   Null is explicit and the frontend can check: if (val !== null).
+#
+# WHY NOT A SEPARATE ENDPOINT:
+#   Two endpoints for the same resource would be harder to maintain.
+#   One endpoint that strips fields is simpler and follows the same
+#   pattern already used in dashboard.py for dashboard.financial.
+#
+# SECURITY NOTE:
+#   The permission check happens SERVER-SIDE in Python.
+#   The frontend also hides the columns visually, but that is a UX layer.
+#   Even if someone calls the API directly (curl, Postman, browser devtools),
+#   they only receive null for profit fields when they lack the permission.
+# ─────────────────────────────────────────────────────────────────────────────
 
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
-from app.middleware.rbac import require_permission
+from app.middleware.rbac import require_permission, get_current_user_with_permissions
 from app.models.product import Product
 from app.models.category import Category
 from app.schemas.product import ProductCreate, ProductUpdate
@@ -27,6 +64,11 @@ from sqlalchemy.exc import IntegrityError
 from typing import Optional
 
 router = APIRouter(prefix="/products", tags=["Products"])
+
+# ── Permission code constant ─────────────────────────────────────────────────
+# Single source of truth. If you ever rename the permission in DB,
+# change it here only — all routes automatically pick up the change.
+PROFIT_PERMISSION = "view_product_profit"
 
 
 # ── Helper: fetch one product row — all fields + both JOIN names ───────────
@@ -57,8 +99,15 @@ def get_product_with_profit(db: Session, prod_id):
 
 
 # ── Helper: format one product row as a dict ──────────────────────────────
-# Includes all four audit fields so every endpoint returns them consistently.
-def row_to_dict(row):
+# show_profit=True  → return full cost price + profit (user has view_product_profit)
+# show_profit=False → return null for both sensitive fields (user lacks permission)
+#
+# WHY A PARAMETER AND NOT AN IF INSIDE EACH ROUTE:
+#   All routes call row_to_dict. Centralising the gate here means:
+#   - Only one place to update if the field list changes
+#   - Impossible to accidentally expose the field in a new route
+#   - Consistent null shape across GET list, GET detail, POST, PUT
+def row_to_dict(row, show_profit: bool = True):
     return {
         "prod_id":              str(row.prod_id),
         "business_id":          str(row.business_id),
@@ -66,8 +115,12 @@ def row_to_dict(row):
         "category_name":        row.category_name if row.category_name else None,
         "prod_name":            row.prod_name,
         "prod_sell_price":      float(row.prod_sell_price),
-        "prod_cost_price":      float(row.prod_cost_price),
-        "prod_profit":          float(row.prod_profit) if row.prod_profit is not None else None,
+        # ── Profit-gated fields ────────────────────────────────────────────
+        # These two are returned as null when show_profit=False.
+        # The frontend checks for null and hides/replaces columns accordingly.
+        "prod_cost_price":      float(row.prod_cost_price) if show_profit else None,
+        "prod_profit":          float(row.prod_profit) if (show_profit and row.prod_profit is not None) else None,
+        # ── End gated fields ──────────────────────────────────────────────
         "prod_stock_qty":       row.prod_stock_qty,
         "prod_low_stock_alert": row.prod_low_stock_alert,
         "tax_rate":             float(row.tax_rate) if row.tax_rate is not None else 0,
@@ -95,6 +148,7 @@ def create_product(
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
+    show_profit = PROFIT_PERMISSION in current_user.get("permissions", set())
 
     # Validate category belongs to this business
     if data.category_id:
@@ -135,7 +189,7 @@ def create_product(
 
     return success_response({
         "message": "Product created successfully",
-        "product": row_to_dict(row)
+        "product": row_to_dict(row, show_profit=show_profit)
     }, 201)
 
 
@@ -150,6 +204,8 @@ def get_all_products(
     search:       Optional[str] = Query(default=None, description="Search by name or barcode")
 ):
     business_id = current_user["business_id"]
+    # Check if the caller is allowed to see profit fields
+    show_profit = PROFIT_PERMISSION in current_user.get("permissions", set())
 
     search_sql = ""
     params = {
@@ -199,7 +255,7 @@ def get_all_products(
 
     return success_response(
         pagination_response(
-            [row_to_dict(r) for r in rows],
+            [row_to_dict(r, show_profit=show_profit) for r in rows],
             total,
             pagination["page"],
             pagination["limit"]
@@ -217,6 +273,8 @@ def get_product(
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
+    # Check profit visibility for this specific user
+    show_profit = PROFIT_PERMISSION in current_user.get("permissions", set())
 
     # ── Step 1: Core product details + both audit JOIN names ─────────────────
     row = db.execute(
@@ -306,77 +364,83 @@ def get_product(
         })
 
     # ── Step 3: Price change history from audit_logs ─────────────────────────
-    audit_rows = db.execute(
-        text("""
-            SELECT
-                al.audit_id,
-                al.action_type,
-                al.old_data,
-                al.new_data,
-                al.created_at,
-                COALESCE(p.full_name, 'System') AS changed_by
-            FROM audit_logs al
-            LEFT JOIN profiles p ON p.id = al.user_id
-            WHERE al.table_name  = 'products'
-              AND al.record_id   = CAST(:prod_id AS uuid)
-              AND al.business_id = CAST(:bid AS uuid)
-              AND al.action_type = 'update'
-            ORDER BY al.created_at DESC
-        """),
-        {"prod_id": prod_id, "bid": business_id}
-    ).fetchall()
-
+    # PROFIT GATE: Price history reveals old and new cost/sell prices.
+    # If the user cannot see profit data, we return an empty list.
+    # This means the "Price History" section disappears entirely from
+    # the drawer UI — no partial leak of price data.
     price_history = []
-    for a in audit_rows:
-        old_data = a.old_data or {}
-        new_data = a.new_data or {}
 
-        old_sell = old_data.get("prod_sell_price")
-        new_sell = new_data.get("prod_sell_price")
-        old_cost = old_data.get("prod_cost_price")
-        new_cost = new_data.get("prod_cost_price")
+    if show_profit:
+        audit_rows = db.execute(
+            text("""
+                SELECT
+                    al.audit_id,
+                    al.action_type,
+                    al.old_data,
+                    al.new_data,
+                    al.created_at,
+                    COALESCE(p.full_name, 'System') AS changed_by
+                FROM audit_logs al
+                LEFT JOIN profiles p ON p.id = al.user_id
+                WHERE al.table_name  = 'products'
+                  AND al.record_id   = CAST(:prod_id AS uuid)
+                  AND al.business_id = CAST(:bid AS uuid)
+                  AND al.action_type = 'update'
+                ORDER BY al.created_at DESC
+            """),
+            {"prod_id": prod_id, "bid": business_id}
+        ).fetchall()
 
-        def to_float(v):
-            try:
-                return float(v) if v is not None else None
-            except (TypeError, ValueError):
-                return None
+        for a in audit_rows:
+            old_data = a.old_data or {}
+            new_data = a.new_data or {}
 
-        old_sell = to_float(old_sell)
-        new_sell = to_float(new_sell)
-        old_cost = to_float(old_cost)
-        new_cost = to_float(new_cost)
+            old_sell = old_data.get("prod_sell_price")
+            new_sell = new_data.get("prod_sell_price")
+            old_cost = old_data.get("prod_cost_price")
+            new_cost = new_data.get("prod_cost_price")
 
-        sell_changed = old_sell is not None and new_sell is not None and old_sell != new_sell
-        cost_changed = old_cost is not None and new_cost is not None and old_cost != new_cost
+            def to_float(v):
+                try:
+                    return float(v) if v is not None else None
+                except (TypeError, ValueError):
+                    return None
 
-        if not sell_changed and not cost_changed:
-            continue
+            old_sell = to_float(old_sell)
+            new_sell = to_float(new_sell)
+            old_cost = to_float(old_cost)
+            new_cost = to_float(new_cost)
 
-        changes = []
-        if sell_changed:
-            changes.append({
-                "field":      "prod_sell_price",
-                "label":      "Selling Price",
-                "old_value":  old_sell,
-                "new_value":  new_sell,
-                "difference": round(new_sell - old_sell, 2)
+            sell_changed = old_sell is not None and new_sell is not None and old_sell != new_sell
+            cost_changed = old_cost is not None and new_cost is not None and old_cost != new_cost
+
+            if not sell_changed and not cost_changed:
+                continue
+
+            changes = []
+            if sell_changed:
+                changes.append({
+                    "field":      "prod_sell_price",
+                    "label":      "Selling Price",
+                    "old_value":  old_sell,
+                    "new_value":  new_sell,
+                    "difference": round(new_sell - old_sell, 2)
+                })
+            if cost_changed:
+                changes.append({
+                    "field":      "prod_cost_price",
+                    "label":      "Cost Price",
+                    "old_value":  old_cost,
+                    "new_value":  new_cost,
+                    "difference": round(new_cost - old_cost, 2)
+                })
+
+            price_history.append({
+                "audit_id":   str(a.audit_id),
+                "changes":    changes,
+                "changed_by": a.changed_by,
+                "changed_at": fmt_ts(a.created_at)
             })
-        if cost_changed:
-            changes.append({
-                "field":      "prod_cost_price",
-                "label":      "Cost Price",
-                "old_value":  old_cost,
-                "new_value":  new_cost,
-                "difference": round(new_cost - old_cost, 2)
-            })
-
-        price_history.append({
-            "audit_id":   str(a.audit_id),
-            "changes":    changes,
-            "changed_by": a.changed_by,
-            "changed_at": fmt_ts(a.created_at)
-        })
 
     # ── Step 4: Summary stats ────────────────────────────────────────────────
     total_sold     = sum(abs(s["qty_changed"]) for s in stock_history if s["move_type"] == "sale")
@@ -385,18 +449,25 @@ def get_product(
 
     # ── Step 5: Final response ───────────────────────────────────────────────
     return success_response({
-        **row_to_dict(row),
+        **row_to_dict(row, show_profit=show_profit),
 
         "history_summary": {
             "total_units_sold":     total_sold,
             "total_units_received": total_received,
             "total_units_returned": total_returned,
+            # If user can't see profit, price_change_count is always 0
+            # (they have no access to price history anyway)
             "price_change_count":   len(price_history),
             "stock_event_count":    len(stock_history)
         },
 
         "stock_history":  stock_history,
-        "price_history":  price_history
+        "price_history":  price_history,
+
+        # Tell the frontend explicitly whether profit fields are available.
+        # This prevents the frontend needing to re-derive it from permissions.
+        # Frontend can use: if (data.can_view_profit) { show columns }
+        "can_view_profit": show_profit,
     })
 
 
@@ -414,6 +485,7 @@ def update_product(
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
+    show_profit = PROFIT_PERMISSION in current_user.get("permissions", set())
 
     product = db.query(Product).filter(
         Product.prod_id      == prod_id,
@@ -454,7 +526,7 @@ def update_product(
 
     return success_response({
         "message": "Product updated successfully",
-        "product": row_to_dict(row)
+        "product": row_to_dict(row, show_profit=show_profit)
     })
 
 

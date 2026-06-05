@@ -9,6 +9,7 @@ from app.models.supplier import Supplier
 from app.schemas.supplier import SupplierCreate, SupplierUpdate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
+from app.utils.timestamp import fmt_ts
 from typing import Optional
 
 router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
@@ -33,10 +34,10 @@ def supplier_to_dict(s, last_updated_by=None) -> dict:
         "supp_country_code": s.supp_country_code,
         "supp_tax_number":   s.supp_tax_number,
         "is_deleted":        s.is_deleted,
-        "supp_created_at":   str(s.supp_created_at) if s.supp_created_at else None,
+        "supp_created_at":   fmt_ts(s.supp_created_at),
         # DB trigger trg_suppliers_updated_at auto-sets updated_at on every UPDATE.
         # We never set updated_at manually in Python — the trigger handles it.
-        "updated_at":        str(s.updated_at) if s.updated_at else None,
+        "updated_at":        fmt_ts(s.updated_at),
         "updated_by":        str(s.updated_by) if s.updated_by else None,
         "last_updated_by":   last_updated_by,
     }
@@ -171,8 +172,8 @@ def get_all_suppliers(
             "supp_country_code": r.supp_country_code,
             "supp_tax_number":   r.supp_tax_number,
             "is_deleted":        r.is_deleted,
-            "supp_created_at":   str(r.supp_created_at) if r.supp_created_at else None,
-            "updated_at":        str(r.updated_at)       if r.updated_at       else None,
+            "supp_created_at":   fmt_ts(r.supp_created_at),
+            "updated_at":        fmt_ts(r.updated_at),
             "updated_by":        str(r.updated_by)       if r.updated_by       else None,
             "last_updated_by":   r.last_updated_by       if r.last_updated_by  else None,
         }

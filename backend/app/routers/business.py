@@ -6,6 +6,7 @@ from app.middleware.rbac import require_permission
 from app.utils.response import success_response, error_response
 from app.schemas.business import BusinessCreate, BusinessUpdate, BusinessResponse
 from app.models.business import Business
+from app.utils.timestamp import fmt_ts
 import uuid
 
 router = APIRouter(
@@ -77,7 +78,7 @@ def get_staff(
             "full_name": row.full_name,
             "role": row.role,
             "is_active": row.is_active,
-            "created_at": str(row.created_at)
+            "created_at": fmt_ts(row.created_at)
         }
         for row in result
     ]

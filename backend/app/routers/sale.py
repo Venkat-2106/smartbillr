@@ -18,6 +18,7 @@ from app.utils.pagination import paginate, pagination_response
 # FIX: Import helpers from utils — NOT from routers/payment.py
 # This removes the circular-import risk between sale.py and payment.py.
 from app.utils.payment_helpers import record_payment_and_sync, calculate_payment_status
+from app.utils.timestamp import fmt_ts
 
 import uuid
 import re
@@ -529,7 +530,7 @@ def get_sales(
             "sales_payment_method": r.sales_payment_method,
             "total_paid":           round(total_paid, 2),
             "remaining_balance":    remaining if remaining > 0 else 0,
-            "sales_created_at":     str(r.sales_created_at)
+            "sales_created_at":     fmt_ts(r.sales_created_at)
         })
 
     return success_response(
@@ -632,7 +633,7 @@ def get_sale(
         # ── NEW payment summary fields ──
         "total_paid":            round(total_paid, 2),
         "remaining_balance":     remaining if remaining > 0 else 0,
-        "sales_created_at":      str(sale.sales_created_at),
+        "sales_created_at":      fmt_ts(sale.sales_created_at),
         "items":                 items_data
     })
 

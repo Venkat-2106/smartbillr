@@ -149,7 +149,7 @@ function buildCustomerPrintHTML(business, customer, summary, salesHistory) {
     { label: 'State',           value: customer.cust_state || '—' },
     { label: 'Country',         value: country },
     { label: 'GSTIN / Tax No.', value: customer.cust_tax_number || '—' },
-    { label: 'Customer Since',  value: new Date(customer.cust_created_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) },
+    { label: 'Customer Since',  value: formatDate(customer.cust_created_at) },
   ]
   if (customer.cust_address) {
     metaFields.push({ label: 'Address', value: customer.cust_address })
@@ -190,7 +190,7 @@ function buildCustomerPrintHTML(business, customer, summary, salesHistory) {
     const status    = row.payment_summary?.current_status || '—'
     const sColor    = paymentStatusColor(status)
     const bg        = i % 2 === 0 ? '#ffffff' : '#f9fafb'
-    const dateStr   = new Date(row.sales_created_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
+    const dateStr   = formatDate(row.sales_created_at)
     return `<tr style="background:${bg};">
       <td style="padding:7px 8px;font-size:12px;color:#111827;text-align:left;">${row.invoice_no || '—'}</td>
       <td style="padding:7px 8px;font-size:12px;color:#374151;text-align:left;">${dateStr}</td>

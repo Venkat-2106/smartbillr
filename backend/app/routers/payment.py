@@ -14,6 +14,7 @@ from app.utils.pagination import paginate, pagination_response
 # FIX: Helpers now imported from utils/payment_helpers.py
 # NOT defined here anymore — avoids circular import with sale.py
 from app.utils.payment_helpers import record_payment_and_sync, calculate_payment_status
+from app.utils.timestamp import fmt_ts
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -60,7 +61,7 @@ def payment_to_dict(p) -> dict:
         "payment_method":  p.payment_method,
         "payment_status":  p.payment_status,
         "is_active":       p.is_active,
-        "payment_paid_at": str(p.payment_paid_at) if p.payment_paid_at else None
+        "payment_paid_at": fmt_ts(p.payment_paid_at)
     }
 
 
@@ -175,7 +176,7 @@ def create_payment(
             "payment_method":  payment.payment_method,
             "payment_status":  payment.payment_status,
             "is_active":       payment.is_active,
-            "payment_paid_at": str(payment.payment_paid_at) if payment.payment_paid_at else None
+            "payment_paid_at": fmt_ts(payment.payment_paid_at)
         }
     }, status_code=201)
 

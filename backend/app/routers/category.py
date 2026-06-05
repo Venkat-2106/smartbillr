@@ -9,6 +9,7 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryResponse
 from app.models.category import Category
+from app.utils.timestamp import fmt_ts
 import uuid
 
 router = APIRouter(
@@ -103,10 +104,10 @@ def get_categories(
             "business_id":     str(r.business_id),
             "category_name":   r.category_name,
             "is_deleted":      r.is_deleted,
-            "created_at":      str(r.created_at)  if r.created_at  else None,
+            "created_at":      fmt_ts(r.created_at),
             "created_by":      str(r.created_by)  if r.created_by  else None,
             "created_by_name": r.created_by_name  if r.created_by_name  else None,
-            "updated_at":      str(r.updated_at)  if r.updated_at  else None,
+            "updated_at":      fmt_ts(r.updated_at),
             "updated_by":      str(r.updated_by)  if r.updated_by  else None,
             "last_updated_by": r.last_updated_by  if r.last_updated_by  else None,
         }
@@ -193,8 +194,8 @@ def get_category(
             "unit":                 p.unit,
             "is_low_stock":         is_low_stock,
             "stock_value":          round(stock_value, 2),
-            "prod_created_at":      str(p.prod_created_at) if p.prod_created_at else None,
-            "updated_at":           str(p.updated_at) if p.updated_at else None
+            "prod_created_at":      fmt_ts(p.prod_created_at),
+            "updated_at":           fmt_ts(p.updated_at)
         })
 
     total_products  = len(products)
@@ -206,10 +207,10 @@ def get_category(
         "business_id":     str(cat_row.business_id),
         "category_name":   cat_row.category_name,
         "is_deleted":      cat_row.is_deleted,
-        "created_at":      str(cat_row.created_at)  if cat_row.created_at  else None,
+        "created_at":      fmt_ts(cat_row.created_at),
         "created_by":      str(cat_row.created_by)  if cat_row.created_by  else None,
         "created_by_name": cat_row.created_by_name  or None,
-        "updated_at":      str(cat_row.updated_at)  if cat_row.updated_at  else None,
+        "updated_at":      fmt_ts(cat_row.updated_at),
         "updated_by":      str(cat_row.updated_by)  if cat_row.updated_by  else None,
         "last_updated_by": cat_row.last_updated_by  or None,
         "summary": {
@@ -338,8 +339,8 @@ def _category_to_dict(category: Category, last_updated_by=None):
         "business_id":    str(category.business_id),
         "category_name":  category.category_name,
         "is_deleted":     category.is_deleted,
-        "created_at":     str(category.created_at) if category.created_at else None,
-        "updated_at":     str(category.updated_at) if category.updated_at else None,
+        "created_at":     fmt_ts(category.created_at),
+        "updated_at":     fmt_ts(category.updated_at),
         "updated_by":     str(category.updated_by) if category.updated_by else None,
         "last_updated_by": last_updated_by,
     }

@@ -11,7 +11,7 @@
 #   pr2 → resolves created_by  → created_by_name
 # This is a single efficient JOIN — no N+1 queries.
 
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
@@ -22,6 +22,7 @@ from app.models.category import Category
 from app.schemas.product import ProductCreate, ProductUpdate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
+from app.utils.timestamp import fmt_ts
 from sqlalchemy.exc import IntegrityError
 from typing import Optional
 
@@ -75,10 +76,10 @@ def row_to_dict(row):
         "unit":                 row.unit,
         "is_deleted":           row.is_deleted,
         # ── Audit fields ──────────────────────────────────────────────────
-        "prod_created_at":      str(row.prod_created_at) if row.prod_created_at else None,
+        "prod_created_at":      fmt_ts(row.prod_created_at),
         "created_by":           str(row.created_by)  if row.created_by  else None,
         "created_by_name":      row.created_by_name  if row.created_by_name  else None,
-        "updated_at":           str(row.updated_at)  if row.updated_at  else None,
+        "updated_at":           fmt_ts(row.updated_at),
         "updated_by":           str(row.updated_by)  if row.updated_by  else None,
         "last_updated_by":      row.last_updated_by  if row.last_updated_by  else None,
     }
@@ -118,7 +119,7 @@ def create_product(
         barcode               = data.barcode,
         unit                  = data.unit,
         # ── Audit ─────────────────────────────────────────────────────────
-        prod_created_at       = datetime.utcnow(),   # explicit set; DB DEFAULT is fallback
+        prod_created_at       = datetime.now(timezone.utc),   # explicit set; DB DEFAULT is fallback
         created_by            = current_user["user_id"],
         updated_by            = current_user["user_id"],  # same user on first save
     )
@@ -301,7 +302,7 @@ def get_product(
             "purchase_reference_id": str(s.purchase_reference_id) if s.purchase_reference_id else None,
             "notes":                 s.move_notes,
             "changed_by":            s.changed_by,
-            "changed_at":            str(s.move_created_at) if s.move_created_at else None
+            "changed_at":            fmt_ts(s.move_created_at)
         })
 
     # ── Step 3: Price change history from audit_logs ─────────────────────────
@@ -374,7 +375,7 @@ def get_product(
             "audit_id":   str(a.audit_id),
             "changes":    changes,
             "changed_by": a.changed_by,
-            "changed_at": str(a.created_at) if a.created_at else None
+            "changed_at": fmt_ts(a.created_at)
         })
 
     # ── Step 4: Summary stats ────────────────────────────────────────────────

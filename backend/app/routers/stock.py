@@ -8,6 +8,7 @@ from app.models.product import Product
 from app.schemas.stock import StockAdjustment
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
+from app.utils.timestamp import fmt_ts
 import uuid
 
 router = APIRouter(prefix="/stock", tags=["Stock"])
@@ -30,7 +31,7 @@ def movement_to_dict(m):
         "reference_type":        m.reference_type,
         "reference_id":          str(m.reference_id) if m.reference_id else None,
         "move_notes":            m.move_notes,
-        "move_created_at":       str(m.move_created_at) if m.move_created_at else None,
+        "move_created_at":       fmt_ts(m.move_created_at),
         "move_created_by":       str(m.move_created_by) if m.move_created_by else None
     }
 
@@ -46,7 +47,7 @@ def alert_to_dict(a):
         "alert_stock_qty": a.alert_stock_qty,
         "alert_threshold": a.alert_threshold,
         "alert_status":    a.alert_status,
-        "alert_created_at": str(a.alert_created_at) if a.alert_created_at else None
+        "alert_created_at": fmt_ts(a.alert_created_at)
     }
 
 

@@ -59,7 +59,7 @@ function buildProductPrintHTML(business, product, detail, summary, stockHistory,
 
   // Audit fields — separate section, matching CategoryDetailDrawer print pattern
   const fmtPrintDate = (dt) =>
-    dt ? new Date(dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+    formatDate(dt)
 
   const auditFields = [
     { label: 'Created On',       value: fmtPrintDate(p.prod_created_at || product.prod_created_at) },

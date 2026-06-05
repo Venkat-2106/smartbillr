@@ -7,6 +7,7 @@ from app.models.expense import Expense
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
+from app.utils.timestamp import fmt_ts, fmt_date
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
@@ -20,10 +21,10 @@ def expense_to_dict(e):
         "business_id": str(e.business_id),
         "expense_category": e.expense_category,
         "expense_amount": float(e.expense_amount),
-        "expense_date": str(e.expense_date) if e.expense_date else None,
+        "expense_date": fmt_date(e.expense_date),
         "expense_notes": e.expense_notes,
         "is_deleted": e.is_deleted,
-        "created_at": str(e.created_at) if e.created_at else None,
+        "created_at": fmt_ts(e.created_at),
         "created_by": str(e.created_by) if e.created_by else None
     }
 

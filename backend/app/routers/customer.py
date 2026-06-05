@@ -21,6 +21,7 @@ from app.models.customer import Customer
 from app.schemas.customer import CustomerCreate, CustomerUpdate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
+from app.utils.timestamp import fmt_ts
 from typing import Optional
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
@@ -42,8 +43,8 @@ def customer_to_dict(c, last_updated_by=None) -> dict:
         "cust_country_code": c.cust_country_code,
         "cust_tax_number":   c.cust_tax_number,
         "is_deleted":        c.is_deleted,
-        "cust_created_at":   str(c.cust_created_at) if c.cust_created_at else None,
-        "updated_at":        str(c.updated_at)      if c.updated_at      else None,
+        "cust_created_at":   fmt_ts(c.cust_created_at),
+        "updated_at":        fmt_ts(c.updated_at),
         "updated_by":        str(c.updated_by)      if c.updated_by      else None,
         "last_updated_by":   last_updated_by,
     }
@@ -196,8 +197,8 @@ def get_all_customers(
             "cust_country_code": r.cust_country_code,
             "cust_tax_number":   r.cust_tax_number,
             "is_deleted":        r.is_deleted,
-            "cust_created_at":   str(r.cust_created_at) if r.cust_created_at else None,
-            "updated_at":        str(r.updated_at)      if r.updated_at      else None,
+            "cust_created_at":   fmt_ts(r.cust_created_at),
+            "updated_at":        fmt_ts(r.updated_at),
             "updated_by":        str(r.updated_by)      if r.updated_by      else None,
             "last_updated_by":   r.last_updated_by      if r.last_updated_by else None,
         }
@@ -370,7 +371,7 @@ def get_customer(
             "return_status":     r.return_status,
             "refund_method":     r.refund_method,
             "restock":           r.restock,
-            "return_created_at": str(r.return_created_at) if r.return_created_at else None
+            "return_created_at": fmt_ts(r.return_created_at)
         })
 
     # ── Assemble response ─────────────────────────────────────────
@@ -411,7 +412,7 @@ def get_customer(
             "sales_final_amount":   sale_final,
             "sales_payment_method": sale.sales_payment_method,
             "sales_payment_status": sale.sales_payment_status,
-            "sales_created_at":     str(sale.sales_created_at) if sale.sales_created_at else None,
+            "sales_created_at":     fmt_ts(sale.sales_created_at),
             "payment_summary":      payment_summary,
             "items":                items_by_sale.get(sale_id, []),
             "returns":              returns_by_sale.get(sale_id, []),

@@ -59,26 +59,13 @@
 //   }
 // ═══════════════════════════════════════════════════════════════
 
+import { formatGeneratedOn } from './formatDate';
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-/**
- * Returns formatted "Generated On: 31 May 2026 | 10:42 PM" string.
- * Uses the user's local timezone (browser's Date object).
- */
-export function formatGeneratedOn() {
-  const now = new Date();
-  const datePart = now.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  });
-  const timePart = now.toLocaleTimeString('en-IN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  }).toUpperCase();
-  return `${datePart} | ${timePart}`;
-}
+// formatGeneratedOn() is defined in ./formatDate.js
+// It is re-exported below so printUtils callers can import it from here too.
+export { formatGeneratedOn };
 
 // ── Core print node ──────────────────────────────────────────────────────────
 

@@ -8,6 +8,7 @@ from app.models.sale import Sale
 from app.schemas.sales_return import SalesReturnCreate, SalesReturnUpdate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
+from app.utils.timestamp import fmt_ts
 from decimal import Decimal
 import uuid
 
@@ -47,9 +48,9 @@ def return_to_dict(r, items):
         "stock_updated": r.stock_updated,
         "refund_method": r.refund_method,
         "approved_by": str(r.approved_by) if r.approved_by else None,
-        "approved_at": str(r.approved_at) if r.approved_at else None,
+        "approved_at": fmt_ts(r.approved_at),
         "rejected_reason": r.rejected_reason,
-        "return_created_at": str(r.return_created_at) if r.return_created_at else None,
+        "return_created_at": fmt_ts(r.return_created_at),
         "created_by": str(r.created_by) if r.created_by else None,
         "items": [return_item_to_dict(i) for i in items]
     }

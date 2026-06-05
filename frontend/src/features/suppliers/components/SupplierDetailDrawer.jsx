@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatDate } from '../../../shared/utils/formatDate';
 import {
   XMarkIcon,
   BuildingOfficeIcon,
@@ -20,13 +21,7 @@ import {
 } from '../../../shared/utils/printUtils';
 import useAuthStore from '../../../store/authStore';
 
-// Local date formatter (matches the rest of the drawer)
-const fmtDate = (dt) => {
-  if (!dt) return '—';
-  return new Date(dt).toLocaleDateString('en-IN', {
-    day: '2-digit', month: 'short', year: 'numeric',
-  });
-};
+// Date formatting uses the shared formatDate() utility from shared/utils/formatDate.js
 
 // ── Print builder ─────────────────────────────────────────────────────────────
 function buildSupplierPrintHTML(business, supplier) {
@@ -40,8 +35,8 @@ function buildSupplierPrintHTML(business, supplier) {
 
   const metaRecord = [
     { label: 'Tax / GSTIN / VAT', value: supplier.supp_tax_number || '—' },
-    { label: 'Added On',          value: fmtDate(supplier.supp_created_at) },
-    { label: 'Last Updated',      value: fmtDate(supplier.updated_at) },
+    { label: 'Added On',          value: formatDate(supplier.supp_created_at) },
+    { label: 'Last Updated',      value: formatDate(supplier.updated_at) },
     { label: 'Last Updated By',   value: supplier.last_updated_by || '—' },
   ];
 
@@ -188,9 +183,9 @@ export default function SupplierDetailDrawer({ supplier, onClose }) {
 
           <DrawerSection title="Record Information">
             <InfoRow icon={<CalendarDaysIcon />} label="Added On"
-              value={fmtDate(supplier.supp_created_at)} />
+              value={formatDate(supplier.supp_created_at)} />
             <InfoRow icon={<CalendarDaysIcon />} label="Last Updated"
-              value={fmtDate(supplier.updated_at)} />
+              value={formatDate(supplier.updated_at)} />
             <InfoRow icon={<UserIcon />}          label="Last Updated By"
               value={supplier.last_updated_by || '—'} isLast />
           </DrawerSection>

@@ -1,3 +1,4 @@
+import { formatDateCSV, formatDateOnlyCSV } from './formatDate';
 // shared/utils/csvExport.js
 //
 // CSV export utility for SmartBillr.
@@ -171,7 +172,7 @@ export const CUSTOMER_CSV_COLUMNS = [
   { key: 'cust_country_code', label: 'Country Code' },
   { key: 'cust_tax_number',   label: 'Tax / GST Number' },
   { key: 'updated_at',        label: 'Last Updated',
-    format: (val) => val ? new Date(val).toLocaleDateString('en-IN') : '' },
+    format: (val) => formatDateCSV(val) },
   { key: 'last_updated_by',   label: 'Last Updated By',
     format: (val) => val || '' },
 ];
@@ -186,7 +187,7 @@ export const SUPPLIER_CSV_COLUMNS = [
   { key: 'supp_country_code', label: 'Country' },
   { key: 'supp_tax_number',   label: 'Tax Number' },
   { key: 'updated_at',        label: 'Last Updated',
-    format: (val) => val ? new Date(val).toLocaleDateString('en-IN') : '' },
+    format: (val) => formatDateCSV(val) },
   // DB now has updated_by column (migration done) — last_updated_by is returned
   // by the GET /suppliers list via LEFT JOIN profiles on updated_by.
   { key: 'last_updated_by',   label: 'Last Updated By',
@@ -209,11 +210,11 @@ export const PRODUCT_CSV_COLUMNS = [
   // Audit columns — all four fields are returned by GET /products/ list
   // via the double LEFT JOIN on profiles (pr1=updated_by, pr2=created_by).
   { key: 'prod_created_at',     label: 'Created On',
-    format: (val) => val ? new Date(val).toLocaleDateString('en-IN') : '' },
+    format: (val) => formatDateCSV(val) },
   { key: 'created_by_name',     label: 'Created By',
     format: (val) => val || '' },
   { key: 'updated_at',          label: 'Last Updated',
-    format: (val) => val ? new Date(val).toLocaleDateString('en-IN') : '' },
+    format: (val) => formatDateCSV(val) },
   { key: 'last_updated_by',     label: 'Last Updated By',
     format: (val) => val || '' },
 ];
@@ -224,11 +225,11 @@ export const CATEGORY_CSV_COLUMNS = [
   // Audit columns — all four fields are returned by GET /categories/ list
   // via the double LEFT JOIN on profiles (p1=updated_by, p2=created_by).
   { key: 'created_at',      label: 'Created On',
-    format: (val) => val ? new Date(val).toLocaleDateString('en-IN') : '' },
+    format: (val) => formatDateCSV(val) },
   { key: 'created_by_name', label: 'Created By',
     format: (val) => val || '' },
   { key: 'updated_at',      label: 'Last Updated',
-    format: (val) => val ? new Date(val).toLocaleDateString('en-IN') : '' },
+    format: (val) => formatDateCSV(val) },
   { key: 'last_updated_by', label: 'Last Updated By',
     format: (val) => val || '' },
 ];
@@ -238,7 +239,7 @@ export const EXPENSE_CSV_COLUMNS = [
   { key: 'expense_category', label: 'Category' },
   { key: 'expense_amount',   label: 'Amount' },
   { key: 'expense_date',     label: 'Date',
-    format: (val) => val ? new Date(val).toLocaleDateString('en-IN') : '' },
+    format: (val) => formatDateOnlyCSV(val) },
   { key: 'expense_notes',    label: 'Notes' },
 ];
 
@@ -261,5 +262,5 @@ export const SALES_CSV_COLUMNS = [
   { key: 'payment_status',     label: 'Payment Status' },
   { key: 'payment_method',     label: 'Payment Method' },
   { key: 'sales_created_at',   label: 'Invoice Date',
-    format: (val) => val ? new Date(val).toLocaleDateString('en-IN') : '' },
+    format: (val) => formatDateCSV(val) },
 ];

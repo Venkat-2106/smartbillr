@@ -9,6 +9,7 @@ from app.models.supplier import Supplier
 from app.schemas.purchase import PurchaseCreate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
+from app.utils.timestamp import fmt_ts
 from decimal import Decimal
 import uuid
 from pydantic import BaseModel
@@ -113,7 +114,7 @@ def purchase_row_to_dict(row, items):
         "pur_final_amount": float(row.pur_final_amount) if row.pur_final_amount else None,
         "pur_payment_status": row.pur_payment_status,
         "is_deleted":       row.is_deleted,
-        "pur_created_at":   str(row.pur_created_at) if row.pur_created_at else None,
+        "pur_created_at":   fmt_ts(row.pur_created_at),
         "created_by":       str(row.created_by) if row.created_by else None,
         "items":            [purchase_item_to_dict(i) for i in items]
     }
@@ -517,10 +518,10 @@ def get_purchase(
             "stock_updated":     ret.stock_updated,
             "refund_method":     ret.refund_method,
             "approved_by":       str(ret.approved_by) if ret.approved_by else None,
-            "approved_at":       str(ret.approved_at) if ret.approved_at else None,
+            "approved_at":       fmt_ts(ret.approved_at),
             "rejected_reason":   ret.rejected_reason,
             "return_amount":     float(ret.return_amount) if ret.return_amount else 0.0,
-            "return_created_at": str(ret.return_created_at) if ret.return_created_at else None,
+            "return_created_at": fmt_ts(ret.return_created_at),
             "created_by":        str(ret.created_by) if ret.created_by else None,
             "total_refund_amount": float(ret.total_refund_amount or 0),
             "items": [

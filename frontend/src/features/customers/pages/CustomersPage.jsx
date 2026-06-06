@@ -441,10 +441,19 @@ export default function CustomersPage() {
       </div>
 
       {/* PAGINATION */}
+      {/* ROOT-CAUSE FIX: Pagination component expects a `pagination` object,  */}
+      {/* not individual `page` / `totalPages` props.                           */}
+      {/* Passing individual props means the `pagination` destructured prop is  */}
+      {/* always undefined → component returns null immediately → no UI shows.  */}
       {!activeSearch && !activeDateFilter && (
         <Pagination
-          page={page}
-          totalPages={totalPages}
+          pagination={{
+            page,
+            total_pages: totalPages,
+            total:       totalItems,
+            has_next:    page < totalPages,
+            has_prev:    page > 1,
+          }}
           onPageChange={setPage}
         />
       )}

@@ -238,9 +238,21 @@ export default function SalesPage() {
         }
       </div>
 
+      {/* ROOT-CAUSE FIX: Pagination expects a `pagination` object, not        */}
+      {/* individual `page` / `totalPages` props. Same bug as Customers and     */}
+      {/* Suppliers. Without this, the component returns null immediately.      */}
       {!anyFilterActive && totalPages > 1 && (
         <div style={{ marginTop: 16 }}>
-          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+          <Pagination
+            pagination={{
+              page,
+              total_pages: totalPages,
+              total:       totalItems,
+              has_next:    page < totalPages,
+              has_prev:    page > 1,
+            }}
+            onPageChange={setPage}
+          />
         </div>
       )}
 

@@ -296,9 +296,23 @@ export default function SuppliersPage() {
       </div>
 
       {/* Pagination */}
+      {/* ROOT-CAUSE FIX (2 bugs):                                              */}
+      {/* Bug 1 — `page` and `totalPages` passed as individual props, but       */}
+      {/*   Pagination expects a `pagination` object → component returned null. */}
+      {/* Bug 2 — `onChange` is not a prop of Pagination; correct is            */}
+      {/*   `onPageChange` — fixing the object alone was not enough.            */}
       {!activeSearch && !activeDateFilter && totalPages > 1 && (
         <div style={{ marginTop: 16 }}>
-          <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+          <Pagination
+            pagination={{
+              page,
+              total_pages: totalPages,
+              total:       totalItems,
+              has_next:    page < totalPages,
+              has_prev:    page > 1,
+            }}
+            onPageChange={setPage}
+          />
         </div>
       )}
 

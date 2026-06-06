@@ -1,5 +1,15 @@
 // src/features/products/pages/ProductsPage.jsx
 //
+// BARCODE CHANGES (2026-06-06):
+//   - AddProductForm / EditProductForm: barcode field now has a "Generate" button
+//   - Generate creates a 13-digit EAN-style barcode (12 random + check digit)
+//   - onBlur fires checkBarcode() — shows inline duplicate error if barcode taken
+//   - USB scanner support: handleBarcodeKeyDown/Up prevent form submission on Enter
+//   - barcodeError + onBarcodeErrorClear props added (mirrors nameError pattern)
+//   - doCreate/doUpdate catch "barcode already exists" and surface inline
+//   - excludeProdId passed to EditProductForm for self-barcode check
+//   No layout, column, modal, permission, or architecture changes.
+//
 // VALIDATION CHANGES (2026-06-06):
 //
 // ── Feature 1: Cost Price vs Sale Price Confirmation ─────────────────────────
@@ -29,7 +39,7 @@
 //   ✅ Profit permission gate (canViewProfit) for cost/profit columns + form
 //   ✅ Zod .trim() on prod_name (trimmed before schema min/max check)
 
-import { useState, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -62,6 +72,7 @@ import {
   useUpdateProduct,
   useDeleteProduct,
 } from '../hooks/useProducts'
+import { checkBarcode } from '../api/productsApi'
 import ProductDetailDrawer from '../components/ProductDetailDrawer'
 
 // ── Unit options ───────────────────────────────────────────────────────────────
@@ -153,8 +164,8 @@ const dateInputStyle = {
 //   nameError        — string | null  — server-side "name already exists" error
 //   onNameErrorClear — () => void     — called on first keystroke in Name field
 //                                       so the red error banner disappears
-function AddProductForm({ onSubmit, onClose, isPending, categories, canViewProfit, nameError, onNameErrorClear }) {
-  const { register, handleSubmit, formState: { errors } } = useForm({
+function AddProductForm({ onSubmit, onClose, isPending, categories, canViewProfit, nameError, onNameErrorClear, barcodeError, onBarcodeErrorClear }) {
+  const { register, handleSubmit, setValue, formState: { errors } } = useForm({
     resolver: zodResolver(createSchema),
     defaultValues: {
       prod_stock_qty:       0,
@@ -168,7 +179,32 @@ function AddProductForm({ onSubmit, onClose, isPending, categories, canViewProfi
   // Combine Zod client-side error with server-side name error.
   // Zod error takes priority (runs first). Server error shows only after a
   // successful Zod pass but a failed API call.
-  const nameFieldError = errors.prod_name || (nameError ? { message: nameError } : undefined)
+  const nameFieldError    = errors.prod_name || (nameError    ? { message: nameError    } : undefined)
+  const barcodeFieldError = errors.barcode   || (barcodeError ? { message: barcodeError } : undefined)
+
+  // ── Barcode: generate EAN-13 barcode ────────────────────────────────────────
+  function generateBarcode() {
+    const digits = Array.from({ length: 12 }, () => Math.floor(Math.random() * 10))
+    const sum = digits.reduce((acc, d, i) => acc + d * (i % 2 === 0 ? 1 : 3), 0)
+    const check = (10 - (sum % 10)) % 10
+    setValue('barcode', [...digits, check].join(''), { shouldValidate: true })
+    onBarcodeErrorClear?.(null)
+  }
+
+  // ── Barcode: async duplicate check on blur ───────────────────────────────────
+  async function handleBarcodeBlur(e) {
+    const val = e.target.value?.trim()
+    if (!val) return
+    try {
+      const taken = await checkBarcode(val)
+      if (taken) onBarcodeErrorClear?.('A product with this barcode already exists.')
+    } catch { /* backend will validate on submit */ }
+  }
+
+  // ── Barcode: USB scanner sends Enter after digits — prevent form submit ──────
+  function handleBarcodeKeyUp(e) {
+    if (e.key === 'Enter') e.preventDefault()
+  }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
@@ -230,8 +266,27 @@ function AddProductForm({ onSubmit, onClose, isPending, categories, canViewProfi
         </FormField>
       </div>
 
-      <FormField label="Barcode" error={errors.barcode} helper="Optional" style={{ marginBottom: 8 }}>
-        <Input placeholder="e.g. 8901234567890" {...register('barcode')} />
+      {/* BARCODE FIX: Generate button + scanner support + inline duplicate error */}
+      <FormField label="Barcode" error={barcodeFieldError} helper="Scan, type, or generate" style={{ marginBottom: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <Input
+            placeholder="e.g. 8901234567890"
+            {...register('barcode')}
+            onKeyUp={handleBarcodeKeyUp}
+            onBlur={handleBarcodeBlur}
+            onInput={() => { if (barcodeError) onBarcodeErrorClear?.(null) }}
+            style={{ flex: 1 }}
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={generateBarcode}
+            style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+          >
+            Generate
+          </Button>
+        </div>
       </FormField>
 
       <Modal.Footer>
@@ -244,13 +299,37 @@ function AddProductForm({ onSubmit, onClose, isPending, categories, canViewProfi
 
 // ── Edit Product Form ─────────────────────────────────────────────────────────
 // Same nameError / onNameErrorClear pattern as AddProductForm.
-function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categories, canViewProfit, nameError, onNameErrorClear }) {
-  const { register, handleSubmit, formState: { errors } } = useForm({
+function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categories, canViewProfit, nameError, onNameErrorClear, barcodeError, onBarcodeErrorClear, excludeProdId }) {
+  const { register, handleSubmit, setValue, formState: { errors } } = useForm({
     resolver: zodResolver(editSchema),
     defaultValues,
   })
 
-  const nameFieldError = errors.prod_name || (nameError ? { message: nameError } : undefined)
+  const nameFieldError    = errors.prod_name || (nameError    ? { message: nameError    } : undefined)
+  const barcodeFieldError = errors.barcode   || (barcodeError ? { message: barcodeError } : undefined)
+
+  // ── Barcode helpers (same as AddProductForm) ─────────────────────────────────
+  function generateBarcode() {
+    const digits = Array.from({ length: 12 }, () => Math.floor(Math.random() * 10))
+    const sum = digits.reduce((acc, d, i) => acc + d * (i % 2 === 0 ? 1 : 3), 0)
+    const check = (10 - (sum % 10)) % 10
+    setValue('barcode', [...digits, check].join(''), { shouldValidate: true })
+    onBarcodeErrorClear?.(null)
+  }
+
+  async function handleBarcodeBlur(e) {
+    const val = e.target.value?.trim()
+    if (!val) return
+    try {
+      // excludeProdId: don't flag a product's own barcode as duplicate when editing
+      const taken = await checkBarcode(val, excludeProdId)
+      if (taken) onBarcodeErrorClear?.('A product with this barcode already exists.')
+    } catch { /* backend will validate on submit */ }
+  }
+
+  function handleBarcodeKeyUp(e) {
+    if (e.key === 'Enter') e.preventDefault()
+  }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
@@ -327,8 +406,27 @@ function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categori
         <FormField label="Tax Code (HSN / SAC)" error={errors.tax_code} helper="Optional">
           <Input placeholder="e.g. 1006" {...register('tax_code')} />
         </FormField>
-        <FormField label="Barcode" error={errors.barcode} helper="Optional">
-          <Input placeholder="e.g. 8901234567890" {...register('barcode')} />
+        {/* BARCODE FIX: Generate button + scanner support + inline duplicate error */}
+        <FormField label="Barcode" error={barcodeFieldError} helper="Scan, type, or generate">
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Input
+              placeholder="e.g. 8901234567890"
+              {...register('barcode')}
+              onKeyUp={handleBarcodeKeyUp}
+              onBlur={handleBarcodeBlur}
+              onInput={() => { if (barcodeError) onBarcodeErrorClear?.(null) }}
+              style={{ flex: 1 }}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={generateBarcode}
+              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+            >
+              Generate
+            </Button>
+          </div>
         </FormField>
       </div>
 
@@ -464,8 +562,11 @@ export default function ProductsPage() {
   // These hold the "A product with this name already exists." message from
   // the server. They are separate for Add vs Edit so one modal's error doesn't
   // bleed into the other.
-  const [addNameError,  setAddNameError]  = useState(null)
-  const [editNameError, setEditNameError] = useState(null)
+  const [addNameError,    setAddNameError]    = useState(null)
+  const [editNameError,   setEditNameError]   = useState(null)
+  // BARCODE FIX: barcode error states (mirror name error pattern)
+  const [addBarcodeError,  setAddBarcodeError]  = useState(null)
+  const [editBarcodeError, setEditBarcodeError] = useState(null)
 
   // ── Feature 1: Loss-price confirmation state ──────────────────────────────
   // pendingPayload — the validated form data waiting for user confirmation
@@ -501,6 +602,7 @@ export default function ProductsPage() {
       onSuccess: () => {
         setShowAdd(false)
         setAddNameError(null)
+        setAddBarcodeError(null)  // BARCODE FIX
       },
       onError: (err) => {
         const msg = err?.response?.data?.message || ''
@@ -508,6 +610,10 @@ export default function ProductsPage() {
         // The toast in useProducts.js also fires — that's fine as a fallback.
         if (msg.toLowerCase().includes('name already exists')) {
           setAddNameError(msg)
+        }
+        // BARCODE FIX
+        if (msg.toLowerCase().includes('barcode already exists')) {
+          setAddBarcodeError(msg)
         }
       },
     })
@@ -520,11 +626,16 @@ export default function ProductsPage() {
         onSuccess: () => {
           setEditTarget(null)
           setEditNameError(null)
+          setEditBarcodeError(null)  // BARCODE FIX
         },
         onError: (err) => {
           const msg = err?.response?.data?.message || ''
           if (msg.toLowerCase().includes('name already exists')) {
             setEditNameError(msg)
+          }
+          // BARCODE FIX
+          if (msg.toLowerCase().includes('barcode already exists')) {
+            setEditBarcodeError(msg)
           }
         },
       }
@@ -842,6 +953,8 @@ export default function ProductsPage() {
           canViewProfit={canViewProfit}
           nameError={addNameError}
           onNameErrorClear={() => setAddNameError(null)}
+          barcodeError={addBarcodeError}
+          onBarcodeErrorClear={(msg) => setAddBarcodeError(msg ?? null)}
         />
       </Modal>
 
@@ -875,6 +988,9 @@ export default function ProductsPage() {
             canViewProfit={canViewProfit}
             nameError={editNameError}
             onNameErrorClear={() => setEditNameError(null)}
+          barcodeError={editBarcodeError}
+          onBarcodeErrorClear={(msg) => setEditBarcodeError(msg ?? null)}
+          excludeProdId={editTarget?.prod_id}
           />
         )}
       </Modal>

@@ -44,6 +44,22 @@
 #    The backend does NOT reject such requests. The frontend shows a warning
 #    popup and the user explicitly confirms before the API call is made.
 #    No backend change needed for Feature 1.
+#
+# ── BARCODE CHANGES (2026-06-06) ─────────────────────────────────────────────
+#
+# 1. _find_duplicate_barcode() helper — explicit pre-INSERT/PUT check.
+#    Same pattern as _find_duplicate_name(). Returns a clean 400 BEFORE the
+#    DB constraint fires so the user sees a precise, friendly message.
+#    The DB unique index (uix_products_barcode_business) is the safety net
+#    for concurrent race-condition inserts.
+#
+# 2. GET /products/barcode/{code} — exact barcode lookup endpoint.
+#    Declared BEFORE /{prod_id} so FastAPI does not try to parse "barcode"
+#    as a UUID. Scoped to the caller's business_id (no cross-tenant leakage).
+#    Returns 404 when no active product matches.
+#
+# 3. POST: added explicit barcode duplicate check after name check.
+# 4. PUT:  added explicit barcode duplicate check with exclude_id pattern.
 # ─────────────────────────────────────────────────────────────────────────────
 
 from datetime import datetime, timezone
@@ -148,6 +164,33 @@ def _find_duplicate_name(
         sql += " AND prod_id != CAST(:exclude_id AS uuid)"
         params["exclude_id"] = exclude_id
 
+
+
+# ── Helper: check for duplicate barcode within a business ────────────────────
+# Returns the conflicting prod_id (truthy) if a duplicate exists, else None.
+# Only called when barcode is a non-empty string.
+# exclude_id: pass the current prod_id on PUT so a product is not flagged as
+#             a duplicate of its own unchanged barcode.
+# Exact = match (not ILIKE): barcodes are case-sensitive. Also hits the
+# btree index (business_id, barcode) directly — no full table scan.
+def _find_duplicate_barcode(
+    db:          Session,
+    business_id: str,
+    barcode:     str,
+    exclude_id:  str = None
+):
+    sql = """
+        SELECT prod_id FROM products
+        WHERE business_id = CAST(:bid AS uuid)
+          AND barcode     = :barcode
+          AND is_deleted  = false
+    """
+    params = {"bid": business_id, "barcode": barcode}
+    if exclude_id:
+        sql += " AND prod_id != CAST(:exclude_id AS uuid)"
+        params["exclude_id"] = exclude_id
+    return db.execute(text(sql), params).fetchone()
+
     return db.execute(text(sql), params).fetchone()
 
 
@@ -186,7 +229,16 @@ def create_product(
     if dup:
         return error_response("A product with this name already exists.", 400)
 
-    # ── 3. Create the product ─────────────────────────────────────────────────
+    # ── 3. Duplicate barcode check (BARCODE FIX) ──────────────────────────────
+    # Only runs when a barcode was actually supplied. Empty/None barcodes are
+    # allowed on multiple products — not every product has a barcode.
+    if data.barcode and data.barcode.strip():
+        data.barcode = data.barcode.strip()
+        dup_bc = _find_duplicate_barcode(db, business_id, data.barcode)
+        if dup_bc:
+            return error_response("A product with this barcode already exists.", 400)
+
+    # ── 4. Create the product ─────────────────────────────────────────────────
     new_product = Product(
         business_id           = business_id,
         category_id           = data.category_id,
@@ -294,6 +346,56 @@ def get_all_products(
             pagination["limit"]
         )
     )
+
+
+
+# ══════════════════════════════════════════════════════════════════
+# GET /products/barcode/{code} → Lookup product by exact barcode
+# ══════════════════════════════════════════════════════════════════
+# DECLARED BEFORE /{prod_id}: FastAPI matches routes top-down. If this route
+# were below /{prod_id}, the string "barcode" in the URL would be passed as
+# prod_id and fail UUID parsing.
+#
+# Used by: CreateSalePage scanner, and any future barcode-scan lookup screen.
+# Returns 404 when no active product with this barcode exists in this business.
+# Scoped to caller's business_id — no cross-tenant data leakage.
+@router.get("/barcode/{code}")
+def get_product_by_barcode(
+    code: str,
+    current_user: dict = Depends(require_permission("products.view")),
+    db: Session = Depends(get_db)
+):
+    business_id = current_user["business_id"]
+    show_profit = PROFIT_PERMISSION in current_user.get("permissions", set())
+
+    row = db.execute(
+        text("""
+            SELECT
+                p.prod_id, p.business_id, p.category_id, p.prod_name,
+                p.prod_sell_price, p.prod_cost_price, p.prod_profit,
+                p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
+                p.tax_code, p.barcode, p.unit, p.is_deleted,
+                p.prod_created_at, p.updated_at,
+                p.created_by, p.updated_by,
+                c.category_name,
+                pr1.full_name AS last_updated_by,
+                pr2.full_name AS created_by_name
+            FROM products p
+            LEFT JOIN categories c   ON c.category_id = p.category_id
+            LEFT JOIN profiles   pr1 ON pr1.id = p.updated_by
+            LEFT JOIN profiles   pr2 ON pr2.id = p.created_by
+            WHERE p.business_id = CAST(:business_id AS uuid)
+              AND p.barcode      = :barcode
+              AND p.is_deleted   = false
+            LIMIT 1
+        """),
+        {"business_id": business_id, "barcode": code.strip()}
+    ).fetchone()
+
+    if not row:
+        return error_response(f"No product found with barcode: {code}", status_code=404)
+
+    return success_response(row_to_dict(row, show_profit=show_profit))
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -539,7 +641,16 @@ def update_product(
     if data.prod_low_stock_alert is not None: product.prod_low_stock_alert = data.prod_low_stock_alert
     if data.tax_rate             is not None: product.tax_rate             = data.tax_rate
     if data.tax_code             is not None: product.tax_code             = data.tax_code
-    if data.barcode              is not None: product.barcode              = data.barcode
+    # ── Barcode update with duplicate check (BARCODE FIX) ──────────────────────
+    # Passing barcode="" or None clears the barcode (allowed on PUT).
+    # Non-empty barcodes are validated for uniqueness before saving.
+    if data.barcode is not None:
+        clean_bc = data.barcode.strip() if data.barcode else None
+        if clean_bc:
+            dup_bc = _find_duplicate_barcode(db, business_id, clean_bc, exclude_id=prod_id)
+            if dup_bc:
+                return error_response("A product with this barcode already exists.", 400)
+        product.barcode = clean_bc or None
     if data.unit                 is not None: product.unit                 = data.unit
 
     # Track who last updated — created_by is intentionally left unchanged

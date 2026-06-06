@@ -1,4 +1,15 @@
-from sqlalchemy import Column, String, Boolean, Text, Integer, Numeric, DateTime, ForeignKey, text
+# app/models/product.py
+#
+# BARCODE FIX (2026-06-06):
+#   Added UniqueConstraint for (business_id, barcode) to the ORM model.
+#   This mirrors the partial unique index created in the DB migration
+#   (uix_products_barcode_business). The ORM constraint is used by Alembic
+#   if you ever auto-generate migrations. It does NOT replace the DB index —
+#   the DB index (WHERE barcode IS NOT NULL) is the authoritative constraint.
+#
+#   All other columns, relationships, and comments are unchanged.
+
+from sqlalchemy import Column, String, Boolean, Text, Integer, Numeric, DateTime, ForeignKey, text, UniqueConstraint
 from sqlalchemy.orm import column_property
 from sqlalchemy import Computed
 from sqlalchemy.dialects.postgresql import UUID
@@ -8,6 +19,15 @@ import uuid
 
 class Product(Base):
     __tablename__ = "products"
+
+    # BARCODE FIX: UniqueConstraint mirrors the DB partial unique index
+    # uix_products_barcode_business (business_id, barcode WHERE barcode IS NOT NULL).
+    # SQLAlchemy's __table_args__ UniqueConstraint is the ORM declaration.
+    # The WHERE clause (partial index) is not expressible here — it lives in
+    # the raw SQL migration. This declaration is for ORM completeness only.
+    __table_args__ = (
+        UniqueConstraint('business_id', 'barcode', name='uix_products_barcode_business'),
+    )
 
     prod_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=True)

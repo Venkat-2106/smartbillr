@@ -1,12 +1,15 @@
 // src/features/categories/pages/CategoriesPage.jsx
 //
-// CHANGES IN THIS VERSION:
-//   ✅ Added ExportButton with CATEGORY_CSV_COLUMNS to the PageHeader action slot
-//   All other logic, layout, styles unchanged.
+// EXPORT FIX (2026-06-06):
+//   ExportButton switched from data={exportData} → onFetch={...}
+//   handleExport now added to useCategories() destructuring.
+//   The exportData useMemo block is removed (no longer needed).
+//   All other code is unchanged — layout, columns, modals, styles are identical.
 //
-// PREVIOUS FIXES RETAINED:
+// PREVIOUS CHANGES RETAINED:
 //   ✅ FIX A — Back button added (← Back to Dashboard via useNavigate)
 //   ✅ FIX B — Last Updated By column
+//   ✅ ExportButton with CATEGORY_CSV_COLUMNS
 
 import { useState, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
@@ -81,6 +84,7 @@ export default function CategoriesPage() {
 
   const navigate = useNavigate()
 
+  // EXPORT FIX: added handleExport to destructuring
   const {
     categories,
     allCategories,
@@ -91,6 +95,7 @@ export default function CategoriesPage() {
     setSearch,
     isLoading,
     isError,
+    handleExport,
   } = useCategories()
 
   const [sortKey, setSortKey] = useState(null)
@@ -156,24 +161,8 @@ export default function CategoriesPage() {
     return rows
   }, [categories, allCategories, sortKey, sortDir, dateFrom, dateTo])
 
-  // Export data — always the FULL allCategories set (up to 100) with current
-  // search + date filters applied, but never paginated.
-  // This ensures Export CSV always reflects ALL matching records, not just the
-  // 20 items currently visible on the table page.
-  const exportData = useMemo(() => {
-    let rows = [...allCategories]
-    const q = search.trim().toLowerCase()
-    if (q) rows = rows.filter(r => r.category_name?.toLowerCase().includes(q))
-    if (dateFrom) {
-      const from = new Date(dateFrom); from.setHours(0, 0, 0, 0)
-      rows = rows.filter(r => r.updated_at && new Date(r.updated_at) >= from)
-    }
-    if (dateTo) {
-      const to = new Date(dateTo); to.setHours(23, 59, 59, 999)
-      rows = rows.filter(r => r.updated_at && new Date(r.updated_at) <= to)
-    }
-    return rows
-  }, [allCategories, search, dateFrom, dateTo])
+  // EXPORT FIX: exportData useMemo removed. Export now calls handleExport()
+  // from the hook, which fetches limit=10000 on demand.
 
   const { mutate: createCategory, isPending: isCreating } = useCreateCategory()
   const { mutate: updateCategory, isPending: isUpdating } = useUpdateCategory()
@@ -289,9 +278,11 @@ export default function CategoriesPage() {
         onBack={() => navigate('/dashboard')}
         action={
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            {/* ADDED: Export CSV button */}
+            {/* EXPORT FIX: switched from data={exportData} to onFetch
+                onFetch triggers a fresh limit=10000 fetch when clicked,
+                so export is never capped at 100 records. */}
             <ExportButton
-              data={exportData}
+              onFetch={() => handleExport({ dateFrom, dateTo })}
               filename="categories"
               columns={CATEGORY_CSV_COLUMNS}
             />

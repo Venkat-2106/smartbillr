@@ -1,80 +1,57 @@
-// features/customers/api/customersApi.js
+// src/features/customers/api/customersApi.js
 //
-// All API calls for the Customers feature.
+// EXPORT FIX — 2026-06-06
+// ─────────────────────────────────────────────────────────────────────────────
+// PROBLEM:
+//   fetchCustomers() used limit=100. Businesses with > 100 customers only
+//   had the first 100 loaded into the hook, so both the table search AND the
+//   CSV export silently missed all records beyond the 100th.
 //
-// RULES (from architecture):
-//   - Every call goes through the axios instance (has auth interceptor)
-//   - Use res.data NOT res.data.data (backend has no double wrapper)
-//   - Backend paginated response shape: { items: [...], pagination: {...} }
-//   - Backend single-item response: the object directly
-//   - Never import authStore here — auth is handled by the axios interceptor
+// FIX:
+//   Raised limit to 10000. The backend paginate() le cap was raised to 10000
+//   in this same fix (app/utils/pagination.py).
+//
+//   Customers uses the "full dataset loaded once" pattern (not lazy export)
+//   because the table itself needs all records for client-side filter/sort.
+//   10 000 customer rows returned as JSON is typically < 2 MB — acceptable
+//   for a SaaS app targeting small retail businesses.
+//
+//   If customer counts grow very large (> 5 000), migrate to server-side
+//   search + lazy export following the Sales page pattern.
+// ─────────────────────────────────────────────────────────────────────────────
 
 import api from '../../../api/axios'
 
-// ── GET ALL CUSTOMERS ──────────────────────────────────────────────────────
-// FIX (Bug 3): Added limit=100 param.
-// Without this, the backend defaults to limit=20 — only the first 20 customers
-// are returned. Client-side filter/sort/pagination then silently operates on
-// only those 20 records, missing the rest.
-// Backend supports up to limit=100 (paginate() le=100 cap).
-
+// ── GET ALL CUSTOMERS ─────────────────────────────────────────────────────────
+// limit=10000 — fetches the complete dataset so client-side filter/sort/paginate
+// and CSV export both operate on ALL records, not just the first 100.
 export async function fetchCustomers() {
-  const res = await api.get('/customers', { params: { limit: 100 } })
+  const res = await api.get('/customers', { params: { limit: 10000 } })
 
-  // Handle both possible shapes from backend
-  if (Array.isArray(res.data))         return res.data          // flat array
-  if (Array.isArray(res.data?.items))  return res.data.items    // paginated shape
+  if (Array.isArray(res.data))         return res.data
+  if (Array.isArray(res.data?.items))  return res.data.items
   return []
 }
 
-
-// ── GET SINGLE CUSTOMER (detail + summary + sales history) ─────────────────
-// FIX (Bug 2): Added this function — required by useCustomer() hook.
-// CustomerDetailDrawer calls useCustomer(custId) which calls this.
-// Backend returns: { cust_id, cust_name, ..., summary: {...}, sales_history: [...] }
-
+// ── GET SINGLE CUSTOMER ───────────────────────────────────────────────────────
 export async function fetchCustomer(custId) {
   const res = await api.get(`/customers/${custId}`)
   return res.data
 }
 
-
-// ── CREATE CUSTOMER ────────────────────────────────────────────────────────
-// POST /customers
-//
-// Fields sent to backend:
-//   cust_name          (required)
-//   cust_phone         (optional)
-//   cust_email         (optional)
-//   cust_address       (optional)
-//   cust_country_code  (optional, e.g. 'IN', 'US')
-//   cust_state         (optional, e.g. 'Tamil Nadu')
-//   cust_tax_number    (optional, e.g. GSTIN / VAT number)
-
+// ── CREATE CUSTOMER ───────────────────────────────────────────────────────────
 export async function createCustomer(payload) {
   const res = await api.post('/customers', payload)
   return res.data
 }
 
-
-// ── UPDATE CUSTOMER ────────────────────────────────────────────────────────
-// PUT /customers/{cust_id}
-//
-// Same fields as create — sends only the updated data.
-// Backend uses the cust_id from the URL, NOT from the body.
-
+// ── UPDATE CUSTOMER ───────────────────────────────────────────────────────────
 export async function updateCustomer(id, payload) {
   const res = await api.put(`/customers/${id}`, payload)
   return res.data
 }
 
-
-// ── DELETE CUSTOMER (SOFT DELETE) ─────────────────────────────────────────
-// DELETE /customers/{cust_id}
-//
-// Backend does NOT remove the row — it sets is_deleted = true.
-// This preserves the customer record for sales history.
-
+// ── DELETE CUSTOMER (soft) ────────────────────────────────────────────────────
 export async function deleteCustomer(id) {
   const res = await api.delete(`/customers/${id}`)
   return res.data

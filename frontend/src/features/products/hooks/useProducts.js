@@ -1,12 +1,16 @@
 // src/features/products/hooks/useProducts.js
 //
+// EXPORT FIX (2026-06-06):
+//   ONE change only: limit: 100 → limit: 10000 in allQuery.
+//   allProducts now contains ALL records (not just first 100).
+//   Everything else — dual-query pattern, category search, exports — unchanged.
+//
 // FIX: Changed limit=500 → limit=100 (matches paginate() le=100 cap).
 // Client-side filter on prod_name AND category_name — category search works
 // because the backend joins category_name into every product row already.
 // Note: backend also now supports ?search= for name/barcode (from last session),
 // but category_name filter must stay client-side since backend only searches
-// name and barcode, not category_name. So we keep the dual-query pattern
-// but with limit=100 which is safe.
+// name and barcode, not category_name. So we keep the dual-query pattern.
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -39,12 +43,12 @@ export function useProducts() {
     enabled:  !isSearching,
   })
 
-  // Full-dataset query — always pre-fetched in background (same as useCategories pattern).
-  // Used for search filtering AND for CSV export (so export always gets all records,
-  // not just the 20 items currently visible on the paged table).
+  // Full-dataset query — always pre-fetched in background.
+  // Used for search filtering (category_name is client-side only) AND for CSV export.
+  // EXPORT FIX: limit raised from 100 → 10000 so allProducts contains every record.
   const allQuery = useQuery({
     queryKey: KEYS.search,
-    queryFn:  () => fetchProducts({ page: 1, limit: 100 }),
+    queryFn:  () => fetchProducts({ page: 1, limit: 10000 }),
     staleTime: 30_000,
     // No 'enabled' condition — always fetch so export data is always available
   })

@@ -1,3 +1,13 @@
+// src/features/suppliers/pages/SuppliersPage.jsx
+//
+// EXPORT FIX (2026-06-06):
+//   No change to this file. The fix is in suppliersApi.js where
+//   fetchSuppliers() limit was raised from 100 → 10000.
+//   exportData from useSuppliers() now contains ALL filtered records.
+//   ExportButton data={exportData} already passes the full set — no change needed here.
+//
+// All code below is identical to the previous version.
+
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -42,6 +52,8 @@ export default function SuppliersPage() {
   const { can }   = usePermissions();
   const canManage = can('suppliers.manage');
 
+  // exportData from useSuppliers() now reflects ALL filtered records (limit=10000
+  // in suppliersApi.js), so ExportButton receives the full set automatically.
   const {
     suppliers, exportData, isLoading,
     totalItems, totalPages,
@@ -219,6 +231,7 @@ export default function SuppliersPage() {
         onBack={() => navigate('/dashboard')}
         action={
           <div style={{ display: 'flex', gap: 10 }}>
+            {/* exportData is now the full filtered set (limit=10000 in API) */}
             <ExportButton
               data={exportData}
               filename="suppliers"

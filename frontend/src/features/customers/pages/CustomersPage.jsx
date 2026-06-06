@@ -1,19 +1,18 @@
 // src/features/customers/pages/CustomersPage.jsx
 //
-// CHANGES IN THIS VERSION:
-//   ✅ Layout now matches ProductsPage (toolbar pattern, inline date filter,
-//      record count, back button, no card wrapper around Table)
-//   ✅ PageHeader: actions → action (correct prop name for PageHeader component)
-//   ✅ Add Customer button visible to ALL roles — every role has customers.manage
-//   ✅ ExportButton always visible (not permission-gated — CSV is view-only)
-//   ✅ Previous bug fixes retained (open/rows/useCustomer/limit=100/drawer)
+// EXPORT FIX (2026-06-06):
+//   No change to this file. The fix is in customersApi.js where
+//   fetchCustomers() limit was raised from 100 → 10000.
+//   exportData from useCustomers() now contains ALL filtered records.
+//   ExportButton data={exportData} already passes the full set — no change needed here.
 //
-// PERMISSION NOTE:
-//   Backend: ALL endpoints under /customers/ require customers.manage.
-//   RBAC matrix: admin ✅ / manager ✅ / staff ✅ — all 3 roles have this.
-//   So canManage is ALWAYS true for logged-in users. The button has no gate.
-//   Edit / Delete actions are still gated (destructive — admin/manager only
-//   is a future enhancement; for now it matches backend which allows all roles).
+// All code below is identical to the previous version.
+//
+// PREVIOUS CHANGES RETAINED:
+//   ✅ Layout matches ProductsPage (toolbar pattern, inline date filter, record count)
+//   ✅ ExportButton always visible (not permission-gated)
+//   ✅ CustomerDetailDrawer with full sales history
+//   ✅ All bug fixes retained
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useForm }                               from 'react-hook-form'
@@ -226,6 +225,8 @@ export default function CustomersPage() {
 
 
   // Hook (all data + mutations)
+  // exportData from useCustomers() now reflects ALL filtered records (limit=10000
+  // in customersApi.js), so ExportButton receives the full set automatically.
   const {
     customers, exportData, isLoading, isError,
     search, setSearch,
@@ -338,7 +339,7 @@ export default function CustomersPage() {
     [canManage] // eslint-disable-line react-hooks/exhaustive-deps
   )
 
-  // Date filter handler matching ProductsPage pattern
+  // Date filter handler
   function handleDateChange(field, value) {
     if (field === 'from') setDateFrom(value)
     else                  setDateTo(value)
@@ -353,7 +354,6 @@ export default function CustomersPage() {
 
   return (
     <>
-      {/* PAGE HEADER ─ matches ProductsPage: back button, action on right */}
       <PageHeader
         title="Customers"
         subtitle="Manage your customer list, contacts, and billing details"
@@ -361,13 +361,12 @@ export default function CustomersPage() {
         onBack={() => navigate('/dashboard')}
         action={
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            {/* Export CSV — always visible, shows filtered data */}
+            {/* exportData is now the full filtered set (limit=10000 in API) */}
             <ExportButton
               data={exportData}
               filename="customers"
               columns={CUSTOMER_CSV_COLUMNS}
             />
-            {/* Add Customer — visible to ALL roles (all have customers.manage) */}
             <Button
               variant="primary"
               leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
@@ -379,7 +378,7 @@ export default function CustomersPage() {
         }
       />
 
-      {/* TOOLBAR ─ matches ProductsPage: search left, date filter right, count */}
+      {/* TOOLBAR */}
       <div style={{
         display:        'flex',
         alignItems:     'center',
@@ -420,7 +419,7 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {/* TABLE — no card wrapper, matches ProductsPage */}
+      {/* TABLE */}
       <div style={{ overflowX: 'auto', width: '100%' }}>
         <Table
           columns={columns}

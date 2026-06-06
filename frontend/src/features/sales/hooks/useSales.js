@@ -5,6 +5,46 @@ import { fetchSales, updateSaleStatus, fetchAllSalesForExport } from '../api/sal
 
 const PAGE_SIZE = 20;
 
+
+// ── Date → UTC ISO boundary converters ───────────────────────────────────────
+//
+// WHY THESE EXIST:
+//   The <input type="date"> gives us a "YYYY-MM-DD" string in the user's LOCAL
+//   date system — e.g., the user in EST picks "2026-06-05" meaning their local
+//   June 5 (which spans UTC 2026-06-05T05:00:00Z → 2026-06-06T04:59:59Z).
+//
+//   The backend filters on `sales_created_at` which is stored in UTC.
+//   If we send the bare date string "2026-06-05", PostgreSQL treats it as UTC
+//   midnight → UTC end-of-day, so records from EST's 7PM–midnight (UTC June 6)
+//   are silently excluded even though the table displays them as "Jun 5".
+//
+// THE FIX:
+//   Convert the local date to UTC ISO strings that represent the actual
+//   UTC boundaries of the user's local day BEFORE sending to the API.
+//
+//   new Date("2026-06-05") parses as UTC midnight (JS spec for date-only strings).
+//   .setHours(0, 0, 0, 0) shifts to LOCAL midnight in the browser's TZ.
+//   .toISOString() converts back to a full UTC ISO string with 'Z' suffix.
+//
+//   Result for an EST user (UTC-5) selecting "2026-06-05":
+//     localDayStartUTC → "2026-06-05T05:00:00.000Z"  (midnight EST in UTC)
+//     localDayEndUTC   → "2026-06-06T04:59:59.999Z"  (11:59 PM EST in UTC)
+//
+//   The backend receives these and compares directly — no T23:59:59 suffix needed.
+//
+function localDayStartUTC(dateStr) {
+  const d = new Date(dateStr);
+  d.setHours(0, 0, 0, 0);     // shift to local midnight
+  return d.toISOString();      // "2026-06-05T05:00:00.000Z" for EST
+}
+
+function localDayEndUTC(dateStr) {
+  const d = new Date(dateStr);
+  d.setHours(23, 59, 59, 999); // shift to local end-of-day
+  return d.toISOString();      // "2026-06-06T04:59:59.999Z" for EST
+}
+
+
 export function useSales() {
   const queryClient = useQueryClient();
 
@@ -51,8 +91,9 @@ export function useSales() {
       const allRows = await fetchAllSalesForExport({
         search:    debouncedSearch || undefined,
         status:    statusFilter    || undefined,
-        date_from: dateFrom        || undefined,
-        date_to:   dateTo          || undefined,
+        // FIX: convert local date to UTC ISO boundary before sending to backend
+        date_from: dateFrom ? localDayStartUTC(dateFrom) : undefined,
+        date_to:   dateTo   ? localDayEndUTC(dateTo)     : undefined,
       });
       return allRows;
     } catch {
@@ -64,7 +105,7 @@ export function useSales() {
   };
 
   // ── React Query — server-side fetch ──────────────────────────────────────
-  // queryKey includes page + search + status so any change triggers a refetch.
+  // queryKey includes page + search + status + dates so any change triggers a refetch.
   // keepPreviousData: true keeps the old table visible while the new page loads
   // (no blank flash between pages).
   const {
@@ -79,8 +120,9 @@ export function useSales() {
       limit:     PAGE_SIZE,
       search:    debouncedSearch || undefined,
       status:    statusFilter    || undefined,
-      date_from: dateFrom        || undefined,
-      date_to:   dateTo          || undefined,
+      // FIX: convert local date to UTC ISO boundary before sending to backend
+      date_from: dateFrom ? localDayStartUTC(dateFrom) : undefined,
+      date_to:   dateTo   ? localDayEndUTC(dateTo)     : undefined,
     }),
     staleTime:        30 * 1000,
     // FIX: keepPreviousData was React Query v4 API — renamed in v5.

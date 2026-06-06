@@ -5,7 +5,7 @@
 // WHAT THIS HOOK DOES:
 //   1. Fetches all customers with React Query (5-min stale cache)
 //   2. Filters by search term (name, phone, email, tax number) — client-side
-//   3. Filters by date range (cust_created_at) — client-side
+//   3. Filters by date range (updated_at) — client-side
 //   4. Sorts by any column — client-side
 //   5. Paginates the result — client-side (15 per page)
 //   6. Exposes create / update / delete mutations with toast feedback
@@ -116,16 +116,30 @@ export function useCustomers() {
     }
 
     // ── Date range filter ────────────────────────────────────────────────
-    // Compare ISO date strings — works because YYYY-MM-DD sorts lexicographically
+    //
+    // FIX: replaced string comparison with Date object comparison.
+    //
+    // WHAT WAS WRONG:
+    //   c.updated_at >= dateFrom
+    //   This compared a UTC ISO string ("2026-06-05T03:00:00Z") against a
+    //   bare date string ("2026-06-05") using lexicographic sort order.
+    //   For an IST user, records updated between 00:00–05:30 IST are stored
+    //   as the previous UTC date, so the string comparison excluded them even
+    //   though the table displays them as the correct local date.
+    //
+    // THE FIX:
+    //   new Date(dateFrom) parses "2026-06-05" as UTC midnight.
+    //   .setHours(0, 0, 0, 0) shifts it to LOCAL midnight in the user's TZ.
+    //   new Date(c.updated_at) parses the "Z"-suffixed UTC string correctly.
+    //   The >= comparison then operates on numeric timestamps — timezone-safe.
+    //
     if (dateFrom) {
-      list = list.filter(c =>
-        c.updated_at && c.updated_at >= dateFrom
-      )
+      const from = new Date(dateFrom); from.setHours(0, 0, 0, 0)
+      list = list.filter(c => c.updated_at && new Date(c.updated_at) >= from)
     }
     if (dateTo) {
-      list = list.filter(c =>
-        c.updated_at && c.updated_at <= dateTo + 'T23:59:59'
-      )
+      const to = new Date(dateTo); to.setHours(23, 59, 59, 999)
+      list = list.filter(c => c.updated_at && new Date(c.updated_at) <= to)
     }
 
     // ── Sort ─────────────────────────────────────────────────────────────

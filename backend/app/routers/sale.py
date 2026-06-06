@@ -418,8 +418,8 @@ def get_sales(
     pagination: dict = Depends(paginate),
     search:     str = Query(None),
     status:     str = Query(None),
-    date_from:  str = Query(None),   # ISO date string e.g. "2025-03-01"
-    date_to:    str = Query(None),   # ISO date string e.g. "2025-03-31"
+    date_from:  str = Query(None),   # UTC ISO string from frontend e.g. "2026-06-05T05:00:00.000Z"
+    date_to:    str = Query(None),   # UTC ISO string from frontend e.g. "2026-06-06T04:59:59.999Z"
 ):
     business_id = current_user["business_id"]
 
@@ -444,11 +444,16 @@ def get_sales(
 
     if date_from:
         extra_where += " AND s.sales_created_at >= :date_from"
-        params["date_from"] = date_from
+        params["date_from"] = date_from   # full UTC ISO string — PostgreSQL handles 'Z' correctly
 
     if date_to:
         extra_where += " AND s.sales_created_at <= :date_to"
-        params["date_to"] = f"{date_to}T23:59:59"
+        # FIX: no longer append T23:59:59 here.
+        # The frontend now sends a full UTC ISO end-of-day string
+        # (e.g. "2026-06-06T04:59:59.999Z" for an EST user's local day-end).
+        # Appending T23:59:59 to a string that already ends in 'Z' would corrupt it.
+        # PostgreSQL correctly interprets the 'Z' suffix as UTC.
+        params["date_to"] = date_to
 
     # Count query — must apply the same filters so total is accurate
     count_sql = f"""

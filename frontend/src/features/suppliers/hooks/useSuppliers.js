@@ -54,14 +54,32 @@ export function useSuppliers() {
       );
     }
 
-    // Date range on updated_at
+    // ── Date range on updated_at ──────────────────────────────────────────
+    //
+    // FIX: replaced string comparison with Date object comparison.
+    //
+    // WHAT WAS WRONG:
+    //   s.updated_at >= dateFrom
+    //   This compared a UTC ISO string ("2026-06-05T03:00:00Z") against a
+    //   bare date string ("2026-06-05") using lexicographic sort order.
+    //   `${dateTo}T23:59:59` had no 'Z', making it an ambiguous local-time
+    //   boundary. For IST users, records updated between 00:00–05:30 IST are
+    //   stored as the previous UTC date and were silently excluded even though
+    //   the grid displayed them under the correct local date.
+    //
+    // THE FIX:
+    //   new Date(dateFrom) parses "2026-06-05" as UTC midnight.
+    //   .setHours(0, 0, 0, 0) shifts it to LOCAL midnight in the user's TZ.
+    //   new Date(s.updated_at) parses the "Z"-suffixed UTC string correctly.
+    //   The >= comparison then operates on numeric timestamps — timezone-safe.
+    //
     if (dateFrom) {
-      rows = rows.filter((s) => s.updated_at && s.updated_at >= dateFrom);
+      const from = new Date(dateFrom); from.setHours(0, 0, 0, 0);
+      rows = rows.filter((s) => s.updated_at && new Date(s.updated_at) >= from);
     }
     if (dateTo) {
-      rows = rows.filter(
-        (s) => s.updated_at && s.updated_at <= `${dateTo}T23:59:59`
-      );
+      const to = new Date(dateTo); to.setHours(23, 59, 59, 999);
+      rows = rows.filter((s) => s.updated_at && new Date(s.updated_at) <= to);
     }
 
     // Sort

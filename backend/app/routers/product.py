@@ -24,28 +24,26 @@
 #   - prod_cost_price  → full value returned
 #   - prod_profit      → full value returned
 #
-# HOW IT WORKS (the "soft check" pattern):
-#   Routes use get_current_user_with_permissions (not require_permission)
-#   so the route itself is accessible to everyone with products.view.
-#   Inside the route, we check 'view_product_profit' in permissions.
-#   If the user lacks it, we call row_to_dict(row, show_profit=False)
-#   which replaces the two sensitive fields with None.
+# ── VALIDATION CHANGES (2026-06-06) ──────────────────────────────────────────
 #
-# WHY NULL AND NOT OMISSION:
-#   Returning null is safer than omitting the key entirely.
-#   Omission causes KeyError crashes on the frontend if not handled.
-#   Null is explicit and the frontend can check: if (val !== null).
+# 1. DUPLICATE NAME CHECK (Feature 2):
+#    Added before INSERT (POST) and before UPDATE (PUT).
+#    Checks: LOWER(TRIM(prod_name)) = LOWER(TRIM(:name)) within same business,
+#    excluding soft-deleted products and (for PUT) the product being edited.
+#    Returns HTTP 400 with "A product with this name already exists." on match.
 #
-# WHY NOT A SEPARATE ENDPOINT:
-#   Two endpoints for the same resource would be harder to maintain.
-#   One endpoint that strips fields is simpler and follows the same
-#   pattern already used in dashboard.py for dashboard.financial.
+#    The DB unique index (uix_products_name_business) acts as the final safety
+#    net for concurrent inserts — the explicit check here gives a clean error
+#    message before that index can fire.
 #
-# SECURITY NOTE:
-#   The permission check happens SERVER-SIDE in Python.
-#   The frontend also hides the columns visually, but that is a UX layer.
-#   Even if someone calls the API directly (curl, Postman, browser devtools),
-#   they only receive null for profit fields when they lack the permission.
+#    IntegrityError handling updated to distinguish barcode vs. name constraint.
+#
+# 2. NOTE — Loss price validation (Feature 1):
+#    The "sell < cost" check is intentionally a UI-only confirmation dialog.
+#    Selling below cost is a valid business decision (clearance sales, etc).
+#    The backend does NOT reject such requests. The frontend shows a warning
+#    popup and the user explicitly confirms before the API call is made.
+#    No backend change needed for Feature 1.
 # ─────────────────────────────────────────────────────────────────────────────
 
 from datetime import datetime, timezone
@@ -66,14 +64,10 @@ from typing import Optional
 router = APIRouter(prefix="/products", tags=["Products"])
 
 # ── Permission code constant ─────────────────────────────────────────────────
-# Single source of truth. If you ever rename the permission in DB,
-# change it here only — all routes automatically pick up the change.
 PROFIT_PERMISSION = "view_product_profit"
 
 
 # ── Helper: fetch one product row — all fields + both JOIN names ───────────
-# Used by POST (after insert), PUT (after update), and GET /{prod_id}.
-# Joins categories for category_name, profiles TWICE for audit names.
 def get_product_with_profit(db: Session, prod_id):
     row = db.execute(
         text("""
@@ -99,14 +93,6 @@ def get_product_with_profit(db: Session, prod_id):
 
 
 # ── Helper: format one product row as a dict ──────────────────────────────
-# show_profit=True  → return full cost price + profit (user has view_product_profit)
-# show_profit=False → return null for both sensitive fields (user lacks permission)
-#
-# WHY A PARAMETER AND NOT AN IF INSIDE EACH ROUTE:
-#   All routes call row_to_dict. Centralising the gate here means:
-#   - Only one place to update if the field list changes
-#   - Impossible to accidentally expose the field in a new route
-#   - Consistent null shape across GET list, GET detail, POST, PUT
 def row_to_dict(row, show_profit: bool = True):
     return {
         "prod_id":              str(row.prod_id),
@@ -115,12 +101,8 @@ def row_to_dict(row, show_profit: bool = True):
         "category_name":        row.category_name if row.category_name else None,
         "prod_name":            row.prod_name,
         "prod_sell_price":      float(row.prod_sell_price),
-        # ── Profit-gated fields ────────────────────────────────────────────
-        # These two are returned as null when show_profit=False.
-        # The frontend checks for null and hides/replaces columns accordingly.
         "prod_cost_price":      float(row.prod_cost_price) if show_profit else None,
         "prod_profit":          float(row.prod_profit) if (show_profit and row.prod_profit is not None) else None,
-        # ── End gated fields ──────────────────────────────────────────────
         "prod_stock_qty":       row.prod_stock_qty,
         "prod_low_stock_alert": row.prod_low_stock_alert,
         "tax_rate":             float(row.tax_rate) if row.tax_rate is not None else 0,
@@ -128,7 +110,6 @@ def row_to_dict(row, show_profit: bool = True):
         "barcode":              row.barcode,
         "unit":                 row.unit,
         "is_deleted":           row.is_deleted,
-        # ── Audit fields ──────────────────────────────────────────────────
         "prod_created_at":      fmt_ts(row.prod_created_at),
         "created_by":           str(row.created_by)  if row.created_by  else None,
         "created_by_name":      row.created_by_name  if row.created_by_name  else None,
@@ -136,6 +117,38 @@ def row_to_dict(row, show_profit: bool = True):
         "updated_by":           str(row.updated_by)  if row.updated_by  else None,
         "last_updated_by":      row.last_updated_by  if row.last_updated_by  else None,
     }
+
+
+# ── Helper: check for duplicate product name within a business ────────────────
+# Returns the conflicting prod_id (truthy) if a duplicate exists, else None.
+#
+# exclude_id: pass the current product's prod_id on PUT so a product isn't
+#             flagged as a duplicate of itself.
+#
+# Why LOWER(TRIM(...)) on both sides?
+#   - LOWER  → case-insensitive: "Laptop" == "laptop" == "LAPTOP"
+#   - TRIM   → ignores leading/trailing spaces: " Laptop " == "Laptop"
+#   The DB index (uix_products_name_business) uses the same expression, so
+#   this query hits the index efficiently.
+def _find_duplicate_name(
+    db:         Session,
+    business_id: str,
+    name:        str,
+    exclude_id:  Optional[str] = None
+):
+    sql = """
+        SELECT prod_id FROM products
+        WHERE business_id       = CAST(:bid AS uuid)
+          AND LOWER(TRIM(prod_name)) = LOWER(TRIM(:name))
+          AND is_deleted         = false
+    """
+    params = {"bid": business_id, "name": name}
+
+    if exclude_id:
+        sql += " AND prod_id != CAST(:exclude_id AS uuid)"
+        params["exclude_id"] = exclude_id
+
+    return db.execute(text(sql), params).fetchone()
 
 
 # ─────────────────────────────────────────
@@ -150,7 +163,7 @@ def create_product(
     business_id = current_user["business_id"]
     show_profit = PROFIT_PERMISSION in current_user.get("permissions", set())
 
-    # Validate category belongs to this business
+    # ── 1. Validate category belongs to this business ─────────────────────────
     if data.category_id:
         category = db.query(Category).filter(
             Category.category_id == data.category_id,
@@ -160,10 +173,24 @@ def create_product(
         if not category:
             return error_response("Category not found", 404)
 
+    # ── 2. Duplicate name check ───────────────────────────────────────────────
+    # The schema validator already stripped the name. We check for an existing
+    # active product with the same normalised name within this business.
+    #
+    # WHY HERE AND NOT JUST RELY ON THE DB INDEX?
+    #   The DB index (uix_products_name_business) would catch it eventually,
+    #   but raises a raw IntegrityError with a Postgres error string.
+    #   Checking explicitly here lets us return a clean, user-friendly message.
+    #   The index is the final safety net for concurrent race-condition inserts.
+    dup = _find_duplicate_name(db, business_id, data.prod_name)
+    if dup:
+        return error_response("A product with this name already exists.", 400)
+
+    # ── 3. Create the product ─────────────────────────────────────────────────
     new_product = Product(
         business_id           = business_id,
         category_id           = data.category_id,
-        prod_name             = data.prod_name,
+        prod_name             = data.prod_name,          # already stripped by schema
         prod_sell_price       = data.prod_sell_price,
         prod_cost_price       = data.prod_cost_price,
         prod_stock_qty        = data.prod_stock_qty,
@@ -172,18 +199,25 @@ def create_product(
         tax_code              = data.tax_code,
         barcode               = data.barcode,
         unit                  = data.unit,
-        # ── Audit ─────────────────────────────────────────────────────────
-        prod_created_at       = datetime.now(timezone.utc),   # explicit set; DB DEFAULT is fallback
+        prod_created_at       = datetime.now(timezone.utc),
         created_by            = current_user["user_id"],
-        updated_by            = current_user["user_id"],  # same user on first save
+        updated_by            = current_user["user_id"],
     )
 
     try:
         db.add(new_product)
         db.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         db.rollback()
-        return error_response("A product with this barcode already exists", 400)
+        # Distinguish between the two unique constraints so the user gets
+        # a precise error message rather than a generic one.
+        err_str = str(e.orig).lower()
+        if "uix_products_name_business" in err_str:
+            # Race condition: another request inserted the same name between
+            # our check above and our INSERT. Extremely rare but handled.
+            return error_response("A product with this name already exists.", 400)
+        # Default → barcode uniqueness violation
+        return error_response("A product with this barcode already exists.", 400)
 
     row = get_product_with_profit(db, new_product.prod_id)
 
@@ -204,7 +238,6 @@ def get_all_products(
     search:       Optional[str] = Query(default=None, description="Search by name or barcode")
 ):
     business_id = current_user["business_id"]
-    # Check if the caller is allowed to see profit fields
     show_profit = PROFIT_PERMISSION in current_user.get("permissions", set())
 
     search_sql = ""
@@ -273,10 +306,8 @@ def get_product(
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
-    # Check profit visibility for this specific user
     show_profit = PROFIT_PERMISSION in current_user.get("permissions", set())
 
-    # ── Step 1: Core product details + both audit JOIN names ─────────────────
     row = db.execute(
         text("""
             SELECT
@@ -303,7 +334,6 @@ def get_product(
     if not row:
         return error_response("Product not found", status_code=404)
 
-    # ── Step 2: Stock movement history ──────────────────────────────────────
     stock_rows = db.execute(
         text("""
             SELECT
@@ -363,11 +393,6 @@ def get_product(
             "changed_at":            fmt_ts(s.move_created_at)
         })
 
-    # ── Step 3: Price change history from audit_logs ─────────────────────────
-    # PROFIT GATE: Price history reveals old and new cost/sell prices.
-    # If the user cannot see profit data, we return an empty list.
-    # This means the "Price History" section disappears entirely from
-    # the drawer UI — no partial leak of price data.
     price_history = []
 
     if show_profit:
@@ -442,12 +467,10 @@ def get_product(
                 "changed_at": fmt_ts(a.created_at)
             })
 
-    # ── Step 4: Summary stats ────────────────────────────────────────────────
     total_sold     = sum(abs(s["qty_changed"]) for s in stock_history if s["move_type"] == "sale")
     total_received = sum(s["qty_changed"]      for s in stock_history if s["move_type"] == "purchase")
     total_returned = sum(s["qty_changed"]      for s in stock_history if s["move_type"] == "sales_return")
 
-    # ── Step 5: Final response ───────────────────────────────────────────────
     return success_response({
         **row_to_dict(row, show_profit=show_profit),
 
@@ -455,18 +478,12 @@ def get_product(
             "total_units_sold":     total_sold,
             "total_units_received": total_received,
             "total_units_returned": total_returned,
-            # If user can't see profit, price_change_count is always 0
-            # (they have no access to price history anyway)
             "price_change_count":   len(price_history),
             "stock_event_count":    len(stock_history)
         },
 
         "stock_history":  stock_history,
         "price_history":  price_history,
-
-        # Tell the frontend explicitly whether profit fields are available.
-        # This prevents the frontend needing to re-derive it from permissions.
-        # Frontend can use: if (data.can_view_profit) { show columns }
         "can_view_profit": show_profit,
     })
 
@@ -496,7 +513,7 @@ def update_product(
     if not product:
         return error_response("Product not found", status_code=404)
 
-    # Validate category if being updated
+    # ── Validate category if being updated ───────────────────────────────────
     if data.category_id:
         category = db.query(Category).filter(
             Category.category_id == data.category_id,
@@ -507,7 +524,16 @@ def update_product(
             return error_response("Category not found", status_code=404)
         product.category_id = data.category_id
 
-    if data.prod_name            is not None: product.prod_name            = data.prod_name
+    # ── Duplicate name check on update ───────────────────────────────────────
+    # Only runs when the caller is actually changing the name.
+    # exclude_id = prod_id so a product isn't flagged as a duplicate of itself
+    # (i.e. editing "Laptop" and saving as "Laptop" again is fine).
+    if data.prod_name is not None:
+        dup = _find_duplicate_name(db, business_id, data.prod_name, exclude_id=prod_id)
+        if dup:
+            return error_response("A product with this name already exists.", 400)
+        product.prod_name = data.prod_name   # already stripped by schema validator
+
     if data.prod_sell_price      is not None: product.prod_sell_price      = data.prod_sell_price
     if data.prod_cost_price      is not None: product.prod_cost_price      = data.prod_cost_price
     if data.prod_low_stock_alert is not None: product.prod_low_stock_alert = data.prod_low_stock_alert
@@ -519,7 +545,15 @@ def update_product(
     # Track who last updated — created_by is intentionally left unchanged
     product.updated_by = current_user["user_id"]
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        err_str = str(e.orig).lower()
+        if "uix_products_name_business" in err_str:
+            return error_response("A product with this name already exists.", 400)
+        return error_response("A product with this barcode already exists.", 400)
+
     db.refresh(product)
 
     row = get_product_with_profit(db, product.prod_id)

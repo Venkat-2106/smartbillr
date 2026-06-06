@@ -1,18 +1,33 @@
 // src/features/products/pages/ProductsPage.jsx
 //
-// PROFIT PERMISSION CHANGES IN THIS VERSION:
-//   ✅ Removed: const isAdmin = profile?.is_admin === true
-//   ✅ Replaced with: const canViewProfit = can('view_product_profit')
-//   ✅ Cost Price column → gated by canViewProfit (was isAdmin)
-//   ✅ Profit column     → gated by canViewProfit (was isAdmin)
-//   ✅ Cost Price field in Edit form → gated by canViewProfit
-//      (staff cannot edit cost price because they can't see it)
-//   ✅ Export columns → profit fields included only when canViewProfit
+// VALIDATION CHANGES (2026-06-06):
 //
-// PREVIOUS FIXES RETAINED:
+// ── Feature 1: Cost Price vs Sale Price Confirmation ─────────────────────────
+//   When prod_sell_price < prod_cost_price (and the user can see cost price),
+//   we intercept the submit in handleCreate / handleUpdate, store the payload,
+//   and open a "LossWarning" ConfirmDialog (variant="warning").
+//   • Cancel  → closes the dialog, form stays open, user can adjust prices.
+//   • Continue → actually fires the API call.
+//   Staff who cannot see cost price (canViewProfit = false) are never shown the
+//   dialog because their hidden cost-price field always defaults to 0.
+//
+// ── Feature 2: Duplicate Product Name Prevention ──────────────────────────────
+//   The backend returns HTTP 400 { message: "A product with this name already
+//   exists." } for duplicate names (case-insensitive, trimmed).
+//   We catch that error in handleCreate / handleUpdate and set a per-modal
+//   name-error state (addNameError / editNameError).
+//   The error is rendered INSIDE the form's "Product Name" FormField — not just
+//   a toast — so the user sees exactly which field needs fixing.
+//   The error clears automatically the moment the user types a new character in
+//   the Product Name input (via onInput on the Input element).
+//   The modal's own name-error state is cleared when the modal closes.
+//
+// PREVIOUS CHANGES RETAINED:
 //   ✅ FIX A — Tax Rate changed from dropdown to number textbox
 //   ✅ FIX B — Back button wired up (← Back to Dashboard via useNavigate)
 //   ✅ ExportButton with PRODUCT_CSV_COLUMNS in the PageHeader action slot
+//   ✅ Profit permission gate (canViewProfit) for cost/profit columns + form
+//   ✅ Zod .trim() on prod_name (trimmed before schema min/max check)
 
 import { useState, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
@@ -53,8 +68,9 @@ import ProductDetailDrawer from '../components/ProductDetailDrawer'
 const UNITS = ['pcs', 'kg', 'g', 'litre', 'ml', 'box', 'pack', 'pair', 'set', 'dozen']
 
 // ── Zod schema (create) ───────────────────────────────────────────────────────
+// .trim() is first so whitespace-only names ("   ") fail the .min(1) check.
 const createSchema = z.object({
-  prod_name:            z.string().min(1, 'Product name is required').max(100).trim(),
+  prod_name:            z.string().trim().min(1, 'Product name is required').max(100),
   prod_sell_price:      z.coerce.number({ invalid_type_error: 'Enter a valid price' }).min(0, 'Cannot be negative'),
   prod_cost_price:      z.coerce.number({ invalid_type_error: 'Enter a valid price' }).min(0, 'Cannot be negative'),
   prod_stock_qty:       z.coerce.number().int().min(0, 'Cannot be negative').default(0),
@@ -68,7 +84,7 @@ const createSchema = z.object({
 
 // ── Zod schema (edit — stock qty excluded) ────────────────────────────────────
 const editSchema = z.object({
-  prod_name:            z.string().min(1, 'Product name is required').max(100).trim(),
+  prod_name:            z.string().trim().min(1, 'Product name is required').max(100),
   prod_sell_price:      z.coerce.number({ invalid_type_error: 'Enter a valid price' }).min(0, 'Cannot be negative'),
   prod_cost_price:      z.coerce.number({ invalid_type_error: 'Enter a valid price' }).min(0, 'Cannot be negative'),
   prod_low_stock_alert: z.coerce.number().int().min(0, 'Cannot be negative').default(10),
@@ -90,6 +106,7 @@ function useCategoryOptions() {
 }
 
 // ── Date range filter bar ─────────────────────────────────────────────────────
+// Note: This is the ProductsPage-local DateRangeFilter (intentional — see architecture notes).
 function DateRangeFilter({ from, to, onChange }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -132,10 +149,11 @@ const dateInputStyle = {
 }
 
 // ── Add Product Form ──────────────────────────────────────────────────────────
-// canViewProfit prop controls whether the Cost Price field appears.
-// If staff cannot see cost price, they also cannot set it.
-// They must enter 0 (handled by the hidden default value in the schema).
-function AddProductForm({ onSubmit, onClose, isPending, categories, canViewProfit }) {
+// Props:
+//   nameError        — string | null  — server-side "name already exists" error
+//   onNameErrorClear — () => void     — called on first keystroke in Name field
+//                                       so the red error banner disappears
+function AddProductForm({ onSubmit, onClose, isPending, categories, canViewProfit, nameError, onNameErrorClear }) {
   const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(createSchema),
     defaultValues: {
@@ -143,18 +161,27 @@ function AddProductForm({ onSubmit, onClose, isPending, categories, canViewProfi
       prod_low_stock_alert: 10,
       tax_rate:             0,
       unit:                 'pcs',
-      prod_cost_price:      0,  // default so staff submission doesn't fail schema
+      prod_cost_price:      0,
     },
   })
 
+  // Combine Zod client-side error with server-side name error.
+  // Zod error takes priority (runs first). Server error shows only after a
+  // successful Zod pass but a failed API call.
+  const nameFieldError = errors.prod_name || (nameError ? { message: nameError } : undefined)
+
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
-      <FormField label="Product Name" error={errors.prod_name} required style={{ marginBottom: 16 }}>
-        <Input placeholder="e.g. Basmati Rice 5kg" autoFocus {...register('prod_name')} />
+      {/* ── Product Name — shows BOTH Zod errors and server duplicate errors ── */}
+      <FormField label="Product Name" error={nameFieldError} required style={{ marginBottom: 16 }}>
+        <Input
+          placeholder="e.g. Basmati Rice 5kg"
+          autoFocus
+          {...register('prod_name')}
+          onInput={() => { if (nameError) onNameErrorClear?.() }}
+        />
       </FormField>
 
-      {/* Selling Price is always visible — it's the public price on invoices */}
-      {/* Cost Price is hidden from staff — they lack view_product_profit */}
       <div style={{ display: 'grid', gridTemplateColumns: canViewProfit ? '1fr 1fr' : '1fr', gap: 12, marginBottom: 16 }}>
         <FormField label="Selling Price" error={errors.prod_sell_price} required>
           <Input type="number" step="0.01" placeholder="0.00" {...register('prod_sell_price')} />
@@ -164,7 +191,6 @@ function AddProductForm({ onSubmit, onClose, isPending, categories, canViewProfi
             <Input type="number" step="0.01" placeholder="0.00" {...register('prod_cost_price')} />
           </FormField>
         )}
-        {/* Hidden input so Zod schema gets a value even when field is not shown */}
         {!canViewProfit && (
           <input type="hidden" value={0} {...register('prod_cost_price')} />
         )}
@@ -217,11 +243,14 @@ function AddProductForm({ onSubmit, onClose, isPending, categories, canViewProfi
 }
 
 // ── Edit Product Form ─────────────────────────────────────────────────────────
-function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categories, canViewProfit }) {
+// Same nameError / onNameErrorClear pattern as AddProductForm.
+function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categories, canViewProfit, nameError, onNameErrorClear }) {
   const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(editSchema),
     defaultValues,
   })
+
+  const nameFieldError = errors.prod_name || (nameError ? { message: nameError } : undefined)
 
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
@@ -246,11 +275,15 @@ function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categori
         </span>
       </div>
 
-      <FormField label="Product Name" error={errors.prod_name} required style={{ marginBottom: 16 }}>
-        <Input placeholder="e.g. Basmati Rice 5kg" autoFocus {...register('prod_name')} />
+      <FormField label="Product Name" error={nameFieldError} required style={{ marginBottom: 16 }}>
+        <Input
+          placeholder="e.g. Basmati Rice 5kg"
+          autoFocus
+          {...register('prod_name')}
+          onInput={() => { if (nameError) onNameErrorClear?.() }}
+        />
       </FormField>
 
-      {/* Selling Price always shown. Cost Price only if user can see profit. */}
       <div style={{ display: 'grid', gridTemplateColumns: canViewProfit ? '1fr 1fr' : '1fr', gap: 12, marginBottom: 16 }}>
         <FormField label="Selling Price" error={errors.prod_sell_price} required>
           <Input type="number" step="0.01" placeholder="0.00" {...register('prod_sell_price')} />
@@ -320,13 +353,7 @@ function fmt(num) {
 export default function ProductsPage() {
   const { can }   = usePermissions()
   const canManage = can('products.edit')
-
-  // ── PERMISSION CHECK ────────────────────────────────────────────────────────
-  // This replaces the old: const isAdmin = profile?.is_admin === true
-  // We now check the actual permission code from the RBAC system.
-  // Admin and Manager both have this permission; Staff does not.
   const canViewProfit = can('view_product_profit')
-  // ── END PERMISSION CHECK ────────────────────────────────────────────────────
 
   const categories = useCategoryOptions()
   const navigate = useNavigate()
@@ -405,8 +432,6 @@ export default function ProductsPage() {
     return rows
   }, [products, sortKey, sortDir, dateFrom, dateTo])
 
-  // Export data — always the FULL allProducts set (up to 100) with current
-  // search + date filters applied, but never paginated.
   const exportData = useMemo(() => {
     let rows = [...allProducts]
     const q = search.trim().toLowerCase()
@@ -429,32 +454,109 @@ export default function ProductsPage() {
   const { mutate: updateProduct, isPending: isUpdating } = useUpdateProduct()
   const { mutate: deleteProduct, isPending: isDeleting } = useDeleteProduct()
 
+  // ── Modal open/close state ────────────────────────────────────────────────
   const [showAdd,        setShowAdd]        = useState(false)
   const [editTarget,     setEditTarget]     = useState(null)
   const [deleteTarget,   setDeleteTarget]   = useState(null)
   const [detailProduct,  setDetailProduct]  = useState(null)
 
-  function handleCreate(data) {
-    const payload = {
+  // ── Feature 2: Duplicate name — per-modal error state ─────────────────────
+  // These hold the "A product with this name already exists." message from
+  // the server. They are separate for Add vs Edit so one modal's error doesn't
+  // bleed into the other.
+  const [addNameError,  setAddNameError]  = useState(null)
+  const [editNameError, setEditNameError] = useState(null)
+
+  // ── Feature 1: Loss-price confirmation state ──────────────────────────────
+  // pendingPayload — the validated form data waiting for user confirmation
+  // pendingAction  — 'create' | 'update' — which mutation to run on confirm
+  const [lossConfirmOpen, setLossConfirmOpen] = useState(false)
+  const [pendingPayload,  setPendingPayload]  = useState(null)
+  const [pendingAction,   setPendingAction]   = useState(null)
+
+  // ── Helper: normalise the raw form data into an API payload ──────────────
+  function buildPayload(data) {
+    return {
       ...data,
       tax_code:    data.tax_code    || null,
       barcode:     data.barcode     || null,
       category_id: data.category_id || null,
     }
-    createProduct(payload, { onSuccess: () => setShowAdd(false) })
+  }
+
+  // ── Helper: did the user enter sell < cost? ───────────────────────────────
+  // Only fires when the user has the profit permission — staff submit with a
+  // hidden cost-price of 0, so the check would always be false anyway, but we
+  // gate it explicitly to be safe and clear.
+  function isSellingAtLoss(payload) {
+    if (!canViewProfit) return false
+    const sell = parseFloat(payload.prod_sell_price)
+    const cost = parseFloat(payload.prod_cost_price)
+    return !isNaN(sell) && !isNaN(cost) && sell < cost
+  }
+
+  // ── Actual API calls (called after loss-check passes or user confirms) ────
+  function doCreate(payload) {
+    createProduct(payload, {
+      onSuccess: () => {
+        setShowAdd(false)
+        setAddNameError(null)
+      },
+      onError: (err) => {
+        const msg = err?.response?.data?.message || ''
+        // If the backend says the name exists, surface it inside the form field.
+        // The toast in useProducts.js also fires — that's fine as a fallback.
+        if (msg.toLowerCase().includes('name already exists')) {
+          setAddNameError(msg)
+        }
+      },
+    })
+  }
+
+  function doUpdate(prodId, payload) {
+    updateProduct(
+      { id: prodId, payload },
+      {
+        onSuccess: () => {
+          setEditTarget(null)
+          setEditNameError(null)
+        },
+        onError: (err) => {
+          const msg = err?.response?.data?.message || ''
+          if (msg.toLowerCase().includes('name already exists')) {
+            setEditNameError(msg)
+          }
+        },
+      }
+    )
+  }
+
+  // ── Form submit handlers ───────────────────────────────────────────────────
+  function handleCreate(data) {
+    const payload = buildPayload(data)
+
+    // Feature 1: intercept if selling at a loss → show confirmation dialog
+    if (isSellingAtLoss(payload)) {
+      setPendingPayload(payload)
+      setPendingAction('create')
+      setLossConfirmOpen(true)
+      return
+    }
+
+    doCreate(payload)
   }
 
   function handleUpdate(data) {
-    const payload = {
-      ...data,
-      tax_code:    data.tax_code    || null,
-      barcode:     data.barcode     || null,
-      category_id: data.category_id || null,
+    const payload = buildPayload(data)
+
+    if (isSellingAtLoss(payload)) {
+      setPendingPayload(payload)
+      setPendingAction('update')
+      setLossConfirmOpen(true)
+      return
     }
-    updateProduct(
-      { id: editTarget.prod_id, payload },
-      { onSuccess: () => setEditTarget(null) }
-    )
+
+    doUpdate(editTarget.prod_id, payload)
   }
 
   function handleDelete() {
@@ -463,11 +565,27 @@ export default function ProductsPage() {
     })
   }
 
+  // ── Loss-price confirm: user clicked "Yes, Continue" ──────────────────────
+  function handleLossConfirmed() {
+    setLossConfirmOpen(false)
+    if (pendingAction === 'create') {
+      doCreate(pendingPayload)
+    } else if (pendingAction === 'update') {
+      doUpdate(editTarget.prod_id, pendingPayload)
+    }
+    setPendingPayload(null)
+    setPendingAction(null)
+  }
+
+  // ── Loss-price confirm: user clicked "Cancel" ─────────────────────────────
+  function handleLossCancelled() {
+    setLossConfirmOpen(false)
+    setPendingPayload(null)
+    setPendingAction(null)
+    // Modals remain open — user can correct prices and try again
+  }
+
   // ── Table columns ─────────────────────────────────────────────────────────
-  // Cost Price and Profit columns are conditionally added based on
-  // canViewProfit — the view_product_profit permission.
-  // The spread operator (...spread ? [col] : []) only adds the column
-  // when the user has the permission. If not, the columns are absent entirely.
   const columns = [
     {
       key:      'prod_name',
@@ -526,10 +644,6 @@ export default function ProductsPage() {
         </span>
       ),
     },
-    // ── Profit-gated columns ─────────────────────────────────────────────────
-    // These two columns only appear when the user has 'view_product_profit'.
-    // The backend also returns null for these fields when the user lacks
-    // the permission, so even if this check is bypassed, the values are null.
     ...(canViewProfit
       ? [
           {
@@ -565,7 +679,6 @@ export default function ProductsPage() {
           },
         ]
       : []),
-    // ── End profit-gated columns ─────────────────────────────────────────────
     {
       key:      'tax_rate',
       label:    'Tax',
@@ -625,9 +738,6 @@ export default function ProductsPage() {
   const activeSearch     = search.trim().length > 0
   const activeDateFilter = dateFrom || dateTo
 
-  // Choose which CSV column config to use based on profit permission.
-  // PRODUCT_CSV_COLUMNS         → includes cost price, profit, created_by_name
-  // PRODUCT_CSV_COLUMNS_NO_PROFIT → excludes those three columns
   const csvColumns = canViewProfit ? PRODUCT_CSV_COLUMNS : PRODUCT_CSV_COLUMNS_NO_PROFIT
 
   return (
@@ -716,17 +826,33 @@ export default function ProductsPage() {
         <Pagination pagination={pagination} onPageChange={setPage} />
       )}
 
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Product" subtitle="Add a new product to your catalogue" size="lg">
+      {/* ── Add Product Modal ─────────────────────────────────────────────── */}
+      <Modal
+        open={showAdd}
+        onClose={() => { setShowAdd(false); setAddNameError(null) }}
+        title="Add Product"
+        subtitle="Add a new product to your catalogue"
+        size="lg"
+      >
         <AddProductForm
           onSubmit={handleCreate}
-          onClose={() => setShowAdd(false)}
+          onClose={() => { setShowAdd(false); setAddNameError(null) }}
           isPending={isCreating}
           categories={categories}
           canViewProfit={canViewProfit}
+          nameError={addNameError}
+          onNameErrorClear={() => setAddNameError(null)}
         />
       </Modal>
 
-      <Modal open={Boolean(editTarget)} onClose={() => setEditTarget(null)} title="Edit Product" subtitle={editTarget?.prod_name} size="lg">
+      {/* ── Edit Product Modal ────────────────────────────────────────────── */}
+      <Modal
+        open={Boolean(editTarget)}
+        onClose={() => { setEditTarget(null); setEditNameError(null) }}
+        title="Edit Product"
+        subtitle={editTarget?.prod_name}
+        size="lg"
+      >
         {editTarget && (
           <EditProductForm
             key={editTarget.prod_id}
@@ -743,15 +869,17 @@ export default function ProductsPage() {
               _stock_qty:           editTarget.prod_stock_qty,
             }}
             onSubmit={handleUpdate}
-            onClose={() => setEditTarget(null)}
+            onClose={() => { setEditTarget(null); setEditNameError(null) }}
             isPending={isUpdating}
             categories={categories}
             canViewProfit={canViewProfit}
+            nameError={editNameError}
+            onNameErrorClear={() => setEditNameError(null)}
           />
         )}
       </Modal>
 
-      {/* Product detail drawer — opens on row click */}
+      {/* ── Product detail drawer ─────────────────────────────────────────── */}
       {detailProduct && (
         <ProductDetailDrawer
           product={detailProduct}
@@ -759,6 +887,7 @@ export default function ProductsPage() {
         />
       )}
 
+      {/* ── Delete confirm ────────────────────────────────────────────────── */}
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
@@ -767,6 +896,26 @@ export default function ProductsPage() {
         message="This will permanently deactivate the product. It will no longer appear in sales or purchases. This cannot be undone."
         confirmText="Yes, delete"
         loading={isDeleting}
+      />
+
+      {/* ── Feature 1: Loss-price confirmation dialog ────────────────────── */}
+      {/*
+          Opens when: prod_sell_price < prod_cost_price AND canViewProfit.
+          variant="warning" → amber icon (⚠️) instead of the default red bin.
+          Cancel  → closes dialog, both Add/Edit modals remain open so user
+                    can correct the prices without losing their other inputs.
+          Continue → fires the actual createProduct / updateProduct call.
+      */}
+      <ConfirmDialog
+        open={lossConfirmOpen}
+        onClose={handleLossCancelled}
+        onConfirm={handleLossConfirmed}
+        variant="warning"
+        title="Selling Below Cost Price"
+        message="The Sale Price is lower than the Cost Price. This product will be sold at a loss. Do you want to continue?"
+        confirmText="Yes, Continue"
+        cancelText="Cancel"
+        loading={isCreating || isUpdating}
       />
     </>
   )

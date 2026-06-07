@@ -1,36 +1,60 @@
 // src/features/customers/api/customersApi.js
 //
-// EXPORT FIX — 2026-06-06
-// ─────────────────────────────────────────────────────────────────────────────
-// PROBLEM:
-//   fetchCustomers() used limit=100. Businesses with > 100 customers only
-//   had the first 100 loaded into the hook, so both the table search AND the
-//   CSV export silently missed all records beyond the 100th.
+// SCALABILITY FIX:
+//   fetchCustomers() no longer loads limit=10000 into the browser.
+//   It now accepts filter params and fetches only the current page
+//   (limit=20 by default). The database does all filtering, sorting,
+//   and counting before returning rows.
 //
-// FIX:
-//   Raised limit to 10000. The backend paginate() le cap was raised to 10000
-//   in this same fix (app/utils/pagination.py).
-//
-//   Customers uses the "full dataset loaded once" pattern (not lazy export)
-//   because the table itself needs all records for client-side filter/sort.
-//   10 000 customer rows returned as JSON is typically < 2 MB — acceptable
-//   for a SaaS app targeting small retail businesses.
-//
-//   If customer counts grow very large (> 5 000), migrate to server-side
-//   search + lazy export following the Sales page pattern.
-// ─────────────────────────────────────────────────────────────────────────────
+//   fetchAllCustomersForExport() is a separate lazy call used only
+//   when the Export button is clicked. It sends the same active filter
+//   params with limit=10000 so the CSV always contains all matching
+//   records — not just what is visible on screen.
 
 import api from '../../../api/axios'
 
-// ── GET ALL CUSTOMERS ─────────────────────────────────────────────────────────
-// limit=10000 — fetches the complete dataset so client-side filter/sort/paginate
-// and CSV export both operate on ALL records, not just the first 100.
-export async function fetchCustomers() {
-  const res = await api.get('/customers', { params: { limit: 10000 } })
+// ── GET PAGINATED LIST — server-side filter/sort/paginate ─────────────────────
+// Called by useCustomers() on every page load and whenever filters change.
+// The backend applies search, sort, date filter, and OFFSET/LIMIT in SQL.
+export async function fetchCustomers({
+  page         = 1,
+  limit        = 20,
+  search       = '',
+  sort_by      = 'updated_at',
+  sort_dir     = 'desc',
+  updated_from = '',
+  updated_to   = '',
+} = {}) {
+  const params = { page, limit }
+  if (search.trim())    params.search       = search.trim()
+  if (sort_by)          params.sort_by      = sort_by
+  if (sort_dir)         params.sort_dir     = sort_dir
+  if (updated_from)     params.updated_from = updated_from
+  if (updated_to)       params.updated_to   = updated_to
 
-  if (Array.isArray(res.data))         return res.data
-  if (Array.isArray(res.data?.items))  return res.data.items
-  return []
+  const res = await api.get('/customers', { params })
+  return res.data   // { items: [...], pagination: { total, page, ... } }
+}
+
+// ── LAZY EXPORT — fetches ALL matching rows only when export is clicked ────────
+// Sends the same active filter params with limit=10000.
+// Returns a flat array of records (not the pagination envelope).
+export async function fetchAllCustomersForExport({
+  search       = '',
+  sort_by      = 'updated_at',
+  sort_dir     = 'desc',
+  updated_from = '',
+  updated_to   = '',
+} = {}) {
+  const params = { page: 1, limit: 10000 }
+  if (search.trim())    params.search       = search.trim()
+  if (sort_by)          params.sort_by      = sort_by
+  if (sort_dir)         params.sort_dir     = sort_dir
+  if (updated_from)     params.updated_from = updated_from
+  if (updated_to)       params.updated_to   = updated_to
+
+  const res = await api.get('/customers', { params })
+  return res.data?.items ?? []
 }
 
 // ── GET SINGLE CUSTOMER ───────────────────────────────────────────────────────

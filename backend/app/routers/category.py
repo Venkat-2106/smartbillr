@@ -1,6 +1,6 @@
 # app/routers/category.py
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
@@ -10,6 +10,7 @@ from app.utils.pagination import paginate, pagination_response
 from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryResponse
 from app.models.category import Category
 from app.utils.timestamp import fmt_ts
+from typing import Optional
 import uuid
 
 router = APIRouter(
@@ -59,24 +60,68 @@ def create_category(
 
 
 # ══════════════════════════════════════════════════════════════════
-# GET /categories → All categories (paginated)
-# Joins profiles to get last_updated_by name + returns updated_at
+# GET /categories — paginated, with server-side search, date filter, sort
+#
+# SCALABILITY UPDATE:
+#   search       — ILIKE on category_name
+#   updated_from — filters updated_at >= date (YYYY-MM-DD)
+#   updated_to   — filters updated_at <= date (YYYY-MM-DD)
+#   sort_by      — whitelist-validated column name
+#   sort_dir     — asc | desc
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
 def get_categories(
-    current_user: dict = Depends(require_permission("products.view")),
-    pagination: dict = Depends(paginate),
-    db: Session = Depends(get_db)
+    current_user: dict          = Depends(require_permission("products.view")),
+    pagination:   dict          = Depends(paginate),
+    db:           Session       = Depends(get_db),
+    search:       Optional[str] = Query(default=None, description="Search by category name"),
+    updated_from: Optional[str] = Query(default=None, description="Filter updated_at >= YYYY-MM-DD"),
+    updated_to:   Optional[str] = Query(default=None, description="Filter updated_at <= YYYY-MM-DD"),
+    sort_by:      Optional[str] = Query(default="category_name", description="Column to sort by"),
+    sort_dir:     Optional[str] = Query(default="asc",           description="asc or desc"),
 ):
     business_id = current_user["business_id"]
 
-    total = db.query(func.count(Category.category_id)).filter(
-        Category.business_id == business_id,
-        Category.is_deleted  == False
+    SORTABLE = {
+        "category_name": "c.category_name",
+        "updated_at":    "c.updated_at",
+        "created_at":    "c.created_at",
+    }
+    order_col = SORTABLE.get(sort_by, "c.category_name")
+    order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
+
+    extra_where = ""
+    params: dict = {
+        "bid":    business_id,
+        "offset": pagination["offset"],
+        "limit":  pagination["limit"],
+    }
+
+    if search and search.strip():
+        extra_where += " AND c.category_name ILIKE :search"
+        params["search"] = f"%{search.strip()}%"
+
+    if updated_from:
+        extra_where += " AND c.updated_at >= CAST(:updated_from AS date)"
+        params["updated_from"] = updated_from
+
+    if updated_to:
+        extra_where += " AND c.updated_at < (CAST(:updated_to AS date) + INTERVAL '1 day')"
+        params["updated_to"] = updated_to
+
+    total = db.execute(
+        text(f"""
+            SELECT COUNT(*)
+            FROM categories c
+            WHERE c.business_id = CAST(:bid AS uuid)
+              AND c.is_deleted   = false
+              {extra_where}
+        """),
+        params
     ).scalar()
 
     rows = db.execute(
-        text("""
+        text(f"""
             SELECT
                 c.category_id, c.business_id, c.category_name,
                 c.is_deleted, c.created_at, c.created_by,
@@ -88,14 +133,11 @@ def get_categories(
             LEFT JOIN profiles p2 ON p2.id = c.created_by
             WHERE c.business_id = CAST(:bid AS uuid)
               AND c.is_deleted   = false
-            ORDER BY c.category_name ASC
+              {extra_where}
+            ORDER BY {order_col} {order_dir}
             OFFSET :offset LIMIT :limit
         """),
-        {
-            "bid":    business_id,
-            "offset": pagination["offset"],
-            "limit":  pagination["limit"],
-        }
+        params
     ).fetchall()
 
     data = [

@@ -1,26 +1,30 @@
 // src/features/categories/hooks/useCategories.js
 //
-// EXPORT FIX — 2026-06-06
-// ─────────────────────────────────────────────────────────────────────────────
-// PROBLEM:
-//   allQuery fetched limit=100 in background on every page load. Businesses
-//   with > 100 categories exported a truncated CSV silently.
+// SCALABILITY FIX — replaced dual-query client-side pattern with a single
+// server-side query (mirrors useCustomers.js exactly).
 //
-// FIX:
-//   1. allQuery is kept at limit=100 only for the live search filter in the
-//      table (search is an infrequent action — 100 categories is a safe upper
-//      bound for a dropdown / search result).
-//   2. handleExport() fetches limit=10000 lazily, only when Export is clicked.
-//   3. CategoriesPage.jsx passes handleExport to <ExportButton onFetch={...} />.
+// BEFORE:
+//   pagedQuery  — fetched current page (limit=20)
+//   allQuery    — fetched limit=100 for search
+//   Client-side: search → filter on allQuery items
+//   Problem: > 100 categories = silently truncated search results
+//   Problem: date filter applied in CategoriesPage useMemo (client-side)
+//   Problem: column sort applied in CategoriesPage useMemo (client-side)
 //
-// NOTE: If your business has > 100 categories and uses search, the table search
-// will show a maximum of 100 results. Move search to server-side if this becomes
-// a limitation (follow the Sales page pattern).
-// ─────────────────────────────────────────────────────────────────────────────
+// AFTER:
+//   Single query sends every active filter (search, sort, date range, page)
+//   to the backend as query params. PostgreSQL does all the work.
+//   The hook owns all filter state — no state in the page component.
+//   handleExport() fetches lazily with the same filters on click.
+//
+// STATE MOVED INTO HOOK (was in CategoriesPage local state):
+//   sortKey, sortDir, handleSort
+//   dateFrom, dateTo, handleDateChange
 
-import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
+import { useState }                               from 'react'
+import toast                                      from 'react-hot-toast'
+import useAuthStore                               from '../../../store/authStore'
 import {
   fetchCategories,
   fetchAllCategoriesForExport,
@@ -28,67 +32,67 @@ import {
   updateCategory,
   deleteCategory,
 } from '../api/categoriesApi'
+import { useDebounce } from '../../../shared/hooks/useDebounce'
 
-const KEYS = {
-  all:    ['categories'],
-  list:   (page) => ['categories', 'list', page],
-  full:   ['categories', 'all'],
-}
+const PAGE_SIZE = 20
 
 export function useCategories() {
-  const [page, setPage]     = useState(1)
-  const [search, setSearch] = useState('')
+  const user        = useAuthStore(s => s.user)
+  const queryClient = useQueryClient()
 
-  const isSearching = search.trim().length > 0
+  // ── Filter / sort / page state ──────────────────────────────────────────
+  const [search,   setSearchRaw] = useState('')
+  const [sortKey,  setSortKey]   = useState('category_name')
+  const [sortDir,  setSortDir]   = useState('asc')
+  const [page,     setPage]      = useState(1)
+  const [dateFrom, setDateFrom]  = useState('')
+  const [dateTo,   setDateTo]    = useState('')
 
-  // Normal paginated query — used only when no filters are active
-  const pagedQuery = useQuery({
-    queryKey: KEYS.list(page),
-    queryFn:  () => fetchCategories({ page, limit: 20 }),
+  // Debounce: wait 350ms after the user stops typing before sending to server
+  const debouncedSearch = useDebounce(search, 350)
+
+  // ── FETCH (React Query — server paginated) ──────────────────────────────
+  const {
+    data:      serverData,
+    isLoading,
+    isError,
+    isFetching,
+  } = useQuery({
+    queryKey: [
+      'categories', page, debouncedSearch, sortKey, sortDir, dateFrom, dateTo,
+    ],
+    queryFn: () => fetchCategories({
+      page,
+      limit:        PAGE_SIZE,
+      search:       debouncedSearch,
+      sort_by:      sortKey,
+      sort_dir:     sortDir,
+      updated_from: dateFrom,
+      updated_to:   dateTo,
+    }),
+    staleTime:       30_000,
     placeholderData: (prev) => prev,
-    staleTime: 30_000,
+    enabled:         !!user,
   })
 
-  // Full dataset query — limit=100 for the live search filter in the table
-  // (NOT used for export — see handleExport below)
-  const allQuery = useQuery({
-    queryKey: KEYS.full,
-    queryFn:  () => fetchCategories({ page: 1, limit: 100 }),
-    staleTime: 30_000,
-  })
+  // Unwrap pagination envelope
+  const categories = serverData?.items       ?? []
+  const pagination = serverData?.pagination  ?? null
+  const totalItems = pagination?.total       ?? 0
 
-  const isFiltering = isSearching
-  const activeQuery = isFiltering ? allQuery : pagedQuery
-  const allItems    = allQuery.data?.items ?? []
-  const pagedItems  = pagedQuery.data?.items ?? []
-
-  const filtered = isSearching
-    ? allItems.filter(c =>
-        c.category_name.toLowerCase().includes(search.trim().toLowerCase())
-      )
-    : pagedItems
-
-  // ── Lazy export — fetches all categories on demand (limit=10000) ─────────
-  async function handleExport({ dateFrom = '', dateTo = '' } = {}) {
+  // ── LAZY EXPORT ──────────────────────────────────────────────────────────
+  async function handleExport() {
     try {
-      let rows = await fetchAllCategoriesForExport()
-
-      // Apply search filter (same as table)
-      if (search.trim()) {
-        const q = search.trim().toLowerCase()
-        rows = rows.filter(c => c.category_name.toLowerCase().includes(q))
+      const rows = await fetchAllCategoriesForExport({
+        search:       debouncedSearch,
+        sort_by:      sortKey,
+        sort_dir:     sortDir,
+        updated_from: dateFrom,
+        updated_to:   dateTo,
+      })
+      if (serverData?.pagination?.truncated) {
+        toast('Export limited to 10,000 records.', { icon: '⚠️' })
       }
-
-      // Apply date range filter on updated_at
-      if (dateFrom) {
-        const from = new Date(dateFrom); from.setHours(0, 0, 0, 0)
-        rows = rows.filter(r => r.updated_at && new Date(r.updated_at) >= from)
-      }
-      if (dateTo) {
-        const to = new Date(dateTo); to.setHours(23, 59, 59, 999)
-        rows = rows.filter(r => r.updated_at && new Date(r.updated_at) <= to)
-      }
-
       return rows
     } catch {
       toast.error('Export failed — please try again')
@@ -96,26 +100,116 @@ export function useCategories() {
     }
   }
 
+  // ── EVENT HANDLERS ──────────────────────────────────────────────────────
+  function handleSearch(val) {
+    setSearchRaw(val)
+    setPage(1)
+  }
+
+  function handleSort(key) {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+    setPage(1)
+  }
+
+  function handleDateChange(field, val) {
+    if (field === 'from') setDateFrom(val)
+    else                  setDateTo(val)
+    setPage(1)
+  }
+
+  // ── MUTATIONS ────────────────────────────────────────────────────────────
+  const createMut = useMutation({
+    mutationFn: createCategory,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] })
+      toast.success('Category created')
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Could not create category')
+    },
+  })
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, payload }) => updateCategory(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] })
+      toast.success('Category updated')
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Could not update category')
+    },
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: deleteCategory,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] })
+      const n = data?.products_deactivated ?? 0
+      if (n > 0) {
+        toast.success(`Category deleted · ${n} product${n > 1 ? 's' : ''} also deactivated`)
+      } else {
+        toast.success('Category deleted')
+      }
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Could not delete category')
+    },
+  })
+
+  // ── RETURN ───────────────────────────────────────────────────────────────
   return {
-    categories: filtered,
-    allCategories: allItems,   // kept for CategoriesPage date-filter display logic
-    pagination: isFiltering ? null : (pagedQuery.data?.pagination ?? null),
+    // Table data (current page only — server paginated + filtered + sorted)
+    categories,
+
+    // Loading / error states
+    isLoading: isLoading || isFetching,
+    isError,
+
+    // Search
+    search,
+    setSearch: handleSearch,
+
+    // Sort (passed to Table.jsx)
+    sortKey,
+    sortDir,
+    handleSort,
+
+    // Date range
+    dateFrom,
+    dateTo,
+    handleDateChange,
+
+    // Pagination
     page,
     setPage,
-    search,
-    setSearch,
-    isLoading:  activeQuery.isLoading,
-    isError:    activeQuery.isError,
+    pagination,
+    totalItems,
+
+    // Export
     handleExport,
+
+    // Mutations (named exports so page can call them and get isPending)
+    createCategory: (data, callbacks)     => createMut.mutate(data, callbacks),
+    updateCategory: ({ id, payload }, cb) => updateMut.mutate({ id, payload }, cb),
+    deleteCategory: (id, callbacks)       => deleteMut.mutate(id, callbacks),
+    isCreating: createMut.isPending,
+    isUpdating: updateMut.isPending,
+    isDeleting: deleteMut.isPending,
   }
 }
 
+// ── Re-exported aliases kept for backward compat with any other import sites ──
 export function useCreateCategory() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: createCategory,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.all })
+      qc.invalidateQueries({ queryKey: ['categories'] })
       toast.success('Category created')
     },
     onError: (err) => {
@@ -129,7 +223,7 @@ export function useUpdateCategory() {
   return useMutation({
     mutationFn: ({ id, payload }) => updateCategory(id, payload),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.all })
+      qc.invalidateQueries({ queryKey: ['categories'] })
       toast.success('Category updated')
     },
     onError: (err) => {
@@ -143,7 +237,7 @@ export function useDeleteCategory() {
   return useMutation({
     mutationFn: deleteCategory,
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: KEYS.all })
+      qc.invalidateQueries({ queryKey: ['categories'] })
       const n = data?.products_deactivated ?? 0
       if (n > 0) {
         toast.success(`Category deleted · ${n} product${n > 1 ? 's' : ''} also deactivated`)

@@ -167,6 +167,12 @@ def _find_duplicate_name(
         sql += " AND prod_id != CAST(:exclude_id AS uuid)"
         params["exclude_id"] = exclude_id
 
+    # BUG FIX: the original function was missing this return statement.
+    # Without it the function always returned None, so duplicate name checks
+    # on POST and PUT never blocked conflicting names (only the DB index did,
+    # which produces a raw IntegrityError instead of a clean 400 response).
+    return db.execute(text(sql), params).fetchone()
+
 
 
 # ── Helper: check for duplicate barcode within a business ────────────────────
@@ -192,8 +198,6 @@ def _find_duplicate_barcode(
     if exclude_id:
         sql += " AND prod_id != CAST(:exclude_id AS uuid)"
         params["exclude_id"] = exclude_id
-    return db.execute(text(sql), params).fetchone()
-
     return db.execute(text(sql), params).fetchone()
 
 
@@ -286,34 +290,80 @@ def create_product(
 
 # ─────────────────────────────────────────
 # GET /products → Get all products (paginated)
+#
+# SCALABILITY UPDATE:
+#   Added server-side filter params so the frontend never needs to fetch all
+#   records to the browser. All filtering, searching, date-ranging, and sorting
+#   now execute at the database level before pagination is applied.
+#
+#   New query params:
+#     search       — ILIKE on prod_name OR barcode (unchanged)
+#     updated_from — ISO date string "YYYY-MM-DD"; filters updated_at >= local midnight
+#     updated_to   — ISO date string "YYYY-MM-DD"; filters updated_at <= local end-of-day
+#     sort_by      — column name to sort by (whitelist-validated)
+#     sort_dir     — "asc" or "desc"
+#
+#   The COUNT query uses the same WHERE clauses as the data query so the
+#   total in the pagination envelope always reflects the filtered result set.
 # ─────────────────────────────────────────
 @router.get("/")
 def get_all_products(
     current_user: dict          = Depends(require_permission("products.view")),
     db:           Session       = Depends(get_db),
     pagination:   dict          = Depends(paginate),
-    search:       Optional[str] = Query(default=None, description="Search by name or barcode")
+    search:       Optional[str] = Query(default=None, description="Search by name or barcode"),
+    updated_from: Optional[str] = Query(default=None, description="Filter updated_at >= this date (YYYY-MM-DD)"),
+    updated_to:   Optional[str] = Query(default=None, description="Filter updated_at <= this date (YYYY-MM-DD)"),
+    sort_by:      Optional[str] = Query(default="prod_name", description="Column to sort by"),
+    sort_dir:     Optional[str] = Query(default="asc",  description="asc or desc"),
 ):
     business_id = current_user["business_id"]
     show_profit = PROFIT_PERMISSION in current_user.get("permissions", set())
 
-    search_sql = ""
+    # ── Whitelist sort column to prevent SQL injection ────────────────────────
+    SORTABLE = {
+        "prod_name":            "p.prod_name",
+        "prod_sell_price":      "p.prod_sell_price",
+        "prod_mrp":             "p.prod_mrp",
+        "prod_cost_price":      "p.prod_cost_price",
+        "prod_profit":          "p.prod_profit",
+        "prod_stock_qty":       "p.prod_stock_qty",
+        "tax_rate":             "p.tax_rate",
+        "updated_at":           "p.updated_at",
+        "prod_created_at":      "p.prod_created_at",
+        "category_name":        "c.category_name",
+    }
+    order_col = SORTABLE.get(sort_by, "p.prod_name")
+    order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
+
+    # ── Build dynamic WHERE clauses ───────────────────────────────────────────
+    extra_where = ""
     params = {
         "business_id": business_id,
-        "offset": pagination["offset"],
-        "limit":  pagination["limit"]
+        "offset":      pagination["offset"],
+        "limit":       pagination["limit"],
     }
+
     if search and search.strip():
-        search_sql = "AND (p.prod_name ILIKE :search OR p.barcode ILIKE :search)"
+        extra_where += " AND (p.prod_name ILIKE :search OR p.barcode ILIKE :search)"
         params["search"] = f"%{search.strip()}%"
+
+    if updated_from:
+        extra_where += " AND p.updated_at >= CAST(:updated_from AS date)"
+        params["updated_from"] = updated_from
+
+    if updated_to:
+        extra_where += " AND p.updated_at < (CAST(:updated_to AS date) + INTERVAL '1 day')"
+        params["updated_to"] = updated_to
 
     total = db.execute(
         text(f"""
             SELECT COUNT(*)
             FROM products p
+            LEFT JOIN categories c ON c.category_id = p.category_id
             WHERE p.business_id = CAST(:business_id AS uuid)
               AND p.is_deleted = false
-              {search_sql}
+              {extra_where}
         """),
         params
     ).scalar()
@@ -337,8 +387,8 @@ def get_all_products(
             LEFT JOIN profiles   pr2 ON pr2.id = p.created_by
             WHERE p.business_id = CAST(:business_id AS uuid)
               AND p.is_deleted   = false
-              {search_sql}
-            ORDER BY p.prod_name ASC
+              {extra_where}
+            ORDER BY {order_col} {order_dir}
             OFFSET :offset LIMIT :limit
         """),
         params

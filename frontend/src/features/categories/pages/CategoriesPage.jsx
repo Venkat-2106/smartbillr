@@ -11,7 +11,7 @@
 //   ✅ FIX B — Last Updated By column
 //   ✅ ExportButton with CATEGORY_CSV_COLUMNS
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -84,82 +84,34 @@ export default function CategoriesPage() {
 
   const navigate = useNavigate()
 
-  // EXPORT FIX: added handleExport to destructuring
+  // ── All filter/sort/date state now lives in the hook (server-side) ─────────
+  // The hook sends every active filter to the backend as query params.
+  // PostgreSQL does the filtering, sorting, and counting. The hook receives
+  // only the 20 rows for the current page — no client-side filtering needed.
   const {
-    categories,
-    allCategories,
+    categories,         // current page rows (already filtered + sorted by server)
     pagination,
     page,
     setPage,
+    totalItems,         // server-side total (reflects active filters)
     search,
     setSearch,
+    sortKey,            // ← from hook (drives server-side ORDER BY)
+    sortDir,
+    handleSort,         // ← from hook (resets page + refetches)
+    dateFrom,           // ← from hook (drives server-side date filter)
+    dateTo,
+    handleDateChange,   // ← from hook (resets page + refetches)
     isLoading,
     isError,
-    handleExport,
+    handleExport,       // lazy export — fetches all matching rows on click
   } = useCategories()
 
-  const [sortKey, setSortKey] = useState(null)
-  const [sortDir, setSortDir] = useState('asc')
-
-  function handleSort(key) {
-    if (sortKey === key) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortKey(key)
-      setSortDir('asc')
-    }
-  }
-
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo,   setDateTo]   = useState('')
-
-  function handleDateChange(field, value) {
-    if (field === 'from') setDateFrom(value)
-    else                  setDateTo(value)
-  }
-
-  const displayRows = useMemo(() => {
-    const source = (dateFrom || dateTo) ? allCategories : categories
-    let rows = [...source]
-
-    if (dateFrom) {
-      const from = new Date(dateFrom)
-      from.setHours(0, 0, 0, 0)
-      rows = rows.filter(r => r.updated_at && new Date(r.updated_at) >= from)
-    }
-    if (dateTo) {
-      const to = new Date(dateTo)
-      to.setHours(23, 59, 59, 999)
-      rows = rows.filter(r => r.updated_at && new Date(r.updated_at) <= to)
-    }
-
-    if (sortKey) {
-      rows.sort((a, b) => {
-        let valA = a[sortKey]
-        let valB = b[sortKey]
-
-        if (sortKey === 'updated_at') {
-          valA = valA ? new Date(valA).getTime() : 0
-          valB = valB ? new Date(valB).getTime() : 0
-          return sortDir === 'asc' ? valA - valB : valB - valA
-        }
-
-        if (typeof valA === 'boolean') {
-          return sortDir === 'asc'
-            ? Number(valA) - Number(valB)
-            : Number(valB) - Number(valA)
-        }
-
-        valA = String(valA ?? '').toLowerCase()
-        valB = String(valB ?? '').toLowerCase()
-        if (valA < valB) return sortDir === 'asc' ? -1 :  1
-        if (valA > valB) return sortDir === 'asc' ?  1 : -1
-        return 0
-      })
-    }
-
-    return rows
-  }, [categories, allCategories, sortKey, sortDir, dateFrom, dateTo])
+  // displayRows useMemo REMOVED:
+  //   Previously this block did client-side date filter + sort on the raw
+  //   categories array. Now that the hook sends all params to the backend,
+  //   `categories` is already filtered, sorted, and paginated correctly.
+  //   Re-filtering here would be redundant (and silently wrong for > 100 rows).
 
   // EXPORT FIX: exportData useMemo removed. Export now calls handleExport()
   // from the hook, which fetches limit=10000 on demand.
@@ -282,7 +234,7 @@ export default function CategoriesPage() {
                 onFetch triggers a fresh limit=10000 fetch when clicked,
                 so export is never capped at 100 records. */}
             <ExportButton
-              onFetch={() => handleExport({ dateFrom, dateTo })}
+              onFetch={handleExport}
               filename="categories"
               columns={CATEGORY_CSV_COLUMNS}
             />
@@ -319,7 +271,7 @@ export default function CategoriesPage() {
           <DateRangeFilter label="Last Updated" from={dateFrom} to={dateTo} onChange={handleDateChange} />
         </div>
         <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
-          {displayRows.length} record{displayRows.length !== 1 ? 's' : ''}
+          {totalItems} record{totalItems !== 1 ? 's' : ''}
           {activeFilters > 0 && ' (filtered)'}
         </span>
       </div>
@@ -336,7 +288,7 @@ export default function CategoriesPage() {
 
       <Table
         columns={columns}
-        rows={displayRows}
+        rows={categories}
         loading={isLoading}
         rowKey="category_id"
         sortKey={sortKey}

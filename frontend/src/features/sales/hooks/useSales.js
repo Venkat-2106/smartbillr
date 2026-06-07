@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-hot-toast';
 import { fetchSales, updateSaleStatus, fetchAllSalesForExport } from '../api/salesApi';
 
@@ -105,16 +105,17 @@ export function useSales() {
   };
 
   // ── React Query — server-side fetch ──────────────────────────────────────
-  // queryKey includes page + search + status + dates so any change triggers a refetch.
-  // keepPreviousData: true keeps the old table visible while the new page loads
-  // (no blank flash between pages).
+  // queryKey includes page + search + status + dates + sort so any change
+  // triggers a refetch. sort_by and sort_dir are now sent to the backend so
+  // the ORDER BY applies across the FULL filtered result set — not just the
+  // 20 rows on the current page.
   const {
     data: serverData,
     isLoading,
     isError,
     isFetching,
   } = useQuery({
-    queryKey:  ['sales', page, debouncedSearch, statusFilter, dateFrom, dateTo],
+    queryKey:  ['sales', page, debouncedSearch, statusFilter, dateFrom, dateTo, sortKey, sortDir],
     queryFn:   () => fetchSales({
       page,
       limit:     PAGE_SIZE,
@@ -123,10 +124,12 @@ export function useSales() {
       // FIX: convert local date to UTC ISO boundary before sending to backend
       date_from: dateFrom ? localDayStartUTC(dateFrom) : undefined,
       date_to:   dateTo   ? localDayEndUTC(dateTo)     : undefined,
+      // SORT FIX: pass sort params to backend so ORDER BY runs on all matching
+      // rows, not just the 20 rows on the current page.
+      sort_by:   sortKey  || undefined,
+      sort_dir:  sortDir  || undefined,
     }),
     staleTime:        30 * 1000,
-    // FIX: keepPreviousData was React Query v4 API — renamed in v5.
-    // placeholderData keeps the old table visible during page transition (no blank flash).
     placeholderData: (prev) => prev,
   });
 
@@ -136,27 +139,14 @@ export function useSales() {
   const totalItems = pagination.total        ?? 0;
   const totalPages = pagination.total_pages  ?? 1;
 
-  // ── Server-side date filter (backend now handles date_from / date_to) ─────
-  // The queryKey includes dateFrom and dateTo so any change triggers a new
-  // server fetch. rawItems is already date-filtered by the backend.
-  // We keep dateFiltered as an alias so the sort useMemo below stays unchanged.
-  const dateFiltered = rawItems;
-
-  // ── Client-side sort (on current page only) ──────────────────────────────
-  // NOTE: Sort still operates on the current server page only. Moving sort
-  // fully server-side is a future improvement. For now this gives correct
-  // visual order within the page the user is viewing.
-  const sales = useMemo(() => {
-    const rows = [...dateFiltered];
-    rows.sort((a, b) => {
-      const av = a[sortKey] ?? '';
-      const bv = b[sortKey] ?? '';
-      if (av < bv) return sortDir === 'asc' ? -1 : 1;
-      if (av > bv) return sortDir === 'asc' ?  1 : -1;
-      return 0;
-    });
-    return rows;
-  }, [dateFiltered, sortKey, sortDir]);
+  // ── Client-side sort REMOVED ──────────────────────────────────────────────
+  // Previously: useMemo sorted the current page's 20 rows in JavaScript.
+  // Now: sort_by + sort_dir are sent to the backend. PostgreSQL applies
+  // ORDER BY before OFFSET/LIMIT so the sort is correct across all pages.
+  //
+  // The server-side date filter (backend handles date_from/date_to) means
+  // rawItems is already filtered correctly by both date AND sort.
+  const sales = rawItems;
 
   // ── Sort handler ─────────────────────────────────────────────────────────
   const handleSort = (key) => {

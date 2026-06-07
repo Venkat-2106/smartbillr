@@ -112,46 +112,34 @@ def get_all_customers(
     db:           Session       = Depends(get_db),
     pagination:   dict          = Depends(paginate),
     search:       Optional[str] = Query(default=None, description="Search by name, phone, or email"),
-    phone:        Optional[str] = Query(default=None, description="Exact phone match (for sale form auto-fill)")
+    phone:        Optional[str] = Query(default=None, description="Exact phone match (for sale form auto-fill)"),
+    updated_from: Optional[str] = Query(default=None, description="Filter updated_at >= YYYY-MM-DD"),
+    updated_to:   Optional[str] = Query(default=None, description="Filter updated_at <= YYYY-MM-DD"),
+    sort_by:      Optional[str] = Query(default="cust_name", description="Column to sort by"),
+    sort_dir:     Optional[str] = Query(default="asc",       description="asc or desc"),
 ):
     business_id = current_user["business_id"]
 
-    base = db.query(Customer).filter(
-        Customer.business_id == business_id,
-        Customer.is_deleted  == False
-    )
+    SORTABLE = {
+        "cust_name":    "c.cust_name",
+        "cust_phone":   "c.cust_phone",
+        "cust_email":   "c.cust_email",
+        "cust_state":   "c.cust_state",
+        "updated_at":   "c.updated_at",
+        "cust_created_at": "c.cust_created_at",
+    }
+    order_col = SORTABLE.get(sort_by, "c.cust_name")
+    order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
 
-    # Server-side search — ILIKE covers name, phone, email in one pass
-    if search and search.strip():
-        q = f"%{search.strip()}%"
-        from sqlalchemy import or_
-        base = base.filter(
-            or_(
-                Customer.cust_name.ilike(q),
-                Customer.cust_phone.ilike(q),
-                Customer.cust_email.ilike(q),
-            )
-        )
-
-    # Exact phone filter (kept for sale creation form)
-    if phone:
-        base = base.filter(Customer.cust_phone == phone)
-
-    total = base.count()
-
-    # Use raw SQL for the list so we can LEFT JOIN profiles in one query
-    # and resolve last_updated_by names without an N+1 loop.
-    # We replicate the same filters in SQL.
-    search_clause = ""
-    phone_clause  = ""
-    params: dict  = {
+    extra_where = ""
+    params: dict = {
         "bid":    business_id,
         "offset": pagination["offset"],
         "limit":  pagination["limit"],
     }
 
     if search and search.strip():
-        search_clause = """
+        extra_where += """
             AND (
                 c.cust_name  ILIKE :search_q
              OR c.cust_phone ILIKE :search_q
@@ -161,8 +149,27 @@ def get_all_customers(
         params["search_q"] = f"%{search.strip()}%"
 
     if phone:
-        phone_clause = "AND c.cust_phone = :exact_phone"
+        extra_where += " AND c.cust_phone = :exact_phone"
         params["exact_phone"] = phone
+
+    if updated_from:
+        extra_where += " AND c.updated_at >= CAST(:updated_from AS date)"
+        params["updated_from"] = updated_from
+
+    if updated_to:
+        extra_where += " AND c.updated_at < (CAST(:updated_to AS date) + INTERVAL '1 day')"
+        params["updated_to"] = updated_to
+
+    total = db.execute(
+        text(f"""
+            SELECT COUNT(*)
+            FROM customers c
+            WHERE c.business_id = CAST(:bid AS uuid)
+              AND c.is_deleted   = false
+              {extra_where}
+        """),
+        params
+    ).scalar()
 
     rows = db.execute(
         text(f"""
@@ -177,9 +184,8 @@ def get_all_customers(
             LEFT JOIN profiles p ON p.id = c.updated_by
             WHERE c.business_id = CAST(:bid AS uuid)
               AND c.is_deleted   = false
-              {search_clause}
-              {phone_clause}
-            ORDER BY c.cust_name ASC
+              {extra_where}
+            ORDER BY {order_col} {order_dir}
             OFFSET :offset LIMIT :limit
         """),
         params

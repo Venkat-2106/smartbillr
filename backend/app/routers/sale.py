@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, Query
 from fastapi import Body
 from pydantic import BaseModel
+from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from decimal import Decimal
@@ -427,20 +428,33 @@ def create_sale(
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
 def get_sales(
-    current_user: dict = Depends(require_permission("sales.view")),
-    db: Session = Depends(get_db),
-    pagination: dict = Depends(paginate),
-    search:     str = Query(None),
-    status:     str = Query(None),
-    date_from:  str = Query(None),   # UTC ISO string from frontend e.g. "2026-06-05T05:00:00.000Z"
-    date_to:    str = Query(None),   # UTC ISO string from frontend e.g. "2026-06-06T04:59:59.999Z"
+    current_user: dict          = Depends(require_permission("sales.view")),
+    db:           Session       = Depends(get_db),
+    pagination:   dict          = Depends(paginate),
+    search:       str           = Query(None),
+    status:       str           = Query(None),
+    date_from:    str           = Query(None),
+    date_to:      str           = Query(None),
+    sort_by:      Optional[str] = Query(default="sales_created_at", description="Column to sort by"),
+    sort_dir:     Optional[str] = Query(default="desc",             description="asc or desc"),
 ):
     business_id = current_user["business_id"]
 
-    # ── Build dynamic WHERE clauses for search and status ───────────────────
-    # FIX: search and status are now applied at the DB level, not in Python.
-    # This means the COUNT and the data query both see the same filtered set,
-    # and pagination is accurate even with 10,000+ invoices.
+    # ── Whitelist sort columns to prevent SQL injection ───────────────────
+    # Sort now runs at the database level so the ORDER BY applies across the
+    # full filtered result set — not just the 20 rows on the current page.
+    SORTABLE = {
+        "sales_created_at":     "s.sales_created_at",
+        "invoice_no":           "s.invoice_no",
+        "customer_name":        "c.cust_name",
+        "sales_final_amount":   "s.sales_final_amount",
+        "sales_payment_status": "s.sales_payment_status",
+        "sales_payment_method": "s.sales_payment_method",
+    }
+    order_col = SORTABLE.get(sort_by, "s.sales_created_at")
+    order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
+
+    # ── Build dynamic WHERE clauses ───────────────────────────────────────
     extra_where = ""
     params = {
         "bid":    business_id,
@@ -458,18 +472,13 @@ def get_sales(
 
     if date_from:
         extra_where += " AND s.sales_created_at >= :date_from"
-        params["date_from"] = date_from   # full UTC ISO string — PostgreSQL handles 'Z' correctly
+        params["date_from"] = date_from
 
     if date_to:
         extra_where += " AND s.sales_created_at <= :date_to"
-        # FIX: no longer append T23:59:59 here.
-        # The frontend now sends a full UTC ISO end-of-day string
-        # (e.g. "2026-06-06T04:59:59.999Z" for an EST user's local day-end).
-        # Appending T23:59:59 to a string that already ends in 'Z' would corrupt it.
-        # PostgreSQL correctly interprets the 'Z' suffix as UTC.
         params["date_to"] = date_to
 
-    # Count query — must apply the same filters so total is accurate
+    # Count query — same WHERE so total is always filter-accurate
     count_sql = f"""
         SELECT COUNT(*)
         FROM sales s
@@ -480,10 +489,7 @@ def get_sales(
     """
     total = db.execute(text(count_sql), params).scalar()
 
-    # ── Raw SQL with LEFT JOIN customers → gets customer_name in one query ───
-    # WHY raw SQL here: SQLAlchemy ORM query(Sale) returns ORM objects that
-    # don't carry JOIN columns. Raw SQL lets us SELECT s.*, c.cust_name in
-    # one round-trip without a separate N+1 customer lookup loop.
+    # Data query — ORDER BY is now dynamic + server-side
     data_sql = f"""
         SELECT s.sales_id, s.invoice_no, s.customer_id,
                c.cust_name        AS customer_name,
@@ -496,7 +502,7 @@ def get_sales(
         WHERE s.business_id = CAST(:bid AS uuid)
           AND s.is_deleted  = false
         {extra_where}
-        ORDER BY s.sales_created_at DESC
+        ORDER BY {order_col} {order_dir}
         OFFSET :offset LIMIT :limit
     """
     sales_rows = db.execute(text(data_sql), params).fetchall()

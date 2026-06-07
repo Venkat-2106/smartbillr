@@ -1,18 +1,16 @@
 // src/features/customers/pages/CustomersPage.jsx
 //
-// EXPORT FIX (2026-06-06):
-//   No change to this file. The fix is in customersApi.js where
-//   fetchCustomers() limit was raised from 100 → 10000.
-//   exportData from useCustomers() now contains ALL filtered records.
-//   ExportButton data={exportData} already passes the full set — no change needed here.
+// SCALABILITY FIX:
+//   useCustomers() now uses server-side pagination. The hook no longer
+//   holds an in-memory array of all customers. This page receives only
+//   the current page of rows.
 //
-// All code below is identical to the previous version.
+//   ExportButton switched from data={exportData} → onFetch={handleExport}.
+//   handleExport() fetches from the backend on demand so the CSV always
+//   contains all matching records — not just the 20 rows on screen.
 //
-// PREVIOUS CHANGES RETAINED:
-//   ✅ Layout matches ProductsPage (toolbar pattern, inline date filter, record count)
-//   ✅ ExportButton always visible (not permission-gated)
-//   ✅ CustomerDetailDrawer with full sales history
-//   ✅ All bug fixes retained
+//   Pagination is always shown (no activeSearch/activeDateFilter hide logic
+//   needed — server handles filtering so pagination is always accurate).
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useForm }                               from 'react-hook-form'
@@ -40,7 +38,6 @@ import CustomerDetailDrawer, { DrawerOverlay }
 
 
 // ─── ZOD VALIDATION SCHEMA ────────────────────────────────────────────────────
-
 const customerSchema = z.object({
   cust_name: z
     .string()
@@ -95,7 +92,6 @@ const DEFAULT_VALUES = {
 
 
 // ─── HELPER ───────────────────────────────────────────────────────────────────
-
 const countryCodeToName = COUNTRIES.reduce((acc, c) => {
   if (c.value) acc[c.value] = c.label
   return acc
@@ -107,7 +103,6 @@ function getCountryName(code) {
 
 
 // ─── TABLE COLUMN DEFINITIONS ─────────────────────────────────────────────────
-
 function buildColumns(canManage, onEdit, onDelete) {
   return [
     {
@@ -213,31 +208,23 @@ function buildColumns(canManage, onEdit, onDelete) {
 
 
 // ─── MAIN PAGE COMPONENT ─────────────────────────────────────────────────────
-
 export default function CustomersPage() {
-
-  // Back navigation
-  const navigate = useNavigate()
-
-  // Permissions
+  const navigate      = useNavigate()
   const hasPermission = useAuthStore(s => s.hasPermission)
   const canManage     = hasPermission('customers.manage')
 
-
-  // Hook (all data + mutations)
-  // exportData from useCustomers() now reflects ALL filtered records (limit=10000
-  // in customersApi.js), so ExportButton receives the full set automatically.
   const {
-    customers, exportData, isLoading, isError,
+    customers,
+    isLoading, isError,
     search, setSearch,
     dateFrom, setDateFrom,
     dateTo,   setDateTo,
     sortKey, sortDir, handleSort,
     page, setPage, totalPages, totalItems,
+    handleExport,
     createCustomer, updateCustomer, deleteCustomer,
     isCreating, isUpdating, isDeleting,
   } = useCustomers()
-
 
   // Modal state
   const [showModal,        setShowModal]        = useState(false)
@@ -247,7 +234,6 @@ export default function CustomersPage() {
   const [selectedCustomer, setSelectedCustomer] = useState(null)
 
   const isEditing = !!editingCustomer?.cust_id
-
 
   // React Hook Form
   const {
@@ -262,8 +248,8 @@ export default function CustomersPage() {
     defaultValues: DEFAULT_VALUES,
   })
 
-  const watchedCountry  = watch('cust_country_code')
-  const prevCountryRef  = useRef(undefined)
+  const watchedCountry = watch('cust_country_code')
+  const prevCountryRef = useRef(undefined)
 
   useEffect(() => {
     if (
@@ -274,7 +260,6 @@ export default function CustomersPage() {
     }
     prevCountryRef.current = watchedCountry
   }, [watchedCountry, setValue])
-
 
   // Modal helpers
   function handleOpenAdd() {
@@ -315,8 +300,6 @@ export default function CustomersPage() {
     setDeletingCustomer(null)
   }
 
-
-  // Form submit
   function onSubmit(formData) {
     const payload = Object.fromEntries(
       Object.entries(formData).filter(([, v]) => v !== '')
@@ -332,26 +315,20 @@ export default function CustomersPage() {
     deleteCustomer(deletingCustomer.cust_id, { onSuccess: handleCloseDelete })
   }
 
-
-  // Table columns (memoized)
   const columns = useMemo(
     () => buildColumns(canManage, handleOpenEdit, handleDeleteClick),
     [canManage] // eslint-disable-line react-hooks/exhaustive-deps
   )
 
-  // Date filter handler
   function handleDateChange(field, value) {
     if (field === 'from') setDateFrom(value)
     else                  setDateTo(value)
   }
 
-  const activeSearch     = search.trim().length > 0
-  const activeDateFilter = dateFrom || dateTo
-  const activeFilters    = [search.trim(), dateFrom, dateTo].filter(Boolean).length
+  const activeFilters = [search.trim(), dateFrom, dateTo].filter(Boolean).length
 
 
   // ─── RENDER ───────────────────────────────────────────────────────────────
-
   return (
     <>
       <PageHeader
@@ -361,9 +338,9 @@ export default function CustomersPage() {
         onBack={() => navigate('/dashboard')}
         action={
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            {/* exportData is now the full filtered set (limit=10000 in API) */}
+            {/* onFetch triggers a backend call on click — not from memory */}
             <ExportButton
-              data={exportData}
+              onFetch={handleExport}
               filename="customers"
               columns={CUSTOMER_CSV_COLUMNS}
             />
@@ -392,7 +369,7 @@ export default function CustomersPage() {
             value={search}
             onChange={setSearch}
             onSearch={setSearch}
-            placeholder="Search by name, phone, email, tax no…"
+            placeholder="Search by name, phone, email…"
             width="280px"
           />
           <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
@@ -431,35 +408,27 @@ export default function CustomersPage() {
           onSort={handleSort}
           onRowClick={(row) => setSelectedCustomer(row)}
           emptyText={
-            activeSearch
-              ? 'No customers match your search.'
-              : activeDateFilter
-                ? 'No customers in the selected date range.'
-                : 'No customers yet. Add your first customer to get started.'
+            activeFilters > 0
+              ? 'No customers match your current filters.'
+              : 'No customers yet. Add your first customer to get started.'
           }
         />
       </div>
 
-      {/* PAGINATION */}
-      {/* ROOT-CAUSE FIX: Pagination component expects a `pagination` object,  */}
-      {/* not individual `page` / `totalPages` props.                           */}
-      {/* Passing individual props means the `pagination` destructured prop is  */}
-      {/* always undefined → component returns null immediately → no UI shows.  */}
-      {!activeSearch && !activeDateFilter && (
-        <Pagination
-          pagination={{
-            page,
-            total_pages: totalPages,
-            total:       totalItems,
-            has_next:    page < totalPages,
-            has_prev:    page > 1,
-          }}
-          onPageChange={setPage}
-        />
-      )}
+      {/* PAGINATION — always shown (server handles filtering) */}
+      <Pagination
+        pagination={{
+          page,
+          total_pages: totalPages,
+          total:       totalItems,
+          has_next:    page < totalPages,
+          has_prev:    page > 1,
+        }}
+        onPageChange={setPage}
+      />
 
 
-      {/* ── ADD / EDIT MODAL ─────────────────────────────────────────── */}
+      {/* ADD / EDIT MODAL */}
       <Modal
         open={showModal}
         onClose={handleCloseModal}
@@ -550,7 +519,7 @@ export default function CustomersPage() {
       </Modal>
 
 
-      {/* ── DELETE CONFIRM ───────────────────────────────────────────── */}
+      {/* DELETE CONFIRM */}
       <ConfirmDialog
         open={showDelete}
         onClose={handleCloseDelete}
@@ -562,7 +531,7 @@ export default function CustomersPage() {
       />
 
 
-      {/* ── CUSTOMER DETAIL DRAWER ───────────────────────────────────── */}
+      {/* CUSTOMER DETAIL DRAWER */}
       {selectedCustomer && (
         <>
           <DrawerOverlay

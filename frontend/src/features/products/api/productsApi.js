@@ -1,20 +1,68 @@
 // src/features/products/api/productsApi.js
 //
-// BARCODE FIX (2026-06-06):
-//   Added two new functions:
-//   1. checkBarcode(barcode, excludeProdId) — validates uniqueness before save
-//   2. fetchProductByBarcode(code) — exact barcode lookup (used by scanner)
+// SCALABILITY FIX — added server-side sort, date-range, and export params.
 //
-//   All existing functions unchanged.
+// BEFORE:
+//   fetchProducts() only sent { page, limit, search } to the backend.
+//   ProductsPage managed sortKey/sortDir/dateFrom/dateTo locally.
+//   The page switched to allProducts (limit=10000) for date filter and sorting,
+//   running those operations in JavaScript on the full dataset.
+//   allQuery fired on EVERY page load whether searching or not.
+//
+// AFTER:
+//   fetchProducts() now forwards sort_by, sort_dir, updated_from, updated_to
+//   to the backend. When NOT searching, the paged query gets correctly sorted
+//   and date-filtered rows from PostgreSQL — no full-dataset fetch needed.
+//
+//   fetchAllProductsForExport() is lazy — only called on export click.
+//   It sends the same active filters with limit=10000.
+//
+// BARCODE + EXISTING FUNCTIONS UNCHANGED:
+//   checkBarcode(), fetchProductByBarcode(), createProduct(), updateProduct(),
+//   deleteProduct() are identical — no behaviour changes.
 
 import api from '../../../api/axios'
 
-// ── Paginated list (table view) ───────────────────────────────────────────────
-export async function fetchProducts({ page = 1, limit = 20, search = '' } = {}) {
+// ── Paginated list (table view) — server-side filter/sort/paginate ─────────────
+export async function fetchProducts({
+  page         = 1,
+  limit        = 20,
+  search       = '',
+  sort_by      = 'prod_name',
+  sort_dir     = 'asc',
+  updated_from = '',
+  updated_to   = '',
+} = {}) {
   const params = { page, limit }
-  if (search && search.trim()) params.search = search.trim()
+  if (search && search.trim())  params.search       = search.trim()
+  if (sort_by)                  params.sort_by      = sort_by
+  if (sort_dir)                 params.sort_dir     = sort_dir
+  if (updated_from)             params.updated_from = updated_from
+  if (updated_to)               params.updated_to   = updated_to
+
   const res = await api.get('/products/', { params })
   return res.data
+}
+
+// ── Lazy export — fetches ALL matching rows only when export is clicked ────────
+// Sends the same active filter params with limit=10000.
+// Returns a flat array of records (not the pagination envelope).
+export async function fetchAllProductsForExport({
+  search       = '',
+  sort_by      = 'prod_name',
+  sort_dir     = 'asc',
+  updated_from = '',
+  updated_to   = '',
+} = {}) {
+  const params = { page: 1, limit: 10000 }
+  if (search && search.trim())  params.search       = search.trim()
+  if (sort_by)                  params.sort_by      = sort_by
+  if (sort_dir)                 params.sort_dir     = sort_dir
+  if (updated_from)             params.updated_from = updated_from
+  if (updated_to)               params.updated_to   = updated_to
+
+  const res = await api.get('/products/', { params })
+  return res.data?.items ?? []
 }
 
 // ── Single product by ID ──────────────────────────────────────────────────────
@@ -23,40 +71,24 @@ export async function fetchProduct(prodId) {
   return res.data
 }
 
-// ── Exact barcode lookup (BARCODE FIX) ────────────────────────────────────────
-// Calls GET /products/barcode/{code}.
-// Returns the matching product object, or null if not found (404).
-// Used by:
-//   - CreateSalePage barcode scanner (already calls this)
-//   - ProductsPage barcode field real-time duplicate check
-// Throws on any error other than 404 so the caller can handle network errors.
+// ── Exact barcode lookup (BARCODE FIX — unchanged) ────────────────────────────
 export async function fetchProductByBarcode(code) {
   try {
     const res = await api.get(`/products/barcode/${encodeURIComponent(code.trim())}`)
-    return res.data   // product object
+    return res.data
   } catch (err) {
     if (err?.response?.status === 404) return null
     throw err
   }
 }
 
-// ── Barcode uniqueness check (BARCODE FIX) ────────────────────────────────────
-// Returns true if the barcode is already taken by another product in this business.
-// excludeProdId: pass the current product's prod_id when editing so a product
-//               is not flagged as a duplicate of itself.
-//
-// HOW IT WORKS:
-//   Calls fetchProductByBarcode() — if a product comes back and its prod_id
-//   is different from excludeProdId, the barcode is taken.
-//
-// Called from the barcode field's onBlur in AddProductForm / EditProductForm.
-// We do NOT call this on every keystroke — only when the user leaves the field.
+// ── Barcode uniqueness check (BARCODE FIX — unchanged) ────────────────────────
 export async function checkBarcode(barcode, excludeProdId = null) {
-  if (!barcode || !barcode.trim()) return false   // empty barcode — always OK
+  if (!barcode || !barcode.trim()) return false
   const product = await fetchProductByBarcode(barcode.trim())
-  if (!product) return false                       // not found — barcode is free
-  if (excludeProdId && product.prod_id === excludeProdId) return false  // own product
-  return true                                      // taken by a different product
+  if (!product) return false
+  if (excludeProdId && product.prod_id === excludeProdId) return false
+  return true
 }
 
 // ── Create product ────────────────────────────────────────────────────────────

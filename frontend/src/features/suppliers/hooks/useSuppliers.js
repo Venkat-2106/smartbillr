@@ -1,193 +1,214 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useMemo } from 'react';
-import { toast } from 'react-hot-toast';
-import { useDebounce } from '../../../shared/hooks/useDebounce';
+// src/features/suppliers/hooks/useSuppliers.js
+//
+// SCALABILITY FIX — replaces client-side filter / sort / paginate.
+//
+// BEFORE (broken at scale):
+//   One query fetched limit=10000 on every page load.
+//   useMemo did all filtering, sorting, and slicing in JavaScript.
+//   For businesses with > 10,000 suppliers, records were silently truncated.
+//
+// AFTER (unlimited scale):
+//   A single React Query sends all active filters to the backend.
+//   PostgreSQL does the filtering, sorting, counting, and OFFSET/LIMIT.
+//   The hook receives only the 20 rows for the current page.
+//   handleExport() fetches backend lazily with the same filters on click.
+//
+// ARCHITECTURE UNCHANGED:
+//   - Server data via React Query (never fetch in component)
+//   - No direct localStorage (Zustand persist handles it)
+//   - authStore not imported here (in the API file either)
+//   - Drawer / modal state kept in hook (same UX as before)
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState }                               from 'react'
+import toast                                      from 'react-hot-toast'
+import useAuthStore                               from '../../../store/authStore'
 import {
   fetchSuppliers,
+  fetchAllSuppliersForExport,
   createSupplier,
   updateSupplier,
   deleteSupplier,
-} from '../api/suppliersApi';
+} from '../api/suppliersApi'
+import { useDebounce } from '../../../shared/hooks/useDebounce'
 
-const PAGE_SIZE = 15;
-const QUERY_KEY = ['suppliers'];
+const PAGE_SIZE = 20
 
 export function useSuppliers() {
-  const queryClient = useQueryClient();
+  const user        = useAuthStore(s => s.user)
+  const queryClient = useQueryClient()
 
-  // ── Filter / sort / page state ───────────────────────────────────────────
-  const [search,   setSearchRaw] = useState('');
-  const [dateFrom, setDateFrom]  = useState('');
-  const [dateTo,   setDateTo]    = useState('');
-  const [sortKey,  setSortKey]   = useState('updated_at');
-  const [sortDir,  setSortDir]   = useState('desc');
-  const [page,     setPage]      = useState(1);
+  // ── Filter / sort / page state ──────────────────────────────────────────
+  const [search,   setSearchRaw] = useState('')
+  const [sortKey,  setSortKey]   = useState('updated_at')
+  const [sortDir,  setSortDir]   = useState('desc')
+  const [page,     setPage]      = useState(1)
+  const [dateFrom, setDateFrom]  = useState('')
+  const [dateTo,   setDateTo]    = useState('')
 
-  const debouncedSearch = useDebounce(search, 350);
+  // Debounce: wait 350ms after the user stops typing before sending to server
+  const debouncedSearch = useDebounce(search, 350)
 
-  // ── Drawer & modal state ─────────────────────────────────────────────────
-  const [drawerSupplier, setDrawerSupplier] = useState(null);
-  const [showAdd,        setShowAdd]        = useState(false);
-  const [editTarget,     setEditTarget]     = useState(null);
-  const [deleteTarget,   setDeleteTarget]   = useState(null);
+  // ── Drawer & modal state (UI-only — no server data involved) ────────────
+  const [drawerSupplier, setDrawerSupplier] = useState(null)
+  const [showAdd,        setShowAdd]        = useState(false)
+  const [editTarget,     setEditTarget]     = useState(null)
+  const [deleteTarget,   setDeleteTarget]   = useState(null)
 
-  // ── Fetch all (limit=100 → client-side filter works on full dataset) ─────
-  const { data: allSuppliers = [], isLoading, isError } = useQuery({
-    queryKey: QUERY_KEY,
-    queryFn:  fetchSuppliers,
-    staleTime: 5 * 60 * 1000,
-  });
+  // ── FETCH (React Query — server paginated) ──────────────────────────────
+  // queryKey includes every filter param so any change triggers a fresh fetch.
+  // staleTime: 30s — short enough that edits show quickly, long enough to
+  // avoid hammering the backend on rapid page or sort clicks.
+  const {
+    data:      serverData,
+    isLoading,
+    isError,
+    isFetching,
+  } = useQuery({
+    queryKey: [
+      'suppliers', page, debouncedSearch, sortKey, sortDir, dateFrom, dateTo,
+    ],
+    queryFn: () => fetchSuppliers({
+      page,
+      limit:        PAGE_SIZE,
+      search:       debouncedSearch,
+      sort_by:      sortKey,
+      sort_dir:     sortDir,
+      updated_from: dateFrom,
+      updated_to:   dateTo,
+    }),
+    staleTime:       30_000,
+    placeholderData: (prev) => prev,   // keep old rows visible while new page loads
+    enabled:         !!user,
+  })
 
-  // ── Client-side: filter → sort → paginate ───────────────────────────────
-  const filtered = useMemo(() => {
-    let rows = [...allSuppliers];
+  // Unwrap pagination envelope
+  const suppliers  = serverData?.items       ?? []
+  const pagination = serverData?.pagination  ?? {}
+  const totalItems = pagination.total        ?? 0
+  const totalPages = pagination.total_pages  ?? 1
 
-    // Text search (name, phone, email, state, country)
-    if (debouncedSearch) {
-      const q = debouncedSearch.toLowerCase();
-      rows = rows.filter((s) =>
-        (s.supp_name         || '').toLowerCase().includes(q) ||
-        (s.supp_phone        || '').toLowerCase().includes(q) ||
-        (s.supp_email        || '').toLowerCase().includes(q) ||
-        (s.supp_state        || '').toLowerCase().includes(q) ||
-        (s.supp_country_code || '').toLowerCase().includes(q)
-      );
+  // ── LAZY EXPORT ──────────────────────────────────────────────────────────
+  // Only runs when the Export button is clicked.
+  // Sends the same active filters to the backend → gets all matching rows.
+  async function handleExport() {
+    try {
+      const rows = await fetchAllSuppliersForExport({
+        search:       debouncedSearch,
+        sort_by:      sortKey,
+        sort_dir:     sortDir,
+        updated_from: dateFrom,
+        updated_to:   dateTo,
+      })
+      if (serverData?.pagination?.truncated) {
+        toast('Export limited to 10,000 records. Contact support for a full export.', { icon: '⚠️' })
+      }
+      return rows
+    } catch {
+      toast.error('Export failed — please try again')
+      return []
     }
+  }
 
-    // ── Date range on updated_at ──────────────────────────────────────────
-    //
-    // FIX: replaced string comparison with Date object comparison.
-    //
-    // WHAT WAS WRONG:
-    //   s.updated_at >= dateFrom
-    //   This compared a UTC ISO string ("2026-06-05T03:00:00Z") against a
-    //   bare date string ("2026-06-05") using lexicographic sort order.
-    //   `${dateTo}T23:59:59` had no 'Z', making it an ambiguous local-time
-    //   boundary. For IST users, records updated between 00:00–05:30 IST are
-    //   stored as the previous UTC date and were silently excluded even though
-    //   the grid displayed them under the correct local date.
-    //
-    // THE FIX:
-    //   new Date(dateFrom) parses "2026-06-05" as UTC midnight.
-    //   .setHours(0, 0, 0, 0) shifts it to LOCAL midnight in the user's TZ.
-    //   new Date(s.updated_at) parses the "Z"-suffixed UTC string correctly.
-    //   The >= comparison then operates on numeric timestamps — timezone-safe.
-    //
-    if (dateFrom) {
-      const from = new Date(dateFrom); from.setHours(0, 0, 0, 0);
-      rows = rows.filter((s) => s.updated_at && new Date(s.updated_at) >= from);
+  // ── EVENT HANDLERS ──────────────────────────────────────────────────────
+  function handleSearch(val) {
+    setSearchRaw(val)
+    setPage(1)
+  }
+
+  function handleSort(key) {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
     }
-    if (dateTo) {
-      const to = new Date(dateTo); to.setHours(23, 59, 59, 999);
-      rows = rows.filter((s) => s.updated_at && new Date(s.updated_at) <= to);
-    }
+    setPage(1)
+  }
 
-    // Sort
-    rows.sort((a, b) => {
-      const av = a[sortKey] ?? '';
-      const bv = b[sortKey] ?? '';
-      if (av < bv) return sortDir === 'asc' ? -1 : 1;
-      if (av > bv) return sortDir === 'asc' ? 1  : -1;
-      return 0;
-    });
+  function handleDateChange(field, val) {
+    if (field === 'from') setDateFrom(val)
+    else                  setDateTo(val)
+    setPage(1)
+  }
 
-    return rows;
-  }, [allSuppliers, debouncedSearch, dateFrom, dateTo, sortKey, sortDir]);
-
-  const { totalItems, totalPages, paginated } = useMemo(() => {
-    const totalItems = filtered.length;
-    const totalPages = Math.ceil(totalItems / PAGE_SIZE);
-    const activeSearch     = !!debouncedSearch;
-    const activeDateFilter = !!(dateFrom || dateTo);
-    const paginated = (activeSearch || activeDateFilter)
-      ? filtered
-      : filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-    return { totalItems, totalPages, paginated };
-  }, [filtered, page, debouncedSearch, dateFrom, dateTo]);
-
-  const activeSearch    = !!debouncedSearch;
-  const activeDateFilter = !!(dateFrom || dateTo);
-
-  // ── Sort handler ─────────────────────────────────────────────────────────
-  const handleSort = (key) => {
-    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    else { setSortKey(key); setSortDir('asc'); }
-    setPage(1);
-  };
-
-  // ── Date filter handler ──────────────────────────────────────────────────
-  const handleDateChange = (field, val) => {
-    if (field === 'from') setDateFrom(val);
-    else                  setDateTo(val);
-    setPage(1);
-  };
-
-  // ── Mutations ────────────────────────────────────────────────────────────
+  // ── MUTATIONS ────────────────────────────────────────────────────────────
   const createMutation = useMutation({
     mutationFn: createSupplier,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
-      toast.success('Supplier added successfully');
-      setShowAdd(false);
+      queryClient.invalidateQueries({ queryKey: ['suppliers'] })
+      toast.success('Supplier added successfully')
+      setShowAdd(false)
     },
     onError: (err) =>
       toast.error(err?.response?.data?.message || 'Failed to add supplier'),
-  });
+  })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, body }) => updateSupplier(id, body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
-      toast.success('Supplier updated successfully');
-      setEditTarget(null);
+      queryClient.invalidateQueries({ queryKey: ['suppliers'] })
+      toast.success('Supplier updated successfully')
+      setEditTarget(null)
     },
     onError: (err) =>
       toast.error(err?.response?.data?.message || 'Failed to update supplier'),
-  });
+  })
 
   const deleteMutation = useMutation({
     mutationFn: deleteSupplier,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
-      toast.success('Supplier deleted');
-      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ['suppliers'] })
+      toast.success('Supplier deleted')
+      setDeleteTarget(null)
     },
     onError: (err) =>
       toast.error(err?.response?.data?.message || 'Failed to delete supplier'),
-  });
+  })
 
+  // ── Derived booleans (used by SuppliersPage for empty state + pagination) ─
+  const activeSearch     = !!debouncedSearch
+  const activeDateFilter = !!(dateFrom || dateTo)
+
+  // ── RETURN ───────────────────────────────────────────────────────────────
   return {
-    // Data
-    suppliers: paginated,
-    exportData: filtered,        // full filtered set → CSV export
-    isLoading,
+    // Table data (current page only — server paginated)
+    suppliers,
+
+    // Loading / error states
+    isLoading: isLoading || isFetching,
     isError,
-    totalItems,
-    totalPages,
 
-    // Search / filter
+    // Search
     search,
-    setSearch: (v) => { setSearchRaw(v); setPage(1); },
-    dateFrom,
-    dateTo,
-    handleDateChange,
-    activeSearch,
-    activeDateFilter,
+    setSearch: handleSearch,
 
-    // Sort
+    // Date range
+    dateFrom,  setDateFrom: (v) => { setDateFrom(v);  setPage(1) },
+    dateTo,    setDateTo:   (v) => { setDateTo(v);    setPage(1) },
+    handleDateChange,
+
+    // Sort (passed to Table.jsx)
     sortKey,
     sortDir,
     handleSort,
 
-    // Pagination
+    // Pagination (passed to Pagination.jsx)
     page,
     setPage,
+    totalPages,
+    totalItems,
+    pagination,
 
-    // Drawer
-    drawerSupplier,
-    setDrawerSupplier,
+    // Filter activity flags (used by page for empty state + pagination visibility)
+    activeSearch,
+    activeDateFilter,
 
-    // Modals
+    // Export
+    handleExport,
+
+    // Drawer & modal state
+    drawerSupplier, setDrawerSupplier,
     showAdd,        setShowAdd,
     editTarget,     setEditTarget,
     deleteTarget,   setDeleteTarget,
@@ -196,5 +217,5 @@ export function useSuppliers() {
     createMutation,
     updateMutation,
     deleteMutation,
-  };
+  }
 }

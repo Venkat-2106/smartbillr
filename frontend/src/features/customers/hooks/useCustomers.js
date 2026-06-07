@@ -1,35 +1,30 @@
-// features/customers/hooks/useCustomers.js
+// src/features/customers/hooks/useCustomers.js
 //
-// All data logic for the Customers feature.
+// SCALABILITY FIX:
+//   The previous version fetched limit=10000 then filtered/sorted/paginated
+//   everything in JavaScript (useMemo). That approach breaks at scale and
+//   silently truncates businesses with > 10,000 customers.
 //
-// WHAT THIS HOOK DOES:
-//   1. Fetches all customers with React Query (5-min stale cache)
-//   2. Filters by search term (name, phone, email, tax number) — client-side
-//   3. Filters by date range (updated_at) — client-side
-//   4. Sorts by any column — client-side
-//   5. Paginates the result — client-side (15 per page)
-//   6. Exposes create / update / delete mutations with toast feedback
+//   This version sends all active filters to the backend as query params.
+//   The database does the filtering, sorting, and counting. The hook
+//   receives only the 20 rows for the current page.
 //
-// FIX (Bug 2): Added useCustomer() export — fetches a single customer's
-//   full detail (summary + sales history) for the detail drawer.
+//   Export is now lazy: handleExport() fetches from the backend on demand
+//   with the same active filters and limit=10000. The CSV always contains
+//   all matching records, not just what is in browser memory.
 //
-// WHY client-side filter/sort/paginate:
-//   Customers table already has trigram GIN indexes for server-side search.
-//   But for a beginner-manageable codebase, and since most businesses will have
-//   fewer than 500 customers, client-side is simpler and still fast.
-//   (When your customer count grows past 1000, move search to server-side.)
-//
-// ARCHITECTURE RULES FOLLOWED:
-//   - Server data only via React Query (never fetch in component)
-//   - No direct localStorage access (Zustand persist handles it)
-//   - authStore not imported in the API file — only here in the hook
+// ARCHITECTURE UNCHANGED:
+//   - Server data via React Query (never fetch in component)
+//   - No direct localStorage (Zustand persist handles it)
+//   - authStore not imported in the API file
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useMemo }                      from 'react'
-import toast                                       from 'react-hot-toast'
-import useAuthStore from '../../../store/authStore'
+import { useState }                               from 'react'
+import toast                                      from 'react-hot-toast'
+import useAuthStore                               from '../../../store/authStore'
 import {
   fetchCustomers,
+  fetchAllCustomersForExport,
   fetchCustomer,
   createCustomer,
   updateCustomer,
@@ -37,34 +32,27 @@ import {
 } from '../api/customersApi'
 import { useDebounce } from '../../../shared/hooks/useDebounce'
 
-// Number of rows shown per page in the table
-const PAGE_SIZE = 15
+const PAGE_SIZE = 20
 
 
 // ── useCustomer (singular) ───────────────────────────────────────────────────
-// FIX (Bug 2): This hook was missing — CustomerDetailDrawer imports it.
-// Fetches a single customer's full detail including summary and sales history.
-// Only fires when custId is provided (drawer is open).
-// staleTime: 60 seconds — detail data changes less often than the list.
-
+// Fetches one customer's full detail (summary + sales history) for the drawer.
 export function useCustomer(custId) {
   return useQuery({
     queryKey: ['customer', custId],
     queryFn:  () => fetchCustomer(custId),
     enabled:  !!custId,
-    staleTime: 60 * 1000,   // 60 seconds
+    staleTime: 60 * 1000,
   })
 }
 
 
 // ── useCustomers (plural) ────────────────────────────────────────────────────
-// Used by CustomersPage for the full list with filter/sort/paginate.
-
 export function useCustomers() {
-  const user        = useAuthStore(s => s.user)   // used to enable/disable the query
+  const user        = useAuthStore(s => s.user)
   const queryClient = useQueryClient()
 
-  // ── UI state (filters, sort, pagination) ──────────────────────────────
+  // ── Filter / sort / page state ──────────────────────────────────────────
   const [search,   setSearchRaw] = useState('')
   const [sortKey,  setSortKey]   = useState('updated_at')
   const [sortDir,  setSortDir]   = useState('desc')
@@ -72,101 +60,66 @@ export function useCustomers() {
   const [dateFrom, setDateFrom]  = useState('')
   const [dateTo,   setDateTo]    = useState('')
 
-  // Wait 300ms after the user stops typing before filtering
-  // (prevents filtering on every keypress which flickers the table)
-  const debouncedSearch = useDebounce(search, 300)
+  // Debounce: wait 350ms after the user stops typing before sending to server
+  const debouncedSearch = useDebounce(search, 350)
 
-
-  // ── FETCH (React Query) ─────────────────────────────────────────────────
-  // queryKey: ['customers'] — invalidated after any create/update/delete
-  // staleTime: 5 minutes — don't refetch if data is recent
-  // enabled: only fetch when user is logged in
+  // ── FETCH (React Query — server paginated) ──────────────────────────────
+  // queryKey includes every filter param so any change triggers a fresh fetch.
+  // staleTime: 30s — short enough that edits show quickly, long enough to
+  // avoid hammering the backend on rapid page clicks.
   const {
-    data:    allCustomers = [],
+    data:      serverData,
     isLoading,
     isError,
+    isFetching,
   } = useQuery({
-    queryKey: ['customers'],
-    queryFn:  fetchCustomers,
-    staleTime: 5 * 60 * 1000,   // 5 minutes
-    enabled:  !!user,
+    queryKey: [
+      'customers', page, debouncedSearch, sortKey, sortDir, dateFrom, dateTo
+    ],
+    queryFn: () => fetchCustomers({
+      page,
+      limit:        PAGE_SIZE,
+      search:       debouncedSearch,
+      sort_by:      sortKey,
+      sort_dir:     sortDir,
+      updated_from: dateFrom,
+      updated_to:   dateTo,
+    }),
+    staleTime:       30_000,
+    placeholderData: (prev) => prev,   // keep old rows visible while new page loads
+    enabled:         !!user,
   })
 
+  // Unwrap pagination envelope
+  const customers  = serverData?.items       ?? []
+  const pagination = serverData?.pagination  ?? {}
+  const totalItems = pagination.total        ?? 0
+  const totalPages = pagination.total_pages  ?? 1
 
-  // ── FILTER + SORT (client-side, runs on every relevant state change) ────
-  //
-  // useMemo means this recalculates ONLY when one of the dependencies changes.
-  // It does NOT run on every render — React is smart about this.
-  //
-  // Search covers: name, phone, email, tax number
-  // Date filter covers: updated_at (the "Last Updated" column)
-  //
-  const filtered = useMemo(() => {
-    let list = [...allCustomers]
-
-    // ── Search filter ────────────────────────────────────────────────────
-    if (debouncedSearch) {
-      const q = debouncedSearch.toLowerCase()
-      list = list.filter(c =>
-        c.cust_name?.toLowerCase().includes(q)        ||
-        c.cust_phone?.toLowerCase().includes(q)       ||
-        c.cust_email?.toLowerCase().includes(q)       ||
-        c.cust_tax_number?.toLowerCase().includes(q)
-      )
+  // ── LAZY EXPORT ──────────────────────────────────────────────────────────
+  // Only runs when the Export button is clicked.
+  // Sends the same active filters to the backend → gets all matching rows.
+  async function handleExport() {
+    try {
+      const rows = await fetchAllCustomersForExport({
+        search:       debouncedSearch,
+        sort_by:      sortKey,
+        sort_dir:     sortDir,
+        updated_from: dateFrom,
+        updated_to:   dateTo,
+      })
+      // Warn if the result was capped at 10,000
+      if (serverData?.pagination?.truncated) {
+        toast('Export limited to 10,000 records. Contact support for full export.', { icon: '⚠️' })
+      }
+      return rows
+    } catch {
+      toast.error('Export failed — please try again')
+      return []
     }
-
-    // ── Date range filter ────────────────────────────────────────────────
-    //
-    // FIX: replaced string comparison with Date object comparison.
-    //
-    // WHAT WAS WRONG:
-    //   c.updated_at >= dateFrom
-    //   This compared a UTC ISO string ("2026-06-05T03:00:00Z") against a
-    //   bare date string ("2026-06-05") using lexicographic sort order.
-    //   For an IST user, records updated between 00:00–05:30 IST are stored
-    //   as the previous UTC date, so the string comparison excluded them even
-    //   though the table displays them as the correct local date.
-    //
-    // THE FIX:
-    //   new Date(dateFrom) parses "2026-06-05" as UTC midnight.
-    //   .setHours(0, 0, 0, 0) shifts it to LOCAL midnight in the user's TZ.
-    //   new Date(c.updated_at) parses the "Z"-suffixed UTC string correctly.
-    //   The >= comparison then operates on numeric timestamps — timezone-safe.
-    //
-    if (dateFrom) {
-      const from = new Date(dateFrom); from.setHours(0, 0, 0, 0)
-      list = list.filter(c => c.updated_at && new Date(c.updated_at) >= from)
-    }
-    if (dateTo) {
-      const to = new Date(dateTo); to.setHours(23, 59, 59, 999)
-      list = list.filter(c => c.updated_at && new Date(c.updated_at) <= to)
-    }
-
-    // ── Sort ─────────────────────────────────────────────────────────────
-    // localeCompare with numeric: true handles both text and number fields correctly
-    list.sort((a, b) => {
-      const aVal = a[sortKey] ?? ''
-      const bVal = b[sortKey] ?? ''
-      const cmp  = String(aVal).localeCompare(String(bVal), undefined, { numeric: true })
-      return sortDir === 'asc' ? cmp : -cmp
-    })
-
-    return list
-  }, [allCustomers, debouncedSearch, sortKey, sortDir, dateFrom, dateTo])
-
-
-  // ── PAGINATION ──────────────────────────────────────────────────────────
-  const { totalItems, totalPages, paginated } = useMemo(() => {
-    const totalItems = filtered.length
-    const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE))
-    const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-    return { totalItems, totalPages, paginated }
-  }, [filtered, page])
-
+  }
 
   // ── EVENT HANDLERS ──────────────────────────────────────────────────────
-  // Always reset to page 1 when search or sort changes (avoids empty pages)
-
   function handleSearch(val) {
     setSearchRaw(val)
     setPage(1)
@@ -192,12 +145,7 @@ export function useCustomers() {
     setPage(1)
   }
 
-
-  // ── MUTATIONS ───────────────────────────────────────────────────────────
-  // After every mutation → invalidate the ['customers'] query key.
-  // This tells React Query: "that cache is now stale, refetch it."
-  // The table will automatically update with the new data.
-
+  // ── MUTATIONS ────────────────────────────────────────────────────────────
   const createMutation = useMutation({
     mutationFn: createCustomer,
     onSuccess: () => {
@@ -205,8 +153,7 @@ export function useCustomers() {
       toast.success('Customer added successfully')
     },
     onError: (err) => {
-      const msg = err?.response?.data?.message || 'Failed to add customer'
-      toast.error(msg)
+      toast.error(err?.response?.data?.message || 'Failed to add customer')
     },
   })
 
@@ -217,8 +164,7 @@ export function useCustomers() {
       toast.success('Customer updated successfully')
     },
     onError: (err) => {
-      const msg = err?.response?.data?.message || 'Failed to update customer'
-      toast.error(msg)
+      toast.error(err?.response?.data?.message || 'Failed to update customer')
     },
   })
 
@@ -229,22 +175,17 @@ export function useCustomers() {
       toast.success('Customer removed')
     },
     onError: (err) => {
-      const msg = err?.response?.data?.message || 'Failed to remove customer'
-      toast.error(msg)
+      toast.error(err?.response?.data?.message || 'Failed to remove customer')
     },
   })
 
-
-  // ── RETURN ──────────────────────────────────────────────────────────────
+  // ── RETURN ───────────────────────────────────────────────────────────────
   return {
-    // Table data (current page only)
-    customers: paginated,
-
-    // Export data (ALL filtered records — not just current page)
-    exportData: filtered,
+    // Table data (current page only — server paginated)
+    customers,
 
     // Loading / error states
-    isLoading,
+    isLoading: isLoading || isFetching,
     isError,
 
     // Search
@@ -260,18 +201,20 @@ export function useCustomers() {
     sortDir,
     handleSort,
 
-    // Pagination (passed to Pagination.jsx)
+    // Pagination (passed to Pagination.jsx via the shape it expects)
     page,
     setPage,
     totalPages,
     totalItems,
 
-    // Mutations — called from the page with (data) or ({ id, data })
-    createCustomer: (data, callbacks) => createMutation.mutate(data, callbacks),
-    updateCustomer: (id, data, callbacks) => updateMutation.mutate({ id, data }, callbacks),
-    deleteCustomer: (id, callbacks) => deleteMutation.mutate(id, callbacks),
+    // Export
+    handleExport,
 
-    // Loading flags for submit buttons (show spinner while saving)
+    // Mutations
+    createCustomer: (data, callbacks)     => createMutation.mutate(data, callbacks),
+    updateCustomer: (id, data, callbacks) => updateMutation.mutate({ id, data }, callbacks),
+    deleteCustomer: (id, callbacks)       => deleteMutation.mutate(id, callbacks),
+
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,

@@ -39,7 +39,7 @@
 //   ✅ Profit permission gate (canViewProfit) for cost/profit columns + form
 //   ✅ Zod .trim() on prod_name (trimmed before schema min/max check)
 
-import React, { useState, useMemo } from 'react'
+import React, { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -535,27 +535,40 @@ export default function ProductsPage() {
 
   const {
     products,
-    allProducts,
+    allProducts,    // still needed for barcode scanner Enter lookup
     pagination,
     page,
     setPage,
     search,
     setSearch,
+    // ── server-side sort (hook sends sort_by/sort_dir to backend) ──────────
+    sortKey,
+    sortDir,
+    handleSort,
+    // ── server-side date filter (hook sends updated_from/updated_to) ───────
+    dateFrom,
+    dateTo,
+    handleDateChange,
+    // ── lazy export (fetches all matching rows on click) ────────────────────
+    handleExport,
     isLoading,
     isError,
   } = useProducts()
 
-  const [sortKey, setSortKey] = useState(null)
-  const [sortDir, setSortDir] = useState('asc')
-
-  function handleSort(key) {
-    if (sortKey === key) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortKey(key)
-      setSortDir('asc')
-    }
-  }
+  // LOCAL sort + date state REMOVED:
+  //   Previously sortKey/sortDir/dateFrom/dateTo were local useState in this
+  //   component. The displayRows useMemo then filtered/sorted on either the
+  //   current page (20 rows) or allProducts (10000 rows) in JavaScript.
+  //
+  //   Problems with the old approach:
+  //     - Date filter triggered a 10,000-row fetch (allProducts) even when not
+  //       searching, wasting bandwidth and browser memory.
+  //     - Sort ran on the current page only — changing page reset the sort visually.
+  //     - export came from allProducts filtered in JS — wrong when > 10,000 records.
+  //
+  //   NOW: all four params are owned by the hook. The hook's queryKey includes
+  //   them, so any change triggers a fresh backend fetch. PostgreSQL does the
+  //   work. The browser receives only 20 rows regardless of total record count.
 
   // ── Barcode scanner Enter handler ────────────────────────────────────────────
   // USB barcode scanners work by emulating a keyboard: they "type" each digit of
@@ -590,73 +603,27 @@ export default function ProductsPage() {
     }
   }
 
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo,   setDateTo]   = useState('')
+  // dateFrom, dateTo, handleDateChange now come from the hook above.
+  // The hook's handleDateChange already calls setPage(1) on every change.
 
-  function handleDateChange(field, value) {
-    if (field === 'from') setDateFrom(value)
-    else                  setDateTo(value)
-  }
+  // displayRows useMemo REMOVED:
+  //   Previously this selected between products (20 rows) and allProducts
+  //   (10,000 rows) based on whether a date filter was active, then applied
+  //   filter + sort in JavaScript.
+  //
+  //   NOW: `products` from the hook is already the correct dataset:
+  //     - Not searching → pagedQuery result, server-filtered/sorted/paginated ✓
+  //     - Searching     → allQuery result, client-filtered on name/category/barcode ✓
+  //   No post-processing needed. The server handles date + sort in both paths.
+  //
+  // exportData useMemo REMOVED:
+  //   Previously computed from allProducts filtered in JS — wrong for > 10k records.
+  //   NOW: ExportButton uses onFetch={handleExport}. handleExport() calls the
+  //   backend lazily with the same active filters and returns all matching rows.
 
-  const displayRows = useMemo(() => {
-    let rows = [...products]
-
-    if (dateFrom) {
-      const from = new Date(dateFrom)
-      from.setHours(0, 0, 0, 0)
-      rows = rows.filter(r => r.updated_at && new Date(r.updated_at) >= from)
-    }
-    if (dateTo) {
-      const to = new Date(dateTo)
-      to.setHours(23, 59, 59, 999)
-      rows = rows.filter(r => r.updated_at && new Date(r.updated_at) <= to)
-    }
-
-    if (sortKey) {
-      rows.sort((a, b) => {
-        let valA = a[sortKey]
-        let valB = b[sortKey]
-
-        if (sortKey === 'updated_at') {
-          valA = valA ? new Date(valA).getTime() : 0
-          valB = valB ? new Date(valB).getTime() : 0
-          return sortDir === 'asc' ? valA - valB : valB - valA
-        }
-
-        if (typeof valA === 'number' || !isNaN(Number(valA))) {
-          valA = Number(valA ?? 0)
-          valB = Number(valB ?? 0)
-          return sortDir === 'asc' ? valA - valB : valB - valA
-        }
-
-        valA = String(valA ?? '').toLowerCase()
-        valB = String(valB ?? '').toLowerCase()
-        if (valA < valB) return sortDir === 'asc' ? -1 :  1
-        if (valA > valB) return sortDir === 'asc' ?  1 : -1
-        return 0
-      })
-    }
-
-    return rows
-  }, [products, sortKey, sortDir, dateFrom, dateTo])
-
-  const exportData = useMemo(() => {
-    let rows = [...allProducts]
-    const q = search.trim().toLowerCase()
-    if (q) rows = rows.filter(p =>
-      p.prod_name?.toLowerCase().includes(q) ||
-      p.category_name?.toLowerCase().includes(q)
-    )
-    if (dateFrom) {
-      const from = new Date(dateFrom); from.setHours(0, 0, 0, 0)
-      rows = rows.filter(r => r.updated_at && new Date(r.updated_at) >= from)
-    }
-    if (dateTo) {
-      const to = new Date(dateTo); to.setHours(23, 59, 59, 999)
-      rows = rows.filter(r => r.updated_at && new Date(r.updated_at) <= to)
-    }
-    return rows
-  }, [allProducts, search, dateFrom, dateTo])
+  // Convenience: total record count to display in the toolbar.
+  //   Not searching → use server total (all pages); searching → use filtered length.
+  const totalCount = pagination ? (pagination.total ?? products.length) : products.length
 
   const { mutate: createProduct, isPending: isCreating } = useCreateProduct()
   const { mutate: updateProduct, isPending: isUpdating } = useUpdateProduct()
@@ -1053,7 +1020,7 @@ export default function ProductsPage() {
         action={
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <ExportButton
-              data={exportData}
+              onFetch={handleExport}
               filename="products"
               columns={csvColumns}
             />
@@ -1097,7 +1064,7 @@ export default function ProductsPage() {
             <BarcodeHint />
           </div>
           <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
-            {displayRows.length} product{displayRows.length !== 1 ? 's' : ''}
+            {totalCount} product{totalCount !== 1 ? 's' : ''}
             {(activeSearch || activeDateFilter) && ' (filtered)'}
           </span>
         </div>
@@ -1117,7 +1084,7 @@ export default function ProductsPage() {
       <div style={{ overflowX: 'auto', width: '100%' }}>
         <Table
           columns={columns}
-          rows={displayRows}
+          rows={products}
           loading={isLoading}
           rowKey="prod_id"
           onRowClick={(row) => setDetailProduct(row)}

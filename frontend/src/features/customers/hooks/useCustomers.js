@@ -13,6 +13,16 @@
 //   with the same active filters and limit=10000. The CSV always contains
 //   all matching records, not just what is in browser memory.
 //
+// TIMEZONE FIX:
+//   The <input type="date"> gives a "YYYY-MM-DD" string in the user's LOCAL
+//   calendar. If we send that bare string to the backend, PostgreSQL (UTC)
+//   treats it as UTC midnight — records from IST 00:00–05:29 on that local
+//   date are stored as the PREVIOUS UTC day and get excluded from the filter.
+//
+//   Fix: localDayStartUTC / localDayEndUTC convert the local calendar date to
+//   the UTC ISO boundaries of that local day before sending to the API.
+//   This mirrors the pattern already used in useSales.js.
+//
 // ARCHITECTURE UNCHANGED:
 //   - Server data via React Query (never fetch in component)
 //   - No direct localStorage (Zustand persist handles it)
@@ -31,6 +41,26 @@ import {
   deleteCustomer,
 } from '../api/customersApi'
 import { useDebounce } from '../../../shared/hooks/useDebounce'
+
+// ── Timezone-aware date boundary helpers ─────────────────────────────────────
+// WHY: <input type="date"> returns "YYYY-MM-DD" in the user's LOCAL calendar.
+// Sending that bare string to the backend means PostgreSQL (UTC) treats it as
+// UTC midnight. A record updated at 00:15 IST (= 2026-06-07 18:45 UTC) will
+// show as "08 Jun" in the UI but fall outside a "08 Jun" filter sent as UTC.
+// FIX: convert local calendar date → UTC ISO string for the actual local day
+// boundaries, then compare server-side against the timestamptz column.
+// Matches the pattern already used in useSales.js.
+function localDayStartUTC(dateStr) {
+  const d = new Date(dateStr)
+  d.setHours(0, 0, 0, 0)       // shift to local midnight
+  return d.toISOString()        // e.g. "2026-06-07T18:30:00.000Z" for IST
+}
+
+function localDayEndUTC(dateStr) {
+  const d = new Date(dateStr)
+  d.setHours(23, 59, 59, 999)  // shift to local end-of-day
+  return d.toISOString()        // e.g. "2026-06-08T18:29:59.999Z" for IST
+}
 
 const PAGE_SIZE = 20
 
@@ -82,8 +112,9 @@ export function useCustomers() {
       search:       debouncedSearch,
       sort_by:      sortKey,
       sort_dir:     sortDir,
-      updated_from: dateFrom,
-      updated_to:   dateTo,
+      // TIMEZONE FIX: send UTC ISO boundaries of the user's local day
+      updated_from: dateFrom ? localDayStartUTC(dateFrom) : undefined,
+      updated_to:   dateTo   ? localDayEndUTC(dateTo)     : undefined,
     }),
     staleTime:       30_000,
     placeholderData: (prev) => prev,   // keep old rows visible while new page loads
@@ -105,8 +136,9 @@ export function useCustomers() {
         search:       debouncedSearch,
         sort_by:      sortKey,
         sort_dir:     sortDir,
-        updated_from: dateFrom,
-        updated_to:   dateTo,
+        // TIMEZONE FIX: same UTC boundary conversion as the query
+        updated_from: dateFrom ? localDayStartUTC(dateFrom) : undefined,
+        updated_to:   dateTo   ? localDayEndUTC(dateTo)     : undefined,
       })
       // Warn if the result was capped at 10,000
       if (serverData?.pagination?.truncated) {

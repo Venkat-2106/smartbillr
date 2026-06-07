@@ -52,10 +52,10 @@ export default function SuppliersPage() {
   const { can }   = usePermissions();
   const canManage = can('suppliers.manage');
 
-  // exportData from useSuppliers() now reflects ALL filtered records (limit=10000
-  // in suppliersApi.js), so ExportButton receives the full set automatically.
+  // handleExport() lazily fetches all filtered records from the backend on click.
+
   const {
-    suppliers, exportData, isLoading,
+    suppliers, handleExport, isLoading,
     totalItems, totalPages,
     search, setSearch,
     dateFrom, dateTo, handleDateChange,
@@ -231,9 +231,9 @@ export default function SuppliersPage() {
         onBack={() => navigate('/dashboard')}
         action={
           <div style={{ display: 'flex', gap: 10 }}>
-            {/* exportData is now the full filtered set (limit=10000 in API) */}
+
             <ExportButton
-              data={exportData}
+              onFetch={handleExport}
               filename="suppliers"
               columns={SUPPLIER_CSV_COLUMNS}
             />

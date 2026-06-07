@@ -152,12 +152,18 @@ def get_all_customers(
         extra_where += " AND c.cust_phone = :exact_phone"
         params["exact_phone"] = phone
 
+    # TIMEZONE FIX:
+    # The frontend sends full UTC ISO strings (e.g. "2026-06-07T18:30:00.000Z")
+    # representing the user's local day boundaries converted to UTC.
+    # We compare directly against the timestamptz column — no CAST to date,
+    # which would apply server/UTC midnight boundaries instead of user boundaries.
+    # This mirrors the pattern in sale.py (the reference implementation).
     if updated_from:
-        extra_where += " AND c.updated_at >= CAST(:updated_from AS date)"
+        extra_where += " AND c.updated_at >= :updated_from"
         params["updated_from"] = updated_from
 
     if updated_to:
-        extra_where += " AND c.updated_at < (CAST(:updated_to AS date) + INTERVAL '1 day')"
+        extra_where += " AND c.updated_at <= :updated_to"
         params["updated_to"] = updated_to
 
     total = db.execute(

@@ -52,6 +52,23 @@ import {
 } from '../api/productsApi'
 import { useDebounce } from '../../../shared/hooks/useDebounce'
 
+// ── Timezone-aware date boundary helpers ─────────────────────────────────────
+// Mirrors the pattern in useSales.js. Converts a local "YYYY-MM-DD" calendar
+// date into UTC ISO strings representing the actual start and end of that local
+// day. Used for BOTH the server-side query (paged path) AND the client-side
+// filter (search path) so both paths use consistent local-timezone boundaries.
+function localDayStartUTC(dateStr) {
+  const d = new Date(dateStr)
+  d.setHours(0, 0, 0, 0)
+  return d.toISOString()
+}
+
+function localDayEndUTC(dateStr) {
+  const d = new Date(dateStr)
+  d.setHours(23, 59, 59, 999)
+  return d.toISOString()
+}
+
 const PAGE_SIZE = 20
 
 const KEYS = {
@@ -80,8 +97,9 @@ export function useProducts() {
       limit:        PAGE_SIZE,
       sort_by:      sortKey,
       sort_dir:     sortDir,
-      updated_from: dateFrom,
-      updated_to:   dateTo,
+      // TIMEZONE FIX: send UTC ISO boundaries of the user's local day
+      updated_from: dateFrom ? localDayStartUTC(dateFrom) : undefined,
+      updated_to:   dateTo   ? localDayEndUTC(dateTo)     : undefined,
     }),
     placeholderData: (prev) => prev,
     staleTime:       30_000,
@@ -116,14 +134,16 @@ export function useProducts() {
           p.barcode?.toLowerCase().includes(q)
         )
 
-        // Apply date filter client-side when user is also searching
+        // Apply date filter client-side when user is also searching.
+        // TIMEZONE FIX: use localDayStartUTC / localDayEndUTC so the comparison
+        // matches local-day boundaries, not UTC midnight boundaries.
         if (dateFrom) {
-          const from = new Date(dateFrom); from.setHours(0, 0, 0, 0)
-          matches = matches.filter(r => r.updated_at && new Date(r.updated_at) >= from)
+          const fromUTC = localDayStartUTC(dateFrom)
+          matches = matches.filter(r => r.updated_at && r.updated_at >= fromUTC)
         }
         if (dateTo) {
-          const to = new Date(dateTo); to.setHours(23, 59, 59, 999)
-          matches = matches.filter(r => r.updated_at && new Date(r.updated_at) <= to)
+          const toUTC = localDayEndUTC(dateTo)
+          matches = matches.filter(r => r.updated_at && r.updated_at <= toUTC)
         }
 
         // Float exact barcode match to position 0 (scanner UX)
@@ -148,8 +168,9 @@ export function useProducts() {
         rows = await fetchAllProductsForExport({
           sort_by:      sortKey,
           sort_dir:     sortDir,
-          updated_from: dateFrom,
-          updated_to:   dateTo,
+          // TIMEZONE FIX: same UTC boundary conversion as the query
+          updated_from: dateFrom ? localDayStartUTC(dateFrom) : undefined,
+          updated_to:   dateTo   ? localDayEndUTC(dateTo)     : undefined,
         })
         if (pagedQuery.data?.pagination?.truncated) {
           toast('Export limited to 10,000 records. Contact support for full export.', { icon: '⚠️' })

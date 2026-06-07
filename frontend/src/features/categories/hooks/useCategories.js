@@ -34,6 +34,22 @@ import {
 } from '../api/categoriesApi'
 import { useDebounce } from '../../../shared/hooks/useDebounce'
 
+// ── Timezone-aware date boundary helpers ─────────────────────────────────────
+// Mirrors the pattern in useSales.js. Converts a local "YYYY-MM-DD" calendar
+// date into UTC ISO strings representing the actual start and end of that local
+// day. The backend compares these directly against the timestamptz column.
+function localDayStartUTC(dateStr) {
+  const d = new Date(dateStr)
+  d.setHours(0, 0, 0, 0)
+  return d.toISOString()
+}
+
+function localDayEndUTC(dateStr) {
+  const d = new Date(dateStr)
+  d.setHours(23, 59, 59, 999)
+  return d.toISOString()
+}
+
 const PAGE_SIZE = 20
 
 export function useCategories() {
@@ -67,8 +83,9 @@ export function useCategories() {
       search:       debouncedSearch,
       sort_by:      sortKey,
       sort_dir:     sortDir,
-      updated_from: dateFrom,
-      updated_to:   dateTo,
+      // TIMEZONE FIX: send UTC ISO boundaries of the user's local day
+      updated_from: dateFrom ? localDayStartUTC(dateFrom) : undefined,
+      updated_to:   dateTo   ? localDayEndUTC(dateTo)     : undefined,
     }),
     staleTime:       30_000,
     placeholderData: (prev) => prev,
@@ -87,8 +104,9 @@ export function useCategories() {
         search:       debouncedSearch,
         sort_by:      sortKey,
         sort_dir:     sortDir,
-        updated_from: dateFrom,
-        updated_to:   dateTo,
+        // TIMEZONE FIX: same UTC boundary conversion as the query
+        updated_from: dateFrom ? localDayStartUTC(dateFrom) : undefined,
+        updated_to:   dateTo   ? localDayEndUTC(dateTo)     : undefined,
       })
       if (serverData?.pagination?.truncated) {
         toast('Export limited to 10,000 records.', { icon: '⚠️' })

@@ -348,12 +348,14 @@ def get_all_products(
         extra_where += " AND (p.prod_name ILIKE :search OR p.barcode ILIKE :search)"
         params["search"] = f"%{search.strip()}%"
 
+    # TIMEZONE FIX: frontend sends UTC ISO strings (local day start/end converted
+    # to UTC). Compare directly — no CAST to date (which would use server UTC timezone).
     if updated_from:
-        extra_where += " AND p.updated_at >= CAST(:updated_from AS date)"
+        extra_where += " AND p.updated_at >= :updated_from"
         params["updated_from"] = updated_from
 
     if updated_to:
-        extra_where += " AND p.updated_at < (CAST(:updated_to AS date) + INTERVAL '1 day')"
+        extra_where += " AND p.updated_at <= :updated_to"
         params["updated_to"] = updated_to
 
     total = db.execute(

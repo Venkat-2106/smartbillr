@@ -56,15 +56,35 @@ export function useProducts() {
   const activeQuery = isSearching ? allQuery : pagedQuery
   const allItems    = activeQuery.data?.items ?? []
 
-  // Client-side filter: matches prod_name OR category_name
+  // ── Client-side filter ───────────────────────────────────────────────────────
+  // Matches prod_name, category_name, OR barcode.
+  // Barcode is included so that both manual barcode entry and keyboard-emulation
+  // scanner input resolve products without any backend change.
+  //
+  // WHY CLIENT-SIDE and not server-side:
+  //   category_name comes from a JOIN and is not searchable by the backend ?search=
+  //   param. So we keep the dual-query pattern (allQuery = all records, filter here).
+  //   Barcode is also checked here for the same reason — all products are already
+  //   in memory via allQuery, so an extra API call would waste a round-trip.
+  //
+  // Sort rule: exact barcode match floated to the top (scanner UX).
+  //   When a scanner sends a full barcode (e.g. "8901234567890"), the exact product
+  //   appears first even if other products have names that partially contain that string.
+  const q = search.trim().toLowerCase()
   const filtered = isSearching
-    ? allItems.filter(p => {
-        const q = search.trim().toLowerCase()
-        return (
-          p.prod_name?.toLowerCase().includes(q) ||
-          p.category_name?.toLowerCase().includes(q)
+    ? (() => {
+        const matches = allItems.filter(p =>
+          p.prod_name?.toLowerCase().includes(q)     ||
+          p.category_name?.toLowerCase().includes(q) ||
+          p.barcode?.toLowerCase().includes(q)
         )
-      })
+        // Float exact barcode match to position 0 (scanner UX: the scanned
+        // product should be the very first row, regardless of name sort order)
+        return matches.sort((a, b) =>
+          (b.barcode?.toLowerCase() === q ? 1 : 0) -
+          (a.barcode?.toLowerCase() === q ? 1 : 0)
+        )
+      })()
     : allItems
 
   return {

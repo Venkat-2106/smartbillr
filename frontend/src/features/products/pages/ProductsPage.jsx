@@ -447,6 +447,51 @@ function fmt(num) {
   })
 }
 
+// ── Barcode scanner UI helpers ─────────────────────────────────────────────────
+// Inline SVG barcode icon — no external icon library needed.
+function BarcodeIcon() {
+  return (
+    <svg width="15" height="11" viewBox="0 0 15 11" fill="currentColor" aria-hidden="true">
+      <rect x="0"    y="0" width="1.4" height="11" />
+      <rect x="2.3"  y="0" width="0.9" height="11" />
+      <rect x="4.1"  y="0" width="1.8" height="11" />
+      <rect x="6.8"  y="0" width="0.7" height="11" />
+      <rect x="8.4"  y="0" width="1.4" height="11" />
+      <rect x="10.7" y="0" width="0.9" height="11" />
+      <rect x="12.5" y="0" width="2.5" height="11" />
+    </svg>
+  )
+}
+
+// Small pill shown next to the SearchBar to tell the user that a USB barcode
+// scanner can be pointed at the page and will work immediately.
+// No click action — it is a hint, not a mode toggle.
+function BarcodeHint() {
+  return (
+    <div
+      title="Barcode scanner supported — scan any product barcode to find it instantly"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '5px 10px',
+        background: 'var(--bg-card)',
+        border: '1.5px solid var(--border)',
+        borderRadius: 8,
+        fontSize: 11.5,
+        fontWeight: 600,
+        color: 'var(--text-muted)',
+        userSelect: 'none',
+        flexShrink: 0,
+        letterSpacing: '0.01em',
+      }}
+    >
+      <BarcodeIcon />
+      <span>Scan</span>
+    </div>
+  )
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function ProductsPage() {
   const { can }   = usePermissions()
@@ -477,6 +522,39 @@ export default function ProductsPage() {
     } else {
       setSortKey(key)
       setSortDir('asc')
+    }
+  }
+
+  // ── Barcode scanner Enter handler ────────────────────────────────────────────
+  // USB barcode scanners work by emulating a keyboard: they "type" each digit of
+  // the barcode rapidly, then fire an Enter keypress when the scan is complete.
+  //
+  // This handler is placed on a wrapper <div> around the SearchBar so we don't
+  // need to modify the shared SearchBar component. React's synthetic events
+  // bubble from the <input> inside SearchBar up through this wrapper div.
+  //
+  // Behaviour on Enter:
+  //   1. Read the current input value from the DOM (e.target.value) — more
+  //      reliable than the React state at this instant because the scanner fires
+  //      chars very quickly and state updates may still be batching.
+  //   2. Find the product in allProducts whose barcode exactly matches.
+  //   3. If exactly one match → auto-open the detail drawer instantly (same UX
+  //      as the CreateSalePage scanner).
+  //   4. If no exact match (or multiple) → do nothing extra; the filtered table
+  //      already shows the partial-match results so the user picks manually.
+  //
+  // NOTE: allProducts is the full pre-fetched dataset (limit=10000). No network
+  // call is made here — the lookup is pure in-memory O(n).
+  function handleScannerEnter(e) {
+    if (e.key !== 'Enter') return
+    const rawValue = (e.target.value ?? search).trim()
+    if (!rawValue || allProducts.length === 0) return
+
+    const exactMatch = allProducts.find(
+      p => p.barcode && p.barcode.toLowerCase() === rawValue.toLowerCase()
+    )
+    if (exactMatch) {
+      setDetailProduct(exactMatch)
     }
   }
 
@@ -888,13 +966,22 @@ export default function ProductsPage() {
         flexWrap: 'wrap',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <SearchBar
-            value={search}
-            onChange={setSearch}
-            onSearch={setSearch}
-            placeholder="Search by product or category…"
-            width="280px"
-          />
+          {/* Wrap SearchBar in a div so the scanner's Enter keypress bubbles up
+              to handleScannerEnter without modifying the shared SearchBar component */}
+          <div
+            onKeyDown={handleScannerEnter}
+            style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+          >
+            <SearchBar
+              value={search}
+              onChange={setSearch}
+              onSearch={setSearch}
+              placeholder="Search by product, category or barcode…"
+              width="290px"
+            />
+            {/* Barcode scanner hint pill — tells the user that a USB scanner works here */}
+            <BarcodeHint />
+          </div>
           <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
             {displayRows.length} product{displayRows.length !== 1 ? 's' : ''}
             {(activeSearch || activeDateFilter) && ' (filtered)'}

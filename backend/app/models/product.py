@@ -34,6 +34,11 @@ class Product(Base):
     category_id = Column(UUID(as_uuid=True), ForeignKey("categories.category_id"), nullable=True)
     prod_name = Column(String(100), nullable=False)
     prod_sell_price = Column(Numeric(10, 2), nullable=False)
+    # MRP FEATURE: Maximum Retail Price — the printed/stickered price on the product.
+    # NULL = not set (most existing products will be NULL; no migration needed for them).
+    # Discount on invoices = (prod_mrp - sale_item_unit_price) per unit.
+    # Stored separately from prod_sell_price so regular discounts vs MRP are distinct.
+    prod_mrp        = Column(Numeric(10, 2), nullable=True)
     prod_cost_price = Column(Numeric(10, 2), nullable=False)
     prod_profit = Column(
         Numeric(10, 2),

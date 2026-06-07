@@ -217,6 +217,8 @@ export const SUPPLIER_CSV_COLUMNS = [
 export const PRODUCT_CSV_COLUMNS = [
   { key: 'prod_name',           label: 'Product Name' },
   { key: 'prod_sell_price',     label: 'Sell Price' },
+  { key: 'prod_mrp',            label: 'MRP',
+    format: (val) => val != null ? String(val) : '' },
   { key: 'prod_cost_price',     label: 'Cost Price' },
   { key: 'prod_profit',         label: 'Profit' },
   { key: 'prod_stock_qty',      label: 'Stock Qty' },
@@ -241,6 +243,8 @@ export const PRODUCT_CSV_COLUMNS = [
 export const PRODUCT_CSV_COLUMNS_NO_PROFIT = [
   { key: 'prod_name',           label: 'Product Name' },
   { key: 'prod_sell_price',     label: 'Sell Price' },
+  { key: 'prod_mrp',            label: 'MRP',
+    format: (val) => val != null ? String(val) : '' },
   // prod_cost_price OMITTED — staff not permitted to see cost data
   // prod_profit     OMITTED — staff not permitted to see profit data
   { key: 'prod_stock_qty',      label: 'Stock Qty' },

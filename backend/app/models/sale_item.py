@@ -16,8 +16,14 @@ class SaleItem(Base):
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.prod_id"), nullable=False)
 
     # Only these two are inserted by the API — DB calculates everything else
-    sale_item_quantity = Column(Integer, nullable=False)
+    sale_item_quantity  = Column(Integer, nullable=False)
     sale_item_unit_price = Column(Numeric(10, 2), nullable=False)
+    # MRP FEATURE: MRP snapshot taken from products.prod_mrp at the moment of sale.
+    # NULL for all existing sale_items (backward-compatible — no back-fill needed).
+    # NULL also means "no MRP was set" → invoice shows no discount for that line.
+    # Stored here so historical invoices always reflect the MRP that was in effect
+    # at sale time, even after the product's MRP is changed later.
+    item_mrp = Column(Numeric(10, 2), nullable=True)
 
     # DB trigger (trg_sale_stock_movement) fills these after insert
     gst_rate = Column(Numeric(5, 2), default=0)

@@ -29,6 +29,10 @@ class ProductCreate(BaseModel):
     prod_name:            str
     prod_sell_price:      Decimal
     prod_cost_price:      Decimal
+    # MRP FEATURE: optional Maximum Retail Price.
+    # None / not supplied → no MRP set (fine — existing products stay unchanged).
+    # Must be >= 0 when supplied. Typical: prod_mrp >= prod_sell_price >= prod_cost_price.
+    prod_mrp:             Optional[Decimal] = None
     prod_stock_qty:       Optional[int]     = 0
     prod_low_stock_alert: Optional[int]     = 10
     tax_rate:             Optional[Decimal] = Decimal("0")
@@ -49,10 +53,10 @@ class ProductCreate(BaseModel):
         return v
 
     # ── Price / qty guards ─────────────────────────────────────────────────────
-    @field_validator("prod_sell_price", "prod_cost_price")
+    @field_validator("prod_sell_price", "prod_cost_price", "prod_mrp")
     @classmethod
     def must_be_positive(cls, v):
-        if v < 0:
+        if v is not None and v < 0:
             raise ValueError("Price cannot be negative")
         return v
 
@@ -73,6 +77,7 @@ class ProductUpdate(BaseModel):
     prod_name:            Optional[str]     = None
     prod_sell_price:      Optional[Decimal] = None
     prod_cost_price:      Optional[Decimal] = None
+    prod_mrp:             Optional[Decimal] = None   # MRP FEATURE: pass null to clear MRP
     prod_low_stock_alert: Optional[int]     = None
     tax_rate:             Optional[Decimal] = None
     tax_code:             Optional[str]     = None
@@ -92,7 +97,7 @@ class ProductUpdate(BaseModel):
         return v
 
     # ── Price guard ────────────────────────────────────────────────────────────
-    @field_validator("prod_sell_price", "prod_cost_price")
+    @field_validator("prod_sell_price", "prod_cost_price", "prod_mrp")
     @classmethod
     def must_be_positive(cls, v):
         if v is not None and v < 0:
@@ -111,6 +116,7 @@ class ProductOut(BaseModel):
     prod_name:            str
     prod_sell_price:      Decimal
     prod_cost_price:      Decimal
+    prod_mrp:             Optional[Decimal] = None   # MRP FEATURE
     prod_profit:          Optional[Decimal] = None
     prod_stock_qty:       int
     prod_low_stock_alert: int

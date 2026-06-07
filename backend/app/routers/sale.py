@@ -151,7 +151,10 @@ def create_sale(
         # DISCOUNT LOGIC:
         #   If frontend sends sales_discount > 0 → use it as manual discount.
         #   If not → auto-calculate from (MRP - actual price) × qty per item.
-        #   This captures any price reduction the staff gave the customer.
+        #
+        # MRP FEATURE: use prod_mrp when available; skip auto-discount when
+        #   no MRP is set (NULL) so products without MRP don't create phantom
+        #   discounts against their selling price.
         total_amount  = Decimal("0")
         auto_discount = Decimal("0")
 
@@ -160,9 +163,11 @@ def create_sale(
             line_total = item.sale_item_unit_price * item.sale_item_quantity
             total_amount += line_total
 
-            price_diff = product.prod_sell_price - item.sale_item_unit_price
-            if price_diff > 0:
-                auto_discount += price_diff * item.sale_item_quantity
+            # Only calculate MRP discount when prod_mrp is explicitly set
+            if product.prod_mrp is not None:
+                price_diff = product.prod_mrp - item.sale_item_unit_price
+                if price_diff > 0:
+                    auto_discount += price_diff * item.sale_item_quantity
 
         discount = data.sales_discount if (data.sales_discount is not None and data.sales_discount > 0) \
                    else auto_discount
@@ -275,18 +280,26 @@ def create_sale(
         # The DB trigger trg_sale_stock_movement fires per item automatically:
         #   → Deducts stock from products table
         #   → Fills cgst/sgst/igst/tax_amount based on business country
+        #
+        # MRP FEATURE: item_mrp is written here from product_cache so it is
+        # frozen at the time of sale. If the product's MRP is changed later,
+        # this row always reflects what was shown to the customer at checkout.
         for item in data.items:
+            product   = product_cache[str(item.product_id)]
+            item_mrp  = str(product.prod_mrp) if product.prod_mrp is not None else None
             db.execute(
                 text("""
                     INSERT INTO sale_items (
                         business_id, sale_id, product_id,
-                        sale_item_quantity, sale_item_unit_price
+                        sale_item_quantity, sale_item_unit_price,
+                        item_mrp
                     ) VALUES (
                         CAST(:business_id AS uuid),
                         CAST(:sale_id AS uuid),
                         CAST(:product_id AS uuid),
                         :quantity,
-                        :unit_price
+                        :unit_price,
+                        :item_mrp
                     )
                 """),
                 {
@@ -294,7 +307,8 @@ def create_sale(
                     "sale_id":     new_sale_id,
                     "product_id":  str(item.product_id),
                     "quantity":    item.sale_item_quantity,
-                    "unit_price":  str(item.sale_item_unit_price)
+                    "unit_price":  str(item.sale_item_unit_price),
+                    "item_mrp":    item_mrp,
                 }
             )
 
@@ -578,6 +592,7 @@ def get_sale(
             SELECT si.sale_item_id, si.product_id,
                    p.prod_name         AS product_name,
                    si.sale_item_quantity, si.sale_item_unit_price,
+                   si.item_mrp,
                    si.sale_item_subtotal, si.cgst_amount, si.sgst_amount,
                    si.igst_amount, si.tax_amount, si.item_tax_total, si.item_total_with_tax
             FROM sale_items si
@@ -603,23 +618,42 @@ def get_sale(
     total_paid  = float(active_payment.total_paid) if active_payment else 0.0
     remaining   = round(sale_final - total_paid, 2)
 
-    items_data = [
-        {
+    items_data = []
+    for i in items:
+        # MRP FEATURE: compute per-item discount from stored item_mrp snapshot.
+        # Both item_mrp and sale_item_unit_price are Decimals from the DB.
+        # We compute once here so the frontend and print template never re-derive
+        # from the current product price — they always see the sale-time values.
+        item_mrp_val = float(i.item_mrp) if i.item_mrp is not None else None
+        unit_price   = float(i.sale_item_unit_price)
+        qty          = i.sale_item_quantity
+
+        if item_mrp_val is not None and item_mrp_val > unit_price:
+            discount_per_unit = round(item_mrp_val - unit_price, 2)
+            discount_amount   = round(discount_per_unit * qty, 2)
+            discount_pct      = round((discount_per_unit / item_mrp_val) * 100, 1)
+        else:
+            discount_per_unit = None
+            discount_amount   = None
+            discount_pct      = None
+
+        items_data.append({
             "sale_item_id":        str(i.sale_item_id),
             "product_id":          str(i.product_id),
             "product_name":        i.product_name or "Unknown Product",
-            "sale_item_quantity":  i.sale_item_quantity,
+            "sale_item_quantity":  qty,
             "sale_item_unit_price": str(i.sale_item_unit_price),
+            "item_mrp":            str(i.item_mrp) if i.item_mrp is not None else None,
+            "item_discount_amount": str(discount_amount) if discount_amount is not None else None,
+            "item_discount_pct":    str(discount_pct)    if discount_pct    is not None else None,
             "sale_item_subtotal":  str(i.sale_item_subtotal) if i.sale_item_subtotal else None,
             "cgst_amount":         str(i.cgst_amount) if i.cgst_amount else None,
             "sgst_amount":         str(i.sgst_amount) if i.sgst_amount else None,
             "igst_amount":         str(i.igst_amount) if i.igst_amount else None,
             "tax_amount":          str(i.tax_amount) if i.tax_amount else None,
             "item_tax_total":      str(i.item_tax_total) if i.item_tax_total else None,
-            "item_total_with_tax": str(i.item_total_with_tax) if i.item_total_with_tax else None
-        }
-        for i in items
-    ]
+            "item_total_with_tax": str(i.item_total_with_tax) if i.item_total_with_tax else None,
+        })
 
     return success_response({
         "sales_id":              str(sale.sales_id),

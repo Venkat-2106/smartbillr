@@ -1,3 +1,13 @@
+// src/features/sales/components/SaleDetailDrawer.jsx
+//
+// MRP FEATURE CHANGES (this session):
+//   1. buildInvoiceHTML — item table now has MRP + Discount columns when any
+//      item has item_mrp set. A "Total Savings" row is added to the totals block.
+//   2. Line Items section in the drawer — each item now shows MRP + "You save"
+//      when item_mrp > sale_item_unit_price.
+//   3. Summary section — "Total Savings" row added when savings > 0.
+//   All other logic, layout, and styling is UNCHANGED.
+
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -36,10 +46,44 @@ function paymentStatusBadge(status) {
   return `<span style="font-size:11px;font-weight:700;color:${s.color};background:${s.bg};padding:3px 10px;border-radius:20px;letter-spacing:0.03em;">${s.label}</span>`;
 }
 
-function buildInvoiceHTML(business, detail, sale, items, cgst, sgst, igst, subtotal, taxTotal, finalAmount, totalPaid, remaining) {
+// ── MRP FEATURE: compute total savings across all items ───────────────────────
+// Returns the sum of (item_mrp - unit_price) × qty for items where item_mrp > unit_price.
+// Returns 0 when no items have MRP set (backward-compatible).
+function computeTotalSavings(items) {
+  return items.reduce((acc, item) => {
+    const mrp   = Number(item.item_mrp);
+    const price = Number(item.sale_item_unit_price);
+    const qty   = Number(item.sale_item_quantity);
+    if (mrp > 0 && mrp > price) {
+      acc += (mrp - price) * qty;
+    }
+    return acc;
+  }, 0);
+}
+
+// ── MRP FEATURE: check if any item in the invoice has an MRP set ─────────────
+function anyItemHasMRP(items) {
+  return items.some(i => i.item_mrp != null && Number(i.item_mrp) > 0);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// buildInvoiceHTML — print template
+// MRP FEATURE changes:
+//   • When any item has item_mrp, table gets extra columns: MRP | Discount
+//   • Each item row shows MRP and per-line discount amount (or '—' if no MRP)
+//   • Totals block gets a "You Saved" row in green when savings > 0
+// ─────────────────────────────────────────────────────────────────────────────
+function buildInvoiceHTML(
+  business, detail, sale, items,
+  cgst, sgst, igst, subtotal, taxTotal, finalAmount, totalPaid, remaining
+) {
   const payStatus = detail?.sales_payment_status || sale.sales_payment_status || 'pending';
   const payMethod = (detail?.sales_payment_method || sale.sales_payment_method || '—')
     .replace(/_/g, ' ').toUpperCase();
+
+  // MRP FEATURE: decide whether to show the MRP/Discount columns
+  const showMRP       = anyItemHasMRP(items);
+  const totalSavings  = computeTotalSavings(items);
 
   const gstBreakdown = (cgst > 0 || sgst > 0 || igst > 0) ? `
     <tr><td style="padding:5px 0;color:#6b7280;font-size:12px;">CGST</td><td style="padding:5px 0;text-align:right;font-size:12px;">${formatCurrency(cgst)}</td></tr>
@@ -47,15 +91,62 @@ function buildInvoiceHTML(business, detail, sale, items, cgst, sgst, igst, subto
     ${igst > 0 ? `<tr><td style="padding:5px 0;color:#6b7280;font-size:12px;">IGST</td><td style="padding:5px 0;text-align:right;font-size:12px;">${formatCurrency(igst)}</td></tr>` : ''}
   ` : '';
 
-  const itemRows = items.map((item, i) => `
-    <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'};">
-      <td style="padding:9px 8px;font-size:12px;color:#111827;">${item.product_name || 'Product'}</td>
-      <td style="padding:9px 8px;text-align:center;font-size:12px;color:#374151;">${item.sale_item_quantity}</td>
-      <td style="padding:9px 8px;text-align:right;font-size:12px;color:#374151;">${formatCurrency(item.sale_item_unit_price)}</td>
-      <td style="padding:9px 8px;text-align:right;font-size:12px;color:#374151;">${Number(item.item_tax_total) > 0 ? formatCurrency(item.item_tax_total) : '—'}</td>
-      <td style="padding:9px 8px;text-align:right;font-size:12px;font-weight:700;color:#111827;">${formatCurrency(item.item_total_with_tax)}</td>
+  // MRP FEATURE: build item rows with optional MRP + Discount columns
+  const itemRows = items.map((item, i) => {
+    const mrpVal      = item.item_mrp != null ? Number(item.item_mrp) : null;
+    const unitPrice   = Number(item.sale_item_unit_price);
+    const qty         = Number(item.sale_item_quantity);
+    const discAmt     = (mrpVal != null && mrpVal > unitPrice)
+                          ? (mrpVal - unitPrice) * qty
+                          : null;
+    const mrpCell     = showMRP
+      ? `<td style="padding:9px 8px;text-align:right;font-size:12px;color:#9ca3af;text-decoration:line-through;">${mrpVal != null ? formatCurrency(mrpVal) : '—'}</td>`
+      : '';
+    const discCell    = showMRP
+      ? `<td style="padding:9px 8px;text-align:right;font-size:12px;color:#059669;font-weight:600;">${discAmt != null ? `−${formatCurrency(discAmt)}` : '—'}</td>`
+      : '';
+
+    return `
+      <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'};">
+        <td style="padding:9px 8px;font-size:12px;color:#111827;">${item.product_name || 'Product'}</td>
+        <td style="padding:9px 8px;text-align:center;font-size:12px;color:#374151;">${qty}</td>
+        ${mrpCell}
+        <td style="padding:9px 8px;text-align:right;font-size:12px;color:#374151;">${formatCurrency(unitPrice)}</td>
+        <td style="padding:9px 8px;text-align:right;font-size:12px;color:#374151;">${Number(item.item_tax_total) > 0 ? formatCurrency(item.item_tax_total) : '—'}</td>
+        ${discCell}
+        <td style="padding:9px 8px;text-align:right;font-size:12px;font-weight:700;color:#111827;">${formatCurrency(item.item_total_with_tax)}</td>
+      </tr>
+    `;
+  }).join('');
+
+  // MRP FEATURE: table header changes when MRP columns are shown
+  const tableHeader = showMRP ? `
+    <tr style="border-bottom:2px solid #111827;background:#f9fafb;">
+      <th style="text-align:left;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Item</th>
+      <th style="text-align:center;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Qty</th>
+      <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">MRP</th>
+      <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Rate</th>
+      <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Tax</th>
+      <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#059669;text-transform:uppercase;letter-spacing:0.06em;">Discount</th>
+      <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Total</th>
     </tr>
-  `).join('');
+  ` : `
+    <tr style="border-bottom:2px solid #111827;background:#f9fafb;">
+      <th style="text-align:left;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Item</th>
+      <th style="text-align:center;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Qty</th>
+      <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Rate</th>
+      <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Tax</th>
+      <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Total</th>
+    </tr>
+  `;
+
+  // MRP FEATURE: "You Saved" banner — only when savings > 0
+  const savingsBanner = (showMRP && totalSavings > 0) ? `
+    <div style="background:#D1FAE5;border:1px solid #6EE7B7;border-radius:8px;padding:10px 16px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:12.5px;font-weight:700;color:#065F46;">🎉 Customer Saved</span>
+      <span style="font-size:14px;font-weight:900;color:#059669;">${formatCurrency(totalSavings)}</span>
+    </div>
+  ` : '';
 
   return `
     ${buildPrintWatermark()}
@@ -85,17 +176,12 @@ function buildInvoiceHTML(business, detail, sale, items, cgst, sgst, igst, subto
 
     <!-- Items table -->
     <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
-      <thead>
-        <tr style="border-bottom:2px solid #111827;background:#f9fafb;">
-          <th style="text-align:left;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Item</th>
-          <th style="text-align:center;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Qty</th>
-          <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Rate</th>
-          <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Tax</th>
-          <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Total</th>
-        </tr>
-      </thead>
+      <thead>${tableHeader}</thead>
       <tbody>${itemRows}</tbody>
     </table>
+
+    <!-- MRP FEATURE: "You Saved" banner above totals block -->
+    ${savingsBanner}
 
     <!-- Totals block -->
     <div style="display:flex;justify-content:flex-end;margin-bottom:32px;">
@@ -109,6 +195,7 @@ function buildInvoiceHTML(business, detail, sale, items, cgst, sgst, igst, subto
         </tr>
         ${totalPaid > 0 ? `<tr><td style="padding:4px 0;color:#10B981;font-size:12px;font-weight:600;">Amount Paid</td><td style="padding:4px 0;text-align:right;font-size:12px;color:#10B981;font-weight:600;">${formatCurrency(totalPaid)}</td></tr>` : ''}
         ${remaining > 0 ? `<tr><td style="padding:4px 0;color:#EF4444;font-size:12.5px;font-weight:700;">Balance Due</td><td style="padding:4px 0;text-align:right;font-size:12.5px;color:#EF4444;font-weight:700;">${formatCurrency(remaining)}</td></tr>` : ''}
+        ${(showMRP && totalSavings > 0) ? `<tr><td style="padding:6px 0 0;color:#059669;font-size:12px;font-weight:700;">You Saved</td><td style="padding:6px 0 0;text-align:right;font-size:12px;color:#059669;font-weight:700;">${formatCurrency(totalSavings)}</td></tr>` : ''}
       </table>
     </div>
 
@@ -154,6 +241,9 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
   const igst        = detail?.igst_total           ?? 0;
   const items       = detail?.items                ?? [];
 
+  // MRP FEATURE: compute total savings for the Summary section
+  const totalSavings = computeTotalSavings(items);
+
   function handlePrint() {
     if (!detail && !sale) return;
     const business = useAuthStore.getState().business;
@@ -188,7 +278,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
         }}
       />
 
-      {/* Drawer panel — no longer needs invoice-print-area class */}
+      {/* Drawer panel */}
       <div
         style={{
           position: 'fixed', top: 0, right: 0,
@@ -346,29 +436,81 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
 
               {items.length > 0 && (
                 <DrawerSection title={`Line Items (${items.length})`}>
-                  {items.map((item, idx) => (
-                    <div key={item.sale_item_id || idx} style={{
-                      padding: '11px 14px',
-                      borderBottom: idx === items.length - 1 ? 'none' : '1px solid var(--border)',
-                      display: 'flex', justifyContent: 'space-between',
-                      alignItems: 'flex-start', gap: 12,
-                    }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {item.product_name || 'Product'}
-                        </div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
-                          {item.sale_item_quantity} × {formatCurrency(item.sale_item_unit_price)}
-                          {Number(item.item_tax_total) > 0 &&
-                            ` + ${formatCurrency(item.item_tax_total)} tax`}
+                  {items.map((item, idx) => {
+                    // MRP FEATURE: compute per-item discount for display
+                    const mrpVal    = item.item_mrp != null ? Number(item.item_mrp) : null;
+                    const unitPrice = Number(item.sale_item_unit_price);
+                    const qty       = Number(item.sale_item_quantity);
+                    const hasDiscount = mrpVal != null && mrpVal > unitPrice;
+                    const discAmt   = hasDiscount ? (mrpVal - unitPrice) * qty : null;
+                    const discPct   = hasDiscount ? Math.round((mrpVal - unitPrice) / mrpVal * 100) : null;
+
+                    return (
+                      <div key={item.sale_item_id || idx} style={{
+                        padding: '11px 14px',
+                        borderBottom: idx === items.length - 1 ? 'none' : '1px solid var(--border)',
+                      }}>
+                        {/* Top row: product name + line total */}
+                        <div style={{
+                          display: 'flex', justifyContent: 'space-between',
+                          alignItems: 'flex-start', gap: 12,
+                        }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                              {item.product_name || 'Product'}
+                            </div>
+
+                            {/* MRP FEATURE: show MRP (struck-through) when available */}
+                            {mrpVal != null && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                                <span style={{
+                                  fontSize: 11, color: 'var(--text-muted)',
+                                  textDecoration: 'line-through',
+                                }}>
+                                  MRP {formatCurrency(mrpVal)}
+                                </span>
+                                {hasDiscount && (
+                                  <span style={{
+                                    fontSize: 10.5, fontWeight: 700,
+                                    color: '#059669',
+                                    background: '#D1FAE5',
+                                    borderRadius: 4,
+                                    padding: '1px 5px',
+                                  }}>
+                                    {discPct}% OFF
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Qty × rate + tax line */}
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                              {qty} × {formatCurrency(unitPrice)}
+                              {Number(item.item_tax_total) > 0 &&
+                                ` + ${formatCurrency(item.item_tax_total)} tax`}
+                            </div>
+
+                            {/* MRP FEATURE: "You save ₹X" per line */}
+                            {hasDiscount && (
+                              <div style={{
+                                fontSize: 11.5, fontWeight: 600,
+                                color: '#059669', marginTop: 3,
+                              }}>
+                                You save {formatCurrency(discAmt)} on this item
+                              </div>
+                            )}
+                          </div>
+
+                          <span style={{
+                            fontSize: 13, fontWeight: 700,
+                            color: 'var(--text-primary)', flexShrink: 0,
+                          }}>
+                            {formatCurrency(item.item_total_with_tax)}
+                          </span>
                         </div>
                       </div>
-                      <span style={{ fontSize: 13, fontWeight: 700,
-                        color: 'var(--text-primary)', flexShrink: 0 }}>
-                        {formatCurrency(item.item_total_with_tax)}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </DrawerSection>
               )}
 
@@ -394,10 +536,20 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                   <InfoRow label="Amount Paid" value={formatCurrency(totalPaid)} />
                 )}
                 {remaining > 0 && (
-                  <InfoRow label="Remaining" isLast
+                  <InfoRow label="Remaining"
                     value={
                       <span style={{ color: '#ef4444', fontWeight: 600 }}>
                         {formatCurrency(remaining)}
+                      </span>
+                    }
+                  />
+                )}
+                {/* MRP FEATURE: "Total Savings" row — only shown when savings > 0 */}
+                {totalSavings > 0 && (
+                  <InfoRow label="🎉 Total Savings" isLast
+                    value={
+                      <span style={{ color: '#059669', fontWeight: 700 }}>
+                        {formatCurrency(totalSavings)}
                       </span>
                     }
                   />

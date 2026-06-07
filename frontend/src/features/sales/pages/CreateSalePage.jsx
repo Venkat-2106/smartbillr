@@ -19,6 +19,7 @@ import useAuthStore from '../../../store/authStore';
 const newItem = () => ({
   _id:        `${Date.now()}-${Math.random()}`,
   product_id: '',
+  mrp:        0,   // MRP FEATURE: product's MRP at time of adding to invoice
   unit_price: 0,
   quantity:   1,
   tax_rate:   0,
@@ -308,6 +309,10 @@ export default function CreateSalePage() {
       return {
         ...item,
         product_id: productId,
+        // MRP FEATURE: snapshot the product's MRP at the moment of adding it to the invoice.
+        // The backend also writes item_mrp from its own product cache, but keeping it
+        // in item state here drives the live discount preview in the line items table.
+        mrp:        Number(product.prod_mrp) || 0,
         unit_price: Number(product.prod_sell_price) || 0,
         tax_rate:   Number(product.tax_rate)         || 0,
       };
@@ -337,11 +342,11 @@ export default function CreateSalePage() {
       subtotal += s;
       taxTotal += t;
 
-      // Calculate auto-discount: price reduction from MRP
-      const product = products.find(p => p.prod_id === item.product_id);
-      if (product) {
-        const mrp  = Number(product.prod_sell_price) || 0;
-        const diff = mrp - (Number(item.unit_price) || 0);
+// MRP FEATURE: use item.mrp (snapped from prod_mrp when product was added).
+      // Do NOT use product.prod_sell_price — that gives wrong discount figures.
+      const itemMrp = Number(item.mrp) || 0;
+      if (itemMrp > 0) {
+        const diff = itemMrp - (Number(item.unit_price) || 0);
         if (diff > 0) autoDiscount += diff * (Number(item.quantity) || 0);
       }
     });

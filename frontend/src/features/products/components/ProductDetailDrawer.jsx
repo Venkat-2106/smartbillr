@@ -91,36 +91,69 @@ function buildProductPrintHTML(business, product, detail, summary, stockHistory,
     { label: 'Date',    key: 'changed_at',   align: 'left', format: v => fmtPrintDate(v) },
   ]
 
-  // ── Pricing grid: 4 cols when profit visible, 2 cols when not ─────────────
+  // ── Pricing cards — responsive wrapping flex layout ──────────────────────
+  // WHY FLEXBOX INSTEAD OF GRID:
+  //   CSS grid with repeat(N, 1fr) uses a FIXED column count regardless of
+  //   available width. On narrow page sizes (Envelope #9 = ~3.8 inches wide,
+  //   Letter landscape, thermal roll, etc.) a 4- or 5-column grid overflows
+  //   and produces illegible squished text or horizontal overflow.
+  //
+  //   flex-wrap: wrap + flex: 1 1 120px means each card:
+  //     - Grows to fill available space (flex-grow: 1)
+  //     - Shrinks when space is tight (flex-shrink: 1)
+  //     - Has a minimum width of 120px before it wraps to the next row
+  //   On a wide A4 page all cards sit in one row.
+  //   On a narrow envelope page they wrap to 2 rows automatically.
+  //   The layout never overflows — it always fits the printable area.
+  //
+  // CARD SIZE:
+  //   font-size on the value is reduced from 18px → 15px so numbers
+  //   like "₹1,23,456.00" fit inside a 120px-wide card without clipping.
+  //   Label font-size stays at 10px (already compact).
+
+  const cardStyle = 'border:1.5px solid #e5e7eb;border-radius:8px;padding:10px 12px;text-align:center;flex:1 1 120px;min-width:0;box-sizing:border-box;'
+  const labelStyle = 'font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'
+  const wrapStyle = 'display:flex;flex-wrap:wrap;gap:10px;margin-bottom:22px;'
+
+  const mrpVal = p.prod_mrp ?? product.prod_mrp ?? null
+  const mrpCard = mrpVal != null
+    ? `<div style="${cardStyle}">
+        <div style="${labelStyle}">MRP</div>
+        <div style="font-size:15px;font-weight:800;color:#9ca3af;text-decoration:line-through;word-break:break-all;">${formatCurrency(mrpVal)}</div>
+      </div>`
+    : ''
+
+  const stockColor = (p.prod_stock_qty ?? product.prod_stock_qty) <= (p.prod_low_stock_alert ?? product.prod_low_stock_alert) ? '#EF4444' : '#111827'
+
   const pricingGrid = showProfit
-    ? `
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px;">
-        <div style="border:1.5px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center;">
-          <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Selling Price</div>
-          <div style="font-size:18px;font-weight:800;color:#4F46E5;">${formatCurrency(p.prod_sell_price ?? product.prod_sell_price)}</div>
+    ? `<div style="${wrapStyle}">
+        <div style="${cardStyle}">
+          <div style="${labelStyle}">Selling Price</div>
+          <div style="font-size:15px;font-weight:800;color:#4F46E5;word-break:break-all;">${formatCurrency(p.prod_sell_price ?? product.prod_sell_price)}</div>
         </div>
-        <div style="border:1.5px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center;">
-          <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Cost Price</div>
-          <div style="font-size:18px;font-weight:800;color:#374151;">${formatCurrency(p.prod_cost_price ?? product.prod_cost_price)}</div>
+        ${mrpCard}
+        <div style="${cardStyle}">
+          <div style="${labelStyle}">Cost Price</div>
+          <div style="font-size:15px;font-weight:800;color:#374151;word-break:break-all;">${formatCurrency(p.prod_cost_price ?? product.prod_cost_price)}</div>
         </div>
-        <div style="border:1.5px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center;">
-          <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Profit</div>
-          <div style="font-size:18px;font-weight:800;color:#10B981;">${formatCurrency(p.prod_profit ?? product.prod_profit ?? 0)}</div>
+        <div style="${cardStyle}">
+          <div style="${labelStyle}">Profit</div>
+          <div style="font-size:15px;font-weight:800;color:#10B981;word-break:break-all;">${formatCurrency(p.prod_profit ?? product.prod_profit ?? 0)}</div>
         </div>
-        <div style="border:1.5px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center;">
-          <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Current Stock</div>
-          <div style="font-size:18px;font-weight:800;color:${(p.prod_stock_qty ?? product.prod_stock_qty) <= (p.prod_low_stock_alert ?? product.prod_low_stock_alert) ? '#EF4444' : '#111827'};">${p.prod_stock_qty ?? product.prod_stock_qty} ${p.unit || product.unit || 'pcs'}</div>
+        <div style="${cardStyle}">
+          <div style="${labelStyle}">Current Stock</div>
+          <div style="font-size:15px;font-weight:800;color:${stockColor};word-break:break-all;">${p.prod_stock_qty ?? product.prod_stock_qty} ${p.unit || product.unit || 'pcs'}</div>
         </div>
       </div>`
-    : `
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:22px;">
-        <div style="border:1.5px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center;">
-          <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Selling Price</div>
-          <div style="font-size:18px;font-weight:800;color:#4F46E5;">${formatCurrency(p.prod_sell_price ?? product.prod_sell_price)}</div>
+    : `<div style="${wrapStyle}">
+        <div style="${cardStyle}">
+          <div style="${labelStyle}">Selling Price</div>
+          <div style="font-size:15px;font-weight:800;color:#4F46E5;word-break:break-all;">${formatCurrency(p.prod_sell_price ?? product.prod_sell_price)}</div>
         </div>
-        <div style="border:1.5px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center;">
-          <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Current Stock</div>
-          <div style="font-size:18px;font-weight:800;color:${(p.prod_stock_qty ?? product.prod_stock_qty) <= (p.prod_low_stock_alert ?? product.prod_low_stock_alert) ? '#EF4444' : '#111827'};">${p.prod_stock_qty ?? product.prod_stock_qty} ${p.unit || product.unit || 'pcs'}</div>
+        ${mrpCard}
+        <div style="${cardStyle}">
+          <div style="${labelStyle}">Current Stock</div>
+          <div style="font-size:15px;font-weight:800;color:${stockColor};word-break:break-all;">${p.prod_stock_qty ?? product.prod_stock_qty} ${p.unit || product.unit || 'pcs'}</div>
         </div>
       </div>`
 
@@ -428,6 +461,13 @@ export default function ProductDetailDrawer({ product, onClose }) {
               {/* were bypassed, the values would display as '—'.            */}
               <Section title="Product Details">
                 <InfoRow label="Selling Price"  value={formatCurrency(detail?.prod_sell_price ?? product.prod_sell_price)} />
+                <InfoRow label="MRP" value={
+                  (detail?.prod_mrp != null)
+                    ? formatCurrency(detail.prod_mrp)
+                    : (product.prod_mrp != null)
+                      ? formatCurrency(product.prod_mrp)
+                      : '—'
+                } />
                 {canViewProfit && (
                   <InfoRow label="Cost Price"   value={
                     detail?.prod_cost_price != null

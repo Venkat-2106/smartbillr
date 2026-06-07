@@ -84,6 +84,8 @@ const createSchema = z.object({
   prod_name:            z.string().trim().min(1, 'Product name is required').max(100),
   prod_sell_price:      z.coerce.number({ invalid_type_error: 'Enter a valid price' }).min(0, 'Cannot be negative'),
   prod_cost_price:      z.coerce.number({ invalid_type_error: 'Enter a valid price' }).min(0, 'Cannot be negative'),
+  // MRP FEATURE: optional — coerce '' or 0 to null in buildPayload
+  prod_mrp:             z.coerce.number().min(0, 'Cannot be negative').default(0),
   prod_stock_qty:       z.coerce.number().int().min(0, 'Cannot be negative').default(0),
   prod_low_stock_alert: z.coerce.number().int().min(0, 'Cannot be negative').default(10),
   tax_rate:             z.coerce.number().min(0, 'Cannot be negative').max(100, 'Max 100%').default(0),
@@ -98,6 +100,8 @@ const editSchema = z.object({
   prod_name:            z.string().trim().min(1, 'Product name is required').max(100),
   prod_sell_price:      z.coerce.number({ invalid_type_error: 'Enter a valid price' }).min(0, 'Cannot be negative'),
   prod_cost_price:      z.coerce.number({ invalid_type_error: 'Enter a valid price' }).min(0, 'Cannot be negative'),
+  // MRP FEATURE: optional — coerce '' or 0 to null in buildPayload
+  prod_mrp:             z.coerce.number().min(0, 'Cannot be negative').default(0),
   prod_low_stock_alert: z.coerce.number().int().min(0, 'Cannot be negative').default(10),
   tax_rate:             z.coerce.number().min(0, 'Cannot be negative').max(100, 'Max 100%').default(0),
   tax_code:             z.string().max(50).optional().or(z.literal('')),
@@ -231,6 +235,20 @@ function AddProductForm({ onSubmit, onClose, isPending, categories, canViewProfi
           <input type="hidden" value={0} {...register('prod_cost_price')} />
         )}
       </div>
+
+      {/* MRP FEATURE: optional Maximum Retail Price field */}
+      <FormField
+        label="MRP (Maximum Retail Price)"
+        error={errors.prod_mrp}
+        helper="Printed price on the product — discount = MRP minus selling price, shown on invoices"
+        style={{ marginBottom: 16 }}
+      >
+        <Input
+          type="number" step="0.01" min="0"
+          placeholder="0.00 — leave blank if not applicable"
+          {...register('prod_mrp')}
+        />
+      </FormField>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
         <FormField label="Opening Stock Qty" error={errors.prod_stock_qty}>
@@ -376,6 +394,20 @@ function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categori
           <input type="hidden" {...register('prod_cost_price')} />
         )}
       </div>
+
+      {/* MRP FEATURE: optional Maximum Retail Price field */}
+      <FormField
+        label="MRP (Maximum Retail Price)"
+        error={errors.prod_mrp}
+        helper="Printed price on the product — set to 0 to clear. Discount shown on invoices = MRP − selling price."
+        style={{ marginBottom: 16 }}
+      >
+        <Input
+          type="number" step="0.01" min="0"
+          placeholder="0.00 — leave blank if not applicable"
+          {...register('prod_mrp')}
+        />
+      </FormField>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
         <FormField label="Low Stock Alert" error={errors.prod_low_stock_alert} helper="Alert when stock falls below this">
@@ -653,6 +685,13 @@ export default function ProductsPage() {
   const [pendingPayload,  setPendingPayload]  = useState(null)
   const [pendingAction,   setPendingAction]   = useState(null)
 
+  // ── MRP FEATURE: Sell-above-MRP confirmation state ────────────────────────
+  // Separate from lossConfirmOpen so both dialogs can chain cleanly.
+  // Flow: sell > MRP → mrpConfirmOpen → user confirms → check loss → save
+  const [mrpConfirmOpen,    setMrpConfirmOpen]    = useState(false)
+  const [mrpPendingPayload, setMrpPendingPayload] = useState(null)
+  const [mrpPendingAction,  setMrpPendingAction]  = useState(null)
+
   // ── Helper: normalise the raw form data into an API payload ──────────────
   function buildPayload(data) {
     return {
@@ -660,6 +699,8 @@ export default function ProductsPage() {
       tax_code:    data.tax_code    || null,
       barcode:     data.barcode     || null,
       category_id: data.category_id || null,
+      // MRP FEATURE: send null when prod_mrp is 0 or empty — means "no MRP set"
+      prod_mrp:    Number(data.prod_mrp) > 0 ? Number(data.prod_mrp) : null,
     }
   }
 
@@ -672,6 +713,15 @@ export default function ProductsPage() {
     const sell = parseFloat(payload.prod_sell_price)
     const cost = parseFloat(payload.prod_cost_price)
     return !isNaN(sell) && !isNaN(cost) && sell < cost
+  }
+
+  // ── MRP FEATURE: did the user enter sell > MRP? ──────────────────────────
+  // Only warns when prod_mrp is explicitly set (not null). If the admin sets
+  // MRP=0 (which buildPayload converts to null), this guard is skipped.
+  function isSellAboveMRP(payload) {
+    const sell = parseFloat(payload.prod_sell_price)
+    const mrp  = parseFloat(payload.prod_mrp)
+    return !isNaN(sell) && !isNaN(mrp) && mrp > 0 && sell > mrp
   }
 
   // ── Actual API calls (called after loss-check passes or user confirms) ────
@@ -724,7 +774,15 @@ export default function ProductsPage() {
   function handleCreate(data) {
     const payload = buildPayload(data)
 
-    // Feature 1: intercept if selling at a loss → show confirmation dialog
+    // MRP FEATURE: intercept if sell > MRP → show MRP warning first
+    if (isSellAboveMRP(payload)) {
+      setMrpPendingPayload(payload)
+      setMrpPendingAction('create')
+      setMrpConfirmOpen(true)
+      return
+    }
+
+    // Feature 1: intercept if selling at a loss → show loss confirmation dialog
     if (isSellingAtLoss(payload)) {
       setPendingPayload(payload)
       setPendingAction('create')
@@ -737,6 +795,14 @@ export default function ProductsPage() {
 
   function handleUpdate(data) {
     const payload = buildPayload(data)
+
+    // MRP FEATURE: check sell > MRP first (same pattern as handleCreate)
+    if (isSellAboveMRP(payload)) {
+      setMrpPendingPayload(payload)
+      setMrpPendingAction('update')
+      setMrpConfirmOpen(true)
+      return
+    }
 
     if (isSellingAtLoss(payload)) {
       setPendingPayload(payload)
@@ -772,6 +838,36 @@ export default function ProductsPage() {
     setPendingPayload(null)
     setPendingAction(null)
     // Modals remain open — user can correct prices and try again
+  }
+
+  // ── MRP FEATURE: Sell-above-MRP confirm handlers ─────────────────────────
+  // After user clicks "Proceed" on the MRP warning, we continue to the
+  // loss check (which may open a second dialog). Both modals can open in
+  // sequence; the Add/Edit modal stays open throughout so nothing is lost.
+  function handleMrpConfirmed() {
+    setMrpConfirmOpen(false)
+    const payload = mrpPendingPayload
+    const action  = mrpPendingAction
+    setMrpPendingPayload(null)
+    setMrpPendingAction(null)
+
+    // After the user acknowledged the MRP warning, still check for loss
+    if (isSellingAtLoss(payload)) {
+      setPendingPayload(payload)
+      setPendingAction(action)
+      setLossConfirmOpen(true)
+      return
+    }
+    action === 'create'
+      ? doCreate(payload)
+      : doUpdate(editTarget.prod_id, payload)
+  }
+
+  function handleMrpCancelled() {
+    setMrpConfirmOpen(false)
+    setMrpPendingPayload(null)
+    setMrpPendingAction(null)
+    // Add/Edit modals remain open so user can correct the prices
   }
 
   // ── Table columns ─────────────────────────────────────────────────────────
@@ -831,6 +927,24 @@ export default function ProductsPage() {
         <span style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--text-primary)' }}>
           ₹{fmt(row.prod_sell_price)}
         </span>
+      ),
+    },
+    {
+      // MRP FEATURE: Maximum Retail Price column.
+      // Shown struck-through (retail sticker price) or '—' when not set.
+      // No permission gate — MRP is a public price, not profit data.
+      key:      'prod_mrp',
+      label:    'MRP',
+      sortable: true,
+      width:    100,
+      render: (row) => (
+        row.prod_mrp != null
+          ? (
+            <span style={{ fontSize: 13, color: 'var(--text-muted)', textDecoration: 'line-through' }}>
+              ₹{fmt(row.prod_mrp)}
+            </span>
+          )
+          : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
       ),
     },
     ...(canViewProfit
@@ -1060,6 +1174,8 @@ export default function ProductsPage() {
               prod_name:            editTarget.prod_name,
               prod_sell_price:      editTarget.prod_sell_price,
               prod_cost_price:      editTarget.prod_cost_price ?? 0,
+              // MRP FEATURE: show current MRP in the edit form (0 = "not set")
+              prod_mrp:             editTarget.prod_mrp ?? 0,
               prod_low_stock_alert: editTarget.prod_low_stock_alert,
               tax_rate:             editTarget.tax_rate ?? 0,
               tax_code:             editTarget.tax_code  ?? '',
@@ -1117,6 +1233,25 @@ export default function ProductsPage() {
         title="Selling Below Cost Price"
         message="The Sale Price is lower than the Cost Price. This product will be sold at a loss. Do you want to continue?"
         confirmText="Yes, Continue"
+        cancelText="Cancel"
+        loading={isCreating || isUpdating}
+      />
+
+      {/* ── MRP FEATURE: Sell-above-MRP confirmation dialog ──────────────── */}
+      {/*
+          Opens when: prod_sell_price > prod_mrp (and prod_mrp is set).
+          Reuses the same ConfirmDialog pattern as the loss warning above.
+          Cancel  → closes dialog, form stays open for correction.
+          Proceed → continues to loss-check (which may open a second dialog).
+      */}
+      <ConfirmDialog
+        open={mrpConfirmOpen}
+        onClose={handleMrpCancelled}
+        onConfirm={handleMrpConfirmed}
+        variant="warning"
+        title="Sale Price Higher Than MRP"
+        message="The Sale Price is higher than the MRP (Maximum Retail Price). This means the customer will be charged above the printed retail price. Do you want to continue?"
+        confirmText="Yes, Proceed"
         cancelText="Cancel"
         loading={isCreating || isUpdating}
       />

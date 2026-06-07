@@ -89,7 +89,8 @@ def get_product_with_profit(db: Session, prod_id):
         text("""
             SELECT
                 p.prod_id, p.business_id, p.category_id, p.prod_name,
-                p.prod_sell_price, p.prod_cost_price, p.prod_profit,
+                p.prod_sell_price, p.prod_mrp,
+                p.prod_cost_price, p.prod_profit,
                 p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
                 p.tax_code, p.barcode, p.unit, p.is_deleted,
                 p.prod_created_at, p.updated_at,
@@ -117,6 +118,8 @@ def row_to_dict(row, show_profit: bool = True):
         "category_name":        row.category_name if row.category_name else None,
         "prod_name":            row.prod_name,
         "prod_sell_price":      float(row.prod_sell_price),
+        # MRP FEATURE: None when not set — frontend treats None as "no MRP"
+        "prod_mrp":             float(row.prod_mrp) if row.prod_mrp is not None else None,
         "prod_cost_price":      float(row.prod_cost_price) if show_profit else None,
         "prod_profit":          float(row.prod_profit) if (show_profit and row.prod_profit is not None) else None,
         "prod_stock_qty":       row.prod_stock_qty,
@@ -244,6 +247,8 @@ def create_product(
         category_id           = data.category_id,
         prod_name             = data.prod_name,          # already stripped by schema
         prod_sell_price       = data.prod_sell_price,
+        # MRP FEATURE: None is fine — means no MRP set for this product
+        prod_mrp              = data.prod_mrp,
         prod_cost_price       = data.prod_cost_price,
         prod_stock_qty        = data.prod_stock_qty,
         prod_low_stock_alert  = data.prod_low_stock_alert,
@@ -317,7 +322,8 @@ def get_all_products(
         text(f"""
             SELECT
                 p.prod_id, p.business_id, p.category_id, p.prod_name,
-                p.prod_sell_price, p.prod_cost_price, p.prod_profit,
+                p.prod_sell_price, p.prod_mrp,
+                p.prod_cost_price, p.prod_profit,
                 p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
                 p.tax_code, p.barcode, p.unit, p.is_deleted,
                 p.prod_created_at, p.updated_at,
@@ -372,7 +378,8 @@ def get_product_by_barcode(
         text("""
             SELECT
                 p.prod_id, p.business_id, p.category_id, p.prod_name,
-                p.prod_sell_price, p.prod_cost_price, p.prod_profit,
+                p.prod_sell_price, p.prod_mrp,
+                p.prod_cost_price, p.prod_profit,
                 p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
                 p.tax_code, p.barcode, p.unit, p.is_deleted,
                 p.prod_created_at, p.updated_at,
@@ -414,7 +421,8 @@ def get_product(
         text("""
             SELECT
                 p.prod_id, p.business_id, p.category_id, p.prod_name,
-                p.prod_sell_price, p.prod_cost_price, p.prod_profit,
+                p.prod_sell_price, p.prod_mrp,
+                p.prod_cost_price, p.prod_profit,
                 p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
                 p.tax_code, p.barcode, p.unit, p.is_deleted,
                 p.prod_created_at, p.updated_at,
@@ -637,6 +645,8 @@ def update_product(
         product.prod_name = data.prod_name   # already stripped by schema validator
 
     if data.prod_sell_price      is not None: product.prod_sell_price      = data.prod_sell_price
+    # MRP FEATURE: allow clearing MRP by passing 0 or null; allow setting/updating it
+    if data.prod_mrp             is not None: product.prod_mrp             = data.prod_mrp if data.prod_mrp > 0 else None
     if data.prod_cost_price      is not None: product.prod_cost_price      = data.prod_cost_price
     if data.prod_low_stock_alert is not None: product.prod_low_stock_alert = data.prod_low_stock_alert
     if data.tax_rate             is not None: product.tax_rate             = data.tax_rate

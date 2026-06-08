@@ -72,11 +72,29 @@ export const fetchCustomersForSale = async () => {
   return []
 }
 
-// ── Products dropdown (Create Invoice) ───────────────────────────────────────
-export const fetchProductsForSale = async () => {
-  const res = await api.get('/products', { params: { limit: 500 } })
+// ── Lean product search for the sales entry form (server-side, min 2 chars) ──
+//
+// WHY THIS REPLACES fetchProductsForSale:
+//   The old approach fetched all products (limit=500) on page load. At 500+
+//   products this is a large payload. At 10,000+ products it breaks silently.
+//   The new lean endpoint (/products/search?q=X) is called on each keystroke
+//   (debounced in CreateSalePage). It returns at most 20 lightweight rows,
+//   skipping all profile JOINs and audit fields.
+//
+// BARCODE LOOKUP:
+//   An exact barcode scan calls GET /products/barcode/{code} directly (already
+//   exists). searchProductsLean is for the dropdown search only.
+export const searchProductsLean = async (q) => {
+  if (!q || q.trim().length < 2) return []
+  const res = await api.get('/products/search', { params: { q: q.trim(), limit: 20 } })
+  // Backend returns array directly (success_response wraps array as-is)
   const data = res.data
-  if (Array.isArray(data))         return data
-  if (Array.isArray(data?.items))  return data.items
+  if (Array.isArray(data)) return data
   return []
+}
+
+// ── Exact barcode lookup for scanner input in the sales form ──────────────────
+export const fetchProductByBarcode = async (code) => {
+  const res = await api.get(`/products/barcode/${encodeURIComponent(code.trim())}`)
+  return res.data   // full product row (with profit fields if permitted)
 }

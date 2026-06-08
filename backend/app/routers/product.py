@@ -408,6 +408,87 @@ def get_all_products(
 
 
 # ══════════════════════════════════════════════════════════════════
+# GET /products/search → Lean product search for sales entry
+#
+# WHY THIS EXISTS (performance):
+#   The full GET /products endpoint JOINs profiles twice (created_by + updated_by),
+#   JOINs categories, and returns audit fields — all useless during invoice creation.
+#   For live search while typing in the sales form, we only need 8 fields.
+#   This endpoint skips all JOINs and returns a flat lean payload.
+#
+# SCALABILITY:
+#   Both prod_name and barcode have GIN trigram indexes — ILIKE on either field
+#   hits the index. LIMIT 20 hard cap means response size is always bounded.
+#   Works correctly at 1,000 / 10,000 / 100,000 / 1,000,000+ product catalogs.
+#
+# DECLARED BEFORE /barcode/{code} AND /{prod_id}:
+#   FastAPI matches routes top-down. "search" must be declared before {prod_id}
+#   or the literal string "search" would be treated as a UUID and fail parsing.
+# ══════════════════════════════════════════════════════════════════
+@router.get("/search")
+def search_products_lean(
+    q:            str           = Query(default="", description="Search by name or barcode (min 2 chars)"),
+    limit:        int           = Query(default=20,  ge=1, le=50, description="Max results to return"),
+    current_user: dict          = Depends(require_permission("products.view")),
+    db:           Session       = Depends(get_db)
+):
+    """
+    Lean product search for the sales creation form.
+    Returns only the fields needed to add a line item: no audit fields, no JOINs to profiles.
+    Minimum 2 characters required to prevent accidental full-table scans.
+    """
+    business_id = current_user["business_id"]
+
+    # Require at least 2 characters — empty / single-char queries return nothing
+    # to prevent full-table ILIKE scans on large catalogs.
+    q = q.strip()
+    if len(q) < 2:
+        return success_response([])
+
+    rows = db.execute(
+        text("""
+            SELECT
+                p.prod_id,
+                p.prod_name,
+                p.prod_sell_price,
+                p.prod_mrp,
+                p.tax_rate,
+                p.barcode,
+                p.unit,
+                p.prod_stock_qty
+            FROM products p
+            WHERE p.business_id = CAST(:bid AS uuid)
+              AND p.is_deleted   = false
+              AND (
+                    p.prod_name ILIKE :q
+                 OR p.barcode   ILIKE :q
+              )
+            ORDER BY p.prod_name ASC
+            LIMIT :lim
+        """),
+        {
+            "bid": business_id,
+            "q":   f"%{q}%",
+            "lim": limit,
+        }
+    ).fetchall()
+
+    return success_response([
+        {
+            "prod_id":         str(r.prod_id),
+            "prod_name":       r.prod_name,
+            "prod_sell_price": float(r.prod_sell_price),
+            "prod_mrp":        float(r.prod_mrp) if r.prod_mrp is not None else None,
+            "tax_rate":        float(r.tax_rate) if r.tax_rate is not None else 0,
+            "barcode":         r.barcode,
+            "unit":            r.unit,
+            "prod_stock_qty":  r.prod_stock_qty,
+        }
+        for r in rows
+    ])
+
+
+# ══════════════════════════════════════════════════════════════════
 # GET /products/barcode/{code} → Lookup product by exact barcode
 # ══════════════════════════════════════════════════════════════════
 # DECLARED BEFORE /{prod_id}: FastAPI matches routes top-down. If this route

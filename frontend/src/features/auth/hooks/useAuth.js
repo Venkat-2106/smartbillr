@@ -29,27 +29,27 @@ export function useLogin() {
 
       setAuth(token, user)
 
-      // Fetch business
-      try {
-        const bizRes = await api.get('/businesses/me')
-        const biz = bizRes.data
+      // FIX 3: fetch business + profile in parallel — saves ~200ms on every login
+      const [bizResult, profileResult] = await Promise.allSettled([
+        api.get('/businesses/me'),
+        api.get('/profiles/me'),
+      ])
+
+      if (bizResult.status === 'fulfilled') {
+        const biz = bizResult.value.data
         if (biz) setBusiness(biz)
-      } catch (bizErr) {
-        console.warn('Could not load business profile:', bizErr.message)
+      } else {
+        console.warn('Could not load business profile:', bizResult.reason?.message)
       }
 
-      // Fetch profile + permissions
-      try {
-        const profileRes = await api.get('/profiles/me')
-        // Backend returns data directly — no wrapper
-        const profile = profileRes.data
+      if (profileResult.status === 'fulfilled') {
+        const profile = profileResult.value.data
         if (profile) {
           setProfile(profile)
-          // Explicitly store permissions so they are always in sync
           setPermissions(profile.permissions ?? [])
         }
-      } catch (profileErr) {
-        console.warn('Could not load user profile:', profileErr.message)
+      } else {
+        console.warn('Could not load user profile:', profileResult.reason?.message)
       }
 
       toast.success('Welcome back!')

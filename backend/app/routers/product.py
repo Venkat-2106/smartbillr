@@ -597,6 +597,7 @@ def get_product(
             WHERE sm.product_id  = CAST(:prod_id AS uuid)
               AND sm.business_id = CAST(:bid AS uuid)
             ORDER BY sm.move_created_at DESC
+            LIMIT 100
         """),
         {"prod_id": prod_id, "bid": business_id}
     ).fetchall()
@@ -725,7 +726,8 @@ def get_product(
             "stock_event_count":    len(stock_history)
         },
 
-        "stock_history":  stock_history,
+        "stock_history":      stock_history,
+        "stock_history_has_more": len(stock_history) == 100,
         "price_history":  price_history,
         "can_view_profit": show_profit,
     })

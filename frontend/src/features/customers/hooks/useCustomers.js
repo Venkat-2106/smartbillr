@@ -40,28 +40,8 @@ import {
   updateCustomer,
   deleteCustomer,
 } from '../api/customersApi'
+import { localDayStartUTC, localDayEndUTC } from '../../../shared/utils/dateUtils'
 import { useDebounce } from '../../../shared/hooks/useDebounce'
-
-// ── Timezone-aware date boundary helpers ─────────────────────────────────────
-// WHY: <input type="date"> returns "YYYY-MM-DD" in the user's LOCAL calendar.
-// Sending that bare string to the backend means PostgreSQL (UTC) treats it as
-// UTC midnight. A record updated at 00:15 IST (= 2026-06-07 18:45 UTC) will
-// show as "08 Jun" in the UI but fall outside a "08 Jun" filter sent as UTC.
-// FIX: convert local calendar date → UTC ISO string for the actual local day
-// boundaries, then compare server-side against the timestamptz column.
-// Matches the pattern already used in useSales.js.
-function localDayStartUTC(dateStr) {
-  const d = new Date(dateStr)
-  d.setHours(0, 0, 0, 0)       // shift to local midnight
-  return d.toISOString()        // e.g. "2026-06-07T18:30:00.000Z" for IST
-}
-
-function localDayEndUTC(dateStr) {
-  const d = new Date(dateStr)
-  d.setHours(23, 59, 59, 999)  // shift to local end-of-day
-  return d.toISOString()        // e.g. "2026-06-08T18:29:59.999Z" for IST
-}
-
 const PAGE_SIZE = 20
 
 

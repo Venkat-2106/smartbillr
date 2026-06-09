@@ -8,19 +8,24 @@
 //   4. Added /staff route (was missing)
 //   5. Step 5.13 — /customers now uses real CustomersPage (was ComingSoon)
 
+import React, { Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { Spinner } from '../shared/components'
 import DashboardLayout from './layouts/DashboardLayout'
 import LoginPage from '../features/auth/pages/LoginPage'
 import ResetPasswordPage from '../features/auth/pages/ResetPasswordPage'
 import UnauthorizedPage from '../features/auth/pages/UnauthorizedPage'
 import ProtectedRoute from '../features/auth/components/ProtectedRoute'
-import DashboardPage from '../features/dashboard/pages/DashboardPage'
-import CategoriesPage from '../features/categories/pages/CategoriesPage'
-import ProductsPage from '../features/products/pages/ProductsPage'
-import CustomersPage from '../features/customers/pages/CustomersPage'
-import SuppliersPage from '../features/suppliers/pages/SuppliersPage';
-import SalesPage      from '../features/sales/pages/SalesPage';
-import CreateSalePage from '../features/sales/pages/CreateSalePage';
+
+// FIX 5: React.lazy — each page loads only when first visited.
+// ComingSoon is defined inline in this file so it cannot be lazy-loaded.
+const DashboardPage  = React.lazy(() => import('../features/dashboard/pages/DashboardPage'))
+const CategoriesPage = React.lazy(() => import('../features/categories/pages/CategoriesPage'))
+const ProductsPage   = React.lazy(() => import('../features/products/pages/ProductsPage'))
+const CustomersPage  = React.lazy(() => import('../features/customers/pages/CustomersPage'))
+const SuppliersPage  = React.lazy(() => import('../features/suppliers/pages/SuppliersPage'))
+const SalesPage      = React.lazy(() => import('../features/sales/pages/SalesPage'))
+const CreateSalePage = React.lazy(() => import('../features/sales/pages/CreateSalePage'))
 
 
 // ─── Premium "Coming Soon" placeholder ───────────────────────────────────────
@@ -136,6 +141,11 @@ function ComingSoon({ name }) {
 export default function AppRouter() {
   return (
     <BrowserRouter>
+      <Suspense fallback={
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+          <Spinner size={32} />
+        </div>
+      }>
       <Routes>
 
         {/* Public routes — no auth needed */}
@@ -270,6 +280,7 @@ export default function AppRouter() {
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
 
       </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

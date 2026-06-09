@@ -30,24 +30,8 @@ import {
   updateSupplier,
   deleteSupplier,
 } from '../api/suppliersApi'
+import { localDayStartUTC, localDayEndUTC } from '../../../shared/utils/dateUtils'
 import { useDebounce } from '../../../shared/hooks/useDebounce'
-
-// ── Timezone-aware date boundary helpers ─────────────────────────────────────
-// Mirrors the pattern in useSales.js. Converts a local "YYYY-MM-DD" calendar
-// date into UTC ISO strings representing the actual start and end of that local
-// day. The backend compares these directly against the timestamptz column.
-function localDayStartUTC(dateStr) {
-  const d = new Date(dateStr)
-  d.setHours(0, 0, 0, 0)
-  return d.toISOString()
-}
-
-function localDayEndUTC(dateStr) {
-  const d = new Date(dateStr)
-  d.setHours(23, 59, 59, 999)
-  return d.toISOString()
-}
-
 const PAGE_SIZE = 20
 
 export function useSuppliers() {

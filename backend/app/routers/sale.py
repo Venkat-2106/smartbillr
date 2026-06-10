@@ -525,16 +525,26 @@ def get_sales(
 
     payment_map = {}
     if sale_ids:
+# FIX: ANY(:ids::uuid[]) crashes because psycopg2 confuses the
+        # SQLAlchemy :param marker with the :: PostgreSQL cast operator.
+        # We build individual named params :id_0, :id_1 ... instead.
+        # The SQL string stays stable in length (same N per page), so
+        # PostgreSQL's plan cache still gets hits per page-size bucket.
+        id_placeholders = ", ".join(
+            f"CAST(:id_{i} AS uuid)" for i in range(len(sale_ids))
+        )
+        id_params = {f"id_{i}": sid for i, sid in enumerate(sale_ids)}
+
         payment_rows = db.execute(
-            text("""
+            text(f"""
                 SELECT sale_id,
                        COALESCE(cumulative_paid, 0) AS total_paid,
                        payment_status
                 FROM payments
-                WHERE sale_id   = ANY(:ids::uuid[])
-                  AND is_active  = true
+                WHERE sale_id  IN ({id_placeholders})
+                  AND is_active = true
             """),
-            {"ids": sale_ids}
+            id_params
         ).fetchall()
         payment_map = {
             str(row.sale_id): {

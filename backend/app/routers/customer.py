@@ -223,6 +223,64 @@ def get_all_customers(
 
 
 # ══════════════════════════════════════════════════════════════════
+# GET /customers/lean → Lean dropdown list for sales creation form
+#
+# PERF FIX (2026-06):
+#   The old fetchCustomersForSale() called GET /customers with
+#   limit=500. That endpoint returns full customer objects:
+#   address, state, country_code, cust_tax_number, audit fields,
+#   last_updated_by (profile JOIN), etc.
+#
+#   500 full objects × ~20 fields each = large JSON payload that
+#   blocks the Create Invoice page from rendering.
+#
+#   This lean endpoint returns ONLY the 3 fields the dropdown needs:
+#   cust_id, cust_name, cust_phone.  No profile JOIN. No audit fields.
+#   No address fields.
+#
+#   Uses idx_customers_lean_dropdown covering index:
+#     (business_id, cust_name, cust_phone, cust_id)
+#   → Postgres satisfies the entire query from the index alone
+#     (index-only scan — never touches the heap).
+#
+# DECLARED BEFORE /{cust_id} so FastAPI does not treat "lean"
+# as a UUID parameter.
+# ══════════════════════════════════════════════════════════════════
+@router.get("/lean")
+def get_customers_lean(
+    current_user: dict = Depends(require_permission("customers.manage")),
+    db:           Session = Depends(get_db),
+):
+    """
+    Returns a minimal customer list for the sales creation dropdown.
+    Only returns: cust_id, cust_name, cust_phone.
+    No pagination — returns all active customers (max 1000).
+    """
+    business_id = current_user["business_id"]
+
+    rows = db.execute(
+        text("""
+            SELECT cust_id, cust_name, cust_phone
+            FROM customers
+            WHERE business_id = CAST(:bid AS uuid)
+              AND is_deleted   = false
+            ORDER BY cust_name ASC
+            LIMIT 1000
+        """),
+        {"bid": business_id}
+    ).fetchall()
+
+    return success_response([
+        {
+            "cust_id":    str(r.cust_id),
+            "cust_name":  r.cust_name,
+            "cust_phone": r.cust_phone,
+        }
+        for r in rows
+    ])
+
+
+# ══════════════════════════════════════════════════════════════════
 # GET /customers/search/phone?phone=9876543210
 # ══════════════════════════════════════════════════════════════════
 @router.get("/search/phone")

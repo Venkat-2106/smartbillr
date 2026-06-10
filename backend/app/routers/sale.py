@@ -510,22 +510,31 @@ def get_sales(
     # ── Scope payment lookup to only the IDs on this page ───────────────────
     # WHY: fetching ALL payments for the business is wasteful at scale.
     # We only need payment info for the sales currently visible on screen.
+    #
+    # PERF FIX (2026-06):
+    #   Old approach built a dynamic IN() string:
+    #     "CAST(:id_0 AS uuid), CAST(:id_1 AS uuid), ..."
+    #   This produces a different SQL string for every page size, so
+    #   PostgreSQL's query plan cache never gets a hit — it re-plans
+    #   the query from scratch on every single GET /sales request.
+    #
+    #   New approach uses = ANY(:ids::uuid[]) with a single parameter.
+    #   The SQL string is identical regardless of how many IDs are on
+    #   the page, so PostgreSQL can cache and reuse the plan.
     sale_ids = [str(r.sales_id) for r in sales_rows]
 
     payment_map = {}
     if sale_ids:
-        placeholders = ", ".join([f"CAST(:id_{i} AS uuid)" for i in range(len(sale_ids))])
-        id_params    = {f"id_{i}": sid for i, sid in enumerate(sale_ids)}
         payment_rows = db.execute(
-            text(f"""
+            text("""
                 SELECT sale_id,
                        COALESCE(cumulative_paid, 0) AS total_paid,
                        payment_status
                 FROM payments
-                WHERE sale_id IN ({placeholders})
-                  AND is_active = true
+                WHERE sale_id   = ANY(:ids::uuid[])
+                  AND is_active  = true
             """),
-            id_params
+            {"ids": sale_ids}
         ).fetchall()
         payment_map = {
             str(row.sale_id): {

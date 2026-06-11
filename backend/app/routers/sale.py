@@ -490,11 +490,17 @@ def get_sales(
     total = db.execute(text(count_sql), params).scalar()
 
     # Data query — ORDER BY is now dynamic + server-side
+    # FIX: Added s.cgst_total, s.sgst_total, s.igst_total to SELECT.
+    # These columns exist in the sales table and are returned by GET /sales/{id},
+    # but were missing from the list query. Without them, SALES_CSV_COLUMNS
+    # could never populate the CGST / SGST / IGST export columns — they were
+    # always empty. Adding them here costs one extra column read per row
+    # (no extra JOIN, no extra query) and fixes all Indian GST exports.
     data_sql = f"""
         SELECT s.sales_id, s.invoice_no, s.customer_id,
                c.cust_name        AS customer_name,
                s.sales_total_amount, s.sales_final_amount,
-               s.tax_total,
+               s.cgst_total, s.sgst_total, s.igst_total, s.tax_total,
                s.sales_payment_status, s.sales_payment_method,
                s.sales_created_at
         FROM sales s
@@ -569,6 +575,10 @@ def get_sales(
             "customer_name":        r.customer_name or None,
             "sales_total_amount":   str(r.sales_total_amount),
             "sales_final_amount":   str(r.sales_final_amount) if r.sales_final_amount else None,
+            # FIX: cgst/sgst/igst now included — required by SALES_CSV_COLUMNS
+            "cgst_total":           str(r.cgst_total) if r.cgst_total else None,
+            "sgst_total":           str(r.sgst_total) if r.sgst_total else None,
+            "igst_total":           str(r.igst_total) if r.igst_total else None,
             "tax_total":            str(r.tax_total) if r.tax_total else None,
             "sales_payment_status": r.sales_payment_status,
             "sales_payment_method": r.sales_payment_method,

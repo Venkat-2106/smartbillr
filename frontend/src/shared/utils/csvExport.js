@@ -287,23 +287,36 @@ export const EXPENSE_CSV_COLUMNS = [
 ];
 
 /** Column config for Sales export */
+//
+// FIX (2026-06):
+//   Three field keys were wrong — they produced empty columns in every export:
+//
+//   BEFORE → AFTER (field name the API list response actually uses):
+//     'subtotal'        → 'sales_total_amount'   (pre-discount/tax total)
+//     'payment_status'  → 'sales_payment_status'  (API snake_case prefix)
+//     'payment_method'  → 'sales_payment_method'  (API snake_case prefix)
+//
+//   Additionally, 'cgst_total', 'sgst_total', 'igst_total' were present in
+//   this column config but the GET /sales list endpoint didn't include them
+//   in its SELECT. Fix 2 in sale.py adds these three columns to the list query.
+//   Both fixes must be applied together for the tax breakdown to work.
 export const SALES_CSV_COLUMNS = [
-  { key: 'invoice_no',         label: 'Invoice No' },
-  { key: 'customer_name',      label: 'Customer' },
-  { key: 'subtotal',           label: 'Subtotal',
+  { key: 'invoice_no',            label: 'Invoice No' },
+  { key: 'customer_name',         label: 'Customer' },
+  { key: 'sales_total_amount',    label: 'Subtotal',        // FIX: was 'subtotal'
     format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
-  { key: 'tax_total',          label: 'Tax Total',
+  { key: 'tax_total',             label: 'Tax Total',
     format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
-  { key: 'cgst_total',         label: 'CGST',
+  { key: 'cgst_total',            label: 'CGST',
     format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
-  { key: 'sgst_total',         label: 'SGST',
+  { key: 'sgst_total',            label: 'SGST',
     format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
-  { key: 'igst_total',         label: 'IGST',
+  { key: 'igst_total',            label: 'IGST',
     format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
-  { key: 'sales_final_amount', label: 'Total Amount',
+  { key: 'sales_final_amount',    label: 'Total Amount',
     format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
-  { key: 'payment_status',     label: 'Payment Status' },
-  { key: 'payment_method',     label: 'Payment Method' },
-  { key: 'sales_created_at',   label: 'Invoice Date',
+  { key: 'sales_payment_status',  label: 'Payment Status' }, // FIX: was 'payment_status'
+  { key: 'sales_payment_method',  label: 'Payment Method' }, // FIX: was 'payment_method'
+  { key: 'sales_created_at',      label: 'Invoice Date',
     format: (val) => formatDateCSV(val) },
 ];

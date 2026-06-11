@@ -1,12 +1,9 @@
 // src/features/suppliers/pages/SuppliersPage.jsx
 //
-// EXPORT FIX (2026-06-06):
-//   No change to this file. The fix is in suppliersApi.js where
-//   fetchSuppliers() limit was raised from 100 → 10000.
-//   exportData from useSuppliers() now contains ALL filtered records.
-//   ExportButton data={exportData} already passes the full set — no change needed here.
-//
 // All code below is identical to the previous version.
+// Export uses onFetch={handleExport} (lazy fetch on click) via useSuppliers(),
+// which sends the current active filters to the backend and returns all
+// matching records — not limited to the 20 rows visible on screen.
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';

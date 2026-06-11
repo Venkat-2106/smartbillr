@@ -53,7 +53,7 @@ export default function SuppliersPage() {
 
   const {
     suppliers, handleExport, isLoading,
-    totalItems, totalPages,
+    totalItems, totalPages, pagination,
     search, setSearch,
     dateFrom, dateTo, handleDateChange,
     activeSearch, activeDateFilter,
@@ -293,25 +293,12 @@ export default function SuppliersPage() {
       </div>
 
       {/* Pagination */}
-      {/* ROOT-CAUSE FIX (2 bugs):                                              */}
-      {/* Bug 1 — `page` and `totalPages` passed as individual props, but       */}
-      {/*   Pagination expects a `pagination` object → component returned null. */}
-      {/* Bug 2 — `onChange` is not a prop of Pagination; correct is            */}
-      {/*   `onPageChange` — fixing the object alone was not enough.            */}
-      {!activeSearch && !activeDateFilter && totalPages > 1 && (
-        <div style={{ marginTop: 16 }}>
-          <Pagination
-            pagination={{
-              page,
-              total_pages: totalPages,
-              total:       totalItems,
-              has_next:    page < totalPages,
-              has_prev:    page > 1,
-            }}
-            onPageChange={setPage}
-          />
-        </div>
-      )}
+      {/* Server-paginated: filters do NOT hide pagination. When you search     */}
+      {/* "ABC" and get 47 results across 3 pages, pagination must stay visible */}
+      {/* so the user can navigate those pages. The old client-side pattern     */}
+      {/* (hide pagination when filter active) was wrong here. Customers and    */}
+      {/* Categories pages both show pagination regardless of active filters.   */}
+      <Pagination pagination={pagination} onPageChange={setPage} />
 
       {/* Detail drawer */}
       {drawerSupplier && (

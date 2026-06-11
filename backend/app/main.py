@@ -1,12 +1,13 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from app.middleware.auth import verify_token
 from app.utils.response import success_response, error_response
 from app.routers import (
     business, category, customer, supplier,
     product, sale, payment, purchase, staff,
     stock, expense, sales_return, purchase_return, profiles,
-    dashboard   # ← NEW: dedicated dashboard aggregation router
+    dashboard
 )
 import os
 
@@ -16,9 +17,15 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# FIX: CORS origins now read from environment variable instead of hardcoded localhost only.
-# Set ALLOWED_ORIGINS in .env as a comma-separated list:
-# ALLOWED_ORIGINS=https://app.smartbillr.com,http://localhost:3000
+# ── GZip compression ──────────────────────────────────────────────────────────
+# Compresses all responses larger than 1000 bytes (JSON, text).
+# Reduces large list/export payloads by 60–80% over the wire.
+# minimum_size=1000 skips tiny responses (health checks etc.) — no overhead.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
+# Origins from environment variable (comma-separated list).
+# Methods and headers restricted to exactly what SmartBillr uses.
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
 ALLOWED_ORIGINS = [origin.strip() for origin in _raw_origins.split(",")]
 
@@ -26,8 +33,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 app.include_router(business.router)
@@ -44,7 +51,8 @@ app.include_router(sales_return.router)
 app.include_router(purchase_return.router)
 app.include_router(profiles.router)
 app.include_router(staff.router)
-app.include_router(dashboard.router)   # ← NEW
+app.include_router(dashboard.router)
+
 
 @app.get("/")
 def root():
@@ -60,10 +68,16 @@ def health_check():
     })
 
 
-@app.get("/test-auth")
-def test_auth(current_user: dict = Depends(verify_token)):
-    return success_response({
-        "message": "Auth is working!",
-        "user_id": current_user["user_id"],
-        "business_id": current_user["business_id"]
-    })
+# ── /test-auth is ONLY available in development ───────────────────────────────
+# In production (ENVIRONMENT=production) this route does not exist.
+# It is never registered — it cannot be called, discovered, or abused.
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
+if ENVIRONMENT == "development":
+    @app.get("/test-auth")
+    def test_auth(current_user: dict = Depends(verify_token)):
+        return success_response({
+            "message": "Auth is working!",
+            "user_id": current_user["user_id"],
+            "business_id": current_user["business_id"]
+        })

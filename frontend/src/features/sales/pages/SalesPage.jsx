@@ -238,10 +238,10 @@ export default function SalesPage() {
         }
       </div>
 
-      {/* ROOT-CAUSE FIX: Pagination expects a `pagination` object, not        */}
-      {/* individual `page` / `totalPages` props. Same bug as Customers and     */}
-      {/* Suppliers. Without this, the component returns null immediately.      */}
-      {!anyFilterActive && totalPages > 1 && (
+      {/* Pagination — shown whenever there are multiple pages.                */}
+      {/* Server-side filtering means filtered results can also span           */}
+      {/* multiple pages, so we never hide pagination based on filter state.  */}
+      {totalPages > 1 && (
         <div style={{ marginTop: 16 }}>
           <Pagination
             pagination={{

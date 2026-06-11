@@ -1,6 +1,6 @@
 # app/schemas/supplier.py
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
@@ -16,6 +16,15 @@ class SupplierCreate(BaseModel):
     supp_country_code: Optional[str]      = None
     supp_tax_number:   Optional[str]      = None
 
+    @field_validator('supp_email', mode='before')
+    @classmethod
+    def empty_email_to_none(cls, v):
+        # Frontend sends "" for empty email; EmailStr rejects "".
+        # Convert empty string → None so validation passes.
+        if v == '' or (isinstance(v, str) and not v.strip()):
+            return None
+        return v
+
 
 # ── Used when UPDATING an existing supplier ───────────────────────────────────
 class SupplierUpdate(BaseModel):
@@ -26,6 +35,13 @@ class SupplierUpdate(BaseModel):
     supp_state:        Optional[str]      = None  # ← NEW
     supp_country_code: Optional[str]      = None
     supp_tax_number:   Optional[str]      = None
+
+    @field_validator('supp_email', mode='before')
+    @classmethod
+    def empty_email_to_none(cls, v):
+        if v == '' or (isinstance(v, str) and not v.strip()):
+            return None
+        return v
 
 
 # ── Used when RETURNING supplier data in response ─────────────────────────────

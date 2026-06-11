@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
@@ -12,6 +12,13 @@ class CustomerCreate(BaseModel):
     cust_country_code: Optional[str] = None
     cust_tax_number: Optional[str] = None
 
+    @field_validator('cust_email', mode='before')
+    @classmethod
+    def empty_email_to_none(cls, v):
+        if v == '' or (isinstance(v, str) and not v.strip()):
+            return None
+        return v
+
 class CustomerUpdate(BaseModel):
     cust_name: Optional[str] = None
     cust_phone: Optional[str] = None
@@ -20,6 +27,13 @@ class CustomerUpdate(BaseModel):
     cust_state: Optional[str] = None        # ← ADD THIS
     cust_country_code: Optional[str] = None
     cust_tax_number: Optional[str] = None
+
+    @field_validator('cust_email', mode='before')
+    @classmethod
+    def empty_email_to_none(cls, v):
+        if v == '' or (isinstance(v, str) and not v.strip()):
+            return None
+        return v
 
 class CustomerOut(BaseModel):
     cust_id: UUID

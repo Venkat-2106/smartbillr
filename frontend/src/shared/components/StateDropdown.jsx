@@ -94,8 +94,8 @@ export default function StateDropdown({
         <select
           style={{
             ...selectStyle,
-            // Highlight the border in accent color when there's a validation error
-            borderColor: error ? 'var(--color-red)' : undefined,
+            // Use border shorthand (not borderColor) to avoid React shorthand/longhand conflict
+            ...(error ? { border: '1.5px solid var(--color-red)' } : {}),
           }}
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}

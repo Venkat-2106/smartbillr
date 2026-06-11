@@ -5,9 +5,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: true,
-    allowedHosts: [
-      'refueling-predefine-gently.ngrok-free.dev',
-    ],
+    // ngrok URL removed — never commit tunnel URLs to the repo.
+    // If you need ngrok locally, add it to a .env.local file (gitignored).
   },
   build: {
     chunkSizeWarningLimit: 600,

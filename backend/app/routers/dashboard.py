@@ -74,21 +74,8 @@ def get_dashboard_summary(
     permissions = current_user.get("permissions", set())
     can_see_financials = "dashboard.financial" in permissions
 
-    # ── FIX: Reduced from 4 sequential queries to 2 by merging aggregates ─────
-    #
-    # WHY NOT asyncio.gather():
-    #   This route uses a synchronous SQLAlchemy Session (from get_db).
-    #   Sync sessions block the OS thread — wrapping them in async def +
-    #   gather() does not create true parallelism; it still runs sequentially
-    #   on the same thread. True parallel DB queries require an AsyncSession
-    #   with asyncpg, which would require changing the entire DB layer.
-    #
-    # WHAT WE DO INSTEAD:
-    #   We merge Queries 1+3+4 into one single SQL statement using
-    #   scalar subqueries. PostgreSQL executes all of them in one plan.
-    #   That reduces 4 network round-trips to 2 (main aggregates + expenses).
-    #
-    # Query 1 (merged): sales counts/sums + customer count + product count + alert count
+    # Single merged query — sales aggregates + customer/product counts
+    # + alert count + expenses total — all in one DB round-trip.
     main_row = db.execute(
         text("""
             SELECT
@@ -99,12 +86,14 @@ def get_dashboard_summary(
                 COUNT(*) FILTER (WHERE sales_payment_status = 'pending')              AS pending_count,
                 COUNT(*) FILTER (WHERE sales_payment_status = 'paid')                 AS paid_count,
                 (SELECT COUNT(*) FROM customers
-                  WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false) AS total_customers,
+                  WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false)      AS total_customers,
                 (SELECT COUNT(*) FROM products
-                  WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false) AS total_products,
+                  WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false)      AS total_products,
                 (SELECT COUNT(*) FROM low_stock_alerts
                   WHERE business_id = CAST(:bid AS uuid)
-                    AND alert_status = 'unread')                                  AS low_stock_alerts
+                    AND alert_status = 'unread')                                      AS low_stock_alerts,
+                (SELECT COALESCE(SUM(expense_amount), 0) FROM expenses
+                  WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false)      AS total_expenses
             FROM sales
             WHERE business_id = CAST(:bid AS uuid)
               AND is_deleted   = false
@@ -112,36 +101,19 @@ def get_dashboard_summary(
         {"bid": business_id}
     ).fetchone()
 
-    # Query 2: Expenses aggregate (kept separate — different table, no natural join)
-    expense_row = db.execute(
-        text("""
-            SELECT COALESCE(SUM(expense_amount), 0) AS total_expenses
-            FROM expenses
-            WHERE business_id = CAST(:bid AS uuid)
-              AND is_deleted   = false
-        """),
-        {"bid": business_id}
-    ).fetchone()
-
-    # ── Build response ───────────────────────────────────────────────────────
-    # Revenue and expenses are gated behind dashboard.financial permission.
-    # If the user is a staff member (no financial permission), those fields
-    # come back as null and the frontend hides those stat cards.
     return success_response({
-        "total_invoices":   int(main_row.total_invoices)      if main_row else 0,
+        "total_invoices":   int(main_row.total_invoices)   if main_row else 0,
         "pending_payments": int(main_row.pending_payments) if main_row else 0,
         "partial_count":    int(main_row.partial_count)    if main_row else 0,
         "pending_count":    int(main_row.pending_count)    if main_row else 0,
         "paid_count":       int(main_row.paid_count)       if main_row else 0,
-        "total_customers":  int(main_row.total_customers)     if main_row else 0,
-        "total_products":   int(main_row.total_products)      if main_row else 0,
-        "low_stock_alerts": int(main_row.low_stock_alerts)    if main_row else 0,
+        "total_customers":  int(main_row.total_customers)  if main_row else 0,
+        "total_products":   int(main_row.total_products)   if main_row else 0,
+        "low_stock_alerts": int(main_row.low_stock_alerts) if main_row else 0,
 
-        # Financial fields — null if user lacks dashboard.financial
-        "total_revenue":  float(main_row.total_revenue)    if (main_row    and can_see_financials) else None,
-        "total_expenses": float(expense_row.total_expenses) if (expense_row and can_see_financials) else None,
+        "total_revenue":  float(main_row.total_revenue)  if (main_row and can_see_financials) else None,
+        "total_expenses": float(main_row.total_expenses) if (main_row and can_see_financials) else None,
     })
-
 
 # ══════════════════════════════════════════════════════════════════
 # GET /dashboard/trend?period=weekly|monthly|yearly

@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
@@ -66,14 +67,18 @@ def calculate_purchase_item_tax(
 def fetch_full_purchase(db: Session, pur_id: str):
     return db.execute(
         text("""
-            SELECT pur_id, business_id, supp_id,
-                   pur_total_amount, pur_discount,
-                   pur_cgst_total, pur_sgst_total, pur_igst_total,
-                   pur_tax_total, pur_final_amount,
-                   pur_payment_status, is_deleted,
-                   pur_created_at, created_by
-            FROM purchases
-            WHERE pur_id = :pid
+            SELECT p.pur_id, p.business_id, p.supp_id,
+                   s.supp_name,
+                   p.pur_total_amount, p.pur_discount,
+                   p.pur_cgst_total, p.pur_sgst_total, p.pur_igst_total,
+                   p.pur_tax_total, p.pur_final_amount,
+                   p.pur_payment_status, p.is_deleted,
+                   p.pur_created_at, p.updated_at, p.created_by,
+                   pr.full_name AS last_updated_by
+            FROM purchases p
+            LEFT JOIN suppliers s  ON s.supp_id   = p.supp_id
+            LEFT JOIN profiles  pr ON pr.id        = p.updated_by
+            WHERE p.pur_id = :pid
         """),
         {"pid": pur_id}
     ).fetchone()
@@ -85,13 +90,16 @@ def fetch_full_purchase(db: Session, pur_id: str):
 def fetch_purchase_items(db: Session, pur_id: str):
     return db.execute(
         text("""
-            SELECT item_id, product_id, pur_item_qty,
-                   item_unit_price, item_subtotal,
-                   gst_rate, cgst_amount, sgst_amount,
-                   igst_amount, pur_tax_total,
-                   item_tax_total, item_total_with_tax
-            FROM purchase_items
-            WHERE pur_id = :pid
+            SELECT pi.item_id, pi.product_id,
+                   p.prod_name,
+                   pi.pur_item_qty,
+                   pi.item_unit_price, pi.item_subtotal,
+                   pi.gst_rate, pi.cgst_amount, pi.sgst_amount,
+                   pi.igst_amount, pi.pur_tax_total,
+                   pi.item_tax_total, pi.item_total_with_tax
+            FROM purchase_items pi
+            LEFT JOIN products p ON p.prod_id = pi.product_id
+            WHERE pi.pur_id = :pid
         """),
         {"pid": pur_id}
     ).fetchall()
@@ -105,6 +113,7 @@ def purchase_row_to_dict(row, items):
         "pur_id":           str(row.pur_id),
         "business_id":      str(row.business_id),
         "supp_id":          str(row.supp_id) if row.supp_id else None,
+        "supp_name":        row.supp_name if hasattr(row, "supp_name") else None,
         "pur_total_amount": float(row.pur_total_amount),
         "pur_discount":     float(row.pur_discount) if row.pur_discount else 0,
         "pur_cgst_total":   float(row.pur_cgst_total) if row.pur_cgst_total else 0,
@@ -115,6 +124,8 @@ def purchase_row_to_dict(row, items):
         "pur_payment_status": row.pur_payment_status,
         "is_deleted":       row.is_deleted,
         "pur_created_at":   fmt_ts(row.pur_created_at),
+        "updated_at":       fmt_ts(row.updated_at) if hasattr(row, "updated_at") else None,
+        "last_updated_by":  row.last_updated_by if hasattr(row, "last_updated_by") else None,
         "created_by":       str(row.created_by) if row.created_by else None,
         "items":            [purchase_item_to_dict(i) for i in items]
     }
@@ -127,6 +138,7 @@ def purchase_item_to_dict(row):
     return {
         "item_id":           str(row.item_id),
         "product_id":        str(row.product_id),
+        "prod_name":         row.prod_name if hasattr(row, "prod_name") else None,
         "pur_item_qty":      row.pur_item_qty,
         "item_unit_price":   float(row.item_unit_price),
         "item_subtotal":     float(row.item_subtotal) if row.item_subtotal else None,
@@ -354,55 +366,100 @@ def create_purchase(
 
 
 # ─────────────────────────────────────────
-# GET /purchases → Get all purchases
+# GET /purchases → Get all purchases (paginated, filtered, sorted)
 # ─────────────────────────────────────────
 @router.get("/")
 def get_all_purchases(
     current_user: dict = Depends(require_permission("purchases.view")),
-    db: Session = Depends(get_db),
-    pagination: dict = Depends(paginate)
+    db:           Session = Depends(get_db),
+    pagination:   dict   = Depends(paginate),
+    search:       Optional[str] = Query(default=None),
+    status:       Optional[str] = Query(default=None),
+    sort_by:      Optional[str] = Query(default="pur_created_at"),
+    sort_dir:     Optional[str] = Query(default="desc"),
+    date_from:    Optional[str] = Query(default=None),
+    date_to:      Optional[str] = Query(default=None),
 ):
     business_id = current_user["business_id"]
 
-    total = db.query(func.count(Purchase.pur_id)).filter(
-        Purchase.business_id == business_id,
-        Purchase.is_deleted == False
-    ).scalar()
+    SORTABLE = {
+        "pur_created_at":    "p.pur_created_at",
+        "pur_final_amount":  "p.pur_final_amount",
+        "pur_payment_status":"p.pur_payment_status",
+        "supp_name":         "s.supp_name",
+        "updated_at":        "p.updated_at",
+    }
+    order_col = SORTABLE.get(sort_by, "p.pur_created_at")
+    order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
 
-    rows = db.execute(
-        text("""
-            SELECT pur_id, business_id, supp_id,
-                   pur_total_amount, pur_discount,
-                   pur_cgst_total, pur_sgst_total, pur_igst_total,
-                   pur_tax_total, pur_final_amount,
-                   pur_payment_status, is_deleted,
-                   pur_created_at, created_by
-            FROM purchases
-            WHERE business_id = :bid
-              AND is_deleted = false
-            ORDER BY pur_created_at DESC
-            OFFSET :offset LIMIT :limit
-        """),
-        {
-            "bid":    business_id,
-            "offset": pagination["offset"],
-            "limit":  pagination["limit"]
-        }
-    ).fetchall()
+    extra_where = ""
+    params = {"bid": business_id}
 
-    # BATCH: fetch ALL items for this page in one query instead of N queries
+    if search and search.strip():
+        extra_where += " AND s.supp_name ILIKE :search"
+        params["search"] = f"%{search.strip()}%"
+
+    if status and status.strip():
+        extra_where += " AND p.pur_payment_status = :status"
+        params["status"] = status.strip()
+
+    if date_from:
+        extra_where += " AND p.pur_created_at >= :date_from"
+        params["date_from"] = date_from
+
+    if date_to:
+        extra_where += " AND p.pur_created_at <= :date_to"
+        params["date_to"] = date_to
+
+    count_sql = f"""
+        SELECT COUNT(p.pur_id)
+        FROM purchases p
+        LEFT JOIN suppliers s ON s.supp_id = p.supp_id
+        WHERE p.business_id = CAST(:bid AS uuid)
+          AND p.is_deleted = false
+        {extra_where}
+    """
+    total = db.execute(text(count_sql), params).scalar() or 0
+
+    params["offset"] = pagination["offset"]
+    params["limit"]  = pagination["limit"]
+
+    list_sql = f"""
+        SELECT p.pur_id, p.business_id, p.supp_id,
+               s.supp_name,
+               p.pur_total_amount, p.pur_discount,
+               p.pur_cgst_total, p.pur_sgst_total, p.pur_igst_total,
+               p.pur_tax_total, p.pur_final_amount,
+               p.pur_payment_status, p.is_deleted,
+               p.pur_created_at, p.updated_at, p.created_by,
+               pr.full_name AS last_updated_by
+        FROM purchases p
+        LEFT JOIN suppliers s  ON s.supp_id = p.supp_id
+        LEFT JOIN profiles  pr ON pr.id      = p.updated_by
+        WHERE p.business_id = CAST(:bid AS uuid)
+          AND p.is_deleted = false
+        {extra_where}
+        ORDER BY {order_col} {order_dir}
+        OFFSET :offset LIMIT :limit
+    """
+    rows = db.execute(text(list_sql), params).fetchall()
+
+    # BATCH: fetch ALL items for this page in one query
     pur_ids = [str(row.pur_id) for row in rows]
     all_items = []
     if pur_ids:
         all_items = db.execute(
             text("""
-                SELECT item_id, pur_id, product_id, pur_item_qty,
-                       item_unit_price, item_subtotal,
-                       gst_rate, cgst_amount, sgst_amount,
-                       igst_amount, pur_tax_total,
-                       item_tax_total, item_total_with_tax
-                FROM purchase_items
-                WHERE pur_id = ANY(CAST(:ids AS uuid[]))
+                SELECT pi.item_id, pi.pur_id, pi.product_id,
+                       p.prod_name,
+                       pi.pur_item_qty,
+                       pi.item_unit_price, pi.item_subtotal,
+                       pi.gst_rate, pi.cgst_amount, pi.sgst_amount,
+                       pi.igst_amount, pi.pur_tax_total,
+                       pi.item_tax_total, pi.item_total_with_tax
+                FROM purchase_items pi
+                LEFT JOIN products p ON p.prod_id = pi.product_id
+                WHERE pi.pur_id = ANY(CAST(:ids AS uuid[]))
             """),
             {"ids": "{" + ",".join(pur_ids) + "}"}
         ).fetchall()
@@ -433,19 +490,23 @@ def get_purchase(
 ):
     business_id = current_user["business_id"]
 
-    # Step 1 → Fetch purchase header
+    # Step 1 → Fetch purchase header with supplier name
     row = db.execute(
         text("""
-            SELECT pur_id, business_id, supp_id,
-                   pur_total_amount, pur_discount,
-                   pur_cgst_total, pur_sgst_total, pur_igst_total,
-                   pur_tax_total, pur_final_amount,
-                   pur_payment_status, is_deleted,
-                   pur_created_at, created_by
-            FROM purchases
-            WHERE pur_id      = :pid
-              AND business_id = :bid
-              AND is_deleted  = false
+            SELECT p.pur_id, p.business_id, p.supp_id,
+                   s.supp_name,
+                   p.pur_total_amount, p.pur_discount,
+                   p.pur_cgst_total, p.pur_sgst_total, p.pur_igst_total,
+                   p.pur_tax_total, p.pur_final_amount,
+                   p.pur_payment_status, p.is_deleted,
+                   p.pur_created_at, p.updated_at, p.created_by,
+                   pr.full_name AS last_updated_by
+            FROM purchases p
+            LEFT JOIN suppliers s  ON s.supp_id = p.supp_id
+            LEFT JOIN profiles  pr ON pr.id      = p.updated_by
+            WHERE p.pur_id      = :pid
+              AND p.business_id = CAST(:bid AS uuid)
+              AND p.is_deleted  = false
         """),
         {"pid": pur_id, "bid": business_id}
     ).fetchone()

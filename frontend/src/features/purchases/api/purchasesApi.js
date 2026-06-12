@@ -1,5 +1,3 @@
-// src/features/purchases/api/purchasesApi.js
-// HTTP layer only — no authStore, no React state.
 
 import api from '../../../api/axios'
 
@@ -26,7 +24,7 @@ export async function fetchPurchases({
   return res.data  // { items: [...], pagination: {...} }
 }
 
-// ── LAZY EXPORT ───────────────────────────────────────────────────────────────
+// ── EXPORT (all matching rows) ────────────────────────────────────────────────
 export async function fetchAllPurchasesForExport({
   search    = '',
   status    = '',
@@ -53,8 +51,20 @@ export async function fetchPurchase(purId) {
   return res.data
 }
 
+// ── CREATE purchase ───────────────────────────────────────────────────────────
+export async function createPurchase(body) {
+  const res = await api.post('/purchases', body)
+  return res.data
+}
+
 // ── PATCH payment status ──────────────────────────────────────────────────────
 export async function updatePurchaseStatus(purId, status) {
   const res = await api.patch(`/purchases/${purId}/status`, { status })
   return res.data
+}
+
+// ── GET lean supplier list (for create-purchase dropdown) ─────────────────────
+export async function fetchSuppliersLean() {
+  const res = await api.get('/suppliers/lean')
+  return res.data  // array of { supp_id, supp_name, supp_phone, supp_state }
 }

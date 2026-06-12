@@ -103,6 +103,42 @@ def create_supplier(
 
 
 # ══════════════════════════════════════════════════════════════════
+# GET /suppliers/lean → Lean supplier list for create-purchase dropdown
+#
+# Returns only supp_id, supp_name, supp_phone, supp_state — no JOIN.
+# Mirrors the /customers/lean pattern used by the sales creation form.
+# Declared BEFORE /{supp_id} so FastAPI matches "lean" as a literal
+# path segment, not a UUID.
+# ══════════════════════════════════════════════════════════════════
+@router.get("/lean")
+def get_suppliers_lean(
+    current_user: dict = Depends(require_permission("suppliers.manage")),
+    db:           Session = Depends(get_db)
+):
+    business_id = current_user["business_id"]
+    rows = db.execute(
+        text("""
+            SELECT supp_id, supp_name, supp_phone, supp_state
+            FROM   suppliers
+            WHERE  business_id = CAST(:bid AS uuid)
+              AND  is_deleted   = false
+            ORDER  BY supp_name ASC
+        """),
+        {"bid": business_id}
+    ).fetchall()
+
+    return success_response([
+        {
+            "supp_id":    str(r.supp_id),
+            "supp_name":  r.supp_name,
+            "supp_phone": r.supp_phone,
+            "supp_state": r.supp_state,
+        }
+        for r in rows
+    ])
+
+
+# ══════════════════════════════════════════════════════════════════
 # GET /suppliers → Paginated list with server-side search/sort/filter
 #
 # SCALABILITY: all filtering, sorting, and counting happens in

@@ -360,4 +360,4 @@ export const PURCHASE_CSV_COLUMNS = [
     format: (val) => formatDateCSV(val) },
   { key: 'last_updated_by',    label: 'Last Updated By',
     format: (val) => val || '' },
-];c
+];

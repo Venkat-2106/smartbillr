@@ -1,5 +1,5 @@
 // src/features/purchases/hooks/usePurchases.js
-// Owns ALL server state + UI filter/sort/page state for the Purchases page.
+// Owns ALL server state + UI filter/sort/page state for the Purchases pages.
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState }                               from 'react'
@@ -11,7 +11,9 @@ import {
   fetchPurchases,
   fetchAllPurchasesForExport,
   fetchPurchase,
+  createPurchase,
   updatePurchaseStatus,
+  fetchSuppliersLean,
 } from '../api/purchasesApi'
 
 const PAGE_SIZE = 20
@@ -23,6 +25,17 @@ export function usePurchaseDetail(purId) {
     queryFn:   () => fetchPurchase(purId),
     enabled:   !!purId,
     staleTime: 30_000,
+  })
+}
+
+// ── useSuppliersLean — lean supplier list for create-purchase form ────────────
+export function useSuppliersLean() {
+  const user = useAuthStore(s => s.user)
+  return useQuery({
+    queryKey:  ['suppliers-lean'],
+    queryFn:   fetchSuppliersLean,
+    staleTime: 5 * 60 * 1000,
+    enabled:   !!user,
   })
 }
 
@@ -117,6 +130,18 @@ export function usePurchases() {
     },
   })
 
+  // ── Create purchase mutation ───────────────────────────────────────────────
+  const createMutation = useMutation({
+    mutationFn: createPurchase,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['purchases'] })
+      queryClient.invalidateQueries({ queryKey: ['products-search-lean'] })
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Failed to create purchase')
+    },
+  })
+
   return {
     purchases,
     isLoading: isLoading || isFetching,
@@ -134,5 +159,8 @@ export function usePurchases() {
 
     updateStatus:    (purId, status, callbacks) => statusMutation.mutate({ purId, status }, callbacks),
     isUpdatingStatus: statusMutation.isPending,
+
+    createPurchase:  (body, callbacks) => createMutation.mutate(body, callbacks),
+    isCreating:      createMutation.isPending,
   }
 }

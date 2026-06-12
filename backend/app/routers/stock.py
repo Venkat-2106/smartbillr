@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
@@ -12,6 +13,9 @@ from app.utils.timestamp import fmt_ts
 import uuid
 
 router = APIRouter(prefix="/stock", tags=["Stock"])
+
+# Mirrors PROFIT_PERMISSION in product.py — gates prod_cost_price / stock value
+PROFIT_PERMISSION = "view_product_profit"
 
 
 # ─────────────────────────────────────────
@@ -105,36 +109,146 @@ def get_movement(
 
 # ─────────────────────────────────────────
 # GET /stock/current → Current stock of all products
+#
+# Reuses the same patterns as GET /products/ (products.py):
+#   - paginate() dependency for server-side pagination
+#   - search ILIKE on prod_name / barcode (same indexes as products.view)
+#   - category filter (category_id)
+#   - status filter: in_stock | low_stock | out_of_stock
+#     (derived from prod_stock_qty vs prod_low_stock_alert — no hardcoded values)
+#   - is_active filter maps to is_deleted = false/true
+#   - SORTABLE whitelist (same style as product.py / purchase.py)
+#   - LEFT JOIN categories for category_name (same as products list)
+#   - prod_cost_price / stock_value gated by view_product_profit, mirroring
+#     row_to_dict(show_profit=...) in product.py
 # ─────────────────────────────────────────
 @router.get("/current")
 def get_current_stock(
-    current_user: dict = Depends(require_permission("stock.view")),
-    db: Session = Depends(get_db),
-    pagination: dict = Depends(paginate)
+    current_user: dict          = Depends(require_permission("stock.view")),
+    db:           Session       = Depends(get_db),
+    pagination:   dict          = Depends(paginate),
+    search:       Optional[str] = Query(default=None, description="Search by product name, SKU, or barcode"),
+    category_id:  Optional[str] = Query(default=None, description="Filter by category_id"),
+    status:       Optional[str] = Query(default=None, description="in_stock | low_stock | out_of_stock"),
+    is_active:    Optional[str] = Query(default=None, description="true | false — maps to is_deleted"),
+    sort_by:      Optional[str] = Query(default="prod_name", description="Column to sort by"),
+    sort_dir:     Optional[str] = Query(default="asc",  description="asc or desc"),
 ):
     business_id = current_user["business_id"]
+    show_profit = PROFIT_PERMISSION in current_user.get("permissions", set())
 
-    total = db.query(func.count(Product.prod_id)).filter(
-        Product.business_id == business_id,
-        Product.is_deleted == False
+    # ── Whitelist sort column (prevents SQL injection) — mirrors product.py ──
+    SORTABLE = {
+        "prod_name":            "p.prod_name",
+        "barcode":              "p.barcode",
+        "category_name":        "c.category_name",
+        "unit":                 "p.unit",
+        "prod_stock_qty":       "p.prod_stock_qty",
+        "prod_low_stock_alert": "p.prod_low_stock_alert",
+        "prod_cost_price":      "p.prod_cost_price",
+        "prod_sell_price":      "p.prod_sell_price",
+        "stock_value":          "stock_value",
+        "updated_at":           "p.updated_at",
+    }
+    order_col = SORTABLE.get(sort_by, "p.prod_name")
+    order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
+
+    # ── Build dynamic WHERE clauses ───────────────────────────────────────────
+    extra_where = ""
+    params = {
+        "business_id": business_id,
+        "offset":      pagination["offset"],
+        "limit":       pagination["limit"],
+    }
+
+    # is_active: default to active (is_deleted = false) unless explicitly
+    # requested otherwise — mirrors product.py default of is_deleted = false.
+    if is_active is not None and is_active.strip().lower() == "false":
+        extra_where += " AND p.is_deleted = true"
+    else:
+        extra_where += " AND p.is_deleted = false"
+
+    if search and search.strip():
+        extra_where += " AND (p.prod_name ILIKE :search OR p.barcode ILIKE :search)"
+        params["search"] = f"%{search.strip()}%"
+
+    if category_id and category_id.strip():
+        extra_where += " AND p.category_id = CAST(:category_id AS uuid)"
+        params["category_id"] = category_id.strip()
+
+    # Stock status filter — derived from existing product settings
+    # (prod_stock_qty vs prod_low_stock_alert), not hardcoded thresholds.
+    if status and status.strip():
+        s = status.strip().lower()
+        if s == "out_of_stock":
+            extra_where += " AND p.prod_stock_qty = 0"
+        elif s == "low_stock":
+            extra_where += " AND p.prod_stock_qty > 0 AND p.prod_stock_qty <= p.prod_low_stock_alert"
+        elif s == "in_stock":
+            extra_where += " AND p.prod_stock_qty > p.prod_low_stock_alert"
+
+    # ── COUNT query — same WHERE clauses as data query ────────────────────────
+    total = db.execute(
+        text(f"""
+            SELECT COUNT(*)
+            FROM products p
+            LEFT JOIN categories c ON c.category_id = p.category_id
+            WHERE p.business_id = CAST(:business_id AS uuid)
+              {extra_where}
+        """),
+        params
     ).scalar()
 
-    products = db.query(Product).filter(
-        Product.business_id == business_id,
-        Product.is_deleted == False
-    ).offset(pagination["offset"]).limit(pagination["limit"]).all()
+    # ── Data query ─────────────────────────────────────────────────────────────
+    # stock_value = prod_stock_qty * prod_cost_price (matches existing
+    # inventory valuation logic — same fields used everywhere else).
+    rows = db.execute(
+        text(f"""
+            SELECT
+                p.prod_id, p.prod_name, p.barcode, p.unit,
+                p.prod_stock_qty, p.prod_low_stock_alert,
+                p.prod_cost_price, p.prod_sell_price,
+                (p.prod_stock_qty * p.prod_cost_price) AS stock_value,
+                p.is_deleted, p.updated_at,
+                c.category_name
+            FROM products p
+            LEFT JOIN categories c ON c.category_id = p.category_id
+            WHERE p.business_id = CAST(:business_id AS uuid)
+              {extra_where}
+            ORDER BY {order_col} {order_dir}
+            OFFSET :offset LIMIT :limit
+        """),
+        params
+    ).fetchall()
 
-    data = [
-        {
-            "prod_id":             str(p.prod_id),
-            "prod_name":           p.prod_name,
-            "prod_stock_qty":      p.prod_stock_qty,
-            "prod_low_stock_alert": p.prod_low_stock_alert,
-            "unit":                p.unit,
-            "is_low_stock":        p.prod_stock_qty <= p.prod_low_stock_alert
-        }
-        for p in products
-    ]
+    data = []
+    for r in rows:
+        qty   = r.prod_stock_qty
+        alert = r.prod_low_stock_alert
+
+        if qty == 0:
+            stock_status = "out_of_stock"
+        elif qty <= alert:
+            stock_status = "low_stock"
+        else:
+            stock_status = "in_stock"
+
+        data.append({
+            "prod_id":             str(r.prod_id),
+            "prod_name":           r.prod_name,
+            "barcode":             r.barcode,
+            "category_name":       r.category_name,
+            "unit":                r.unit,
+            "prod_stock_qty":      r.prod_stock_qty,
+            "prod_low_stock_alert": r.prod_low_stock_alert,
+            "available_stock":     r.prod_stock_qty,
+            "prod_sell_price":     float(r.prod_sell_price) if r.prod_sell_price is not None else None,
+            "prod_cost_price":     float(r.prod_cost_price) if (show_profit and r.prod_cost_price is not None) else None,
+            "stock_value":         float(r.stock_value) if (show_profit and r.stock_value is not None) else None,
+            "stock_status":        stock_status,
+            "is_active":           not r.is_deleted,
+            "updated_at":          fmt_ts(r.updated_at),
+        })
 
     return success_response(
         pagination_response(data, total, pagination["page"], pagination["limit"])

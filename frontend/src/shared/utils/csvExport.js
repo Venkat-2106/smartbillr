@@ -361,3 +361,42 @@ export const PURCHASE_CSV_COLUMNS = [
   { key: 'last_updated_by',    label: 'Last Updated By',
     format: (val) => val || '' },
 ];
+// ── STOCK CSV COLUMNS (with cost price / stock value — view_product_profit) ───
+export const STOCK_CSV_COLUMNS = [
+  { key: 'prod_name',           label: 'Product Name' },
+  { key: 'barcode',              label: 'Barcode',
+    format: (val) => val || '' },
+  { key: 'category_name',        label: 'Category',
+    format: (val) => val || '' },
+  { key: 'unit',                  label: 'Unit' },
+  { key: 'prod_stock_qty',        label: 'Current Stock' },
+  { key: 'available_stock',       label: 'Available Stock' },
+  { key: 'prod_low_stock_alert',  label: 'Reorder Level' },
+  { key: 'prod_sell_price',       label: 'Selling Price',
+    format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
+  { key: 'prod_cost_price',       label: 'Cost Price',
+    format: (val) => (val != null ? Number(val).toFixed(2) : '') },
+  { key: 'stock_value',           label: 'Stock Value',
+    format: (val) => (val != null ? Number(val).toFixed(2) : '') },
+  { key: 'stock_status',          label: 'Stock Status' },
+  { key: 'updated_at',            label: 'Last Updated',
+    format: (val) => formatDateCSV(val) },
+];
+
+// ── STOCK CSV COLUMNS — no profit (cost price / stock value omitted) ──────────
+export const STOCK_CSV_COLUMNS_NO_PROFIT = [
+  { key: 'prod_name',           label: 'Product Name' },
+  { key: 'barcode',              label: 'Barcode',
+    format: (val) => val || '' },
+  { key: 'category_name',        label: 'Category',
+    format: (val) => val || '' },
+  { key: 'unit',                  label: 'Unit' },
+  { key: 'prod_stock_qty',        label: 'Current Stock' },
+  { key: 'available_stock',       label: 'Available Stock' },
+  { key: 'prod_low_stock_alert',  label: 'Reorder Level' },
+  { key: 'prod_sell_price',       label: 'Selling Price',
+    format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
+  { key: 'stock_status',          label: 'Stock Status' },
+  { key: 'updated_at',            label: 'Last Updated',
+    format: (val) => formatDateCSV(val) },
+];

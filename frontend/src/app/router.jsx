@@ -17,6 +17,7 @@ import ResetPasswordPage from '../features/auth/pages/ResetPasswordPage'
 import UnauthorizedPage from '../features/auth/pages/UnauthorizedPage'
 import ProtectedRoute from '../features/auth/components/ProtectedRoute'
 
+
 // FIX 5: React.lazy — each page loads only when first visited.
 // ComingSoon is defined inline in this file so it cannot be lazy-loaded.
 const DashboardPage  = React.lazy(() => import('../features/dashboard/pages/DashboardPage'))
@@ -29,6 +30,7 @@ const CreateSalePage = React.lazy(() => import('../features/sales/pages/CreateSa
 const PaymentsPage   = React.lazy(() => import('../features/payments/pages/PaymentsPage'))
 const PurchasesPage  = React.lazy(() => import('../features/purchases/pages/PurchasesPage'))
 const CreatePurchasePage = React.lazy(() => import('../features/purchases/pages/CreatePurchasePage'))
+const StockPage = React.lazy(() => import('../features/stock/pages/StockPage'))
 
 
 // ─── Premium "Coming Soon" placeholder ───────────────────────────────────────
@@ -212,8 +214,14 @@ export default function AppRouter() {
               </ProtectedRoute>
             }
           />
-          <Route path="stock"     element={<ComingSoon name="Stock" />} />
-
+          <Route
+            path="stock"
+            element={
+              <ProtectedRoute permission="stock.view">
+                <StockPage />
+              </ProtectedRoute>
+            }
+          />
           {/* Sales returns — all roles (staff can only see their own, enforced backend) */}
           <Route path="sales-returns" element={<ComingSoon name="Sales Returns" />} />
 

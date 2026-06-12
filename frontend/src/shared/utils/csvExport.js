@@ -320,3 +320,19 @@ export const SALES_CSV_COLUMNS = [
   { key: 'sales_created_at',      label: 'Invoice Date',
     format: (val) => formatDateCSV(val) },
 ];
+
+// ── PAYMENT CSV COLUMNS ───────────────────────────────────────────────────────
+export const PAYMENT_CSV_COLUMNS = [
+  { key: 'invoice_no',          label: 'Invoice No' },
+  { key: 'customer_name',       label: 'Customer' },
+  { key: 'sales_final_amount',  label: 'Invoice Total',
+    format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
+  { key: 'cumulative_paid',     label: 'Total Paid',
+    format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
+  { key: 'remaining_balance',   label: 'Remaining Balance',
+    format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
+  { key: 'payment_status',      label: 'Payment Status' },
+  { key: 'payment_method',      label: 'Payment Method' },
+  { key: 'payment_paid_at',     label: 'Last Payment Date',
+    format: (val) => formatDateCSV(val) },
+];

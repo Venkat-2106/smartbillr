@@ -1,8 +1,8 @@
 # app/routers/payment.py
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text
+from sqlalchemy import text
 from app.database import get_db
 from app.middleware.rbac import require_permission
 from app.models.payment import Payment
@@ -10,9 +10,6 @@ from app.models.sale import Sale
 from app.schemas.payment import PaymentCreate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
-
-# FIX: Helpers now imported from utils/payment_helpers.py
-# NOT defined here anymore — avoids circular import with sale.py
 from app.utils.payment_helpers import record_payment_and_sync, calculate_payment_status
 from app.utils.timestamp import fmt_ts
 
@@ -46,6 +43,17 @@ router = APIRouter(prefix="/payments", tags=["Payments"])
 # To see total paid:     Read cumulative_paid from that one row (= 1000)
 # To see remaining:      sale_final - cumulative_paid (= 0)
 # ══════════════════════════════════════════════════════════════════
+
+
+# ── Sort column whitelist (prevents SQL injection) ──────────────────────────
+SORTABLE = {
+    "payment_paid_at": "p.payment_paid_at",
+    "payment_amount":  "p.payment_amount",
+    "cumulative_paid": "p.cumulative_paid",
+    "payment_status":  "p.payment_status",
+    "invoice_no":      "s.invoice_no",
+    "customer_name":   "c.cust_name",
+}
 
 
 # ─────────────────────────────────────────
@@ -95,10 +103,6 @@ def create_payment(
     sale_final = float(sale_row.sales_final_amount) if sale_row and sale_row.sales_final_amount else 0
 
     # ── Get total already paid by reading cumulative_paid from active row ─────
-    # WHY read cumulative_paid and not SUM all rows:
-    # cumulative_paid on the active row already IS the running total.
-    # No need to sum across all rows — one read is enough.
-    # If no payments exist yet, cumulative_paid defaults to 0.
     active_row = db.execute(
         text("""
             SELECT COALESCE(cumulative_paid, 0) AS already_paid
@@ -182,49 +186,127 @@ def create_payment(
 
 
 # ══════════════════════════════════════════════════════════════════
-# GET /payments → All payments for this business (paginated)
+# GET /payments → All active payments for this business (paginated)
+#
+# WHY is_active=True:
+#   Each sale can have multiple payment rows (one per installment).
+#   Only the active row (is_active=true) represents the CURRENT state.
+#   Historical rows are accessible via GET /payments/sale/{id}.
+#
+# ENHANCED (Step 5.16):
+#   Added search (invoice_no / customer_name), status filter,
+#   sort whitelist, date filter on payment_paid_at, and JOINs with
+#   sales + customers to return invoice_no, customer_name,
+#   sales_final_amount, and remaining_balance in each row.
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
 def get_all_payments(
     current_user: dict = Depends(require_permission("payments.manage")),
     db:           Session = Depends(get_db),
-    pagination:   dict    = Depends(paginate)
+    pagination:   dict = Depends(paginate),
+    search:       str  = Query(default=None),
+    status:       str  = Query(default=None),
+    sort_by:      str  = Query(default="payment_paid_at"),
+    sort_dir:     str  = Query(default="desc"),
+    date_from:    str  = Query(default=None),
+    date_to:      str  = Query(default=None),
 ):
     business_id = current_user["business_id"]
 
-# is_active=True → only the current snapshot row per sale (not historical rows).
-    # Historical rows (is_active=False) are accessible via GET /payments/sale/{id}.
-    total = db.query(func.count(Payment.payment_id)).filter(
-        Payment.business_id == business_id,
-        Payment.is_active   == True
-    ).scalar()
+    order_col = SORTABLE.get(sort_by, "p.payment_paid_at")
+    order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
 
-    payments = db.query(Payment).filter(
-        Payment.business_id == business_id,
-        Payment.is_active   == True
-    ).order_by(Payment.payment_paid_at.desc())\
-     .offset(pagination["offset"]).limit(pagination["limit"]).all()
+    # Build WHERE clauses dynamically
+    where_clauses = [
+        "p.business_id = CAST(:bid AS uuid)",
+        "p.is_active   = true",
+    ]
+    params = {"bid": business_id}
+
+    if search and search.strip():
+        where_clauses.append(
+            "(s.invoice_no ILIKE :search OR c.cust_name ILIKE :search)"
+        )
+        params["search"] = f"%{search.strip()}%"
+
+    if status and status.strip():
+        where_clauses.append("p.payment_status = :status")
+        params["status"] = status.strip()
+
+    if date_from:
+        where_clauses.append("p.payment_paid_at >= CAST(:date_from AS timestamptz)")
+        params["date_from"] = date_from
+
+    if date_to:
+        where_clauses.append("p.payment_paid_at <= CAST(:date_to AS timestamptz)")
+        params["date_to"] = date_to
+
+    where_sql = " AND ".join(where_clauses)
+
+    base_sql = f"""
+        FROM payments p
+        JOIN sales     s ON s.sales_id     = p.sale_id
+        LEFT JOIN customers c ON c.cust_id = s.customer_id
+        WHERE {where_sql}
+    """
+
+    # COUNT
+    count_row = db.execute(
+        text(f"SELECT COUNT(*) AS total {base_sql}"), params
+    ).fetchone()
+    total = count_row.total if count_row else 0
+
+    # DATA
+    rows = db.execute(
+        text(f"""
+            SELECT
+                p.payment_id,
+                p.business_id,
+                p.sale_id,
+                p.payment_amount,
+                p.cumulative_paid,
+                p.payment_method,
+                p.payment_status,
+                p.is_active,
+                p.payment_paid_at,
+                s.invoice_no,
+                s.sales_final_amount,
+                COALESCE(c.cust_name, 'Walk-in') AS customer_name
+            {base_sql}
+            ORDER BY {order_col} {order_dir}
+            LIMIT :limit OFFSET :offset
+        """),
+        {**params, "limit": pagination["limit"], "offset": pagination["offset"]}
+    ).fetchall()
+
+    items = []
+    for r in rows:
+        sale_final   = float(r.sales_final_amount) if r.sales_final_amount else 0.0
+        cumul        = float(r.cumulative_paid)    if r.cumulative_paid    else 0.0
+        remaining    = round(sale_final - cumul, 2)
+        items.append({
+            "payment_id":         str(r.payment_id),
+            "sale_id":            str(r.sale_id),
+            "payment_amount":     float(r.payment_amount),
+            "cumulative_paid":    cumul,
+            "payment_method":     r.payment_method,
+            "payment_status":     r.payment_status,
+            "is_active":          r.is_active,
+            "payment_paid_at":    fmt_ts(r.payment_paid_at),
+            "invoice_no":         r.invoice_no         or "—",
+            "customer_name":      r.customer_name      or "Walk-in",
+            "sales_final_amount": sale_final,
+            "remaining_balance":  remaining if remaining > 0 else 0.0,
+        })
 
     return success_response(
-        pagination_response(
-            [payment_to_dict(p) for p in payments],
-            total,
-            pagination["page"],
-            pagination["limit"]
-        )
+        pagination_response(items, total, pagination["page"], pagination["limit"])
     )
 
 
 # ══════════════════════════════════════════════════════════════════
 # GET /payments/sale/{sale_id} → Full payment history for one sale
-#
-# Returns:
-#   current_status  → from active row (source of truth)
-#   sale_final      → total the customer owes
-#   total_paid      → cumulative_paid from active row
-#   remaining_balance → sale_final - total_paid
-#   payment_history → all rows, latest first
-#                     (active row is first, is_active=true)
+# (Declared BEFORE /{payment_id} to avoid FastAPI routing conflict)
 # ══════════════════════════════════════════════════════════════════
 @router.get("/sale/{sale_id}")
 def get_payments_by_sale(
@@ -244,38 +326,62 @@ def get_payments_by_sale(
     if not sale:
         return error_response("Sale not found", status_code=404)
 
-    # Fetch all payment rows, latest first
-    payments = db.query(Payment).filter(
-        Payment.sale_id     == sale_id,
-        Payment.business_id == business_id
-    ).order_by(Payment.payment_paid_at.desc()).all()
+    # Fetch all payment rows + customer_name via JOIN, latest first
+    rows = db.execute(
+        text("""
+            SELECT
+                p.payment_id, p.business_id, p.sale_id,
+                p.payment_amount, p.cumulative_paid, p.payment_method,
+                p.payment_status, p.is_active, p.payment_paid_at,
+                s.invoice_no,
+                s.sales_final_amount,
+                COALESCE(c.cust_name, 'Walk-in') AS customer_name
+            FROM payments p
+            JOIN sales s ON s.sales_id = p.sale_id
+            LEFT JOIN customers c ON c.cust_id = s.customer_id
+            WHERE p.sale_id     = CAST(:sid AS uuid)
+              AND p.business_id = CAST(:bid AS uuid)
+            ORDER BY p.payment_paid_at DESC
+        """),
+        {"sid": sale_id, "bid": business_id}
+    ).fetchall()
 
-    # Get sale final amount
-    sale_row = db.execute(
-        text("SELECT sales_final_amount FROM sales WHERE sales_id = CAST(:sid AS uuid)"),
-        {"sid": sale_id}
-    ).fetchone()
-    sale_final = float(sale_row.sales_final_amount) if sale_row and sale_row.sales_final_amount else 0
+    sale_final = float(rows[0].sales_final_amount) if rows and rows[0].sales_final_amount else 0.0
 
-    # Read total_paid from cumulative_paid on the active row
-    # (much faster than summing all rows)
-    active_payment = next((p for p in payments if p.is_active), None)
-    total_paid     = float(active_payment.cumulative_paid) if active_payment and active_payment.cumulative_paid else 0.0
-    current_status = active_payment.payment_status if active_payment else "pending"
+    # Active row is first (latest by date)
+    active_row     = next((r for r in rows if r.is_active), None)
+    total_paid     = float(active_row.cumulative_paid) if active_row and active_row.cumulative_paid else 0.0
+    current_status = active_row.payment_status if active_row else "pending"
+    invoice_no     = rows[0].invoice_no    if rows else "—"
+    customer_name  = rows[0].customer_name if rows else "Walk-in"
+
+    history = []
+    for r in rows:
+        history.append({
+            "payment_id":      str(r.payment_id),
+            "payment_amount":  float(r.payment_amount),
+            "cumulative_paid": float(r.cumulative_paid) if r.cumulative_paid else 0.0,
+            "payment_method":  r.payment_method,
+            "payment_status":  r.payment_status,
+            "is_active":       r.is_active,
+            "payment_paid_at": fmt_ts(r.payment_paid_at),
+        })
 
     return success_response({
         "sale_id":            sale_id,
+        "invoice_no":         invoice_no,
+        "customer_name":      customer_name,
         "sale_final_amount":  sale_final,
         "total_paid":         round(total_paid, 2),
         "remaining_balance":  round(sale_final - total_paid, 2),
         "current_status":     current_status,
-        "payment_history":    [payment_to_dict(p) for p in payments]
-        # Note: active row (is_active=true) is first in the list (latest by date)
+        "payment_history":    history,
     })
 
 
 # ══════════════════════════════════════════════════════════════════
 # GET /payments/{payment_id} → One specific payment row
+# (Must be declared AFTER /sale/{sale_id})
 # ══════════════════════════════════════════════════════════════════
 @router.get("/{payment_id}")
 def get_payment(

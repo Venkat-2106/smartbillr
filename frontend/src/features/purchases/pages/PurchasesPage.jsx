@@ -11,7 +11,7 @@ import useAuthStore              from '../../../store/authStore'
 import PurchaseDetailDrawer, { DrawerOverlay }
   from '../components/PurchaseDetailDrawer'
 import {
-  Table, Badge, SearchBar,
+  Table, Badge, SearchBar, Button,
   Pagination, PageHeader, DateRangeFilter, ExportButton,
 } from '../../../shared/components'
 import { selectStyle }           from '../../../shared/components/FormField'
@@ -98,6 +98,7 @@ export default function PurchasesPage() {
   const navigate      = useNavigate()
   const hasPermission = useAuthStore(s => s.hasPermission)
   const canEdit       = hasPermission('purchases.edit')
+  const canCreate     = hasPermission('purchases.view') // same permission gates create
 
   const {
     purchases,
@@ -132,11 +133,18 @@ export default function PurchasesPage() {
         back
         onBack={() => navigate('/dashboard')}
         action={
-          <ExportButton
-            onFetch={handleExport}
-            filename="purchases"
-            columns={PURCHASE_CSV_COLUMNS}
-          />
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <ExportButton
+              onFetch={handleExport}
+              filename="purchases"
+              columns={PURCHASE_CSV_COLUMNS}
+            />
+            {canCreate && (
+              <Button variant="primary" onClick={() => navigate('/purchases/new')}>
+                + New Purchase
+              </Button>
+            )}
+          </div>
         }
       />
 

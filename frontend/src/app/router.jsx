@@ -27,6 +27,8 @@ const SuppliersPage  = React.lazy(() => import('../features/suppliers/pages/Supp
 const SalesPage      = React.lazy(() => import('../features/sales/pages/SalesPage'))
 const CreateSalePage = React.lazy(() => import('../features/sales/pages/CreateSalePage'))
 const PaymentsPage   = React.lazy(() => import('../features/payments/pages/PaymentsPage'))
+const PurchasesPage  = React.lazy(() => import('../features/purchases/pages/PurchasesPage'))
+const CreatePurchasePage = React.lazy(() => import('../features/purchases/pages/CreatePurchasePage'))
 
 
 // ─── Premium "Coming Soon" placeholder ───────────────────────────────────────
@@ -220,7 +222,15 @@ export default function AppRouter() {
             path="purchases"
             element={
               <ProtectedRoute permission="purchases.view">
-                <ComingSoon name="Purchases" />
+                <PurchasesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="purchases/new"
+            element={
+              <ProtectedRoute permission="purchases.view">
+                <CreatePurchasePage />
               </ProtectedRoute>
             }
           />

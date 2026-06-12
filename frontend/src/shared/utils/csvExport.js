@@ -336,3 +336,28 @@ export const PAYMENT_CSV_COLUMNS = [
   { key: 'payment_paid_at',     label: 'Last Payment Date',
     format: (val) => formatDateCSV(val) },
 ];
+/** Column config for Purchases export */
+export const PURCHASE_CSV_COLUMNS = [
+  { key: 'supp_name',          label: 'Supplier' },
+  { key: 'pur_total_amount',   label: 'Subtotal',
+    format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
+  { key: 'pur_discount',       label: 'Discount',
+    format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
+  { key: 'pur_tax_total',      label: 'Tax Total',
+    format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
+  { key: 'pur_cgst_total',     label: 'CGST',
+    format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
+  { key: 'pur_sgst_total',     label: 'SGST',
+    format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
+  { key: 'pur_igst_total',     label: 'IGST',
+    format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
+  { key: 'pur_final_amount',   label: 'Total Amount',
+    format: (val) => (val != null ? Number(val).toFixed(2) : '0.00') },
+  { key: 'pur_payment_status', label: 'Payment Status' },
+  { key: 'pur_created_at',     label: 'Purchase Date',
+    format: (val) => formatDateCSV(val) },
+  { key: 'updated_at',         label: 'Last Updated',
+    format: (val) => formatDateCSV(val) },
+  { key: 'last_updated_by',    label: 'Last Updated By',
+    format: (val) => val || '' },
+];c

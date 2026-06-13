@@ -1,23 +1,24 @@
 // src/shared/components/Pagination.jsx
 //
-// Page number controls that match your backend's pagination format:
-//   { items: [...], pagination: { page, pages, total, size } }
+// FIX APPLIED:
+//   NavBtn and page buttons were using onMouseEnter/Leave to mutate
+//   e.currentTarget.style.background directly (same DOM mutation bug fixed
+//   in Modal.jsx, Table.jsx, DashboardLayout.jsx). When the parent re-renders
+//   (e.g. page changes), React resets all inline styles and the hover snaps off.
 //
-// Props:
-//   pagination  → the pagination object from API response
-//   onPageChange → function(newPage) — called when user clicks a page
+//   Fix: NavBtn now has its own useState(false) for hover — it is already a
+//   function component so this is a natural, minimal change. Page buttons use
+//   a single hoveredPage state at the outer component level (same approach
+//   as Table.jsx's row hover tracking).
 //
-// Usage:
-//   const [page, setPage] = useState(1)
-//   // pass page to your useQuery hook
-//   // in JSX:
-//   <Pagination pagination={data?.pagination} onPageChange={setPage} />
+//   No visual change — identical appearance and transition.
+
+import { useState } from 'react'
 
 export default function Pagination({ pagination, onPageChange }) {
   if (!pagination) return null
 
   // Backend sends: { page, total_pages, total, has_next, has_prev }
-  // Component previously read 'pages' which never existed → next was always enabled.
   const current = pagination.page        ?? 1
   const total   = pagination.total_pages ?? pagination.pages ?? 1   // fallback for safety
   const hasNext = pagination.has_next    ?? (current < total)
@@ -76,29 +77,49 @@ export default function Pagination({ pagination, onPageChange }) {
     pointerEvents: 'none',
   }
 
+  // FIX: NavBtn has its own hover state — no DOM mutation
   function NavBtn({ direction }) {
+    const [hovered, setHovered] = useState(false)
     const isDisabled = direction === 'prev' ? !hasPrev : !hasNext
     const label = direction === 'prev' ? '←' : '→'
     return (
       <button
         onClick={() => onPageChange(direction === 'prev' ? current - 1 : current + 1)}
+        disabled={isDisabled}
+        onMouseEnter={() => !isDisabled && setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         style={{
           ...btnBase,
           ...(isDisabled ? disabledStyle : {}),
+          ...(!isDisabled && hovered ? { background: 'var(--bg-hover)' } : {}),
           fontSize: 16,
-        }}
-        disabled={isDisabled}
-        onMouseEnter={e => {
-          if (!isDisabled) e.currentTarget.style.background = 'var(--bg-hover)'
-        }}
-        onMouseLeave={e => {
-          if (!isDisabled) e.currentTarget.style.background = 'var(--bg-card)'
         }}
       >
         {label}
       </button>
     )
   }
+
+  return (
+    <PaginationInner
+      current={current}
+      total={total}
+      pages={pages}
+      pagination={pagination}
+      onPageChange={onPageChange}
+      btnBase={btnBase}
+      activeStyle={activeStyle}
+      NavBtn={NavBtn}
+    />
+  )
+}
+
+// FIX: extracted inner component so useState (hoveredPage) works correctly —
+// hooks cannot be called conditionally, and the early `if (total <= 1) return null`
+// above means we need state below that guard. This inner component always renders.
+function PaginationInner({ current, total, pages, pagination, onPageChange, btnBase, activeStyle, NavBtn }) {
+  // FIX: single state tracks which page button is hovered — no DOM mutation needed
+  const [hoveredPage, setHoveredPage] = useState(null)
 
   return (
     <div style={{
@@ -135,18 +156,16 @@ export default function Pagination({ pagination, onPageChange }) {
               ···
             </span>
           ) : (
+            // FIX: onMouseEnter/Leave set hoveredPage state — no e.currentTarget.style mutation
             <button
               key={p}
               onClick={() => onPageChange(p)}
+              onMouseEnter={() => p !== current && setHoveredPage(p)}
+              onMouseLeave={() => setHoveredPage(null)}
               style={{
                 ...btnBase,
                 ...(p === current ? activeStyle : {}),
-              }}
-              onMouseEnter={e => {
-                if (p !== current) e.currentTarget.style.background = 'var(--bg-hover)'
-              }}
-              onMouseLeave={e => {
-                if (p !== current) e.currentTarget.style.background = 'var(--bg-card)'
+                ...(hoveredPage === p && p !== current ? { background: 'var(--bg-hover)' } : {}),
               }}
             >
               {p}

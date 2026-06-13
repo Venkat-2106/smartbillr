@@ -1,30 +1,16 @@
 // src/shared/components/Modal.jsx
 //
-// A full overlay modal with header, scrollable body, and footer slot.
-// Closes on backdrop click OR pressing Escape.
-//
-// Props:
-//   open          → boolean — controls visibility
-//   onClose       → function — called when user clicks backdrop or Escape
-//   title         → string shown in modal header
-//   subtitle      → optional subtitle below the title
-//   children      → the modal body content
-//   footer        → JSX for the footer (usually buttons)
-//   size          → 'sm' | 'md' | 'lg' | 'xl'   (controls max-width)
-//   hideClose     → hides the × button (for modals where close = cancel only)
-//
-// Usage:
-//   <Modal open={show} onClose={() => setShow(false)} title="Add Category">
-//     <p>body content here</p>
-//     <Modal.Footer>
-//       <Button variant="ghost" onClick={...}>Cancel</Button>
-//       <Button variant="primary" onClick={...}>Save</Button>
-//     </Modal.Footer>
-//   </Modal>
-//
-// NOTE: Modal.Footer is a convenience sub-component — or pass footer prop directly.
+// FIX APPLIED:
+//   Close button was using onMouseEnter/Leave to mutate e.currentTarget.style
+//   directly (same DOM mutation bug that was already fixed in Table.jsx,
+//   DashboardLayout.jsx, and StatCard). When any state inside the Modal changes
+//   (e.g. typing in a form field causes a parent re-render), React wipes all
+//   inline styles and the hover effect snaps off while the mouse is still over
+//   the button. Fixed by tracking hover in a single useState variable inside
+//   the Modal component — the same pattern used everywhere else in the project.
+//   No visual change at all — identical appearance and animation.
 
-import { useEffect, useCallback, Children, isValidElement } from 'react'
+import { useState, useEffect, useCallback, Children, isValidElement } from 'react'
 
 const SIZE_MAP = {
   sm: 400,
@@ -62,6 +48,9 @@ export default function Modal({
   hideClose = false,
 }) {
   const maxW = SIZE_MAP[size] || SIZE_MAP.md
+
+  // FIX: single boolean tracks close-button hover — no DOM mutation needed
+  const [closeBtnHovered, setCloseBtnHovered] = useState(false)
 
   // Close on Escape key
   const handleKeyDown = useCallback((e) => {
@@ -194,29 +183,26 @@ export default function Modal({
               </div>
 
               {!hideClose && (
+                // FIX: onMouseEnter/Leave now set React state instead of mutating
+                // e.currentTarget.style directly. The computed style is derived
+                // from closeBtnHovered — same visual result, no DOM mutation.
                 <button
                   onClick={onClose}
                   aria-label="Close modal"
+                  onMouseEnter={() => setCloseBtnHovered(true)}
+                  onMouseLeave={() => setCloseBtnHovered(false)}
                   style={{
                     width: 30, height: 30,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: 'var(--bg-subtle)',
+                    background: closeBtnHovered ? 'var(--bg-hover)' : 'var(--bg-subtle)',
                     border: '1px solid var(--border)',
                     borderRadius: 8,
                     cursor: 'pointer',
-                    color: 'var(--text-muted)',
+                    color: closeBtnHovered ? 'var(--text-primary)' : 'var(--text-muted)',
                     fontSize: 16,
                     lineHeight: 1,
                     flexShrink: 0,
                     transition: 'all 0.14s',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = 'var(--bg-hover)'
-                    e.currentTarget.style.color = 'var(--text-primary)'
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'var(--bg-subtle)'
-                    e.currentTarget.style.color = 'var(--text-muted)'
                   }}
                 >
                   ✕

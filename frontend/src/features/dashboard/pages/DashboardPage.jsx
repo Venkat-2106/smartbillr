@@ -151,7 +151,7 @@ function SalesTrendChart({ period, onPeriodChange }) {
 
   function fmtY(val) { return String(Math.round(val)) }
 
-  const yTicks = [0, maxVal / 2, maxVal]
+  const yTicks = [...new Set([0, Math.ceil(maxVal / 2), maxVal])]
 
   const PERIODS = [
     { key: 'weekly',  label: 'Weekly' },

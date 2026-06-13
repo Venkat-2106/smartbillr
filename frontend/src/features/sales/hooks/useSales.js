@@ -1,18 +1,14 @@
 // src/features/sales/hooks/useSales.js
 //
-// CHANGE FROM EXISTING:
-//   Replaced manual debounce (useRef + clearTimeout + setTimeout in useEffect)
-//   with the shared useDebounce hook — same as useCustomers.js and useSuppliers.js.
-//
-//   WHY: The manual approach worked but was inconsistent with every other hook
-//   in the project. If useDebounce.js ever gets a bug fix, useSales would be
-//   the only hook not benefiting from it. Now all hooks use the same source.
-//
-//   BEHAVIOUR IS IDENTICAL: 300ms delay, resets page to 1 on new search.
-//   The only visible change is cleaner code — no functional difference.
-//
-// Everything else (queryKey, fetchSales params, sort, pagination, mutations)
-// is completely unchanged.
+// FIX APPLIED:
+//   Added `enabled: !!user` to useQuery — the only hook in the project missing
+//   this guard. Every other hook (useCustomers, useSuppliers, useCategories,
+//   useProducts, usePurchases, useStock, usePayments) has this guard.
+//   Without it, the query fires the moment SalesPage mounts, even if Zustand
+//   hasn't hydrated from localStorage yet (user is null). This caused 2 failed
+//   401 requests on every sales page load (1 attempt + 1 retry from retry:1
+//   in the global QueryClient config). Adding the guard makes it fire only
+//   after the user is confirmed — identical to every other hook.
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -20,11 +16,13 @@ import { toast } from 'react-hot-toast';
 import { fetchSales, updateSaleStatus, fetchAllSalesForExport } from '../api/salesApi';
 import { localDayStartUTC, localDayEndUTC } from '../../../shared/utils/dateUtils';
 import { useDebounce } from '../../../shared/hooks/useDebounce';
+import useAuthStore from '../../../store/authStore';   // FIX: added import
 
 const PAGE_SIZE = 20;
 
 export function useSales() {
   const queryClient = useQueryClient();
+  const user        = useAuthStore(s => s.user);       // FIX: read user from store
 
   // ── Server-side state (drives API calls) ─────────────────────────────────
   const [page,         setPage]      = useState(1);
@@ -43,7 +41,6 @@ export function useSales() {
   const [drawerSale, setDrawerSale] = useState(null);
 
   // ── Debounce search — shared hook, 300ms (same as useCustomers) ───────────
-  // CHANGE: replaced manual useRef+clearTimeout with useDebounce hook.
   const debouncedSearch = useDebounce(search, 300);
 
   // ── CSV export ────────────────────────────────────────────────────────────
@@ -87,6 +84,7 @@ export function useSales() {
     }),
     staleTime:       30 * 1000,
     placeholderData: (prev) => prev,
+    enabled:         !!user,   // FIX: prevents query firing before auth hydrates
   });
 
   // Unwrap pagination envelope
@@ -111,9 +109,6 @@ export function useSales() {
   };
 
   // ── Search handler — resets page ──────────────────────────────────────────
-  // CHANGE: page reset on search is now handled naturally by debouncedSearch
-  // changing, which changes the queryKey, which triggers a refetch from page 1.
-  // We explicitly reset page here too so the Pagination component reflects it.
   const handleSearch = (val) => {
     setSearchRaw(val);
     setPage(1);

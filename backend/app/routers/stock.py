@@ -66,22 +66,95 @@ def get_all_movements(
 ):
     business_id = current_user["business_id"]
 
-    total = db.query(func.count(StockMovement.move_id)).filter(
-        StockMovement.business_id == business_id
+    # ── Sort whitelist (prevents SQL injection) — same pattern as all other routers ──
+    SORTABLE = {
+        "move_created_at": "sm.move_created_at",
+        "prod_name":       "p.prod_name",
+        "move_type":       "sm.move_type",
+        "move_qty":        "sm.move_qty",
+    }
+    order_col = SORTABLE.get(sort_by, "sm.move_created_at")
+    order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
+
+    # ── Build dynamic WHERE clauses ───────────────────────────────────────────
+    extra_where = ""
+    params = {
+        "business_id": business_id,
+        "offset":      pagination["offset"],
+        "limit":       pagination["limit"],
+    }
+
+    if search and search.strip():
+        extra_where += " AND p.prod_name ILIKE :search"
+        params["search"] = f"%{search.strip()}%"
+
+    if move_type and move_type.strip():
+        extra_where += " AND sm.move_type = :move_type"
+        params["move_type"] = move_type.strip()
+
+    if date_from and date_from.strip():
+        extra_where += " AND sm.move_created_at >= :date_from"
+        params["date_from"] = date_from.strip()
+
+    if date_to and date_to.strip():
+        extra_where += " AND sm.move_created_at <= :date_to"
+        params["date_to"] = date_to.strip()
+
+    # ── COUNT query ───────────────────────────────────────────────────────────
+    total = db.execute(
+        text(f"""
+            SELECT COUNT(*)
+            FROM stock_movements sm
+            LEFT JOIN products p ON p.prod_id = sm.product_id
+            WHERE sm.business_id = CAST(:business_id AS uuid)
+            {extra_where}
+        """),
+        params
     ).scalar()
 
-    movements = db.query(StockMovement).filter(
-        StockMovement.business_id == business_id
-    ).order_by(StockMovement.move_created_at.desc())\
-     .offset(pagination["offset"]).limit(pagination["limit"]).all()
+    # ── Data query — raw SQL with JOIN so prod_name is available in one trip ──
+    rows = db.execute(
+        text(f"""
+            SELECT
+                sm.move_id, sm.business_id, sm.product_id,
+                sm.move_type, sm.move_qty,
+                sm.move_prev_stock, sm.move_new_stock,
+                sm.sale_reference_id, sm.purchase_reference_id,
+                sm.reference_type, sm.reference_id,
+                sm.move_notes, sm.move_created_at, sm.move_created_by,
+                p.prod_name
+            FROM stock_movements sm
+            LEFT JOIN products p ON p.prod_id = sm.product_id
+            WHERE sm.business_id = CAST(:business_id AS uuid)
+            {extra_where}
+            ORDER BY {order_col} {order_dir}
+            OFFSET :offset LIMIT :limit
+        """),
+        params
+    ).fetchall()
+
+    data = []
+    for r in rows:
+        data.append({
+            "move_id":               str(r.move_id),
+            "business_id":           str(r.business_id),
+            "product_id":            str(r.product_id),
+            "prod_name":             r.prod_name,          # now resolved via JOIN
+            "move_type":             r.move_type,
+            "move_qty":              r.move_qty,
+            "move_prev_stock":       r.move_prev_stock,
+            "move_new_stock":        r.move_new_stock,
+            "sale_reference_id":     str(r.sale_reference_id)     if r.sale_reference_id     else None,
+            "purchase_reference_id": str(r.purchase_reference_id) if r.purchase_reference_id else None,
+            "reference_type":        r.reference_type,
+            "reference_id":          str(r.reference_id) if r.reference_id else None,
+            "move_notes":            r.move_notes,
+            "move_created_at":       fmt_ts(r.move_created_at),
+            "move_created_by":       str(r.move_created_by) if r.move_created_by else None,
+        })
 
     return success_response(
-        pagination_response(
-            [movement_to_dict(m) for m in movements],
-            total,
-            pagination["page"],
-            pagination["limit"]
-        )
+        pagination_response(data, total, pagination["page"], pagination["limit"])
     )
 
 
@@ -328,8 +401,7 @@ def adjust_stock(
         db.execute(
             text("""
                 UPDATE products
-                SET prod_stock_qty = :new_stock,
-                    updated_at = now()
+                SET prod_stock_qty = :new_stock
                 WHERE prod_id = CAST(:prod_id AS uuid)
                   AND business_id = CAST(:business_id AS uuid)
             """),

@@ -514,7 +514,10 @@ export default function CreateSalePage() {
         if (diff > 0) autoDiscount += diff * (Number(item.quantity) || 0);
       }
     });
-    const grandTotal = subtotal - autoDiscount + taxTotal;
+// Grand Total = sell price × qty + tax — matches backend sales_final_amount,
+    // which is sales_total_amount + tax_total (sales_discount is always 0).
+    // autoDiscount (MRP savings) is informational only — NEVER subtracted here.
+    const grandTotal = subtotal + taxTotal;
     return { subtotal, taxTotal, autoDiscount, grandTotal };
   }, [items]);
 
@@ -1058,8 +1061,8 @@ export default function CreateSalePage() {
                   <SummaryRow label="Subtotal"   value={formatCurrency(totals.subtotal)} />
                   {totals.autoDiscount > 0 && (
                     <SummaryRow
-                      label="Discount"
-                      value={<span style={{ color: '#059669' }}>−{formatCurrency(totals.autoDiscount)}</span>}
+                      label="You Saved (vs MRP)"
+                      value={<span style={{ color: '#059669' }}>{formatCurrency(totals.autoDiscount)}</span>}
                       muted
                     />
                   )}

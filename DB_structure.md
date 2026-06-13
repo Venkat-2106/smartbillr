@@ -488,16 +488,18 @@
 | public | business\_counters | business\_counters\_pkey | CREATE UNIQUE INDEX business\_counters\_pkey ON public.business\_counters USING btree (business\_id) |
 | public | business\_settings | business\_settings\_pkey | CREATE UNIQUE INDEX business\_settings\_pkey ON public.business\_settings USING btree (business\_id) |
 | public | businesses | businesses\_pkey | CREATE UNIQUE INDEX businesses\_pkey ON public.businesses USING btree (business\_id) |
+| public | categories | idx\_categories\_business\_deleted | CREATE INDEX idx\_categories\_business\_deleted ON public.categories USING btree (business\_id, is\_deleted) |
+| public | categories | idx\_categories\_name\_trgm | CREATE INDEX idx\_categories\_name\_trgm ON public.categories USING gin (category\_name gin\_trgm\_ops) WHERE (is\_deleted = false) |
 | public | categories | categories\_pkey | CREATE UNIQUE INDEX categories\_pkey ON public.categories USING btree (category\_id) |
 | public | categories | idx\_categories\_business\_updated | CREATE INDEX idx\_categories\_business\_updated ON public.categories USING btree (business\_id, updated\_at DESC) WHERE (is\_deleted = false) |
-| public | categories | idx\_categories\_business\_deleted | CREATE INDEX idx\_categories\_business\_deleted ON public.categories USING btree (business\_id, is\_deleted) |
-| public | customers | idx\_customers\_business\_id | CREATE INDEX idx\_customers\_business\_id ON public.customers USING btree (business\_id) WHERE (is\_deleted = false) |
+| public | customers | idx\_customers\_business\_deleted | CREATE INDEX idx\_customers\_business\_deleted ON public.customers USING btree (business\_id, is\_deleted) |
 | public | customers | idx\_customers\_cust\_name | CREATE INDEX idx\_customers\_cust\_name ON public.customers USING btree (cust\_name) |
 | public | customers | idx\_customers\_email\_trgm | CREATE INDEX idx\_customers\_email\_trgm ON public.customers USING gin (cust\_email gin\_trgm\_ops) |
 | public | customers | idx\_customers\_phone\_trgm | CREATE INDEX idx\_customers\_phone\_trgm ON public.customers USING gin (cust\_phone gin\_trgm\_ops) |
 | public | customers | idx\_customers\_name\_trgm | CREATE INDEX idx\_customers\_name\_trgm ON public.customers USING gin (cust\_name gin\_trgm\_ops) |
-| public | customers | idx\_customers\_business\_deleted | CREATE INDEX idx\_customers\_business\_deleted ON public.customers USING btree (business\_id, is\_deleted) |
 | public | customers | customers\_pkey | CREATE UNIQUE INDEX customers\_pkey ON public.customers USING btree (cust\_id) |
+| public | customers | idx\_customers\_business\_id | CREATE INDEX idx\_customers\_business\_id ON public.customers USING btree (business\_id) WHERE (is\_deleted = false) |
+| public | customers | idx\_customers\_business\_lower\_trim\_name | CREATE INDEX idx\_customers\_business\_lower\_trim\_name ON public.customers USING btree (business\_id, lower(TRIM(BOTH FROM cust\_name))) WHERE (is\_deleted = false) |
 | public | customers | idx\_customers\_lean\_dropdown | CREATE INDEX idx\_customers\_lean\_dropdown ON public.customers USING btree (business\_id, cust\_name, cust\_phone, cust\_id) WHERE (is\_deleted = false) |
 | public | customers | idx\_customers\_business\_name | CREATE INDEX idx\_customers\_business\_name ON public.customers USING btree (business\_id, cust\_name) WHERE (is\_deleted = false) |
 | public | customers | idx\_customers\_business\_updated | CREATE INDEX idx\_customers\_business\_updated ON public.customers USING btree (business\_id, updated\_at DESC) WHERE (is\_deleted = false) |

@@ -73,9 +73,11 @@ function anyItemHasMRP(items) {
 //   • Each item row shows MRP and per-line discount amount (or '—' if no MRP)
 //   • Totals block gets a "You Saved" row in green when savings > 0
 // ─────────────────────────────────────────────────────────────────────────────
+// FIX: added `discount` parameter so the totals block can show the
+// discount row and users can reconcile Subtotal → Discount → Tax → Grand Total.
 function buildInvoiceHTML(
   business, detail, sale, items,
-  cgst, sgst, igst, subtotal, taxTotal, finalAmount, totalPaid, remaining
+  cgst, sgst, igst, subtotal, taxTotal, discount, finalAmount, totalPaid, remaining
 ) {
   const payStatus = detail?.sales_payment_status || sale.sales_payment_status || 'pending';
   const payMethod = (detail?.sales_payment_method || sale.sales_payment_method || '—')
@@ -187,6 +189,7 @@ function buildInvoiceHTML(
     <div style="display:flex;justify-content:flex-end;margin-bottom:32px;">
       <table style="min-width:280px;">
         <tr><td style="padding:5px 0;color:#6b7280;font-size:12px;">Subtotal</td><td style="padding:5px 0;text-align:right;font-size:12px;">${formatCurrency(subtotal)}</td></tr>
+        ${discount > 0 ? `<tr><td style="padding:5px 0;color:#059669;font-size:12px;">Discount</td><td style="padding:5px 0;text-align:right;font-size:12px;color:#059669;">−${formatCurrency(discount)}</td></tr>` : ''}
         ${gstBreakdown}
         <tr><td style="padding:5px 0;color:#6b7280;font-size:12px;">Tax Total</td><td style="padding:5px 0;text-align:right;font-size:12px;">${formatCurrency(taxTotal)}</td></tr>
         <tr style="border-top:2px solid #111827;">
@@ -232,13 +235,18 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
   if (!sale) return null;
 
   const subtotal    = detail?.sales_total_amount  ?? sale.sales_total_amount ?? 0;
-  const taxTotal    = detail?.tax_total            ?? sale.tax_total          ?? 0;
   const finalAmount = detail?.sales_final_amount   ?? sale.sales_final_amount ?? 0;
   const totalPaid   = detail?.total_paid           ?? 0;
   const remaining   = detail?.remaining_balance    ?? 0;
-  const cgst        = detail?.cgst_total           ?? 0;
-  const sgst        = detail?.sgst_total           ?? 0;
-  const igst        = detail?.igst_total           ?? 0;
+  const cgst        = Number(detail?.cgst_total    ?? 0);
+  const sgst        = Number(detail?.sgst_total    ?? 0);
+  const igst        = Number(detail?.igst_total    ?? 0);
+  // FIX: For Indian businesses the trigger stores tax in cgst/sgst/igst columns,
+  // leaving tax_total = 0.  Always derive the display value from all four
+  // columns so the Summary section and invoice print show the correct total.
+  const rawTaxTotal = Number(detail?.tax_total ?? sale.tax_total ?? 0);
+  const taxTotal    = (cgst + sgst + igst) > 0 ? (cgst + sgst + igst) : rawTaxTotal;
+  const discount    = Number(detail?.sales_discount ?? 0);
   const items       = detail?.items                ?? [];
 
   // MRP FEATURE: compute total savings for the Summary section
@@ -249,7 +257,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
     const business = useAuthStore.getState().business;
     const html = buildInvoiceHTML(
       business, detail, sale, items, cgst, sgst, igst,
-      subtotal, taxTotal, finalAmount, totalPaid, remaining
+      subtotal, taxTotal, discount, finalAmount, totalPaid, remaining
     );
     triggerPrint(html);
   }
@@ -524,6 +532,15 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
 
               <DrawerSection title="Summary">
                 <InfoRow label="Subtotal"   value={formatCurrency(subtotal)} />
+                {discount > 0 && (
+                  <InfoRow label="Discount"
+                    value={
+                      <span style={{ color: '#059669', fontWeight: 600 }}>
+                        −{formatCurrency(discount)}
+                      </span>
+                    }
+                  />
+                )}
                 <InfoRow label="Tax Total"  value={formatCurrency(taxTotal)} />
                 <InfoRow label="Total"
                   value={

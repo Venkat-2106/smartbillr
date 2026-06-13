@@ -99,6 +99,7 @@ import { formatCurrency } from '../../../shared/utils/formatCurrency';
 import { COUNTRIES } from '../../../shared/data/countries';
 import useAuthStore from '../../../store/authStore';
 import { useDebounce } from '../../../shared/hooks/useDebounce';
+import { getAutoPrintInvoice, setAutoPrintInvoice } from '../../../shared/utils/preferences';
 
 // ── Module-level constants ─────────────────────────────────────────────────────
 // FIX 4: Moved out of component — created once, never re-created on render.
@@ -143,6 +144,7 @@ export default function CreateSalePage() {
   const [paymentStatus, setPaymentStatus] = useState('paid');
   const [paidAmount,    setPaidAmount]    = useState('');
   const [items,         setItems]         = useState([newItem()]);
+  const [autoPrint,     setAutoPrint]      = useState(() => getAutoPrintInvoice());
 
   // FIX 3: itemsRef always holds the latest items array.
   const itemsRef = useRef(items);
@@ -411,7 +413,7 @@ export default function CreateSalePage() {
       navigate('/sales', {
         state: {
           openInvoice: data?.sales_id,
-          autoPrint:   true,
+          autoPrint:   autoPrint,
           invoiceNo:   inv,
         },
       });
@@ -1150,6 +1152,23 @@ export default function CreateSalePage() {
                   </FormField>
                 )}
               </div>
+
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                fontSize: 12.5, color: 'var(--text-secondary)',
+                cursor: 'pointer', userSelect: 'none',
+              }}>
+                <input
+                  type="checkbox"
+                  checked={autoPrint}
+                  onChange={e => {
+                    setAutoPrint(e.target.checked);
+                    setAutoPrintInvoice(e.target.checked);
+                  }}
+                  style={{ width: 15, height: 15, cursor: 'pointer', accentColor: 'var(--accent-600)' }}
+                />
+                Open print preview after creating invoice
+              </label>
 
               <Button
                 variant="primary"

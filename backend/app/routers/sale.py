@@ -29,12 +29,6 @@ router = APIRouter(prefix="/sales", tags=["Sales"])
 
 # ─────────────────────────────────────────
 # Schema for PATCH /sales/{id}/status body
-#
-# FIX: status used to be a URL query param (?status=paid).
-# It is now a proper JSON request body.
-# WHY: REST convention is to send changes in the request body, not the URL.
-# A URL query param means a GET request with filters. A PATCH body means
-# "here is the data I want changed."
 # ─────────────────────────────────────────
 class SaleStatusUpdate(BaseModel):
     status: str
@@ -42,9 +36,6 @@ class SaleStatusUpdate(BaseModel):
 
 # ─────────────────────────────────────────
 # HELPER → Generate Invoice Number
-# Calls the DB stored function get_next_invoice_number() which has a
-# row-level lock (SELECT FOR UPDATE) to prevent duplicate numbers
-# under concurrent requests.
 # ─────────────────────────────────────────
 def generate_invoice_number(db: Session, business_id: str) -> str:
     result = db.execute(
@@ -72,10 +63,6 @@ def create_sale(
 
     try:
         # ── Step 1 — Validate products and check stock (BULK LOOKUP) ────────
-        # FIX: Instead of querying the DB once per item (N+1 problem),
-        # we collect all product_ids first, then fetch them ALL in ONE query
-        # using IN(). This means 1 DB round-trip regardless of item count.
-        # An invoice with 20 items = 1 query, not 20.
         requested_ids = [str(item.product_id) for item in data.items]
 
         products_bulk = db.query(Product).filter(
@@ -84,23 +71,10 @@ def create_sale(
             Product.is_deleted  == False
         ).all()
 
-        # Build a dict {str(prod_id): product} for O(1) lookup in Python
         product_cache = {str(p.prod_id): p for p in products_bulk}
 
-        # ── Stock check — two modes ────────────────────────────────────────
-        # Mode 1 (default, allow_stock_override=False):
-        #   Any item over available stock → immediate 400 with full list of
-        #   over-stock items so the frontend can show the override dialog.
-        #
-        # Mode 2 (allow_stock_override=True, set by frontend after user confirms):
-        #   Over-stock items are collected into `override_items` list.
-        #   Step 5.5 (below) will write a manual adjustment stock movement
-        #   to bring stock to 0 before the sale trigger fires, preventing
-        #   the trigger from raising "Insufficient stock" itself.
-        #
-        # Product-not-found is never overrideable — that is always a hard error.
-        override_items = []   # list of {product, requested_qty, available_qty}
-        stock_errors   = []   # collected when allow_stock_override=False
+        override_items = []
+        stock_errors   = []
 
         for item in data.items:
             product = product_cache.get(str(item.product_id))
@@ -113,15 +87,12 @@ def create_sale(
 
             if product.prod_stock_qty < item.sale_item_quantity:
                 if data.allow_stock_override:
-                    # User confirmed override — record for Step 5.5
                     override_items.append({
                         "product":       product,
                         "requested_qty": item.sale_item_quantity,
                         "available_qty": int(product.prod_stock_qty),
                     })
                 else:
-                    # Collect ALL over-stock errors at once so the dialog
-                    # can show every problem item in a single response.
                     stock_errors.append({
                         "product_id":    str(product.prod_id),
                         "product_name":  product.prod_name,
@@ -130,57 +101,52 @@ def create_sale(
                         "shortfall":     item.sale_item_quantity - int(product.prod_stock_qty),
                     })
 
-        # If any stock errors exist and override was NOT requested → return them
-        # The frontend reads `error_code: "INSUFFICIENT_STOCK"` to open the dialog.
-        # WHY JSONResponse directly (not error_response): our error_response helper
-        # only accepts message + status_code. We need to send structured extra data
-        # (the list of over-stock items) so the frontend dialog can display them.
-        # We do NOT change error_response() to keep the helper simple everywhere else.
         if stock_errors:
             from fastapi.responses import JSONResponse as _JSONResponse
             return _JSONResponse(
                 status_code=400,
                 content={
-                    "success":       False,
-                    "message":       "Insufficient stock for one or more items",
-                    "error_code":    "INSUFFICIENT_STOCK",
-                    "stock_errors":  stock_errors,
+                    "success":      False,
+                    "message":      "Insufficient stock for one or more items",
+                    "error_code":   "INSUFFICIENT_STOCK",
+                    "stock_errors": stock_errors,
                 }
             )
 
-        # ── Step 2 — Calculate totals and auto-discount ─────────────────────
-        # DISCOUNT LOGIC:
-        #   If frontend sends sales_discount > 0 → use it as manual discount.
-        #   If not → auto-calculate from (MRP - actual price) × qty per item.
+        # ── Step 2 — Calculate totals ─────────────────────────────────────────
+        # MRP DISCOUNT POLICY:
+        #   MRP (Maximum Retail Price) is shown on the invoice as informational
+        #   display — "you saved X vs MRP". It is NOT a discount off the bill.
+        #   The customer always pays: sell_price × qty + tax.
         #
-        # MRP FEATURE: use prod_mrp when available; skip auto-discount when
-        #   no MRP is set (NULL) so products without MRP don't create phantom
-        #   discounts against their selling price.
-        total_amount  = Decimal("0")
-        auto_discount = Decimal("0")
-
+        # WHY sales_discount MUST stay 0 here:
+        #   The DB generated column is:
+        #     sales_final_amount = sales_total_amount - sales_discount
+        #                         + cgst_total + sgst_total + igst_total + tax_total
+        #   Storing (MRP - sell_price) × qty as sales_discount would make the
+        #   customer pay LESS than the sell price — an undercharge error.
+        #
+        #   sales_discount is reserved for future explicit manual discounts only
+        #   (e.g. a cashier applying a 10% loyalty reduction), which would be
+        #   sent explicitly from the frontend. MRP savings are preserved per
+        #   line via sale_items.item_mrp (frozen snapshot at time of sale).
+        total_amount = Decimal("0")
         for item in data.items:
-            product    = product_cache[str(item.product_id)]
-            line_total = item.sale_item_unit_price * item.sale_item_quantity
-            total_amount += line_total
+            total_amount += item.sale_item_unit_price * item.sale_item_quantity
 
-            # Only calculate MRP discount when prod_mrp is explicitly set
-            if product.prod_mrp is not None:
-                price_diff = product.prod_mrp - item.sale_item_unit_price
-                if price_diff > 0:
-                    auto_discount += price_diff * item.sale_item_quantity
-
-        discount = data.sales_discount if (data.sales_discount is not None and data.sales_discount > 0) \
-                   else auto_discount
+        # Only honour an explicit discount sent by the frontend (currently always 0).
+        discount = (
+            data.sales_discount
+            if (data.sales_discount is not None and data.sales_discount > 0)
+            else Decimal("0")
+        )
 
         # ── Step 3 — Generate invoice number via DB function ─────────────────
         invoice_no = generate_invoice_number(db, business_id)
 
         # ── Step 4 — Insert sale header via raw SQL ──────────────────────────
         # WHY raw SQL: sales_final_amount is a GENERATED ALWAYS AS column.
-        # SQLAlchemy ORM tries to insert NULL for generated columns which the
-        # DB rejects with "ERROR: column is generated". Raw SQL lets us skip
-        # that column entirely so the DB generates it automatically.
+        # SQLAlchemy ORM would try to insert NULL which the DB rejects.
         new_sale_id = str(uuid.uuid4())
 
         db.execute(
@@ -211,41 +177,23 @@ def create_sale(
             }
         )
 
-        # ── Step 5 — Pre-insert adjustment for override items (RUNS FIRST) ────
-        # FIX: This block was previously placed AFTER sale_items inserts (Step 5.5).
-        # That was wrong: the DB trigger trg_sale_stock_movement fires on AFTER INSERT
-        # on each sale_item row. When stock is 0 and override=True, the trigger was
-        # seeing stock=0 and raising "Insufficient stock!" before the adjustment ran.
-        #
-        # Correct order:
-        #   1. Sale HEADER is already inserted (Step 4) → sale_reference_id FK works ✅
-        #   2. Insert adjustment stock_movement rows to ADD the shortfall qty first ← HERE
-        #   3. Insert sale_items → trigger fires → deducts correctly → stock goes to 0 or below
-        #
-        # move_type = 'adjustment' — allowed by DB CHECK constraint.
-        # move_qty  = shortfall (positive) → adds missing units so the trigger can deduct them.
-        # move_new_stock is GENERATED ALWAYS AS (move_prev_stock + move_qty) — never insert manually.
-        # sale_reference_id FK is satisfied: the sale header row exists from Step 4.
+        # ── Step 5 — Pre-insert stock adjustment for override items ───────────
+        # Must run BEFORE sale_items inserts so the trigger sees enough stock.
         if override_items:
             for ov in override_items:
-                product    = ov["product"]
-                avail      = ov["available_qty"]   # stock BEFORE this sale
-                shortfall  = ov["requested_qty"] - avail  # units we need to add first
+                product   = ov["product"]
+                avail     = ov["available_qty"]
+                shortfall = ov["requested_qty"] - avail
 
-                # Add the shortfall back into stock so the trigger can deduct the full quantity
                 db.execute(
                     text("""
                         UPDATE products
                         SET prod_stock_qty = prod_stock_qty + :shortfall
                         WHERE prod_id = CAST(:product_id AS uuid)
                     """),
-                    {
-                        "shortfall":   shortfall,
-                        "product_id":  str(product.prod_id),
-                    }
+                    {"shortfall": shortfall, "product_id": str(product.prod_id)}
                 )
 
-                # Write the adjustment audit record
                 db.execute(
                     text("""
                         INSERT INTO stock_movements (
@@ -275,19 +223,15 @@ def create_sale(
                 )
 
         # ── Step 5.5 — Insert sale items via raw SQL ─────────────────────────
-        # Runs AFTER the override adjustment above so the trigger sees enough stock.
-        # WHY raw SQL: sale_item_subtotal, item_tax_total, item_total_with_tax
-        # are GENERATED ALWAYS AS columns. We only insert quantity and unit_price.
-        # The DB trigger trg_sale_stock_movement fires per item automatically:
-        #   → Deducts stock from products table
-        #   → Fills cgst/sgst/igst/tax_amount based on business country
-        #
-        # MRP FEATURE: item_mrp is written here from product_cache so it is
-        # frozen at the time of sale. If the product's MRP is changed later,
-        # this row always reflects what was shown to the customer at checkout.
+        # GENERATED columns (sale_item_subtotal, item_tax_total, item_total_with_tax)
+        # are never inserted — DB computes them.
+        # Trigger trg_sale_stock_movement fires per-item:
+        #   → deducts stock, fills cgst/sgst/igst/tax_amount
+        # item_mrp is frozen here from product_cache — historical invoices always
+        # reflect the MRP that was in effect at checkout, not the current value.
         for item in data.items:
-            product   = product_cache[str(item.product_id)]
-            item_mrp  = str(product.prod_mrp) if product.prod_mrp is not None else None
+            product  = product_cache[str(item.product_id)]
+            item_mrp = str(product.prod_mrp) if product.prod_mrp is not None else None
             db.execute(
                 text("""
                     INSERT INTO sale_items (
@@ -314,16 +258,10 @@ def create_sale(
             )
 
         # ── Step 6 — Update sales header with summed tax totals ──────────────
-        # The DB trigger fills cgst/sgst/igst on each sale_item row.
-        # The sales header tax columns are NOT filled by the trigger — we
-        # must SUM them from sale_items and write them back to sales.
-        # Without this, sales_final_amount (generated column) would compute
-        # wrong totals because it reads the header tax columns.
-        #
-        # FIX: Replaced 4 correlated subqueries with a single-scan CTE.
-        # Old approach scanned sale_items 4× (once per tax column) = 4 × N rows.
-        # New approach scans sale_items ONCE, aggregates all 4 columns together,
-        # then joins the result into the UPDATE — always exactly N row reads.
+        # The trigger fills cgst/sgst/igst on each sale_item row.
+        # We must SUM them back to the sales header so the generated column
+        # sales_final_amount can include them in its formula.
+        # Single-scan CTE reads sale_items once for all 4 columns.
         db.execute(
             text("""
                 UPDATE sales
@@ -346,37 +284,35 @@ def create_sale(
             {"sid": new_sale_id}
         )
 
-        # ── Step 7 — Auto-record payment at invoice creation ────────────────────
-        # "paid"    → full amount recorded immediately (cash walk-in)
-        # "partial" → paid_amount recorded if provided by frontend
-        # "pending" → no payment entry created (bill now, pay later)
+        # ── Step 7 — Auto-record payment at invoice creation ──────────────────
         if data.sales_payment_status in ("paid", "partial"):
             sale_row = db.execute(
                 text("SELECT sales_final_amount FROM sales WHERE sales_id = CAST(:sid AS uuid)"),
                 {"sid": new_sale_id}
             ).fetchone()
-            final_amount = float(sale_row.sales_final_amount) if sale_row and sale_row.sales_final_amount else float(total_amount)
+            # sales_final_amount is a DB generated column — always set after Step 6.
+            # Fallback: since discount is now 0, total_amount is a safe approximation.
+            final_amount = (
+                float(sale_row.sales_final_amount)
+                if sale_row and sale_row.sales_final_amount
+                else float(total_amount)
+            )
 
             if data.sales_payment_status == "paid":
-                # Full payment — record the complete invoice amount
                 record_payment_and_sync(
                     db              = db,
                     business_id     = business_id,
                     sale_id         = new_sale_id,
                     sale_final      = final_amount,
-                    payment_amount  = final_amount,   # full amount paid at once
+                    payment_amount  = final_amount,
                     payment_method  = data.sales_payment_method or "cash",
                     new_status      = "paid",
-                    cumulative_paid = final_amount    # running total = full amount
+                    cumulative_paid = final_amount
                 )
 
             elif data.sales_payment_status == "partial" and data.paid_amount and float(data.paid_amount) > 0:
-                # Partial payment — record the upfront amount the customer paid.
-                # paid_amount must be > 0 and < final_amount.
-                # If somehow paid_amount >= final_amount, treat as fully paid.
                 paid = float(data.paid_amount)
                 if paid >= final_amount:
-                    # Treat as fully paid — no rounding issues
                     record_payment_and_sync(
                         db              = db,
                         business_id     = business_id,
@@ -396,32 +332,29 @@ def create_sale(
                         payment_amount  = round(paid, 2),
                         payment_method  = data.sales_payment_method or "cash",
                         new_status      = "partial",
-                        cumulative_paid = round(paid, 2)   # running total = upfront paid
+                        cumulative_paid = round(paid, 2)
                     )
 
         db.commit()
 
         return success_response({
-            "message":       "Sale created successfully",
-            "invoice_no":    invoice_no,
-            "sales_id":      new_sale_id,
-            "total_amount":  str(total_amount),
-            "discount":      str(discount),
-            "discount_source": "manual" if (data.sales_discount and data.sales_discount > 0) else "auto"
+            "message":      "Sale created successfully",
+            "invoice_no":   invoice_no,
+            "sales_id":     new_sale_id,
+            "total_amount": str(total_amount),
         }, 201)
 
     except Exception as e:
         db.rollback()
         error_msg = str(e)
 
-        # If the DB trigger fires a stock error (fallback — Step 1 should
-        # catch it first), extract only the human-readable part.
         if "Insufficient stock" in error_msg:
             match = re.search(r"Insufficient stock[^\n\"\\]+", error_msg)
             clean = match.group(0).strip() if match else "Insufficient stock for one or more items"
             return error_response(clean, 400)
 
         return error_response("An unexpected error occurred. Please try again.", 500)
+
 
 # ══════════════════════════════════════════════════════════════════
 # GET /sales → All sales (paginated) with payment summary
@@ -440,9 +373,6 @@ def get_sales(
 ):
     business_id = current_user["business_id"]
 
-    # ── Whitelist sort columns to prevent SQL injection ───────────────────
-    # Sort now runs at the database level so the ORDER BY applies across the
-    # full filtered result set — not just the 20 rows on the current page.
     SORTABLE = {
         "sales_created_at":     "s.sales_created_at",
         "invoice_no":           "s.invoice_no",
@@ -454,7 +384,6 @@ def get_sales(
     order_col = SORTABLE.get(sort_by, "s.sales_created_at")
     order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
 
-    # ── Build dynamic WHERE clauses ───────────────────────────────────────
     extra_where = ""
     params = {
         "bid":    business_id,
@@ -478,7 +407,6 @@ def get_sales(
         extra_where += " AND s.sales_created_at <= :date_to"
         params["date_to"] = date_to
 
-    # Count query — same WHERE so total is always filter-accurate
     count_sql = f"""
         SELECT COUNT(*)
         FROM sales s
@@ -489,13 +417,6 @@ def get_sales(
     """
     total = db.execute(text(count_sql), params).scalar()
 
-    # Data query — ORDER BY is now dynamic + server-side
-    # FIX: Added s.cgst_total, s.sgst_total, s.igst_total to SELECT.
-    # These columns exist in the sales table and are returned by GET /sales/{id},
-    # but were missing from the list query. Without them, SALES_CSV_COLUMNS
-    # could never populate the CGST / SGST / IGST export columns — they were
-    # always empty. Adding them here costs one extra column read per row
-    # (no extra JOIN, no extra query) and fixes all Indian GST exports.
     data_sql = f"""
         SELECT s.sales_id, s.invoice_no, s.customer_id,
                c.cust_name        AS customer_name,
@@ -513,29 +434,10 @@ def get_sales(
     """
     sales_rows = db.execute(text(data_sql), params).fetchall()
 
-    # ── Scope payment lookup to only the IDs on this page ───────────────────
-    # WHY: fetching ALL payments for the business is wasteful at scale.
-    # We only need payment info for the sales currently visible on screen.
-    #
-    # PERF FIX (2026-06):
-    #   Old approach built a dynamic IN() string:
-    #     "CAST(:id_0 AS uuid), CAST(:id_1 AS uuid), ..."
-    #   This produces a different SQL string for every page size, so
-    #   PostgreSQL's query plan cache never gets a hit — it re-plans
-    #   the query from scratch on every single GET /sales request.
-    #
-    #   New approach uses = ANY(:ids::uuid[]) with a single parameter.
-    #   The SQL string is identical regardless of how many IDs are on
-    #   the page, so PostgreSQL can cache and reuse the plan.
     sale_ids = [str(r.sales_id) for r in sales_rows]
 
     payment_map = {}
     if sale_ids:
-# FIX: ANY(:ids::uuid[]) crashes because psycopg2 confuses the
-        # SQLAlchemy :param marker with the :: PostgreSQL cast operator.
-        # We build individual named params :id_0, :id_1 ... instead.
-        # The SQL string stays stable in length (same N per page), so
-        # PostgreSQL's plan cache still gets hits per page-size bucket.
         id_placeholders = ", ".join(
             f"CAST(:id_{i} AS uuid)" for i in range(len(sale_ids))
         )
@@ -575,7 +477,6 @@ def get_sales(
             "customer_name":        r.customer_name or None,
             "sales_total_amount":   str(r.sales_total_amount),
             "sales_final_amount":   str(r.sales_final_amount) if r.sales_final_amount else None,
-            # FIX: cgst/sgst/igst now included — required by SALES_CSV_COLUMNS
             "cgst_total":           str(r.cgst_total) if r.cgst_total else None,
             "sgst_total":           str(r.sgst_total) if r.sgst_total else None,
             "igst_total":           str(r.igst_total) if r.igst_total else None,
@@ -637,28 +538,23 @@ def get_sale(
         {"sid": sales_id}
     ).fetchall()
 
-    # Get payment summary for this sale
     active_payment = db.execute(
         text("""
             SELECT COALESCE(cumulative_paid, 0) AS total_paid,
                    payment_status
             FROM payments
-            WHERE sale_id    = CAST(:sid AS uuid)
-              AND is_active   = true
+            WHERE sale_id  = CAST(:sid AS uuid)
+              AND is_active = true
         """),
         {"sid": sales_id}
     ).fetchone()
 
-    sale_final  = float(sale.sales_final_amount) if sale.sales_final_amount else 0.0
-    total_paid  = float(active_payment.total_paid) if active_payment else 0.0
-    remaining   = round(sale_final - total_paid, 2)
+    sale_final = float(sale.sales_final_amount) if sale.sales_final_amount else 0.0
+    total_paid = float(active_payment.total_paid) if active_payment else 0.0
+    remaining  = round(sale_final - total_paid, 2)
 
     items_data = []
     for i in items:
-        # MRP FEATURE: compute per-item discount from stored item_mrp snapshot.
-        # Both item_mrp and sale_item_unit_price are Decimals from the DB.
-        # We compute once here so the frontend and print template never re-derive
-        # from the current product price — they always see the sale-time values.
         item_mrp_val = float(i.item_mrp) if i.item_mrp is not None else None
         unit_price   = float(i.sale_item_unit_price)
         qty          = i.sale_item_quantity
@@ -673,58 +569,46 @@ def get_sale(
             discount_pct      = None
 
         items_data.append({
-            "sale_item_id":        str(i.sale_item_id),
-            "product_id":          str(i.product_id),
-            "product_name":        i.product_name or "Unknown Product",
-            "sale_item_quantity":  qty,
+            "sale_item_id":         str(i.sale_item_id),
+            "product_id":           str(i.product_id),
+            "product_name":         i.product_name or "Unknown Product",
+            "sale_item_quantity":   qty,
             "sale_item_unit_price": str(i.sale_item_unit_price),
-            "item_mrp":            str(i.item_mrp) if i.item_mrp is not None else None,
+            "item_mrp":             str(i.item_mrp) if i.item_mrp is not None else None,
             "item_discount_amount": str(discount_amount) if discount_amount is not None else None,
             "item_discount_pct":    str(discount_pct)    if discount_pct    is not None else None,
-            "sale_item_subtotal":  str(i.sale_item_subtotal) if i.sale_item_subtotal else None,
-            "cgst_amount":         str(i.cgst_amount) if i.cgst_amount else None,
-            "sgst_amount":         str(i.sgst_amount) if i.sgst_amount else None,
-            "igst_amount":         str(i.igst_amount) if i.igst_amount else None,
-            "tax_amount":          str(i.tax_amount) if i.tax_amount else None,
-            "item_tax_total":      str(i.item_tax_total) if i.item_tax_total else None,
-            "item_total_with_tax": str(i.item_total_with_tax) if i.item_total_with_tax else None,
+            "sale_item_subtotal":   str(i.sale_item_subtotal) if i.sale_item_subtotal else None,
+            "cgst_amount":          str(i.cgst_amount) if i.cgst_amount else None,
+            "sgst_amount":          str(i.sgst_amount) if i.sgst_amount else None,
+            "igst_amount":          str(i.igst_amount) if i.igst_amount else None,
+            "tax_amount":           str(i.tax_amount) if i.tax_amount else None,
+            "item_tax_total":       str(i.item_tax_total) if i.item_tax_total else None,
+            "item_total_with_tax":  str(i.item_total_with_tax) if i.item_total_with_tax else None,
         })
 
     return success_response({
-        "sales_id":              str(sale.sales_id),
-        "invoice_no":            sale.invoice_no,
-        "customer_id":           str(sale.customer_id) if sale.customer_id else None,
-        "customer_name":         sale.customer_name or None,
-        "sales_total_amount":    str(sale.sales_total_amount),
-        "sales_discount":        str(sale.sales_discount),
-        "cgst_total":            str(sale.cgst_total) if sale.cgst_total else None,
-        "sgst_total":            str(sale.sgst_total) if sale.sgst_total else None,
-        "igst_total":            str(sale.igst_total) if sale.igst_total else None,
-        "tax_total":             str(sale.tax_total) if sale.tax_total else None,
-        "sales_final_amount":    str(sale.sales_final_amount) if sale.sales_final_amount else None,
-        "sales_payment_method":  sale.sales_payment_method,
-        "sales_payment_status":  sale.sales_payment_status,
-        # ── NEW payment summary fields ──
-        "total_paid":            round(total_paid, 2),
-        "remaining_balance":     remaining if remaining > 0 else 0,
-        "sales_created_at":      fmt_ts(sale.sales_created_at),
-        "items":                 items_data
+        "sales_id":             str(sale.sales_id),
+        "invoice_no":           sale.invoice_no,
+        "customer_id":          str(sale.customer_id) if sale.customer_id else None,
+        "customer_name":        sale.customer_name or None,
+        "sales_total_amount":   str(sale.sales_total_amount),
+        "sales_discount":       str(sale.sales_discount),
+        "cgst_total":           str(sale.cgst_total) if sale.cgst_total else None,
+        "sgst_total":           str(sale.sgst_total) if sale.sgst_total else None,
+        "igst_total":           str(sale.igst_total) if sale.igst_total else None,
+        "tax_total":            str(sale.tax_total) if sale.tax_total else None,
+        "sales_final_amount":   str(sale.sales_final_amount) if sale.sales_final_amount else None,
+        "sales_payment_method": sale.sales_payment_method,
+        "sales_payment_status": sale.sales_payment_status,
+        "total_paid":           round(total_paid, 2),
+        "remaining_balance":    remaining if remaining > 0 else 0,
+        "sales_created_at":     fmt_ts(sale.sales_created_at),
+        "items":                items_data
     })
 
 
 # ══════════════════════════════════════════════════════════════════
 # PATCH /sales/{sales_id}/status → Manual payment status override
-#
-# WHEN TO USE THIS:
-#   This endpoint is for manual overrides only — write-offs, end-of-day
-#   reconciliation, or correcting a mistaken status.
-#   For normal payments, use POST /payments instead.
-#
-# FIX 1: status now comes from the JSON request body (was query param).
-# FIX 2: No more fake ₹0.01 adjustment row when sale is already fully paid.
-#         If remaining > 0 → record an "adjustment" payment for that amount.
-#         If remaining = 0 → just update the existing active row's status
-#         and sync the sales table. No new row inserted.
 # ══════════════════════════════════════════════════════════════════
 @router.patch("/{sales_id}/status")
 def update_payment_status(
@@ -750,27 +634,24 @@ def update_payment_status(
 
     old_status = sale.sales_payment_status
 
-    # Only act if status is actually changing
     if old_status == status:
         return success_response({"message": f"Sale is already '{status}'", "status": status})
 
     reconciliation_inserted = False
 
     if status == "paid" and old_status != "paid":
-        # Get the sale final amount
         sale_row = db.execute(
             text("SELECT sales_final_amount FROM sales WHERE sales_id = CAST(:sid AS uuid)"),
             {"sid": sales_id}
         ).fetchone()
         sale_final = float(sale_row.sales_final_amount) if sale_row and sale_row.sales_final_amount else 0
 
-        # Get how much has already been paid from the active payment row
         active_row = db.execute(
             text("""
                 SELECT COALESCE(cumulative_paid, 0) AS already_paid
                 FROM payments
-                WHERE sale_id    = CAST(:sid AS uuid)
-                  AND is_active   = true
+                WHERE sale_id  = CAST(:sid AS uuid)
+                  AND is_active = true
             """),
             {"sid": sales_id}
         ).fetchone()
@@ -778,8 +659,6 @@ def update_payment_status(
         remaining    = round(sale_final - already_paid, 2)
 
         if remaining > 0:
-            # There is an unpaid balance — record it as an "adjustment"
-            # (write-off, rounding, etc.)
             record_payment_and_sync(
                 db              = db,
                 business_id     = current_user["business_id"],
@@ -792,13 +671,10 @@ def update_payment_status(
             )
             reconciliation_inserted = True
         else:
-            # Sale is already fully paid — just update statuses, no new row
             db.execute(
                 text("""
-                    UPDATE payments
-                    SET payment_status = 'paid'
-                    WHERE sale_id  = CAST(:sid AS uuid)
-                      AND is_active = true
+                    UPDATE payments SET payment_status = 'paid'
+                    WHERE sale_id = CAST(:sid AS uuid) AND is_active = true
                 """),
                 {"sid": sales_id}
             )
@@ -808,20 +684,14 @@ def update_payment_status(
             )
 
     else:
-        # For other status changes (e.g., paid → partial, partial → pending),
-        # just update the sales table. These are manual corrections.
-        # The payment history rows are preserved as-is for the audit trail.
         db.execute(
             text("UPDATE sales SET sales_payment_status = :status WHERE sales_id = CAST(:sid AS uuid)"),
             {"status": status, "sid": sales_id}
         )
-        # Also update the active payment row's status to match
         db.execute(
             text("""
-                UPDATE payments
-                SET payment_status = :status
-                WHERE sale_id  = CAST(:sid AS uuid)
-                  AND is_active = true
+                UPDATE payments SET payment_status = :status
+                WHERE sale_id = CAST(:sid AS uuid) AND is_active = true
             """),
             {"status": status, "sid": sales_id}
         )
@@ -844,7 +714,7 @@ def update_payment_status(
 @router.delete("/{sales_id}")
 def delete_sale(
     sales_id: str,
-    current_user : dict = Depends(require_permission("sales.delete")),
+    current_user: dict = Depends(require_permission("sales.delete")),
     db: Session = Depends(get_db)
 ):
     sale = db.query(Sale).filter(

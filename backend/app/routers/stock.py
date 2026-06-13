@@ -473,6 +473,15 @@ def adjust_stock(
 
 # ─────────────────────────────────────────
 # GET /stock/alerts → Low stock alerts
+#
+# FIX — duplicate entries:
+# The low_stock_alerts table appends a new row every time stock drops below
+# the threshold, so one product can accumulate dozens of alert rows.
+# The old ORM query returned all of them, causing duplicate display.
+#
+# Fix: DISTINCT ON (product_id) keeps only the LATEST alert per product.
+# Also adds a LEFT JOIN to products so prod_name is available in the response
+# (previously missing, showing only product_id in the UI).
 # ─────────────────────────────────────────
 @router.get("/alerts")
 def get_low_stock_alerts(
@@ -481,23 +490,58 @@ def get_low_stock_alerts(
     pagination: dict = Depends(paginate)
 ):
     business_id = current_user["business_id"]
+    params = {
+        "business_id": business_id,
+        "offset":      pagination["offset"],
+        "limit":       pagination["limit"],
+    }
 
-    total = db.query(func.count(LowStockAlert.alert_id)).filter(
-        LowStockAlert.business_id == business_id
+    # COUNT — count distinct products with active alerts, not raw alert rows
+    total = db.execute(
+        text("""
+            SELECT COUNT(*) FROM (
+                SELECT DISTINCT ON (la.product_id) la.alert_id
+                FROM low_stock_alerts la
+                WHERE la.business_id = CAST(:business_id AS uuid)
+            ) sub
+        """),
+        params
     ).scalar()
 
-    alerts = db.query(LowStockAlert).filter(
-        LowStockAlert.business_id == business_id
-    ).order_by(LowStockAlert.alert_created_at.desc())\
-     .offset(pagination["offset"]).limit(pagination["limit"]).all()
+    # DATA — one row per product (latest alert), joined to products for name
+    rows = db.execute(
+        text("""
+            SELECT DISTINCT ON (la.product_id)
+                la.alert_id, la.business_id, la.product_id,
+                la.alert_stock_qty, la.alert_threshold,
+                la.alert_status, la.alert_created_at,
+                p.prod_name, p.barcode, p.unit
+            FROM low_stock_alerts la
+            LEFT JOIN products p ON p.prod_id = la.product_id
+            WHERE la.business_id = CAST(:business_id AS uuid)
+            ORDER BY la.product_id, la.alert_created_at DESC
+            OFFSET :offset LIMIT :limit
+        """),
+        params
+    ).fetchall()
+
+    data = []
+    for r in rows:
+        data.append({
+            "alert_id":        str(r.alert_id),
+            "business_id":     str(r.business_id),
+            "product_id":      str(r.product_id),
+            "prod_name":       r.prod_name,
+            "barcode":         r.barcode,
+            "unit":            r.unit,
+            "alert_stock_qty": r.alert_stock_qty,
+            "alert_threshold": r.alert_threshold,
+            "alert_status":    r.alert_status,
+            "alert_created_at": fmt_ts(r.alert_created_at),
+        })
 
     return success_response(
-        pagination_response(
-            [alert_to_dict(a) for a in alerts],
-            total,
-            pagination["page"],
-            pagination["limit"]
-        )
+        pagination_response(data, total, pagination["page"], pagination["limit"])
     )
 
 

@@ -603,6 +603,23 @@ function LowStockAlertsTab({ active }) {
 
   const columns = useMemo(() => [
     {
+      key:      'prod_name',
+      label:    'Product',
+      sortable: false,
+      render: (row) => (
+        <div>
+          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13.5 }}>
+            {row.prod_name ?? <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Unknown</span>}
+          </div>
+          {row.barcode && (
+            <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
+              {row.barcode}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
       key:      'alert_status',
       label:    'Urgency',
       sortable: false,
@@ -700,7 +717,7 @@ function LowStockAlertsTab({ active }) {
         </Button>
       </div>
 
-      {/* Info note — backend limitation */}
+      {/* Info note */}
       <div style={{
         background: 'rgba(14,165,233,0.07)',
         border: '1px solid rgba(14,165,233,0.2)',
@@ -712,7 +729,7 @@ function LowStockAlertsTab({ active }) {
         fontWeight: 500,
       }}>
         💡 Alerts are generated automatically when product stock falls at or below its reorder level.
-        Go to the <strong>Current Stock</strong> tab to see product names and use <strong>Adjust Stock</strong> to restock.
+        Use <strong>Adjust Stock</strong> on the <strong>Current Stock</strong> tab to restock.
       </div>
 
       {isError && (

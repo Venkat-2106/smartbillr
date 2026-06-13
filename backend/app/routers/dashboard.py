@@ -150,24 +150,39 @@ def get_dashboard_trend(
 
     if period == "weekly":
         # Last 7 days — group by calendar day
-        # generate_series produces a row for each of the last 7 days,
-        # even if there are zero sales that day.
-        # LEFT JOIN ensures zero-count days appear (not just days with sales).
+        # WHY THIS REWRITE: the old query joined generate_series to sales using
+        # `s.sales_created_at::date = gs::date`. Wrapping the column in ::date
+        # makes the existing index idx_sales_business_created
+        # (business_id, sales_created_at DESC) WHERE is_deleted=false unusable —
+        # Postgres has to function-scan every row for the business.
+        #
+        # FIX: first filter sales with a sargable range predicate
+        # (sales_created_at >= start AND < end), which the index can use
+        # directly. Aggregate that small filtered set by day in a CTE, then
+        # LEFT JOIN to generate_series for zero-fill. ::date is only applied
+        # to the already-small aggregated rowset, not to the index lookup.
         rows = db.execute(
             text("""
+                WITH daily AS (
+                    SELECT
+                        s.sales_created_at::date AS bucket,
+                        COUNT(s.sales_id)        AS invoice_count
+                    FROM sales s
+                    WHERE s.business_id = CAST(:bid AS uuid)
+                      AND s.is_deleted  = false
+                      AND s.sales_created_at >= NOW()::date - INTERVAL '6 days'
+                      AND s.sales_created_at <  NOW()::date + INTERVAL '1 day'
+                    GROUP BY s.sales_created_at::date
+                )
                 SELECT
-                    gs::date                         AS bucket,
-                    COUNT(s.sales_id)                AS invoice_count
+                    gs::date                          AS bucket,
+                    COALESCE(d.invoice_count, 0)       AS invoice_count
                 FROM generate_series(
                     NOW()::date - INTERVAL '6 days',
                     NOW()::date,
                     INTERVAL '1 day'
                 ) AS gs
-                LEFT JOIN sales s
-                    ON s.sales_created_at::date = gs::date
-                    AND s.business_id = CAST(:bid AS uuid)
-                    AND s.is_deleted  = false
-                GROUP BY gs
+                LEFT JOIN daily d ON d.bucket = gs::date
                 ORDER BY gs
             """),
             {"bid": business_id}
@@ -185,21 +200,31 @@ def get_dashboard_trend(
 
     elif period == "monthly":
         # Last 6 months — group by calendar month
+        # Same fix as weekly: filter sales with a sargable range predicate
+        # first (uses idx_sales_business_created), then date_trunc only on
+        # the small aggregated rowset.
         rows = db.execute(
             text("""
+                WITH monthly AS (
+                    SELECT
+                        date_trunc('month', s.sales_created_at) AS bucket,
+                        COUNT(s.sales_id)                       AS invoice_count
+                    FROM sales s
+                    WHERE s.business_id = CAST(:bid AS uuid)
+                      AND s.is_deleted  = false
+                      AND s.sales_created_at >= date_trunc('month', NOW() - INTERVAL '5 months')
+                      AND s.sales_created_at <  date_trunc('month', NOW()) + INTERVAL '1 month'
+                    GROUP BY date_trunc('month', s.sales_created_at)
+                )
                 SELECT
-                    date_trunc('month', gs)                  AS bucket,
-                    COUNT(s.sales_id)                        AS invoice_count
+                    gs                                  AS bucket,
+                    COALESCE(m.invoice_count, 0)        AS invoice_count
                 FROM generate_series(
                     date_trunc('month', NOW() - INTERVAL '5 months'),
                     date_trunc('month', NOW()),
                     INTERVAL '1 month'
                 ) AS gs
-                LEFT JOIN sales s
-                    ON date_trunc('month', s.sales_created_at) = gs
-                    AND s.business_id = CAST(:bid AS uuid)
-                    AND s.is_deleted  = false
-                GROUP BY gs
+                LEFT JOIN monthly m ON m.bucket = gs
                 ORDER BY gs
             """),
             {"bid": business_id}
@@ -217,21 +242,30 @@ def get_dashboard_trend(
 
     else:  # yearly
         # Last 5 years — group by calendar year
+        # Same fix: sargable range predicate first, date_trunc only on the
+        # small aggregated rowset.
         rows = db.execute(
             text("""
+                WITH yearly AS (
+                    SELECT
+                        date_trunc('year', s.sales_created_at) AS bucket,
+                        COUNT(s.sales_id)                       AS invoice_count
+                    FROM sales s
+                    WHERE s.business_id = CAST(:bid AS uuid)
+                      AND s.is_deleted  = false
+                      AND s.sales_created_at >= date_trunc('year', NOW() - INTERVAL '4 years')
+                      AND s.sales_created_at <  date_trunc('year', NOW()) + INTERVAL '1 year'
+                    GROUP BY date_trunc('year', s.sales_created_at)
+                )
                 SELECT
-                    date_trunc('year', gs)                   AS bucket,
-                    COUNT(s.sales_id)                        AS invoice_count
+                    gs                                  AS bucket,
+                    COALESCE(y.invoice_count, 0)        AS invoice_count
                 FROM generate_series(
                     date_trunc('year', NOW() - INTERVAL '4 years'),
                     date_trunc('year', NOW()),
                     INTERVAL '1 year'
                 ) AS gs
-                LEFT JOIN sales s
-                    ON date_trunc('year', s.sales_created_at) = gs
-                    AND s.business_id = CAST(:bid AS uuid)
-                    AND s.is_deleted  = false
-                GROUP BY gs
+                LEFT JOIN yearly y ON y.bucket = gs
                 ORDER BY gs
             """),
             {"bid": business_id}

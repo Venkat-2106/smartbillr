@@ -256,13 +256,14 @@ export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManag
   return (
     <div style={{
       position: 'fixed', top: 0, right: 0, bottom: 0,
+      height: '100dvh',
       width: 540,
       background: 'var(--bg-card)',
       borderLeft: '1.5px solid var(--border)',
       boxShadow: '-8px 0 32px rgba(0,0,0,0.12)',
       zIndex: 500,
       display: 'flex', flexDirection: 'column',
-      overflowY: 'auto',
+      overflow: 'hidden',
     }}>
       {/* Header */}
       <div style={{
@@ -330,7 +331,8 @@ export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManag
         </div>
       </div>
 
-      {/* Body */}
+      {/* Body wrapper — fills remaining height below sticky header, scrolls independently */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
       {isLoading && (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
           <Spinner size={28} />
@@ -398,6 +400,7 @@ export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManag
           )}
         </div>
       )}
+      </div>
     </div>
   )
 }

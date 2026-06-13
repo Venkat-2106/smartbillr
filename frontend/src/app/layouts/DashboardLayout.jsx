@@ -306,7 +306,7 @@ export default function DashboardLayout() {
   const W = collapsed ? SLIM : FULL
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: "'Plus Jakarta Sans', -apple-system, sans-serif", background: 'var(--bg-page)' }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily:"'Plus Jakarta Sans', -apple-system, sans-serif", background: 'var(--bg-page)' }}>
 
       {/* ── SIDEBAR ── */}
       <aside style={{ width: W, minHeight: '100vh', background: 'var(--sb-bg)', display: 'flex', flexDirection: 'column', position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 100, transition: 'width 0.2s var(--ease-out)', overflow: 'hidden', borderRight: '1px solid var(--sb-border)' }}>
@@ -369,7 +369,7 @@ export default function DashboardLayout() {
       </aside>
 
       {/* ── MAIN CONTENT ── */}
-      <div style={{ flex: 1, minWidth: 0, marginLeft: W, transition: 'margin-left 0.2s var(--ease-out)', display: 'flex', flexDirection: 'column', minHeight: '100vh', overflowX: 'hidden' }}>
+      <div style={{ flex: 1, minWidth: 0, marginLeft: W, transition: 'margin-left 0.2s var(--ease-out)', display: 'flex', flexDirection: 'column', height: '100vh', overflowX: 'hidden' }}>
 
         {/* Topbar */}
         <header style={{ height: 60, background: 'var(--topbar-bg)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderBottom: '1px solid var(--topbar-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 32px', position: 'sticky', top: 0, zIndex: 50 }}>
@@ -423,7 +423,7 @@ export default function DashboardLayout() {
           </div>
         </header>
 
-        <main style={{ flex: 1, padding: '32px 36px', overflowY: 'auto' }}>
+        <main style={{ flex: 1, padding: '32px 36px', overflowY: 'auto', overflowX: 'hidden' }}>
           <div className="fade-up"><Outlet /></div>
         </main>
       </div>

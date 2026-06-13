@@ -985,7 +985,7 @@ export default function CreateSalePage() {
               <div style={{
                 maxHeight: 'min(calc(100dvh - 416px), 460px)',
                 overflowY: 'auto',
-                overflowX: 'hidden',
+                overflowX: 'visible',
                 marginRight: -8,
                 paddingRight: 8,
               }}>
@@ -1041,9 +1041,15 @@ export default function CreateSalePage() {
           </div>
 
           {/* ── RIGHT panel ─────────────────────────────────────────────── */}
+          {/* maxHeight = viewport - topbar(60) - main padding top(32) - sticky top offset(24)
+              overflowY: auto lets the right column scroll internally on very small screens
+              where the summary + payment cards together exceed the available height.
+              On normal screens (≥768px tall) everything fits without scrolling. */}
           <div style={{
             display: 'flex', flexDirection: 'column', gap: 16,
             position: 'sticky', top: 24,
+            maxHeight: 'calc(100dvh - 116px)',
+            overflowY: 'auto',
           }}>
             <SectionCard title="Order Summary">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

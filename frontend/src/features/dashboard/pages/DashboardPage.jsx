@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDashboard, useSalesTrend } from '../hooks/useDashboard'
 import useAuthStore from '../../../store/authStore'
@@ -120,14 +120,24 @@ function SalesTrendChart({ period, onPeriodChange }) {
   const chartW = W - PAD_L - PAD_R
   const chartH = H - PAD_T - PAD_B
 
-  const maxVal = Math.max(...points.map(p => p.value), 1)
+  // PERF: maxVal, coords, and yTicks are all derived purely from `points`.
+  // Without memoization these array maps + Math.max spread re-run on every
+  // render (sidebar toggle, theme switch, unrelated parent state changes),
+  // even though `points` itself only changes when useSalesTrend refetches.
+  const { maxVal, coords, yTicks } = useMemo(() => {
+    const maxVal = Math.max(...points.map(p => p.value), 1)
 
-  const coords = points.map((p, i) => ({
-    x: PAD_L + (i / Math.max(points.length - 1, 1)) * chartW,
-    y: PAD_T + chartH - (p.value / maxVal) * chartH,
-    label: p.label,
-    value: p.value,
-  }))
+    const coords = points.map((p, i) => ({
+      x: PAD_L + (i / Math.max(points.length - 1, 1)) * chartW,
+      y: PAD_T + chartH - (p.value / maxVal) * chartH,
+      label: p.label,
+      value: p.value,
+    }))
+
+    const yTicks = [...new Set([0, Math.ceil(maxVal / 2), maxVal])]
+
+    return { maxVal, coords, yTicks }
+  }, [points])
 
   function smoothPath(pts) {
     if (pts.length < 2) return ''
@@ -150,8 +160,6 @@ function SalesTrendChart({ period, onPeriodChange }) {
   }
 
   function fmtY(val) { return String(Math.round(val)) }
-
-  const yTicks = [...new Set([0, Math.ceil(maxVal / 2), maxVal])]
 
   const PERIODS = [
     { key: 'weekly',  label: 'Weekly' },

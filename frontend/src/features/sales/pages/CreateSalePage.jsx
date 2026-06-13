@@ -80,7 +80,8 @@
 // FIX 4 — NUM_INPUT_STYLE as module-level constant
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback, memo, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
@@ -556,19 +557,9 @@ export default function CreateSalePage() {
         back
         onBack={() => navigate('/sales')}
         action={
-          <div style={{ display: 'flex', gap: 10 }}>
-            <Button variant="ghost" onClick={() => navigate('/sales')} disabled={mutation.isPending}>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleSubmit}
-              loading={mutation.isPending}
-              disabled={!isValid || isPageLoading}
-            >
-              Create Invoice
-            </Button>
-          </div>
+          <Button variant="ghost" onClick={() => navigate('/sales')} disabled={mutation.isPending}>
+            Cancel
+          </Button>
         }
       />
 
@@ -771,13 +762,14 @@ export default function CreateSalePage() {
             border: '1px solid var(--border)',
             borderRadius: 14,
             padding: '14px 20px',
-            alignItems: 'end',
+            alignItems: 'start',
           }}>
             {/* Customer combobox */}
             <div>
               <div style={{
                 fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
                 textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6,
+                display: 'flex', alignItems: 'center', minHeight: 18,
               }}>
                 Customer
               </div>
@@ -878,7 +870,7 @@ export default function CreateSalePage() {
             <div>
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                marginBottom: 6,
+                marginBottom: 6, minHeight: 18,
               }}>
                 <div style={{
                   fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
@@ -915,9 +907,9 @@ export default function CreateSalePage() {
                   placeholder="Scan or type 3×barcode → Enter"
                   disabled={barcodeLoading}
                   style={{
-                    flex: 1, padding: '8px 12px',
+                    flex: 1, padding: '9px 12px',
                     border: '1.5px solid var(--border)',
-                    borderRadius: 9, fontSize: 13.5,
+                    borderRadius: 10, fontSize: 13.5,
                     background: 'var(--bg-page)',
                     color: 'var(--text-primary)',
                     outline: 'none', fontFamily: 'inherit',
@@ -992,7 +984,7 @@ export default function CreateSalePage() {
                 marginRight: -8,
                 paddingRight: 8,
               }}>
-                {items.map(item => (
+                {items.map((item) => (
                   <LineItemRow
                     key={item._id}
                     item={item}
@@ -1099,32 +1091,34 @@ export default function CreateSalePage() {
                 <h3 style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
                   Payment
                 </h3>
-                <FormField label="Payment Method" style={{ marginBottom: 12 }}>
-                  <select
-                    className="sb-select"
-                    value={paymentMethod}
-                    onChange={e => setPaymentMethod(e.target.value)}
-                    style={selectStyle}
-                  >
-                    <option value="cash">Cash</option>
-                    <option value="card">Card</option>
-                    <option value="upi">UPI</option>
-                    <option value="bank">Bank Transfer</option>
-                    <option value="split">Split</option>
-                  </select>
-                </FormField>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                  <FormField label="Method">
+                    <select
+                      className="sb-select"
+                      value={paymentMethod}
+                      onChange={e => setPaymentMethod(e.target.value)}
+                      style={selectStyle}
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="card">Card</option>
+                      <option value="upi">UPI</option>
+                      <option value="bank">Bank Transfer</option>
+                      <option value="split">Split</option>
+                    </select>
+                  </FormField>
 
-                <FormField label="Payment Status" style={{ marginBottom: 12 }}>
-                  <select
-                    value={paymentStatus}
-                    onChange={e => { setPaymentStatus(e.target.value); setPaidAmount(''); }}
-                    style={selectStyle}
-                  >
-                    <option value="paid">Paid</option>
-                    <option value="partial">Partial</option>
-                    <option value="pending">Unpaid</option>
-                  </select>
-                </FormField>
+                  <FormField label="Status">
+                    <select
+                      value={paymentStatus}
+                      onChange={e => { setPaymentStatus(e.target.value); setPaidAmount(''); }}
+                      style={selectStyle}
+                    >
+                      <option value="paid">Paid</option>
+                      <option value="partial">Partial</option>
+                      <option value="pending">Unpaid</option>
+                    </select>
+                  </FormField>
+                </div>
 
                 {paymentStatus === 'partial' && (
                   <FormField label="Paid Amount">
@@ -1182,6 +1176,49 @@ export default function CreateSalePage() {
   );
 }
 
+/* ─── DropdownPortal — renders a floating panel anchored to a ref's rect,
+ * escaping any ancestor `overflow: auto` clipping via document.body portal.
+ * Repositions on scroll/resize while open. ──────────────────────────────── */
+function DropdownPortal({ anchorRef, children }) {
+  const [rect, setRect] = useState(null);
+
+  useLayoutEffect(() => {
+    const update = () => {
+      const el = anchorRef.current;
+      if (!el) return;
+      setRect(el.getBoundingClientRect());
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [anchorRef]);
+
+  if (!rect) return null;
+
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const spaceAbove = rect.top;
+  const openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
+
+  const style = {
+    position: 'fixed',
+    left: rect.left,
+    width: rect.width,
+    ...(openUp
+      ? { bottom: window.innerHeight - rect.top + 3 }
+      : { top: rect.bottom + 3 }),
+    zIndex: 1000,
+  };
+
+  return createPortal(
+    <div style={style}>{children}</div>,
+    document.body
+  );
+}
+
 /* ─── LineItemRow — memoized, only re-renders when ITS props change ──────────
  *
  * FIX L3: Grid template updated to match header — '2fr 80px 110px 72px 100px 28px'
@@ -1208,6 +1245,7 @@ const LineItemRow = memo(function LineItemRow({
 
   const availableQty = item.prod_stock_qty != null ? Number(item.prod_stock_qty) : null;
   const overStock = availableQty !== null && Number(item.quantity) > availableQty;
+  const comboRef = useRef(null);
 
   return (
     /* FIX L3: grid template matches updated header */
@@ -1220,7 +1258,7 @@ const LineItemRow = memo(function LineItemRow({
     }}>
 
       {/* Product search combobox */}
-      <div style={{ position: 'relative' }}>
+      <div ref={comboRef} style={{ position: 'relative' }}>
         {item.product_id ? (
           <div style={{
             display: 'flex', alignItems: 'center',
@@ -1257,13 +1295,12 @@ const LineItemRow = memo(function LineItemRow({
               style={{ ...selectStyle, fontSize: 13, padding: '7px 9px' }}
             />
             {isOpen && searchText.length >= 2 && (
+              <DropdownPortal anchorRef={comboRef}>
               <div style={{
-                position: 'absolute', top: 'calc(100% + 3px)', left: 0, right: 0,
                 background: 'var(--bg-card)',
                 border: '1.5px solid var(--border)',
                 borderRadius: 10,
                 boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-                zIndex: 300,
                 maxHeight: 220, overflowY: 'auto',
               }}>
                 {searchResults.length === 0 ? (
@@ -1307,16 +1344,18 @@ const LineItemRow = memo(function LineItemRow({
                   ))
                 )}
               </div>
+              </DropdownPortal>
             )}
             {isOpen && searchText.length > 0 && searchText.length < 2 && (
+              <DropdownPortal anchorRef={comboRef}>
               <div style={{
-                position: 'absolute', top: 'calc(100% + 3px)', left: 0, right: 0,
                 background: 'var(--bg-card)', border: '1.5px solid var(--border)',
                 borderRadius: 10, padding: '10px 14px',
-                fontSize: 12.5, color: 'var(--text-muted)', zIndex: 300,
+                fontSize: 12.5, color: 'var(--text-muted)',
               }}>
                 Type at least 2 characters to search
               </div>
+              </DropdownPortal>
             )}
           </>
         )}

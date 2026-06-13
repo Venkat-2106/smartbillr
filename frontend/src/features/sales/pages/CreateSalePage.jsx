@@ -976,40 +976,50 @@ export default function CreateSalePage() {
                 ))}
               </div>
 
-              {/* FIX 1: Each row is a memoized LineItemRow.
+{/* FIX 1: Each row is a memoized LineItemRow.
                   EMPTY_ARRAY is passed as searchResults when the dropdown is
                   closed — stable reference → React.memo skips re-render for
-                  closed rows when search results arrive for another row. */}
-              {items.map(item => (
-                <LineItemRow
-                  key={item._id}
-                  item={item}
-                  isOpen={!!openDropMap[item._id]}
-                  searchText={searchMap[item._id] || ''}
-                  searchResults={openDropMap[item._id] ? productSearchResults : EMPTY_ARRAY}
-                  onSearchChange={handleItemSearchChange}
-                  onProductSelect={handleProductSelect}
-                  onOpenDropdown={handleOpenDropdown}
-                  onCloseDropdown={handleCloseDropdown}
-                  onClearProduct={handleClearProduct}
-                  onQtyChange={updateItem}
-                  onPriceChange={updateItem}
-                  onTaxChange={updateItem}
-                  onRemove={removeItem}
-                  canRemove={items.length > 1}
-                />
-              ))}
+                  closed rows when search results arrive for another row.
+                  Scroll container: rows scroll internally so the page never
+                  grows past the viewport height. */}
+              <div style={{
+                maxHeight: 'min(calc(100dvh - 416px), 460px)',
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                marginRight: -8,
+                paddingRight: 8,
+              }}>
+                {items.map(item => (
+                  <LineItemRow
+                    key={item._id}
+                    item={item}
+                    isOpen={!!openDropMap[item._id]}
+                    searchText={searchMap[item._id] || ''}
+                    searchResults={openDropMap[item._id] ? productSearchResults : EMPTY_ARRAY}
+                    onSearchChange={handleItemSearchChange}
+                    onProductSelect={handleProductSelect}
+                    onOpenDropdown={handleOpenDropdown}
+                    onCloseDropdown={handleCloseDropdown}
+                    onClearProduct={handleClearProduct}
+                    onQtyChange={updateItem}
+                    onPriceChange={updateItem}
+                    onTaxChange={updateItem}
+                    onRemove={removeItem}
+                    canRemove={items.length > 1}
+                  />
+                ))}
 
-              {/* Over-stock hint row */}
-              {items.some(i => i.prod_stock_qty != null && Number(i.quantity) > Number(i.prod_stock_qty)) && (
-                <div style={{
-                  marginTop: 10, padding: '8px 12px',
-                  background: '#FFFBEB', border: '1px solid #FDE68A',
-                  borderRadius: 8, fontSize: 12, color: '#92400E', fontWeight: 500,
-                }}>
-                  ⚠ One or more items exceed available stock. You will be asked to confirm before saving.
-                </div>
-              )}
+                {/* Over-stock hint row */}
+                {items.some(i => i.prod_stock_qty != null && Number(i.quantity) > Number(i.prod_stock_qty)) && (
+                  <div style={{
+                    marginTop: 10, padding: '8px 12px',
+                    background: '#FFFBEB', border: '1px solid #FDE68A',
+                    borderRadius: 8, fontSize: 12, color: '#92400E', fontWeight: 500,
+                  }}>
+                    ⚠ One or more items exceed available stock. You will be asked to confirm before saving.
+                  </div>
+                )}
+              </div>
 
               <button
                 type="button"

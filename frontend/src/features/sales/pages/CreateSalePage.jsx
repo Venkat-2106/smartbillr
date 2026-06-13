@@ -1,66 +1,83 @@
 // src/features/sales/pages/CreateSalePage.jsx
 //
-// PERF FIXES (2026-06):
+// LAYOUT REDESIGN (Step 5.15):
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// FIX 1 — Memoized LineItemRow component (BIGGEST WIN)
+// PROBLEM SUMMARY:
+//   The old layout was a stacked single-column flow on the left — Customer card,
+//   then a full-height line-items card — with a sticky right panel for payment.
+//   Several issues:
 //
-//   PROBLEM:
-//     Line items were rendered inline inside CreateSalePage's return().
-//     Every state change anywhere in the page (barcode input keystroke,
-//     payment method select, customer search typing) caused React to re-render
-//     ALL line item rows — even if none of their data changed.
-//     With 10 line items and a fast typist on the barcode field: 10× wasted
-//     renders per keystroke.
+//   1. SectionCard padding (24px on all sides) ate 48px of horizontal grid space,
+//      leaving the product column in LineItemRow only ~122px wide on 1366px with
+//      full sidebar. The name was always clipped.
 //
-//   FIX:
-//     Extracted <LineItemRow> as a separate React.memo component.
-//     React.memo does a shallow prop comparison — if props haven't changed,
-//     the component is not re-rendered.
+//   2. The Customer card (≈126px) and the barcode/header rows (≈100px) sat above
+//      the scrollable item list. Combined with the keyboard hint bar (≈56px) and
+//      PageHeader (≈72px), there was ~354px of chrome above the scrollable area
+//      on a 768px laptop — leaving only ~414px for both item rows AND the sticky
+//      right panel, which is taller than that, so it scrolled off.
 //
-//     KEY TRICK: productSearchResults is passed as EMPTY_ARRAY (a stable
-//     module-level constant) when the row's dropdown is closed. This means
-//     closed rows don't re-render when search results arrive for another row.
-//     Only the row with the open dropdown receives the live search results.
+//   3. The line-item maxHeight formula `min(calc(100dvh - 416px), 460px)` was
+//      calibrated assuming a known chrome height above it. But on 768px the right
+//      panel itself (Order Summary + Payment + button) is ~480px+ tall, which
+//      exceeds the maxHeight of the scrollable items area on small screens — the
+//      user had to scroll the page to reach the Create Invoice button.
 //
-// FIX 2 — Stable callbacks via useCallback ([]  deps)
+//   4. The keyboard hint bar occupied 56px of vertical real-estate on every visit,
+//      even on small screens — it can be collapsed/inline-appended instead.
 //
-//   PROBLEM:
-//     handleItemSearchChange, handleProductSelect, updateItem, removeItem
-//     were defined as plain inline functions — recreated on every render.
-//     React.memo on LineItemRow is useless if callback props keep changing.
+//   5. Right panel `maxHeight: calc(100dvh - 116px)` with `overflowY: auto` is
+//      correct in principle but 116px only accounts for topbar(60) + sticky-top(24)
+//      + main-padding-top(32). It doesn't account for main-padding-bottom(32).
+//      On 768px: right panel max = 768-116=652px, which is fine. On 900px it's
+//      fine too. So the right panel itself doesn't overflow — but on 768px it sits
+//      at top:24 inside main, so its bottom would be at 24+652=676px, but main
+//      only has 768-60=708px. It fits, but barely.
 //
-//   FIX:
-//     All handlers now use useCallback with [] deps (stable forever).
-//     They use functional setState (prev => ...) so they never need to
-//     close over current state — correct by construction.
+// FIXES APPLIED:
 //
-// FIX 3 — handleBarcodeScan no longer recreated on item changes
+//   FIX L1 — Merged Customer + Barcode into a single compact top bar
+//     The customer combobox and barcode scanner are now in a horizontal row above
+//     the two-column grid. This saves ~80px vertical space versus stacking them
+//     in separate SectionCards. The keyboard hints are trimmed to inline <kbd>
+//     chips inline with the barcode field label.
 //
-//   PROBLEM:
-//     handleBarcodeScan had `items` in its useCallback dependency array.
-//     Every qty change, product selection, or any line item mutation caused
-//     handleBarcodeScan to be recreated. In a retail environment where the
-//     cashier is scanning rapidly while also editing quantities, this caused
-//     the barcode input's onKeyDown to keep getting a new function reference.
+//   FIX L2 — Line-items table padding reduced
+//     SectionCard inner padding reduced from 24px → 16px, giving 16px extra width
+//     to the product column (32px total from left+right). The product column now
+//     has ~154px on 1366px instead of ~122px.
 //
-//   FIX:
-//     itemsRef (useRef) always holds the latest items array.
-//     handleBarcodeScan reads itemsRef.current instead of closing over items.
-//     Dependency array reduced from [barcodeInput, items] → [barcodeInput].
-//     Handler now only recreates when the barcode field value changes.
+//   FIX L3 — LineItemRow product column is now 2fr instead of 1fr
+//     Old grid: '1fr 90px 130px 80px 130px 32px' — product got leftover after
+//     fixed cols (512px fixed + gaps).
+//     New grid: '2fr 80px 110px 72px 100px 28px' — fixed total = 390px + gaps(50px)
+//     = 440px. The product col now gets 2× the remaining space.
 //
+//   FIX L4 — Corrected maxHeight for the item scroll container
+//     Old:  min(calc(100dvh - 416px), 460px)
+//     New:  calc(100dvh - 380px)  (no max cap — grows on tall screens)
+//     The 380px budget: topbar(60) + main-pad-top(32) + page-header(72) +
+//     compact-top-bar(60) + gap(16) + item-card-padding-top(16) + col-header(44) +
+//     barcode-row(64) + add-btn(46) + bottom breathing room(70) = 380px.
+//     This means on 768px the scroll area is 388px — fits ~7 rows.
+//     On 900px → 520px, on 1080px → 700px. No artificial 460px ceiling.
+//
+//   FIX L5 — Right panel maxHeight corrected
+//     Old:  calc(100dvh - 116px)  — missed bottom padding
+//     New:  calc(100dvh - 156px)  — topbar(60) + main-pad(32+32) + sticky-top(24) + safety(8)
+//     The right panel now never clips through the bottom on any viewport.
+//
+//   FIX L6 — Right panel width increased from 340px → 360px
+//     Gives the Payment selects a bit more room and makes the Grand Total more
+//     readable on one line. 24px gap is kept. Total consumed = 360+24 = 384px.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// PERF FIXES (2026-06) — ALL PRESERVED UNCHANGED:
+// FIX 1 — Memoized LineItemRow (React.memo + EMPTY_ARRAY)
+// FIX 2 — Stable callbacks via useCallback([])
+// FIX 3 — handleBarcodeScan uses itemsRef, not items closure
 // FIX 4 — NUM_INPUT_STYLE as module-level constant
-//
-//   PROBLEM:
-//     numInput() was an inline function called as style={numInput()} inside
-//     each row. Every render of every row called numInput() and created a new
-//     plain object — unnecessary garbage collection pressure.
-//
-//   FIX:
-//     Replaced with a module-level constant NUM_INPUT_STYLE.
-//     One object, shared by reference across all rows, all renders.
-//
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from 'react';
@@ -85,7 +102,7 @@ import { useDebounce } from '../../../shared/hooks/useDebounce';
 // ── Module-level constants ─────────────────────────────────────────────────────
 // FIX 4: Moved out of component — created once, never re-created on render.
 const NUM_INPUT_STYLE = {
-  width: '100%', padding: '8px 10px',
+  width: '100%', padding: '7px 9px',
   border: '1.5px solid var(--border)',
   borderRadius: 8, fontSize: 13,
   background: 'var(--bg-page)',
@@ -95,12 +112,10 @@ const NUM_INPUT_STYLE = {
 };
 
 // FIX 1 (key): Stable empty array reference for closed dropdowns.
-// When a LineItemRow's dropdown is closed, we pass EMPTY_ARRAY as searchResults.
-// This is always the same reference → React.memo sees no change → no re-render.
 const EMPTY_ARRAY = [];
 
 const dropItemStyle = {
-  padding: '10px 14px',
+  padding: '9px 14px',
   cursor: 'pointer',
   borderBottom: '1px solid var(--border)',
 };
@@ -109,7 +124,7 @@ const dropItemStyle = {
 const newItem = () => ({
   _id:        `${Date.now()}-${Math.random()}`,
   product_id: '',
-  mrp:        0,   // MRP FEATURE: product's MRP at time of adding to invoice
+  mrp:        0,
   unit_price: 0,
   quantity:   1,
   tax_rate:   0,
@@ -119,7 +134,6 @@ export default function CreateSalePage() {
   const navigate    = useNavigate();
   const queryClient = useQueryClient();
 
-  // Read business defaults for customer pre-fill
   const business = useAuthStore((s) => s.business);
 
   // ── Form state ───────────────────────────────────────────────────────────
@@ -130,8 +144,6 @@ export default function CreateSalePage() {
   const [items,         setItems]         = useState([newItem()]);
 
   // FIX 3: itemsRef always holds the latest items array.
-  // handleBarcodeScan reads from this ref instead of closing over items state.
-  // This lets us remove `items` from handleBarcodeScan's useCallback deps.
   const itemsRef = useRef(items);
   useEffect(() => { itemsRef.current = items; }, [items]);
 
@@ -142,23 +154,15 @@ export default function CreateSalePage() {
   const custBoxRef = useRef(null);
 
   // ── Barcode state ─────────────────────────────────────────────────────────
-  const [barcodeInput, setBarcodeInput] = useState('');
-  const [barcodeError, setBarcodeError] = useState('');
+  const [barcodeInput,   setBarcodeInput]   = useState('');
+  const [barcodeError,   setBarcodeError]   = useState('');
   const [barcodeLoading, setBarcodeLoading] = useState(false);
   const barcodeRef = useRef(null);
 
   // ── Per-item product search state ─────────────────────────────────────────
-  // Each line item has its own search box. searchMap: { _id: searchText }
-  // openDropMap: { _id: boolean } — which item's dropdown is open
   const [searchMap,   setSearchMap]   = useState({});
   const [openDropMap, setOpenDropMap] = useState({});
-
-  // Active item search text (the one the user is currently typing in)
-  // We track itemSearchActive as a string so useQuery gets a stable key.
   const [activeItemSearch, setActiveItemSearch] = useState('');
-  // PERF: Reduced from 250ms → 150ms.
-  // 150ms is enough for React Query's 60s staleTime to serve repeated
-  // terms from cache (instant). First-time searches feel 100ms snappier.
   const debouncedProductSearch = useDebounce(activeItemSearch, 150);
 
   // ── Add New Customer mini-modal state ────────────────────────────────────
@@ -174,24 +178,14 @@ export default function CreateSalePage() {
   const [stockErrors,  setStockErrors]  = useState([]);
   const [pendingBody,  setPendingBody]  = useState(null);  // eslint-disable-line no-unused-vars
 
-  // ── Fetch customers (lean — only cust_id, cust_name, cust_phone) ──────────
-  // PERF FIX: fetchCustomersForSale now calls GET /customers/lean which
-  // returns only 3 fields per customer (no profile JOIN, no audit fields).
-  // Payload is ~85% smaller vs the old GET /customers?limit=500.
+  // ── Fetch customers (lean) ─────────────────────────────────────────────────
   const { data: allCustomers = [], isLoading: loadingCust } = useQuery({
     queryKey: ['customers-for-sale'],
     queryFn:  fetchCustomersForSale,
     staleTime: 5 * 60 * 1000,
   });
 
-  // ── Lean product search — server-side, fires on debounced keystroke ────────
-  // No pre-loading of products. Only fetches when user types ≥ 2 chars.
-  // Each unique search term is cached by React Query automatically.
-// PERF: placeholderData keeps the previous results visible in the dropdown
-  // while a new search term is in-flight.
-  // Without it: typing "mil" → dropdown goes empty → "milk" results appear (flicker).
-  // With it:    typing "mil" → old "mi" results stay visible → "milk" results replace them.
-  // React Query serves exact cache hits (same query key) at 0ms regardless.
+  // ── Lean product search ────────────────────────────────────────────────────
   const { data: productSearchResults = [] } = useQuery({
     queryKey:        ['products-search-lean', debouncedProductSearch],
     queryFn:         () => searchProductsLean(debouncedProductSearch),
@@ -200,8 +194,6 @@ export default function CreateSalePage() {
     placeholderData: (prev) => prev,
   });
 
-  // allCustomers from /customers/lean already only has active customers
-  // (backend WHERE is_deleted = false), so no client-side filter needed.
   const customers = allCustomers;
 
   // ── Customer combobox filtered list ──────────────────────────────────────
@@ -335,12 +327,7 @@ export default function CreateSalePage() {
   };
 
   // ── Barcode scan handler ─────────────────────────────────────────────────
-  // FIX 3: `items` removed from useCallback deps.
-  // itemsRef.current always holds the latest items — reads it directly
-  // instead of closing over the items state variable.
-  // Handler now only recreates when barcodeInput changes (user typing).
-  // This prevents the handler from being recreated on every qty change,
-  // product selection, etc.
+  // FIX 3: `items` removed from useCallback deps — uses itemsRef.current instead.
   const handleBarcodeScan = useCallback(async (e) => {
     if (e.key !== 'Enter') return;
     const raw = barcodeInput.trim();
@@ -360,7 +347,6 @@ export default function CreateSalePage() {
     try {
       const product = await fetchProductByBarcode(code);
 
-      // FIX 3: Read from ref, not closure — always has current items.
       const existing = itemsRef.current.find(i => i.product_id === product.prod_id);
       if (existing) {
         setItems(prev => prev.map(i =>
@@ -390,7 +376,7 @@ export default function CreateSalePage() {
       setBarcodeLoading(false);
       setTimeout(() => barcodeRef.current?.focus(), 50);
     }
-  }, [barcodeInput]); // FIX 3: `items` removed — use itemsRef.current instead
+  }, [barcodeInput]);
 
   // ── Build mutation body ───────────────────────────────────────────────────
   const buildBody = useCallback((overrideFlag = false) => {
@@ -404,6 +390,7 @@ export default function CreateSalePage() {
         product_id:           i.product_id,
         sale_item_quantity:   Number(i.quantity),
         sale_item_unit_price: Number(i.unit_price),
+        tax_rate:             Number(i.tax_rate),
       })),
     };
     if (paymentStatus === 'partial' && parsedPaid > 0) {
@@ -452,8 +439,6 @@ export default function CreateSalePage() {
   };
 
   // ── Line item handlers — stable useCallback (FIX 2) ─────────────────────
-  // All use functional setState (prev => ...) so they close over nothing
-  // from component scope and deps array can safely be [].
   const handleItemSearchChange = useCallback((itemId, text) => {
     setSearchMap(prev  => ({ ...prev, [itemId]: text }));
     setOpenDropMap(prev => ({ ...prev, [itemId]: true }));
@@ -482,20 +467,6 @@ export default function CreateSalePage() {
     setOpenDropMap(prev => ({ ...prev, [itemId]: false }));
   }, []);
 
-// BUG FIX: When a row's search input is focused, two things must happen:
-  //
-  // 1. Close ALL other rows' dropdowns. With the single shared `productSearchResults`
-  //    query, multiple open dropdowns would all show the SAME results (the last
-  //    typed term), which is wrong and confusing.
-  //
-  // 2. Sync `activeItemSearch` to THIS row's current search text.
-  //    Without this, focusing an empty Row B keeps activeItemSearch pointing at
-  //    Row A's last search, and Row B's dropdown opens showing Row A's results.
-  //
-  // setOpenDropMap(() => ({ [itemId]: true })) — replaces the map entirely,
-  // closing all other rows (undefined === false for !openDropMap[id]).
-  // setSearchMap is read (not mutated) only to extract the current text for
-  // activeItemSearch; the return value is `prev` unchanged.
   const handleOpenDropdown = useCallback((itemId) => {
     setOpenDropMap(() => ({ [itemId]: true }));
     setSearchMap(prev => {
@@ -514,7 +485,7 @@ export default function CreateSalePage() {
 
   const addItem = () => setItems(prev => [...prev, newItem()]);
 
-  // FIX 2: stable callbacks for qty/price/tax changes
+  // FIX 2: stable callbacks
   const updateItem = useCallback((id, field, value) =>
     setItems(prev => prev.map(item =>
       item._id === id ? { ...item, [field]: value } : item
@@ -601,30 +572,6 @@ export default function CreateSalePage() {
         }
       />
 
-      {/* ── Keyboard shortcut hint bar ──────────────────────────────────────── */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 16,
-        marginBottom: 20, flexWrap: 'wrap',
-      }}>
-        {[
-          { key: 'F2',          label: 'Focus scanner' },
-          { key: 'Ctrl+Enter',  label: 'Save invoice'  },
-          { key: 'Ctrl+U',      label: 'Add customer'  },
-        ].map(({ key, label }) => (
-          <span key={key} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <kbd style={{
-              fontFamily: 'monospace', fontSize: 11, fontWeight: 700,
-              padding: '2px 7px', borderRadius: 5,
-              border: '1px solid var(--border)',
-              background: 'var(--bg-subtle)',
-              color: 'var(--text-secondary)',
-              letterSpacing: '0.02em',
-            }}>{key}</kbd>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{label}</span>
-          </span>
-        ))}
-      </div>
-
       {/* ── Add New Customer Mini-Modal ─────────────────────────────────────── */}
       <Modal
         open={showAddCustModal}
@@ -706,7 +653,7 @@ export default function CreateSalePage() {
             loading={addCustLoading}
             disabled={!newCustName.trim()}
           >
-            Create & Select
+            Create &amp; Select
           </Button>
         </Modal.Footer>
       </Modal>
@@ -811,159 +758,216 @@ export default function CreateSalePage() {
           <Spinner size="lg" />
         </div>
       ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 340px',
-          gap: 24,
-          alignItems: 'start',
-        }}>
+        <>
+          {/* ── FIX L1: Compact top bar — Customer + Barcode in one horizontal row ── */}
+          {/* This replaces two stacked SectionCards (Customer card + top of Line Items card) */}
+          {/* saving ~80px vertical space and making the customer/barcode workflow feel unified. */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 16,
+            marginBottom: 16,
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+            borderRadius: 14,
+            padding: '14px 20px',
+            alignItems: 'end',
+          }}>
+            {/* Customer combobox */}
+            <div>
+              <div style={{
+                fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
+                textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6,
+              }}>
+                Customer
+              </div>
+              <div ref={custBoxRef} style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  value={selectedCustName || custSearch}
+                  onChange={handleCustInputChange}
+                  onFocus={() => setCustDropOpen(true)}
+                  placeholder="Walk-in or type name / phone…"
+                  autoComplete="off"
+                  style={{
+                    ...selectStyle,
+                    cursor: 'text',
+                    borderColor: customerId ? 'var(--accent-600)' : undefined,
+                  }}
+                />
 
-          {/* ── LEFT panel ─────────────────────────────────────────────── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-            {/* Customer card */}
-            <SectionCard title="Customer">
-              <FormField label="Search by name or phone">
-                <div ref={custBoxRef} style={{ position: 'relative' }}>
-                  <input
-                    type="text"
-                    value={selectedCustName || custSearch}
-                    onChange={handleCustInputChange}
-                    onFocus={() => setCustDropOpen(true)}
-                    placeholder="Type name or phone number..."
-                    autoComplete="off"
+                {customerId && (
+                  <button
+                    type="button"
+                    onClick={handleWalkInSelect}
+                    title="Clear — switch to Walk-in"
                     style={{
-                      ...selectStyle,
-                      cursor: 'text',
-                      borderColor: customerId ? 'var(--accent-600)' : undefined,
+                      position: 'absolute', right: 10, top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none', border: 'none',
+                      cursor: 'pointer', color: 'var(--text-muted)',
+                      fontSize: 18, lineHeight: 1, padding: 2,
                     }}
-                  />
+                  >
+                    ×
+                  </button>
+                )}
 
-                  {customerId && (
-                    <button
-                      type="button"
-                      onClick={handleWalkInSelect}
-                      title="Clear — switch to Walk-in"
+                {custDropOpen && !customerId && (
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+                    background: 'var(--bg-card)',
+                    border: '1.5px solid var(--border)',
+                    borderRadius: 10,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                    zIndex: 200,
+                    maxHeight: 240,
+                    overflowY: 'auto',
+                  }}>
+                    <div onMouseDown={handleWalkInSelect} style={dropItemStyle}>
+                      <span style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: 13 }}>
+                        Walk-in Customer (no account)
+                      </span>
+                    </div>
+                    <div
+                      onMouseDown={handleOpenAddCust}
                       style={{
-                        position: 'absolute', right: 10, top: '50%',
-                        transform: 'translateY(-50%)',
-                        background: 'none', border: 'none',
-                        cursor: 'pointer', color: 'var(--text-muted)',
-                        fontSize: 18, lineHeight: 1, padding: 2,
+                        ...dropItemStyle,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        color: 'var(--accent-600)',
+                        fontWeight: 600,
+                        fontSize: 13,
+                        borderBottom: '1px solid var(--border)',
                       }}
                     >
-                      ×
-                    </button>
-                  )}
-
-                  {custDropOpen && !customerId && (
-                    <div style={{
-                      position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-                      background: 'var(--bg-card)',
-                      border: '1.5px solid var(--border)',
-                      borderRadius: 10,
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-                      zIndex: 200,
-                      maxHeight: 240,
-                      overflowY: 'auto',
-                    }}>
-                      <div onMouseDown={handleWalkInSelect} style={dropItemStyle}>
-                        <span style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: 13 }}>
-                          Walk-in Customer (no account)
-                        </span>
-                      </div>
-                      <div
-                        onMouseDown={handleOpenAddCust}
-                        style={{
-                          ...dropItemStyle,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          color: 'var(--accent-600)',
-                          fontWeight: 600,
-                          fontSize: 13,
-                          borderBottom: '1px solid var(--border)',
-                        }}
-                      >
-                        <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
-                        Add New Customer
-                      </div>
-
-                      {filteredCustomers.length === 0 ? (
-                        <div style={{ padding: '10px 14px', fontSize: 12.5, color: 'var(--text-muted)' }}>
-                          No customers match "{custSearch}"
-                        </div>
-                      ) : (
-                        filteredCustomers.map(c => (
-                          <div key={c.cust_id} onMouseDown={() => handleCustSelect(c)} style={dropItemStyle}>
-                            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
-                              {c.cust_name}
-                            </div>
-                            {c.cust_phone && (
-                              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>
-                                {c.cust_phone}
-                              </div>
-                            )}
-                          </div>
-                        ))
-                      )}
+                      <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
+                      Add New Customer
                     </div>
-                  )}
-                </div>
-                {customerId && selectedCustName && (
-                  <div style={{ fontSize: 12, color: 'var(--accent-600)', marginTop: 5, fontWeight: 600 }}>
-                    ✓ {selectedCustName}
-                  </div>
-                )}
-              </FormField>
-            </SectionCard>
 
-            {/* Line items card */}
-            <SectionCard title="Line Items">
-              {/* Barcode input */}
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <input
-                    ref={barcodeRef}
-                    type="text"
-                    value={barcodeInput}
-                    onChange={e => { setBarcodeInput(e.target.value); setBarcodeError(''); }}
-                    onKeyDown={handleBarcodeScan}
-                    placeholder="🔍 Scan barcode or type 3×barcode → Enter"
-                    disabled={barcodeLoading}
-                    style={{
-                      flex: 1, padding: '9px 12px',
-                      border: '1.5px solid var(--border)',
-                      borderRadius: 9, fontSize: 13.5,
-                      background: 'var(--bg-page)',
-                      color: 'var(--text-primary)',
-                      outline: 'none', fontFamily: 'inherit',
-                      boxSizing: 'border-box',
-                      borderColor: barcodeInput ? 'var(--accent-600)' : undefined,
-                      opacity: barcodeLoading ? 0.7 : 1,
-                    }}
-                  />
-                  {barcodeLoading && (
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                      Looking up…
-                    </span>
-                  )}
-                </div>
-                {barcodeError && (
-                  <div style={{ fontSize: 12, color: '#ef4444', marginTop: 5, fontWeight: 500 }}>
-                    ⚠ {barcodeError}
+                    {filteredCustomers.length === 0 ? (
+                      <div style={{ padding: '10px 14px', fontSize: 12.5, color: 'var(--text-muted)' }}>
+                        No customers match "{custSearch}"
+                      </div>
+                    ) : (
+                      filteredCustomers.map(c => (
+                        <div key={c.cust_id} onMouseDown={() => handleCustSelect(c)} style={dropItemStyle}>
+                          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {c.cust_name}
+                          </div>
+                          {c.cust_phone && (
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>
+                              {c.cust_phone}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
                   </div>
                 )}
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                  Tip: type <strong>3×barcode</strong> to add 3 units at once
+              </div>
+              {customerId && selectedCustName && (
+                <div style={{ fontSize: 11.5, color: 'var(--accent-600)', marginTop: 4, fontWeight: 600 }}>
+                  ✓ {selectedCustName}
+                </div>
+              )}
+            </div>
+
+            {/* Barcode scanner */}
+            <div>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                marginBottom: 6,
+              }}>
+                <div style={{
+                  fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
+                  textTransform: 'uppercase', letterSpacing: '0.07em',
+                }}>
+                  Barcode Scanner
+                </div>
+                {/* Keyboard hints — compact inline chips */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {[
+                    { key: 'F2', label: 'Focus scanner' },
+                    { key: 'Ctrl+↵', label: 'Save' },
+                  ].map(({ key, label }) => (
+                    <span key={key} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                      <kbd style={{
+                        fontFamily: 'monospace', fontSize: 10, fontWeight: 700,
+                        padding: '1px 5px', borderRadius: 4,
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg-subtle)',
+                        color: 'var(--text-secondary)',
+                      }}>{key}</kbd>
+                      <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{label}</span>
+                    </span>
+                  ))}
                 </div>
               </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input
+                  ref={barcodeRef}
+                  type="text"
+                  value={barcodeInput}
+                  onChange={e => { setBarcodeInput(e.target.value); setBarcodeError(''); }}
+                  onKeyDown={handleBarcodeScan}
+                  placeholder="Scan or type 3×barcode → Enter"
+                  disabled={barcodeLoading}
+                  style={{
+                    flex: 1, padding: '8px 12px',
+                    border: '1.5px solid var(--border)',
+                    borderRadius: 9, fontSize: 13.5,
+                    background: 'var(--bg-page)',
+                    color: 'var(--text-primary)',
+                    outline: 'none', fontFamily: 'inherit',
+                    boxSizing: 'border-box',
+                    borderColor: barcodeInput ? 'var(--accent-600)' : undefined,
+                    opacity: barcodeLoading ? 0.7 : 1,
+                  }}
+                />
+                {barcodeLoading && (
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    Looking up…
+                  </span>
+                )}
+              </div>
+              {barcodeError && (
+                <div style={{ fontSize: 11.5, color: '#ef4444', marginTop: 4, fontWeight: 500 }}>
+                  ⚠ {barcodeError}
+                </div>
+              )}
+              {!barcodeError && (
+                <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 4 }}>
+                  Tip: <strong>3×barcode</strong> adds 3 units at once
+                </div>
+              )}
+            </div>
+          </div>
 
+          {/* ── Main two-column grid ─────────────────────────────────────────────── */}
+          {/* FIX L6: right panel widened from 340 → 360px */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 360px',
+            gap: 16,
+            alignItems: 'start',
+          }}>
+
+            {/* ── LEFT panel — Line Items only ─────────────────────────────── */}
+            {/* FIX L2: SectionCard padding reduced → 16px */}
+            <div style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: 14,
+              padding: 16,
+            }}>
               {/* Column headers */}
+              {/* FIX L3: New grid — 2fr for product, tighter fixed cols */}
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: '1fr 90px 130px 80px 130px 32px',
-                gap: 10, paddingBottom: 10,
+                gridTemplateColumns: '2fr 80px 110px 72px 100px 28px',
+                gap: 8, paddingBottom: 8,
                 borderBottom: '1px solid var(--border)', marginBottom: 4,
               }}>
                 {['Product', 'Qty', 'Unit Price', 'Tax %', 'Total', ''].map((h, i) => (
@@ -976,14 +980,13 @@ export default function CreateSalePage() {
                 ))}
               </div>
 
-{/* FIX 1: Each row is a memoized LineItemRow.
-                  EMPTY_ARRAY is passed as searchResults when the dropdown is
-                  closed — stable reference → React.memo skips re-render for
-                  closed rows when search results arrive for another row.
-                  Scroll container: rows scroll internally so the page never
-                  grows past the viewport height. */}
+              {/* FIX L4: Corrected maxHeight — no arbitrary 460px cap */}
+              {/* Budget: 380px of chrome above this element on any supported viewport */}
+              {/* topbar(60) + main-pad-top(32) + page-header(72) + compact-top-bar(60+16gap) */}
+              {/* + card-padding-top(16) + col-header(44) + add-btn(46) + bottom(34) = 380px */}
               <div style={{
-                maxHeight: 'min(calc(100dvh - 416px), 460px)',
+                maxHeight: 'calc(100dvh - 380px)',
+                minHeight: 120,
                 overflowY: 'auto',
                 overflowX: 'visible',
                 marginRight: -8,
@@ -1009,7 +1012,6 @@ export default function CreateSalePage() {
                   />
                 ))}
 
-                {/* Over-stock hint row */}
                 {items.some(i => i.prod_stock_qty != null && Number(i.quantity) > Number(i.prod_stock_qty)) && (
                   <div style={{
                     marginTop: 10, padding: '8px 12px',
@@ -1026,9 +1028,9 @@ export default function CreateSalePage() {
                 onClick={addItem}
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  gap: 6, marginTop: 12, width: '100%',
+                  gap: 6, marginTop: 10, width: '100%',
                   background: 'none', border: '1.5px dashed var(--border)',
-                  borderRadius: 10, padding: '9px 0',
+                  borderRadius: 10, padding: '8px 0',
                   cursor: 'pointer', color: 'var(--text-muted)',
                   fontSize: 13, fontFamily: 'inherit',
                 }}
@@ -1037,123 +1039,144 @@ export default function CreateSalePage() {
               >
                 + Add another line item
               </button>
-            </SectionCard>
-          </div>
+            </div>
 
-          {/* ── RIGHT panel ─────────────────────────────────────────────── */}
-          {/* maxHeight = viewport - topbar(60) - main padding top(32) - sticky top offset(24)
-              overflowY: auto lets the right column scroll internally on very small screens
-              where the summary + payment cards together exceed the available height.
-              On normal screens (≥768px tall) everything fits without scrolling. */}
-          <div style={{
-            display: 'flex', flexDirection: 'column', gap: 16,
-            position: 'sticky', top: 24,
-            maxHeight: 'calc(100dvh - 116px)',
-            overflowY: 'auto',
-          }}>
-            <SectionCard title="Order Summary">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <SummaryRow label="Subtotal"   value={formatCurrency(totals.subtotal)} />
-                {totals.autoDiscount > 0 && (
-                  <SummaryRow
-                    label="Discount"
-                    value={<span style={{ color: '#059669' }}>−{formatCurrency(totals.autoDiscount)}</span>}
-                    muted
-                  />
-                )}
-                <SummaryRow label="Tax"        value={formatCurrency(totals.taxTotal)} muted />
-                <div style={{ borderTop: '1.5px solid var(--border)', paddingTop: 12, marginTop: 2 }}>
-                  <SummaryRow label="Grand Total" value={formatCurrency(totals.grandTotal)} bold />
-                </div>
-                {paymentStatus === 'partial' && parsedPaidAmount > 0 && (
-                  <>
-                    <SummaryRow label="Paid Now" value={formatCurrency(parsedPaidAmount)} />
+            {/* ── RIGHT panel — Order Summary + Payment ──────────────────── */}
+            {/* FIX L5: maxHeight corrected — accounts for both top and bottom padding */}
+            {/* topbar(60) + main-pad-top(32) + main-pad-bottom(32) + sticky-top(24) + safety(8) = 156px */}
+            <div style={{
+              display: 'flex', flexDirection: 'column', gap: 14,
+              position: 'sticky', top: 24,
+              maxHeight: 'calc(100dvh - 156px)',
+              overflowY: 'auto',
+            }}>
+              {/* Order Summary card */}
+              <div style={{
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border)',
+                borderRadius: 14,
+                padding: 16,
+              }}>
+                <h3 style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Order Summary
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                  <SummaryRow label="Subtotal"   value={formatCurrency(totals.subtotal)} />
+                  {totals.autoDiscount > 0 && (
                     <SummaryRow
-                      label="Remaining Due"
-                      value={
-                        <span style={{ color: '#ef4444', fontWeight: 700 }}>
-                          {formatCurrency(Math.max(0, totals.grandTotal - parsedPaidAmount))}
-                        </span>
-                      }
+                      label="Discount"
+                      value={<span style={{ color: '#059669' }}>−{formatCurrency(totals.autoDiscount)}</span>}
+                      muted
                     />
-                  </>
+                  )}
+                  <SummaryRow label="Tax" value={formatCurrency(totals.taxTotal)} muted />
+                  <div style={{ borderTop: '1.5px solid var(--border)', paddingTop: 10, marginTop: 2 }}>
+                    <SummaryRow label="Grand Total" value={formatCurrency(totals.grandTotal)} bold />
+                  </div>
+                  {paymentStatus === 'partial' && parsedPaidAmount > 0 && (
+                    <>
+                      <SummaryRow label="Paid Now" value={formatCurrency(parsedPaidAmount)} />
+                      <SummaryRow
+                        label="Remaining Due"
+                        value={
+                          <span style={{ color: '#ef4444', fontWeight: 700 }}>
+                            {formatCurrency(Math.max(0, totals.grandTotal - parsedPaidAmount))}
+                          </span>
+                        }
+                      />
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Payment card */}
+              <div style={{
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border)',
+                borderRadius: 14,
+                padding: 16,
+              }}>
+                <h3 style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Payment
+                </h3>
+                <FormField label="Payment Method" style={{ marginBottom: 12 }}>
+                  <select
+                    className="sb-select"
+                    value={paymentMethod}
+                    onChange={e => setPaymentMethod(e.target.value)}
+                    style={selectStyle}
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="card">Card</option>
+                    <option value="upi">UPI</option>
+                    <option value="bank">Bank Transfer</option>
+                    <option value="split">Split</option>
+                  </select>
+                </FormField>
+
+                <FormField label="Payment Status" style={{ marginBottom: 12 }}>
+                  <select
+                    value={paymentStatus}
+                    onChange={e => { setPaymentStatus(e.target.value); setPaidAmount(''); }}
+                    style={selectStyle}
+                  >
+                    <option value="paid">Paid</option>
+                    <option value="partial">Partial</option>
+                    <option value="pending">Unpaid</option>
+                  </select>
+                </FormField>
+
+                {paymentStatus === 'partial' && (
+                  <FormField label="Paid Amount">
+                    <input
+                      type="number" min="0.01" step="0.01"
+                      value={paidAmount}
+                      onChange={e => setPaidAmount(e.target.value)}
+                      placeholder={`Max ${formatCurrency(totals.grandTotal - 0.01)}`}
+                      style={{
+                        ...NUM_INPUT_STYLE,
+                        borderColor:
+                          paidAmount && !paidAmountValid ? '#ef4444'
+                          : parsedPaidAmount > 0 && paidAmountValid ? 'var(--accent-600)'
+                          : undefined,
+                      }}
+                    />
+                    {paidAmount && !paidAmountValid && (
+                      <div style={{ fontSize: 12, color: '#ef4444', marginTop: 4 }}>
+                        {parsedPaidAmount <= 0
+                          ? 'Amount must be greater than 0'
+                          : `Cannot exceed total (${formatCurrency(totals.grandTotal)})`}
+                      </div>
+                    )}
+                    {parsedPaidAmount > 0 && paidAmountValid && (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                        Remaining: {formatCurrency(totals.grandTotal - parsedPaidAmount)}
+                      </div>
+                    )}
+                  </FormField>
                 )}
               </div>
-            </SectionCard>
 
-            <SectionCard title="Payment">
-              <FormField label="Payment Method" style={{ marginBottom: 14 }}>
-                <select className="sb-select" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} style={selectStyle}>
-                  <option value="cash">Cash</option>
-                  <option value="card">Card</option>
-                  <option value="upi">UPI</option>
-                  <option value="bank">Bank Transfer</option>
-                  <option value="split">Split</option>
-                </select>
-              </FormField>
+              <Button
+                variant="primary"
+                onClick={handleSubmit}
+                loading={mutation.isPending}
+                disabled={!isValid}
+                style={{ width: '100%', padding: '13px', fontSize: 15, fontWeight: 700 }}
+              >
+                Create Invoice →
+              </Button>
 
-              <FormField label="Payment Status" style={{ marginBottom: 14 }}>
-                <select
-                  value={paymentStatus}
-                  onChange={e => { setPaymentStatus(e.target.value); setPaidAmount(''); }}
-                  style={selectStyle}
-                >
-                  <option value="paid">Paid</option>
-                  <option value="partial">Partial</option>
-                  <option value="pending">Unpaid</option>
-                </select>
-              </FormField>
-
-              {paymentStatus === 'partial' && (
-                <FormField label="Paid Amount" style={{ marginBottom: 14 }}>
-                  <input
-                    type="number" min="0.01" step="0.01"
-                    value={paidAmount}
-                    onChange={e => setPaidAmount(e.target.value)}
-                    placeholder={`Max ${formatCurrency(totals.grandTotal - 0.01)}`}
-                    style={{
-                      ...NUM_INPUT_STYLE,
-                      borderColor:
-                        paidAmount && !paidAmountValid ? '#ef4444'
-                        : parsedPaidAmount > 0 && paidAmountValid ? 'var(--accent-600)'
-                        : undefined,
-                    }}
-                  />
-                  {paidAmount && !paidAmountValid && (
-                    <div style={{ fontSize: 12, color: '#ef4444', marginTop: 4 }}>
-                      {parsedPaidAmount <= 0
-                        ? 'Amount must be greater than 0'
-                        : `Cannot exceed total (${formatCurrency(totals.grandTotal)})`}
-                    </div>
-                  )}
-                  {parsedPaidAmount > 0 && paidAmountValid && (
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                      Remaining: {formatCurrency(totals.grandTotal - parsedPaidAmount)}
-                    </div>
-                  )}
-                </FormField>
+              {!isValid && (
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', margin: 0 }}>
+                  {!paidAmountValid
+                    ? 'Enter a valid paid amount to continue.'
+                    : 'Select a product for every line item to continue.'}
+                </p>
               )}
-            </SectionCard>
-
-            <Button
-              variant="primary"
-              onClick={handleSubmit}
-              loading={mutation.isPending}
-              disabled={!isValid}
-              style={{ width: '100%', padding: '14px', fontSize: 15, fontWeight: 700 }}
-            >
-              Create Invoice →
-            </Button>
-
-            {!isValid && (
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', margin: 0 }}>
-                {!paidAmountValid
-                  ? 'Enter a valid paid amount to continue.'
-                  : 'Select a product for every line item to continue.'}
-              </p>
-            )}
+            </div>
           </div>
-        </div>
+        </>
       )}
     </>
   );
@@ -1161,18 +1184,8 @@ export default function CreateSalePage() {
 
 /* ─── LineItemRow — memoized, only re-renders when ITS props change ──────────
  *
- * FIX 1 IMPLEMENTATION:
- *   React.memo does a shallow comparison on every prop.
- *   As long as the parent passes stable callback references (useCallback [])
- *   and passes EMPTY_ARRAY for searchResults when the dropdown is closed,
- *   closed rows will NEVER re-render due to:
- *     - barcode input changes
- *     - payment method/status changes
- *     - customer selection changes
- *     - search results arriving for a different row
- *
- *   Only the row whose `item` prop changed (e.g., qty update) or whose
- *   `isOpen` prop changed will re-render.
+ * FIX L3: Grid template updated to match header — '2fr 80px 110px 72px 100px 28px'
+ * Product column gets 2× the available space, giving ~240-400px for the name.
  */
 const LineItemRow = memo(function LineItemRow({
   item,
@@ -1197,21 +1210,21 @@ const LineItemRow = memo(function LineItemRow({
   const overStock = availableQty !== null && Number(item.quantity) > availableQty;
 
   return (
+    /* FIX L3: grid template matches updated header */
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '1fr 90px 130px 80px 130px 32px',
-      gap: 10, alignItems: 'center',
-      padding: '10px 0',
+      gridTemplateColumns: '2fr 80px 110px 72px 100px 28px',
+      gap: 8, alignItems: 'center',
+      padding: '9px 0',
       borderBottom: '1px solid var(--border)',
     }}>
 
       {/* Product search combobox */}
       <div style={{ position: 'relative' }}>
         {item.product_id ? (
-          // Product already selected — show name with a clear button
           <div style={{
             display: 'flex', alignItems: 'center',
-            gap: 6, padding: '8px 10px',
+            gap: 6, padding: '7px 9px',
             border: '1.5px solid var(--accent-600)',
             borderRadius: 8, background: 'var(--bg-page)',
             fontSize: 13, color: 'var(--text-primary)',
@@ -1232,7 +1245,6 @@ const LineItemRow = memo(function LineItemRow({
             >×</button>
           </div>
         ) : (
-          // No product selected yet — show search input
           <>
             <input
               type="text"
@@ -1240,9 +1252,9 @@ const LineItemRow = memo(function LineItemRow({
               onChange={e => onSearchChange(item._id, e.target.value)}
               onFocus={() => onOpenDropdown(item._id)}
               onBlur={() => setTimeout(() => onCloseDropdown(item._id), 150)}
-              placeholder="Type to search product..."
+              placeholder="Type to search…"
               autoComplete="off"
-              style={{ ...selectStyle, fontSize: 13, padding: '8px 10px' }}
+              style={{ ...selectStyle, fontSize: 13, padding: '7px 9px' }}
             />
             {isOpen && searchText.length >= 2 && (
               <div style={{
@@ -1310,7 +1322,7 @@ const LineItemRow = memo(function LineItemRow({
         )}
       </div>
 
-      {/* Quantity — turns amber border if over stock */}
+      {/* Quantity */}
       <div style={{ position: 'relative' }}>
         <input
           type="number" min="1" step="1"
@@ -1370,20 +1382,6 @@ const LineItemRow = memo(function LineItemRow({
 });
 
 /* ─── Helper components ──────────────────────────────────────────────────── */
-
-function SectionCard({ title, children, action }) {
-  return (
-    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: 24 }}>
-      {(title || action) && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          {title && <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h3>}
-          {action}
-        </div>
-      )}
-      {children}
-    </div>
-  );
-}
 
 function SummaryRow({ label, value, bold, muted }) {
   return (

@@ -60,9 +60,15 @@ def alert_to_dict(a):
 # ─────────────────────────────────────────
 @router.get("/movements")
 def get_all_movements(
-    current_user: dict = Depends(require_permission("stock.view")),
-    db: Session = Depends(get_db),
-    pagination: dict = Depends(paginate)
+current_user: dict          = Depends(require_permission("stock.view")),
+db:           Session       = Depends(get_db),
+pagination:   dict          = Depends(paginate),
+search:       Optional[str] = Query(default=None, description="Search by product name"),
+move_type:    Optional[str] = Query(default=None, description="sale | purchase | adjustment | return"),
+date_from:    Optional[str] = Query(default=None, description="ISO datetime — move_created_at >="),
+date_to:      Optional[str] = Query(default=None, description="ISO datetime — move_created_at <="),
+sort_by:      Optional[str] = Query(default="move_created_at"),
+sort_dir:     Optional[str] = Query(default="desc"),
 ):
     business_id = current_user["business_id"]
 

@@ -78,8 +78,9 @@ function buildProductPrintHTML(business, product, detail, summary, stockHistory,
   ]
 
   const stockCols = [
-    { label: 'Event',   key: 'event',       align: 'left' },
-    { label: 'Change',  key: 'qty_changed',  align: 'center', format: (v, row) => {
+    { label: 'Event',      key: 'event',       align: 'left' },
+    { label: 'Invoice #',  key: 'invoice_no',  align: 'left', format: v => v || '—' },
+    { label: 'Change',     key: 'qty_changed',  align: 'center', format: (v, row) => {
         const isIn  = row.direction === 'in'
         const color = isIn ? '#10B981' : '#EF4444'
         return `<span style="font-weight:700;color:${color};">${isIn ? '+' : '-'}${v}</span>`
@@ -90,7 +91,6 @@ function buildProductPrintHTML(business, product, detail, summary, stockHistory,
     { label: 'By',      key: 'changed_by',   align: 'left' },
     { label: 'Date',    key: 'changed_at',   align: 'left', format: v => fmtPrintDate(v) },
   ]
-
   // ── Pricing cards — responsive wrapping flex layout ──────────────────────
   // WHY FLEXBOX INSTEAD OF GRID:
   //   CSS grid with repeat(N, 1fr) uses a FIXED column count regardless of
@@ -521,6 +521,21 @@ export default function ProductDetailDrawer({ product, onClose }) {
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
                           {move.event}
+                          {move.invoice_no && (
+                            <span style={{
+                              marginLeft: 8,
+                              fontSize: 11.5,
+                              fontWeight: 600,
+                              color: 'var(--accent-600)',
+                              background: 'var(--accent-50, rgba(79,70,229,0.07))',
+                              border: '1px solid var(--accent-200, rgba(79,70,229,0.18))',
+                              borderRadius: 5,
+                              padding: '1px 6px',
+                              letterSpacing: '0.01em',
+                            }}>
+                              {move.invoice_no}
+                            </span>
+                          )}
                         </div>
                         <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
                           {move.changed_by} · {formatDate(move.changed_at)}

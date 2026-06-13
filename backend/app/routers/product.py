@@ -297,7 +297,7 @@ def create_product(
 #   now execute at the database level before pagination is applied.
 #
 #   New query params:
-#     search       — ILIKE on prod_name OR barcode (unchanged)
+#     search       — ILIKE on prod_name OR barcode OR category_name (JOIN)
 #     updated_from — ISO date string "YYYY-MM-DD"; filters updated_at >= local midnight
 #     updated_to   — ISO date string "YYYY-MM-DD"; filters updated_at <= local end-of-day
 #     sort_by      — column name to sort by (whitelist-validated)
@@ -345,7 +345,7 @@ def get_all_products(
     }
 
     if search and search.strip():
-        extra_where += " AND (p.prod_name ILIKE :search OR p.barcode ILIKE :search)"
+        extra_where += " AND (p.prod_name ILIKE :search OR p.barcode ILIKE :search OR c.category_name ILIKE :search)"
         params["search"] = f"%{search.strip()}%"
 
     # TIMEZONE FIX: frontend sends UTC ISO strings (local day start/end converted

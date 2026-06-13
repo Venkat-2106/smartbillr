@@ -156,7 +156,10 @@ export default function CreateSalePage() {
   // Active item search text (the one the user is currently typing in)
   // We track itemSearchActive as a string so useQuery gets a stable key.
   const [activeItemSearch, setActiveItemSearch] = useState('');
-  const debouncedProductSearch = useDebounce(activeItemSearch, 250);
+  // PERF: Reduced from 250ms → 150ms.
+  // 150ms is enough for React Query's 60s staleTime to serve repeated
+  // terms from cache (instant). First-time searches feel 100ms snappier.
+  const debouncedProductSearch = useDebounce(activeItemSearch, 150);
 
   // ── Add New Customer mini-modal state ────────────────────────────────────
   const [showAddCustModal, setShowAddCustModal] = useState(false);
@@ -184,11 +187,17 @@ export default function CreateSalePage() {
   // ── Lean product search — server-side, fires on debounced keystroke ────────
   // No pre-loading of products. Only fetches when user types ≥ 2 chars.
   // Each unique search term is cached by React Query automatically.
+// PERF: placeholderData keeps the previous results visible in the dropdown
+  // while a new search term is in-flight.
+  // Without it: typing "mil" → dropdown goes empty → "milk" results appear (flicker).
+  // With it:    typing "mil" → old "mi" results stay visible → "milk" results replace them.
+  // React Query serves exact cache hits (same query key) at 0ms regardless.
   const { data: productSearchResults = [] } = useQuery({
-    queryKey: ['products-search-lean', debouncedProductSearch],
-    queryFn:  () => searchProductsLean(debouncedProductSearch),
-    enabled:  debouncedProductSearch.length >= 2,
-    staleTime: 60 * 1000,   // cache each search result for 60s
+    queryKey:        ['products-search-lean', debouncedProductSearch],
+    queryFn:         () => searchProductsLean(debouncedProductSearch),
+    enabled:         debouncedProductSearch.length >= 2,
+    staleTime:       60 * 1000,
+    placeholderData: (prev) => prev,
   });
 
   // allCustomers from /customers/lean already only has active customers
@@ -473,8 +482,26 @@ export default function CreateSalePage() {
     setOpenDropMap(prev => ({ ...prev, [itemId]: false }));
   }, []);
 
+// BUG FIX: When a row's search input is focused, two things must happen:
+  //
+  // 1. Close ALL other rows' dropdowns. With the single shared `productSearchResults`
+  //    query, multiple open dropdowns would all show the SAME results (the last
+  //    typed term), which is wrong and confusing.
+  //
+  // 2. Sync `activeItemSearch` to THIS row's current search text.
+  //    Without this, focusing an empty Row B keeps activeItemSearch pointing at
+  //    Row A's last search, and Row B's dropdown opens showing Row A's results.
+  //
+  // setOpenDropMap(() => ({ [itemId]: true })) — replaces the map entirely,
+  // closing all other rows (undefined === false for !openDropMap[id]).
+  // setSearchMap is read (not mutated) only to extract the current text for
+  // activeItemSearch; the return value is `prev` unchanged.
   const handleOpenDropdown = useCallback((itemId) => {
-    setOpenDropMap(prev => ({ ...prev, [itemId]: true }));
+    setOpenDropMap(() => ({ [itemId]: true }));
+    setSearchMap(prev => {
+      setActiveItemSearch(prev[itemId] || '');
+      return prev;
+    });
   }, []);
 
   const handleClearProduct = useCallback((itemId) => {

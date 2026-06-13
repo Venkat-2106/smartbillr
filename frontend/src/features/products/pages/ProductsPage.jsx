@@ -39,7 +39,7 @@
 //   ✅ Profit permission gate (canViewProfit) for cost/profit columns + form
 //   ✅ Zod .trim() on prod_name (trimmed before schema min/max check)
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -833,8 +833,17 @@ export default function ProductsPage() {
     // Add/Edit modals remain open so user can correct the prices
   }
 
-  // ── Table columns ─────────────────────────────────────────────────────────
-  const columns = [
+// ── Table columns ─────────────────────────────────────────────────────────
+  // PERF: columns is a fairly large array of objects with inline render
+  // functions. Table.jsx receives it as a prop on every render of this page
+  // (e.g. while the user types in the search box). Memoizing it keeps the
+  // same array/object references across re-renders triggered by search,
+  // pagination, or unrelated state — so Table (and any memoized row
+  // components within it) don't see "columns" as a changed prop.
+  // Dependencies: only canViewProfit/canManage actually change which columns
+  // appear or what their action buttons do. setEditTarget/setDeleteTarget are
+  // stable useState setters and don't need to be listed.
+  const columns = useMemo(() => [
     {
       key:      'prod_name',
       label:    'Product',
@@ -999,7 +1008,7 @@ export default function ProductsPage() {
           ),
         }]
       : []),
-  ]
+  ], [canViewProfit, canManage])
 
   const activeSearch     = search.trim().length > 0
   const activeDateFilter = dateFrom || dateTo

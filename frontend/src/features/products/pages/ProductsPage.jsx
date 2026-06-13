@@ -72,7 +72,7 @@ import {
   useUpdateProduct,
   useDeleteProduct,
 } from '../hooks/useProducts'
-import { checkBarcode } from '../api/productsApi'
+import { checkBarcode, fetchProductByBarcode } from '../api/productsApi'
 import ProductDetailDrawer from '../components/ProductDetailDrawer'
 
 // ── Unit options ───────────────────────────────────────────────────────────────
@@ -535,7 +535,6 @@ export default function ProductsPage() {
 
   const {
     products,
-    allProducts,    // still needed for barcode scanner Enter lookup
     pagination,
     page,
     setPage,
@@ -569,8 +568,7 @@ export default function ProductsPage() {
   //   NOW: all four params are owned by the hook. The hook's queryKey includes
   //   them, so any change triggers a fresh backend fetch. PostgreSQL does the
   //   work. The browser receives only 20 rows regardless of total record count.
-
-  // ── Barcode scanner Enter handler ────────────────────────────────────────────
+// ── Barcode scanner Enter handler ────────────────────────────────────────────
   // USB barcode scanners work by emulating a keyboard: they "type" each digit of
   // the barcode rapidly, then fire an Enter keypress when the scan is complete.
   //
@@ -582,47 +580,45 @@ export default function ProductsPage() {
   //   1. Read the current input value from the DOM (e.target.value) — more
   //      reliable than the React state at this instant because the scanner fires
   //      chars very quickly and state updates may still be batching.
-  //   2. Find the product in allProducts whose barcode exactly matches.
-  //   3. If exactly one match → auto-open the detail drawer instantly (same UX
-  //      as the CreateSalePage scanner).
-  //   4. If no exact match (or multiple) → do nothing extra; the filtered table
-  //      already shows the partial-match results so the user picks manually.
+  //   2. Look up the exact barcode via GET /products/barcode/{code} — the same
+  //      lean, indexed endpoint CreateSalePage's scanner uses.
+  //   3. If a match is found → auto-open the detail drawer instantly (same UX
+  //      as before). The drawer only needs prod_id to fetch full details.
+  //   4. If no match → do nothing extra; the filtered table already shows the
+  //      partial-match results (search is server-side and includes barcode).
   //
-  // NOTE: allProducts is the full pre-fetched dataset (limit=10000). No network
-  // call is made here — the lookup is pure in-memory O(n).
-  function handleScannerEnter(e) {
+  // PERF NOTE: this replaces the old in-memory lookup over a pre-fetched
+  // 10,000-row dataset (allProducts) with a single indexed DB query — faster
+  // and correct at any catalogue size.
+  async function handleScannerEnter(e) {
     if (e.key !== 'Enter') return
     const rawValue = (e.target.value ?? search).trim()
-    if (!rawValue || allProducts.length === 0) return
+    if (!rawValue) return
 
-    const exactMatch = allProducts.find(
-      p => p.barcode && p.barcode.toLowerCase() === rawValue.toLowerCase()
-    )
-    if (exactMatch) {
-      setDetailProduct(exactMatch)
+    try {
+      const match = await fetchProductByBarcode(rawValue)
+      if (match) {
+        setDetailProduct({ prod_id: match.prod_id })
+      }
+    } catch {
+      // Silently ignore — table search already reflects the typed value.
     }
   }
 
   // dateFrom, dateTo, handleDateChange now come from the hook above.
   // The hook's handleDateChange already calls setPage(1) on every change.
 
-  // displayRows useMemo REMOVED:
-  //   Previously this selected between products (20 rows) and allProducts
-  //   (10,000 rows) based on whether a date filter was active, then applied
-  //   filter + sort in JavaScript.
+  // displayRows / exportData useMemo REMOVED (v1):
+  //   Previously selected between products (20 rows) and allProducts
+  //   (10,000 rows), with client-side filter/sort/export.
   //
-  //   NOW: `products` from the hook is already the correct dataset:
-  //     - Not searching → pagedQuery result, server-filtered/sorted/paginated ✓
-  //     - Searching     → allQuery result, client-filtered on name/category/barcode ✓
-  //   No post-processing needed. The server handles date + sort in both paths.
-  //
-  // exportData useMemo REMOVED:
-  //   Previously computed from allProducts filtered in JS — wrong for > 10k records.
-  //   NOW: ExportButton uses onFetch={handleExport}. handleExport() calls the
-  //   backend lazily with the same active filters and returns all matching rows.
+  //   NOW (v2): `products` from the hook is a single server-filtered,
+  //   server-sorted, server-paginated dataset for ALL cases (browsing or
+  //   searching, including category_name search). No post-processing needed.
+  //   ExportButton uses onFetch={handleExport}, which lazily fetches all
+  //   matching rows with the same active filters.
 
-  // Convenience: total record count to display in the toolbar.
-  //   Not searching → use server total (all pages); searching → use filtered length.
+  // Convenience: total record count (across all pages) for the toolbar.
   const totalCount = pagination ? (pagination.total ?? products.length) : products.length
 
   const { mutate: createProduct, isPending: isCreating } = useCreateProduct()
@@ -1101,9 +1097,7 @@ export default function ProductsPage() {
         />
       </div>
 
-      {!activeSearch && !activeDateFilter && (
-        <Pagination pagination={pagination} onPageChange={setPage} />
-      )}
+      <Pagination pagination={pagination} onPageChange={setPage} />
 
       {/* ── Add Product Modal ─────────────────────────────────────────────── */}
       <Modal

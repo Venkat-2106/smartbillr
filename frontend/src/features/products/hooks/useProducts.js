@@ -1,44 +1,29 @@
 // src/features/products/hooks/useProducts.js
 //
-// SCALABILITY FIX:
+// SCALABILITY FIX (v2):
 //
-// BEFORE:
-//   allQuery (limit=10000) fired on EVERY page load, loading all products into
-//   browser memory even when the user was just browsing the first page.
-//   Column sort and date filter ran as JavaScript useMemo on the full dataset.
-//   ProductsPage owned sortKey, sortDir, dateFrom, dateTo as local state.
+// BEFORE (v1):
+//   When searching, allQuery (limit=10000, no server filters) fetched the
+//   entire product catalogue into the browser and filtered client-side on
+//   prod_name, category_name, and barcode. This was needed because the
+//   backend's ?search= param only matched prod_name and barcode — not
+//   category_name (a JOIN field).
 //
-// AFTER:
-//   ┌──────────────────────────────────────────────────────────────────────┐
-//   │ NOT searching (isSearching = false):                                 │
-//   │   pagedQuery runs with sort_by, sort_dir, updated_from, updated_to.  │
-//   │   PostgreSQL does the sort + date filter + OFFSET/LIMIT.             │
-//   │   Browser receives only 20 rows. allQuery does NOT run.              │
-//   │                                                                      │
-//   │ Searching (isSearching = true):                                      │
-//   │   allQuery runs (limit=10000, no server filters).                    │
-//   │   Client-side filter handles prod_name, category_name, barcode.     │
-//   │   WHY client-side: backend ?search= does not match category_name    │
-//   │   (it is a JOIN result, not a raw column). Barcode float-to-top UX  │
-//   │   also requires client-side sort after match. Category search is a  │
-//   │   real use case — user types "Electronics" to see all electronics.  │
-//   │   pagedQuery does NOT run when searching.                            │
-//   └──────────────────────────────────────────────────────────────────────┘
+// AFTER (v2):
+//   The backend GET /products endpoint now matches category_name as well:
+//     p.prod_name ILIKE :search OR p.barcode ILIKE :search OR c.category_name ILIKE :search
+//   So a single paginated query (pagedQuery) covers ALL cases — searching or
+//   not. PostgreSQL does search + sort + date filter + pagination. The
+//   browser always receives at most PAGE_SIZE rows. allQuery and the
+//   limit=10000 fetch are removed entirely.
 //
-// SCANNER UX PRESERVED:
-//   When the user types in the search box, isSearching = true, allQuery loads.
-//   handleScannerEnter (in ProductsPage) uses allProducts to find exact barcode
-//   match and auto-open the detail drawer — same as before.
-//   allProducts is [] until allQuery resolves, but the handler guards for that.
-//
-// STATE MOVED INTO HOOK (was in ProductsPage local state before):
-//   sortKey, sortDir, handleSort
-//   dateFrom, dateTo, handleDateChange
-//
-// EXPORT:
-//   handleExport() — when searching, returns the already-filtered client-side
-//   array (category_name filter respected in CSV). When not searching, calls
-//   fetchAllProductsForExport() with active sort+date filters.
+// SCANNER UX:
+//   handleScannerEnter (in ProductsPage) previously used allProducts
+//   (the full 10000-row dataset) to find an exact barcode match on Enter.
+//   That full dataset no longer exists. ProductsPage now calls
+//   fetchProductByBarcode() directly (the same lean, indexed endpoint used
+//   by CreateSalePage's scanner) on Enter. The hook no longer exposes
+//   allProducts.
 
 import { useState }                               from 'react'
 import { useQuery, useMutation, useQueryClient }  from '@tanstack/react-query'
@@ -55,9 +40,8 @@ import { useDebounce } from '../../../shared/hooks/useDebounce'
 const PAGE_SIZE = 20
 
 const KEYS = {
-  all:    ['products'],
-  paged:  (p, s, sk, sd, df, dt) => ['products', 'paged', p, s, sk, sd, df, dt],
-  search: (s) => ['products', 'search', s],
+  all:   ['products'],
+  paged: (p, s, sk, sd, df, dt) => ['products', 'paged', p, s, sk, sd, df, dt],
 }
 
 export function useProducts() {
@@ -69,15 +53,17 @@ export function useProducts() {
   const [dateTo,   setDateTo]    = useState('')
 
   const debouncedSearch = useDebounce(search, 350)
-  const isSearching     = debouncedSearch.trim().length > 0
 
-  // ── Paged query — used when NOT searching ───────────────────────────────
-  // Sends sort and date params so the server does the work.
+  // ── Single paginated query — server handles search + sort + date filter ──
+  // category_name is now matched server-side (backend JOIN + ILIKE), so this
+  // one query covers both the "browsing" and "searching" cases. No second
+  // large fetch is needed.
   const pagedQuery = useQuery({
-    queryKey: KEYS.paged(page, '', sortKey, sortDir, dateFrom, dateTo),
+    queryKey: KEYS.paged(page, debouncedSearch, sortKey, sortDir, dateFrom, dateTo),
     queryFn:  () => fetchProducts({
       page,
       limit:        PAGE_SIZE,
+      search:       debouncedSearch,
       sort_by:      sortKey,
       sort_dir:     sortDir,
       // TIMEZONE FIX: send UTC ISO boundaries of the user's local day
@@ -86,78 +72,24 @@ export function useProducts() {
     }),
     placeholderData: (prev) => prev,
     staleTime:       30_000,
-    enabled:         !isSearching,
   })
 
-  // ── All-records query — only loaded when the user is actively searching ──
-  // Uses limit=10000 with NO server filters — client-side filter covers
-  // prod_name, category_name, barcode (including USB scanner lookup).
-  // NOT loaded on normal page browsing, saving a large request every load.
-  const allQuery = useQuery({
-    queryKey: KEYS.search(debouncedSearch),
-    queryFn:  () => fetchProducts({ page: 1, limit: 10000 }),
-    staleTime: 30_000,
-    enabled:  isSearching,
-  })
-
-  const pagedItems = pagedQuery.data?.items  ?? []
-  const allItems   = allQuery.data?.items    ?? []
-
-  // ── Client-side filter (search path only) ──────────────────────────────
-  // Runs only when isSearching = true (allQuery loaded).
-  // Matches prod_name, category_name (JOIN field), barcode.
-  // Also applies date range client-side when searching + date filters active.
-  const q = debouncedSearch.trim().toLowerCase()
-
-  const filteredForSearch = isSearching
-    ? (() => {
-        let matches = allItems.filter(p =>
-          p.prod_name?.toLowerCase().includes(q)     ||
-          p.category_name?.toLowerCase().includes(q) ||
-          p.barcode?.toLowerCase().includes(q)
-        )
-
-        // Apply date filter client-side when user is also searching.
-        // TIMEZONE FIX: use localDayStartUTC / localDayEndUTC so the comparison
-        // matches local-day boundaries, not UTC midnight boundaries.
-        if (dateFrom) {
-          const fromUTC = localDayStartUTC(dateFrom)
-          matches = matches.filter(r => r.updated_at && r.updated_at >= fromUTC)
-        }
-        if (dateTo) {
-          const toUTC = localDayEndUTC(dateTo)
-          matches = matches.filter(r => r.updated_at && r.updated_at <= toUTC)
-        }
-
-        // Float exact barcode match to position 0 (scanner UX)
-        return matches.sort((a, b) =>
-          (b.barcode?.toLowerCase() === q ? 1 : 0) -
-          (a.barcode?.toLowerCase() === q ? 1 : 0)
-        )
-      })()
-    : pagedItems   // server already applied sort + date filter
+  const products = pagedQuery.data?.items ?? []
 
   // ── Export ──────────────────────────────────────────────────────────────
-  // When searching: the filtered client-side array already respects
-  // category_name and date filter — use it directly for the CSV.
-  // When not searching: fetch lazily from backend with active sort+date.
+  // Lazily fetches ALL matching rows (limit=10000) with the same active
+  // search/sort/date filters — only called on export click.
   async function handleExport() {
     try {
-      let rows
-      if (isSearching) {
-        // Already in memory, already filtered — just return it
-        rows = filteredForSearch
-      } else {
-        rows = await fetchAllProductsForExport({
-          sort_by:      sortKey,
-          sort_dir:     sortDir,
-          // TIMEZONE FIX: same UTC boundary conversion as the query
-          updated_from: dateFrom ? localDayStartUTC(dateFrom) : undefined,
-          updated_to:   dateTo   ? localDayEndUTC(dateTo)     : undefined,
-        })
-        if (pagedQuery.data?.pagination?.truncated) {
-          toast('Export limited to 10,000 records. Contact support for full export.', { icon: '⚠️' })
-        }
+      const rows = await fetchAllProductsForExport({
+        search:       debouncedSearch,
+        sort_by:      sortKey,
+        sort_dir:     sortDir,
+        updated_from: dateFrom ? localDayStartUTC(dateFrom) : undefined,
+        updated_to:   dateTo   ? localDayEndUTC(dateTo)     : undefined,
+      })
+      if (pagedQuery.data?.pagination?.truncated) {
+        toast('Export limited to 10,000 records. Contact support for full export.', { icon: '⚠️' })
       }
       return rows
     } catch {
@@ -188,29 +120,19 @@ export function useProducts() {
     setPage(1)
   }
 
-  const activeQuery = isSearching ? allQuery : pagedQuery
-
   return {
     // Table data
-    products:    filteredForSearch,
-    // allProducts: still exposed for the scanner handleScannerEnter in the page
-    // (it needs the full list to find an exact barcode match on Enter).
-    // Empty array ([]) when not searching — scanner will not auto-open drawer
-    // on first scan but will work after allQuery loads (triggered by search text).
-    allProducts: allItems,
+    products,
 
-    // Pagination (null when searching — no paginator shown during search)
-    pagination:  isSearching ? null : (pagedQuery.data?.pagination ?? null),
+    // Pagination — always shown now (server-paginated for all cases)
+    pagination: pagedQuery.data?.pagination ?? null,
 
-    // totalItems: correct count for both modes.
-    //   Not searching → server total (all pages); searching → filtered length.
-    totalItems:  isSearching
-      ? filteredForSearch.length
-      : (pagedQuery.data?.pagination?.total ?? 0),
+    // totalItems: server total across all pages of the current filter set
+    totalItems: pagedQuery.data?.pagination?.total ?? 0,
 
     // Loading / error
-    isLoading:  activeQuery.isLoading,
-    isError:    activeQuery.isError,
+    isLoading:  pagedQuery.isLoading,
+    isError:    pagedQuery.isError,
 
     // Search
     search,

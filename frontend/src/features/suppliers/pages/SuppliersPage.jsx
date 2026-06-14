@@ -5,7 +5,7 @@
 // which sends the current active filters to the backend and returns all
 // matching records — not limited to the 20 rows visible on screen.
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -101,7 +101,11 @@ export default function SuppliersPage() {
     (activeSearch ? 1 : 0) + (activeDateFilter ? 1 : 0);
 
   /* ── Column definitions ─────────────────────────────────────────────── */
-  const columns = [
+  // PERF: memoized so Table doesn't see a new `columns` reference on every
+  // render caused by search typing, pagination clicks, etc.
+  // Dependencies: only canManage changes which columns appear (actions column).
+  // setEditTarget/setDeleteTarget are stable useState setters — not listed.
+  const columns = useMemo(() => [
     {
       key: 'supp_name',
       label: 'Supplier Name',
@@ -215,7 +219,7 @@ export default function SuppliersPage() {
         </div>
       ),
     }] : []),
-  ];
+  ], [canManage]);
 
   /* ── Render ───────────────────────────────────────────────────────────── */
   return (

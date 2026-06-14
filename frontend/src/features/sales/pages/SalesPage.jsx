@@ -57,7 +57,7 @@ export default function SalesPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // run once on mount only — location.state is stable at mount time
 
-// ── Column definitions ───────────────────────────────────────────────────
+  // ── Column definitions ───────────────────────────────────────────────────
   // PERF: columns only reference `row` data and module-level constants
   // (STATUS_VARIANT, STATUS_LABEL, formatCurrency, formatDate). There are no
   // component-scope dependencies, so the array is stable for the lifetime of
@@ -243,23 +243,21 @@ export default function SalesPage() {
         }
       </div>
 
-      {/* Pagination — shown whenever there are multiple pages.                */}
-      {/* Server-side filtering means filtered results can also span           */}
-      {/* multiple pages, so we never hide pagination based on filter state.  */}
-      {totalPages > 1 && (
-        <div style={{ marginTop: 16 }}>
-          <Pagination
-            pagination={{
-              page,
-              total_pages: totalPages,
-              total:       totalItems,
-              has_next:    page < totalPages,
-              has_prev:    page > 1,
-            }}
-            onPageChange={setPage}
-          />
-        </div>
-      )}
+      {/* Pagination — Pagination's own `if (total_pages <= 1) return null`   */}
+      {/* guard handles the single-page case. No outer conditional needed.   */}
+      {/* This matches CustomersPage, SuppliersPage, and the documented rule. */}
+      <div style={{ marginTop: 16 }}>
+        <Pagination
+          pagination={{
+            page,
+            total_pages: totalPages,
+            total:       totalItems,
+            has_next:    page < totalPages,
+            has_prev:    page > 1,
+          }}
+          onPageChange={setPage}
+        />
+      </div>
 
       {/* Detail drawer */}
       {drawerSale && (

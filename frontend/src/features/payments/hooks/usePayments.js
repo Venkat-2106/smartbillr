@@ -148,7 +148,8 @@ export function usePayments() {
   return {
     // Table data
     payments,
-    isLoading: isLoading || isFetching,
+    isLoading,
+    isFetching,
     isError,
 
     // Filters

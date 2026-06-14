@@ -178,7 +178,8 @@ export function useSuppliers() {
     suppliers,
 
     // Loading / error states
-    isLoading: isLoading || isFetching,
+    isLoading,
+    isFetching,
     isError,
 
     // Search

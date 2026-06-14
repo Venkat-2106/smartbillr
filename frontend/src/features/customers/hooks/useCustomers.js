@@ -197,7 +197,8 @@ export function useCustomers() {
     customers,
 
     // Loading / error states
-    isLoading: isLoading || isFetching,
+    isLoading,
+    isFetching,
     isError,
 
     // Search

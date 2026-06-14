@@ -144,7 +144,8 @@ export function usePurchases() {
 
   return {
     purchases,
-    isLoading: isLoading || isFetching,
+    isLoading,
+    isFetching,
     isError,
 
     search,    setSearch: handleSearch,

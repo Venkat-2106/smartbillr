@@ -169,7 +169,8 @@ export function useCategories() {
     categories,
 
     // Loading / error states
-    isLoading: isLoading || isFetching,
+    isLoading,
+    isFetching,
     isError,
 
     // Search

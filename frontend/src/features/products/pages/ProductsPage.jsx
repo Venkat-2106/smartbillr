@@ -56,8 +56,10 @@ import {
 
 import { PRODUCT_CSV_COLUMNS, PRODUCT_CSV_COLUMNS_NO_PROFIT } from '../../../shared/utils/csvExport'
 import { usePermissions }       from '../../../shared/hooks/usePermissions'
-import { formatDate }            from '../../../shared/utils/formatDate'
-import { fetchCategories }       from '../../categories/api/categoriesApi'
+import { formatDate }           from '../../../shared/utils/formatDate'
+import { formatCurrency }       from '../../../shared/utils/formatCurrency'
+import useAuthStore             from '../../../store/authStore'
+import { fetchCategories }      from '../../categories/api/categoriesApi'
 
 import {
   useProducts,
@@ -124,13 +126,9 @@ const dateInputStyle = {
 }
 
 // ── Currency formatter ─────────────────────────────────────────────────────────
-function fmt(num) {
-  if (num == null) return '—'
-  return Number(num).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
+// Removed: local fmt() with hardcoded 'en-IN'. Now uses formatCurrency() which
+// reads the business's country code and formats correctly for any locale.
+
 
 // ── Barcode scanner UI helpers ─────────────────────────────────────────────────
 // Inline SVG barcode icon — no external icon library needed.
@@ -182,6 +180,8 @@ export default function ProductsPage() {
   const { can }   = usePermissions()
   const canManage = can('products.edit')
   const canViewProfit = can('view_product_profit')
+  const business      = useAuthStore(s => s.business)
+  const countryCode   = business?.business_country_code
 
   const categories = useCategoryOptions()
   const navigate = useNavigate()
@@ -551,7 +551,7 @@ export default function ProductsPage() {
       width:    110,
       render: (row) => (
         <span style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--text-primary)' }}>
-          ₹{fmt(row.prod_sell_price)}
+          {formatCurrency(row.prod_sell_price, countryCode)}
         </span>
       ),
     },
@@ -567,7 +567,7 @@ export default function ProductsPage() {
         row.prod_mrp != null
           ? (
             <span style={{ fontSize: 13, color: 'var(--text-muted)', textDecoration: 'line-through' }}>
-              ₹{fmt(row.prod_mrp)}
+              {formatCurrency(row.prod_mrp, countryCode)}
             </span>
           )
           : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
@@ -584,7 +584,7 @@ export default function ProductsPage() {
               row.prod_cost_price != null
                 ? (
                   <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                    ₹{fmt(row.prod_cost_price)}
+                    {formatCurrency(row.prod_cost_price, countryCode)}
                   </span>
                 )
                 : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
@@ -601,7 +601,7 @@ export default function ProductsPage() {
               const isNeg  = Number(profit) < 0
               return (
                 <span style={{ fontSize: 13, fontWeight: 600, color: isNeg ? '#EF4444' : '#10B981' }}>
-                  {isNeg ? '−' : '+'}₹{fmt(Math.abs(profit))}
+                  {isNeg ? '' : '+'}{formatCurrency(profit, countryCode)}
                 </span>
               )
             },
@@ -662,7 +662,7 @@ export default function ProductsPage() {
           ),
         }]
       : []),
-  ], [canViewProfit, canManage])
+  ], [canViewProfit, canManage, countryCode])
 
   const activeSearch     = search.trim().length > 0
   const activeDateFilter = dateFrom || dateTo

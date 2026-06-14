@@ -26,8 +26,10 @@ import {
 } from '../../../shared/components'
 
 import { STOCK_CSV_COLUMNS, STOCK_CSV_COLUMNS_NO_PROFIT } from '../../../shared/utils/csvExport'
-import { usePermissions } from '../../../shared/hooks/usePermissions'
-import { formatDate }     from '../../../shared/utils/formatDate'
+import { usePermissions }  from '../../../shared/hooks/usePermissions'
+import { formatDate }      from '../../../shared/utils/formatDate'
+import { formatCurrency }  from '../../../shared/utils/formatCurrency'
+import useAuthStore        from '../../../store/authStore'
 import { fetchCategories } from '../../categories/api/categoriesApi'
 import { useStock, useStockMovements, useStockAlerts } from '../hooks/useStock'
 import AdjustStockModal from '../components/AdjustStockModal'
@@ -99,13 +101,8 @@ function useCategoryOptions() {
 }
 
 // ── Currency formatter ─────────────────────────────────────────────────────────
-function fmt(num) {
-  if (num == null) return '—'
-  return Number(num).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
+// Removed: local fmt() with hardcoded 'en-IN'. Now uses formatCurrency() which
+// reads the business's country code and formats correctly for any locale.
 
 // ── Stock status badge ─────────────────────────────────────────────────────────
 function StockStatusBadge({ status }) {
@@ -136,7 +133,9 @@ function AlertBadge({ stockQty }) {
 // TAB 1 — Current Stock
 // ═══════════════════════════════════════════════════════════════════════════════
 function CurrentStockTab({ canViewProfit, canAdjust }) {
-  const categories = useCategoryOptions()
+  const categories  = useCategoryOptions()
+  const business    = useAuthStore(s => s.business)
+  const countryCode = business?.business_country_code
   const [adjustTarget, setAdjustTarget] = useState(null)
 
   const {
@@ -225,7 +224,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
       width:    110,
       render: (row) => (
         <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-          ₹{fmt(row.prod_sell_price)}
+          {formatCurrency(row.prod_sell_price, countryCode)}
         </span>
       ),
     },
@@ -238,7 +237,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
             width:    110,
             render: (row) => (
               row.prod_cost_price != null
-                ? <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>₹{fmt(row.prod_cost_price)}</span>
+                ? <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{formatCurrency(row.prod_cost_price, countryCode)}</span>
                 : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
             ),
           },
@@ -249,7 +248,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
             width:    120,
             render: (row) => (
               row.stock_value != null
-                ? <span style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--text-primary)' }}>₹{fmt(row.stock_value)}</span>
+                ? <span style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--text-primary)' }}>{formatCurrency(row.stock_value, countryCode)}</span>
                 : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
             ),
           },
@@ -292,7 +291,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
           ),
         }]
       : []),
-  ], [canViewProfit, canAdjust, handleAdjustClick])
+  ], [canViewProfit, canAdjust, handleAdjustClick, countryCode])
 
   return (
     <>

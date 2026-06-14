@@ -4,7 +4,6 @@ export default function AuthLayout({ children }) {
       minHeight: '100vh',
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
-      fontFamily: 'Inter, sans-serif',
     }}>
 
       {/* LEFT — Dark hero panel */}
@@ -131,24 +130,23 @@ export default function AuthLayout({ children }) {
         </div>
       </div>
 
-      {/* RIGHT — Light form area */}
+      {/* RIGHT — Form area */}
       <div style={{
-        background: '#F1F5F9',
+        background: 'var(--bg-page)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         padding: '2.5rem',
       }}>
-        {/* Glass card */}
+        {/* Card */}
         <div style={{
           width: '100%',
           maxWidth: '400px',
-          background: 'rgba(255,255,255,0.9)',
-          backdropFilter: 'blur(12px)',
-          border: '1px solid #E5E7EB',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
           borderRadius: '18px',
           padding: '2rem',
-          boxShadow: '0 25px 50px rgba(0,0,0,0.08)',
+          boxShadow: 'var(--shadow-elevated)',
           transition: 'transform 0.25s ease',
         }}
           onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'}

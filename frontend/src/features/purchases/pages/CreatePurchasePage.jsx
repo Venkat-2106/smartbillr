@@ -11,13 +11,13 @@
 //   - On success: redirects to /purchases
 //
 // PERF:
-//   - React.memo LineItemRow (same FIX 1 pattern as CreateSalePage)
+//   - React.memo PurchaseLineItemRow (same FIX 1 pattern as CreateSalePage)
 //   - useCallback([]) for all stable handlers (FIX 2)
 //   - EMPTY_ARRAY stable reference for closed dropdowns (FIX 1 key)
 //   - Module-level NUM_INPUT_STYLE constant (FIX 4)
 //   - No product pre-loading — server-side search on demand (≥2 chars)
 
-import React, { useState, useMemo, useCallback, memo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useNavigate }          from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast }                from 'react-hot-toast'
@@ -28,6 +28,9 @@ import { selectStyle }          from '../../../shared/components/FormField'
 import { formatCurrency }       from '../../../shared/utils/formatCurrency'
 import useAuthStore             from '../../../store/authStore'
 import { useDebounce }          from '../../../shared/hooks/useDebounce'
+import PurchaseLineItemRow      from '../components/PurchaseLineItemRow'
+import PurchaseOrderSummaryRow  from '../components/PurchaseOrderSummaryRow'
+import PurchaseSectionCard      from '../components/PurchaseSectionCard'
 
 // ── Module-level constants (created once, never recreated on render) ──────────
 const NUM_INPUT_STYLE = {
@@ -274,7 +277,7 @@ export default function CreatePurchasePage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
             {/* Supplier card */}
-            <SectionCard title="Supplier">
+            <PurchaseSectionCard title="Supplier">
               <FormField label="Search by name or phone">
                 <div style={{ position: 'relative' }}>
                   <input
@@ -350,10 +353,10 @@ export default function CreatePurchasePage() {
                   </div>
                 )}
               </FormField>
-            </SectionCard>
+            </PurchaseSectionCard>
 
             {/* Line items card */}
-            <SectionCard title="Line Items">
+            <PurchaseSectionCard title="Line Items">
               {/* Column headers */}
               <div style={{
                 display: 'grid',
@@ -372,7 +375,7 @@ export default function CreatePurchasePage() {
               </div>
 
               {items.map(item => (
-                <LineItemRow
+                <PurchaseLineItemRow
                   key={item._id}
                   item={item}
                   isOpen={!!openDropMap[item._id]}
@@ -407,7 +410,7 @@ export default function CreatePurchasePage() {
               >
                 + Add another line item
               </button>
-            </SectionCard>
+            </PurchaseSectionCard>
           </div>
 
           {/* ── RIGHT panel ─────────────────────────────────────────────── */}
@@ -415,26 +418,26 @@ export default function CreatePurchasePage() {
             display: 'flex', flexDirection: 'column', gap: 16,
             position: 'sticky', top: 24,
           }}>
-            <SectionCard title="Order Summary">
+            <PurchaseSectionCard title="Order Summary">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <SummaryRow label="Subtotal" value={formatCurrency(totals.subtotal)} />
+                <PurchaseOrderSummaryRow label="Subtotal" value={formatCurrency(totals.subtotal)} />
                 {totals.taxTotal > 0 && (
-                  <SummaryRow label="Tax" value={formatCurrency(totals.taxTotal)} muted />
+                  <PurchaseOrderSummaryRow label="Tax" value={formatCurrency(totals.taxTotal)} muted />
                 )}
                 {totals.discountAmt > 0 && (
-                  <SummaryRow
+                  <PurchaseOrderSummaryRow
                     label="Discount"
                     value={<span style={{ color: '#059669' }}>−{formatCurrency(totals.discountAmt)}</span>}
                     muted
                   />
                 )}
                 <div style={{ borderTop: '1.5px solid var(--border)', paddingTop: 12, marginTop: 2 }}>
-                  <SummaryRow label="Grand Total" value={formatCurrency(totals.grandTotal)} bold />
+                  <PurchaseOrderSummaryRow label="Grand Total" value={formatCurrency(totals.grandTotal)} bold />
                 </div>
               </div>
-            </SectionCard>
+            </PurchaseSectionCard>
 
-            <SectionCard title="Payment">
+            <PurchaseSectionCard title="Payment">
               <FormField label="Discount (flat amount)" style={{ marginBottom: 14 }}>
                 <input
                   type="number" min="0" step="0.01"
@@ -456,7 +459,7 @@ export default function CreatePurchasePage() {
                   <option value="paid">Paid</option>
                 </select>
               </FormField>
-            </SectionCard>
+            </PurchaseSectionCard>
 
             <Button
               variant="primary"
@@ -477,212 +480,5 @@ export default function CreatePurchasePage() {
         </div>
       )}
     </>
-  )
-}
-
-/* ─── LineItemRow — memoized, same pattern as CreateSalePage ────────────────
- * React.memo + stable useCallback refs ensure only the changed row re-renders.
- * Closed rows receive EMPTY_ARRAY as searchResults → no re-render on search.
- */
-const LineItemRow = memo(function LineItemRow({
-  item,
-  isOpen,
-  searchText,
-  searchResults,
-  onSearchChange,
-  onProductSelect,
-  onOpenDropdown,
-  onCloseDropdown,
-  onClearProduct,
-  onQtyChange,
-  onPriceChange,
-  onTaxChange,
-  onRemove,
-  canRemove,
-}) {
-  const s = (Number(item.unit_price) || 0) * (Number(item.quantity) || 0)
-  const t = s * ((Number(item.tax_rate) || 0) / 100)
-
-  return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '1fr 80px 130px 70px 130px 32px',
-      gap: 10, alignItems: 'center',
-      padding: '10px 0',
-      borderBottom: '1px solid var(--border)',
-    }}>
-
-      {/* Product search combobox */}
-      <div style={{ position: 'relative' }}>
-        {item.product_id ? (
-          <div style={{
-            display: 'flex', alignItems: 'center',
-            gap: 6, padding: '8px 10px',
-            border: '1.5px solid var(--accent-600)',
-            borderRadius: 8, background: 'var(--bg-page)',
-            fontSize: 13, color: 'var(--text-primary)',
-          }}>
-            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {item.prod_name}
-            </span>
-            <button
-              type="button"
-              onClick={() => onClearProduct(item._id)}
-              title="Change product"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 16, padding: 0, lineHeight: 1 }}
-            >×</button>
-          </div>
-        ) : (
-          <>
-            <input
-              type="text"
-              value={searchText}
-              onChange={e => onSearchChange(item._id, e.target.value)}
-              onFocus={() => onOpenDropdown(item._id)}
-              onBlur={() => setTimeout(() => onCloseDropdown(item._id), 150)}
-              placeholder="Type to search product…"
-              autoComplete="off"
-              style={{ ...selectStyle, fontSize: 13, padding: '8px 10px' }}
-            />
-            {isOpen && searchText.length >= 2 && (
-              <div style={{
-                position: 'absolute', top: 'calc(100% + 3px)', left: 0, right: 0,
-                background: 'var(--bg-card)',
-                border: '1.5px solid var(--border)',
-                borderRadius: 10,
-                boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-                zIndex: 300,
-                maxHeight: 220, overflowY: 'auto',
-              }}>
-                {searchResults.length === 0 ? (
-                  <div style={{ padding: '10px 14px', fontSize: 12.5, color: 'var(--text-muted)' }}>
-                    No products found for "{searchText}"
-                  </div>
-                ) : (
-                  searchResults.map(p => (
-                    <div
-                      key={p.prod_id}
-                      onMouseDown={() => onProductSelect(item._id, p)}
-                      style={{
-                        padding: '9px 14px', cursor: 'pointer',
-                        borderBottom: '1px solid var(--border)',
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-subtle)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    >
-                      <div>
-                        <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {p.prod_name}
-                        </div>
-                        {p.barcode && (
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
-                            {p.barcode}
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 10 }}>
-                        <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-                          Cost: {formatCurrency(p.prod_cost_price || 0)}
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                          Stock: {p.prod_stock_qty ?? '—'}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-            {isOpen && searchText.length > 0 && searchText.length < 2 && (
-              <div style={{
-                position: 'absolute', top: 'calc(100% + 3px)', left: 0, right: 0,
-                background: 'var(--bg-card)', border: '1.5px solid var(--border)',
-                borderRadius: 10, padding: '10px 14px',
-                fontSize: 12.5, color: 'var(--text-muted)', zIndex: 300,
-              }}>
-                Type at least 2 characters to search
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Quantity */}
-      <input
-        type="number" min="1" step="1"
-        value={item.quantity}
-        onChange={e => onQtyChange(item._id, 'quantity', Math.max(1, Number(e.target.value) || 1))}
-        style={NUM_INPUT_STYLE}
-      />
-
-      {/* Unit (cost) price */}
-      <input
-        type="number" min="0" step="0.01"
-        value={item.unit_price}
-        onChange={e => onPriceChange(item._id, 'unit_price', Number(e.target.value) || 0)}
-        style={NUM_INPUT_STYLE}
-      />
-
-      {/* Tax % */}
-      <input
-        type="number" min="0" max="100" step="0.5"
-        value={item.tax_rate}
-        onChange={e => onTaxChange(item._id, 'tax_rate', Number(e.target.value) || 0)}
-        style={NUM_INPUT_STYLE}
-      />
-
-      {/* Line total */}
-      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', textAlign: 'right' }}>
-        {formatCurrency(s + t)}
-      </span>
-
-      {/* Remove */}
-      <button
-        type="button"
-        onClick={() => onRemove(item._id)}
-        disabled={!canRemove}
-        title="Remove item"
-        style={{
-          background: 'none', border: 'none', padding: 4,
-          cursor: canRemove ? 'pointer' : 'not-allowed',
-          color: canRemove ? '#ef4444' : 'var(--text-muted)',
-          fontSize: 20, lineHeight: 1, borderRadius: 6,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}
-      >×</button>
-    </div>
-  )
-})
-
-/* ─── Helper components ──────────────────────────────────────────────────── */
-
-function SectionCard({ title, children }) {
-  return (
-    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: 24 }}>
-      {title && (
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 20 }}>
-          {title}
-        </h3>
-      )}
-      {children}
-    </div>
-  )
-}
-
-function SummaryRow({ label, value, bold, muted }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ fontSize: 13.5, color: muted ? 'var(--text-muted)' : 'var(--text-secondary)' }}>
-        {label}
-      </span>
-      <span style={{
-        fontSize: bold ? 16 : 13.5,
-        fontWeight: bold ? 700 : 500,
-        color: bold ? 'var(--text-primary)' : 'var(--text-secondary)',
-      }}>
-        {value}
-      </span>
-    </div>
   )
 }

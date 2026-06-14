@@ -80,8 +80,7 @@
 // FIX 4 — NUM_INPUT_STYLE as module-level constant
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useState, useMemo, useRef, useEffect, useCallback, memo, useLayoutEffect } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
@@ -92,14 +91,16 @@ import {
   fetchProductByBarcode,
 } from '../api/salesApi';
 import { createCustomer } from '../../customers/api/customersApi';
-import { Button, PageHeader, FormField, Spinner, Modal } from '../../../shared/components';
-import StateDropdown from '../../../shared/components/StateDropdown';
+import { Button, PageHeader, FormField, Spinner } from '../../../shared/components';
 import { selectStyle } from '../../../shared/components/FormField';
 import { formatCurrency } from '../../../shared/utils/formatCurrency';
-import { COUNTRIES } from '../../../shared/data/countries';
 import useAuthStore from '../../../store/authStore';
 import { useDebounce } from '../../../shared/hooks/useDebounce';
 import { getAutoPrintInvoice, setAutoPrintInvoice } from '../../../shared/utils/preferences';
+import SaleLineItemRow from '../components/SaleLineItemRow';
+import OrderSummaryRow from '../components/OrderSummaryRow';
+import AddCustomerModal from '../components/AddCustomerModal';
+import StockOverrideModal from '../components/StockOverrideModal';
 
 // ── Module-level constants ─────────────────────────────────────────────────────
 // FIX 4: Moved out of component — created once, never re-created on render.
@@ -291,6 +292,12 @@ export default function CreateSalePage() {
     setNewCustCountry(business?.business_country_code || '');
     setNewCustState(business?.business_state || '');
     setShowAddCustModal(true);
+  };
+
+  const handleCloseAddCustModal = () => {
+    setShowAddCustModal(false);
+    setNewCustName(''); setNewCustPhone(''); setNewCustEmail('');
+    setNewCustCountry(''); setNewCustState('');
   };
 
   const handleAddNewCustomer = async () => {
@@ -569,185 +576,30 @@ export default function CreateSalePage() {
       />
 
       {/* ── Add New Customer Mini-Modal ─────────────────────────────────────── */}
-      <Modal
+      <AddCustomerModal
         open={showAddCustModal}
-        onClose={() => {
-          setShowAddCustModal(false);
-          setNewCustName(''); setNewCustPhone(''); setNewCustEmail('');
-          setNewCustCountry(''); setNewCustState('');
-        }}
-        title="Add New Customer"
-        subtitle="Quickly add a customer and select them for this invoice"
-        size="sm"
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <FormField label="Full Name *">
-            <input
-              type="text"
-              value={newCustName}
-              onChange={e => setNewCustName(e.target.value)}
-              placeholder="Customer name"
-              autoFocus
-              style={{ ...selectStyle }}
-            />
-          </FormField>
-          <FormField label="Phone">
-            <input
-              type="tel"
-              value={newCustPhone}
-              onChange={e => setNewCustPhone(e.target.value)}
-              placeholder="Phone number (optional)"
-              style={{ ...selectStyle }}
-            />
-          </FormField>
-          <FormField label="Email">
-            <input
-              type="email"
-              value={newCustEmail}
-              onChange={e => setNewCustEmail(e.target.value)}
-              placeholder="Email address (optional)"
-              style={{ ...selectStyle }}
-            />
-          </FormField>
-          <FormField label="Country">
-            <select
-              value={newCustCountry}
-              onChange={e => {
-                setNewCustCountry(e.target.value);
-                setNewCustState('');
-              }}
-              style={{ ...selectStyle }}
-            >
-              <option value="">— Select Country —</option>
-              {COUNTRIES.map(c => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
-            </select>
-          </FormField>
-          <StateDropdown
-            label="State / Province"
-            countryCode={newCustCountry}
-            value={newCustState}
-            onChange={val => setNewCustState(val)}
-          />
-        </div>
-        <Modal.Footer>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setShowAddCustModal(false);
-              setNewCustName(''); setNewCustPhone(''); setNewCustEmail('');
-              setNewCustCountry(''); setNewCustState('');
-            }}
-            disabled={addCustLoading}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            onClick={handleAddNewCustomer}
-            loading={addCustLoading}
-            disabled={!newCustName.trim()}
-          >
-            Create &amp; Select
-          </Button>
-        </Modal.Footer>
-      </Modal>
+        onClose={handleCloseAddCustModal}
+        name={newCustName}
+        phone={newCustPhone}
+        email={newCustEmail}
+        country={newCustCountry}
+        state={newCustState}
+        loading={addCustLoading}
+        onNameChange={setNewCustName}
+        onPhoneChange={setNewCustPhone}
+        onEmailChange={setNewCustEmail}
+        onCountryChange={(val) => { setNewCustCountry(val); setNewCustState(''); }}
+        onStateChange={setNewCustState}
+        onSubmit={handleAddNewCustomer}
+      />
 
       {/* ── Stock Override Dialog ──────────────────────────────────────────── */}
-      <Modal
-        open={stockErrors.length > 0}
-        onClose={handleStockOverrideCancel}
-        title="Stock Quantity Alert"
-        subtitle="The following items exceed available stock"
-        size="md"
-      >
-        <div style={{
-          background: '#FEF9EC',
-          border: '1.5px solid #F59E0B',
-          borderRadius: 10,
-          padding: '12px 16px',
-          marginBottom: 20,
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 10,
-        }}>
-          <span style={{ fontSize: 20, flexShrink: 0, lineHeight: 1.2 }}>⚠️</span>
-          <div>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: '#92400E', marginBottom: 3 }}>
-              Requested quantity exceeds available stock
-            </div>
-            <div style={{ fontSize: 12.5, color: '#B45309', lineHeight: 1.5 }}>
-              You can override and proceed — a <strong>manual adjustment</strong> record
-              will be created automatically in stock movements with the note
-              "Manual adjustment during sale".
-            </div>
-          </div>
-        </div>
-
-        <div style={{
-          border: '1px solid var(--border)',
-          borderRadius: 10,
-          overflow: 'hidden',
-          marginBottom: 4,
-        }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 100px 100px 90px',
-            gap: 0,
-            background: 'var(--bg-subtle)',
-            borderBottom: '1px solid var(--border)',
-            padding: '9px 16px',
-          }}>
-            {['Product', 'Available', 'Requested', 'Shortfall'].map((h, i) => (
-              <span key={i} style={{
-                fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
-                textTransform: 'uppercase', letterSpacing: '0.07em',
-                textAlign: i > 0 ? 'right' : 'left',
-              }}>
-                {h}
-              </span>
-            ))}
-          </div>
-
-          {stockErrors.map((err, idx) => (
-            <div
-              key={err.product_id}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 100px 100px 90px',
-                gap: 0,
-                padding: '11px 16px',
-                alignItems: 'center',
-                borderBottom: idx === stockErrors.length - 1 ? 'none' : '1px solid var(--border)',
-                background: 'var(--bg-card)',
-              }}
-            >
-              <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
-                {err.product_name}
-              </span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#059669', textAlign: 'right' }}>
-                {err.available_qty}
-              </span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#2563EB', textAlign: 'right' }}>
-                {err.requested_qty}
-              </span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#DC2626', textAlign: 'right' }}>
-                −{err.shortfall}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        <Modal.Footer>
-          <Button variant="ghost" onClick={handleStockOverrideCancel} disabled={mutation.isPending}>
-            Edit Quantities
-          </Button>
-          <Button variant="danger" onClick={handleStockOverrideConfirm} loading={mutation.isPending}>
-            Override &amp; Save
-          </Button>
-        </Modal.Footer>
-      </Modal>
+      <StockOverrideModal
+        stockErrors={stockErrors}
+        isPending={mutation.isPending}
+        onCancel={handleStockOverrideCancel}
+        onConfirm={handleStockOverrideConfirm}
+      />
 
       {isPageLoading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
@@ -990,7 +842,7 @@ export default function CreateSalePage() {
                 paddingRight: 8,
               }}>
                 {items.map((item) => (
-                  <LineItemRow
+                  <SaleLineItemRow
                     key={item._id}
                     item={item}
                     isOpen={!!openDropMap[item._id]}
@@ -1058,22 +910,22 @@ export default function CreateSalePage() {
                   Order Summary
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                  <SummaryRow label="Subtotal"   value={formatCurrency(totals.subtotal)} />
+                  <OrderSummaryRow label="Subtotal"   value={formatCurrency(totals.subtotal)} />
                   {totals.autoDiscount > 0 && (
-                    <SummaryRow
+                    <OrderSummaryRow
                       label="You Saved (vs MRP)"
                       value={<span style={{ color: '#059669' }}>{formatCurrency(totals.autoDiscount)}</span>}
                       muted
                     />
                   )}
-                  <SummaryRow label="Tax" value={formatCurrency(totals.taxTotal)} muted />
+                  <OrderSummaryRow label="Tax" value={formatCurrency(totals.taxTotal)} muted />
                   <div style={{ borderTop: '1.5px solid var(--border)', paddingTop: 10, marginTop: 2 }}>
-                    <SummaryRow label="Grand Total" value={formatCurrency(totals.grandTotal)} bold />
+                    <OrderSummaryRow label="Grand Total" value={formatCurrency(totals.grandTotal)} bold />
                   </div>
                   {paymentStatus === 'partial' && parsedPaidAmount > 0 && (
                     <>
-                      <SummaryRow label="Paid Now" value={formatCurrency(parsedPaidAmount)} />
-                      <SummaryRow
+                      <OrderSummaryRow label="Paid Now" value={formatCurrency(parsedPaidAmount)} />
+                      <OrderSummaryRow
                         label="Remaining Due"
                         value={
                           <span style={{ color: '#ef4444', fontWeight: 700 }}>
@@ -1195,270 +1047,5 @@ export default function CreateSalePage() {
         </>
       )}
     </>
-  );
-}
-
-/* ─── DropdownPortal — renders a floating panel anchored to a ref's rect,
- * escaping any ancestor `overflow: auto` clipping via document.body portal.
- * Repositions on scroll/resize while open. ──────────────────────────────── */
-function DropdownPortal({ anchorRef, children }) {
-  const [rect, setRect] = useState(null);
-
-  useLayoutEffect(() => {
-    const update = () => {
-      const el = anchorRef.current;
-      if (!el) return;
-      setRect(el.getBoundingClientRect());
-    };
-    update();
-    window.addEventListener('scroll', update, true);
-    window.addEventListener('resize', update);
-    return () => {
-      window.removeEventListener('scroll', update, true);
-      window.removeEventListener('resize', update);
-    };
-  }, [anchorRef]);
-
-  if (!rect) return null;
-
-  const spaceBelow = window.innerHeight - rect.bottom;
-  const spaceAbove = rect.top;
-  const openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
-
-  const style = {
-    position: 'fixed',
-    left: rect.left,
-    width: rect.width,
-    ...(openUp
-      ? { bottom: window.innerHeight - rect.top + 3 }
-      : { top: rect.bottom + 3 }),
-    zIndex: 1000,
-  };
-
-  return createPortal(
-    <div style={style}>{children}</div>,
-    document.body
-  );
-}
-
-/* ─── LineItemRow — memoized, only re-renders when ITS props change ──────────
- *
- * FIX L3: Grid template updated to match header — '2fr 80px 110px 72px 100px 28px'
- * Product column gets 2× the available space, giving ~240-400px for the name.
- */
-const LineItemRow = memo(function LineItemRow({
-  item,
-  isOpen,
-  searchText,
-  searchResults,
-  onSearchChange,
-  onProductSelect,
-  onOpenDropdown,
-  onCloseDropdown,
-  onClearProduct,
-  onQtyChange,
-  onPriceChange,
-  onTaxChange,
-  onRemove,
-  canRemove,
-}) {
-  const s = (Number(item.unit_price) || 0) * (Number(item.quantity) || 0);
-  const t = s * ((Number(item.tax_rate) || 0) / 100);
-
-  const availableQty = item.prod_stock_qty != null ? Number(item.prod_stock_qty) : null;
-  const overStock = availableQty !== null && Number(item.quantity) > availableQty;
-  const comboRef = useRef(null);
-
-  return (
-    /* FIX L3: grid template matches updated header */
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '2fr 80px 110px 72px 100px 28px',
-      gap: 8, alignItems: 'center',
-      padding: '9px 0',
-      borderBottom: '1px solid var(--border)',
-    }}>
-
-      {/* Product search combobox */}
-      <div ref={comboRef} style={{ position: 'relative' }}>
-        {item.product_id ? (
-          <div style={{
-            display: 'flex', alignItems: 'center',
-            gap: 6, padding: '7px 9px',
-            border: '1.5px solid var(--accent-600)',
-            borderRadius: 8, background: 'var(--bg-page)',
-            fontSize: 13, color: 'var(--text-primary)',
-          }}>
-            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {item.prod_name}
-              {availableQty !== null && (
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>
-                  ({availableQty} left)
-                </span>
-              )}
-            </span>
-            <button
-              type="button"
-              onClick={() => onClearProduct(item._id)}
-              title="Change product"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 16, padding: 0, lineHeight: 1 }}
-            >×</button>
-          </div>
-        ) : (
-          <>
-            <input
-              type="text"
-              value={searchText}
-              onChange={e => onSearchChange(item._id, e.target.value)}
-              onFocus={() => onOpenDropdown(item._id)}
-              onBlur={() => setTimeout(() => onCloseDropdown(item._id), 150)}
-              placeholder="Type to search…"
-              autoComplete="off"
-              style={{ ...selectStyle, fontSize: 13, padding: '7px 9px' }}
-            />
-            {isOpen && searchText.length >= 2 && (
-              <DropdownPortal anchorRef={comboRef}>
-              <div style={{
-                background: 'var(--bg-card)',
-                border: '1.5px solid var(--border)',
-                borderRadius: 10,
-                boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-                maxHeight: 220, overflowY: 'auto',
-              }}>
-                {searchResults.length === 0 ? (
-                  <div style={{ padding: '10px 14px', fontSize: 12.5, color: 'var(--text-muted)' }}>
-                    No products found for "{searchText}"
-                  </div>
-                ) : (
-                  searchResults.map(p => (
-                    <div
-                      key={p.prod_id}
-                      onMouseDown={() => onProductSelect(item._id, p)}
-                      style={{
-                        padding: '9px 14px', cursor: 'pointer',
-                        borderBottom: '1px solid var(--border)',
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-subtle)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    >
-                      <div>
-                        <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {p.prod_name}
-                        </div>
-                        {p.barcode && (
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
-                            {p.barcode}
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 10 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {formatCurrency(p.prod_sell_price)}
-                        </div>
-                        {p.prod_stock_qty != null && (
-                          <div style={{ fontSize: 11, color: p.prod_stock_qty > 0 ? '#059669' : '#ef4444' }}>
-                            {p.prod_stock_qty} left
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-              </DropdownPortal>
-            )}
-            {isOpen && searchText.length > 0 && searchText.length < 2 && (
-              <DropdownPortal anchorRef={comboRef}>
-              <div style={{
-                background: 'var(--bg-card)', border: '1.5px solid var(--border)',
-                borderRadius: 10, padding: '10px 14px',
-                fontSize: 12.5, color: 'var(--text-muted)',
-              }}>
-                Type at least 2 characters to search
-              </div>
-              </DropdownPortal>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Quantity */}
-      <div style={{ position: 'relative' }}>
-        <input
-          type="number" min="1" step="1"
-          value={item.quantity}
-          onChange={e => onQtyChange(item._id, 'quantity', Math.max(1, Number(e.target.value) || 1))}
-          style={{
-            ...NUM_INPUT_STYLE,
-            borderColor: overStock ? '#F59E0B' : undefined,
-          }}
-          title={overStock ? `Only ${availableQty} in stock — override will be needed` : undefined}
-        />
-        {overStock && (
-          <span style={{
-            position: 'absolute', top: -4, right: -4,
-            width: 8, height: 8, borderRadius: '50%',
-            background: '#F59E0B',
-            border: '1.5px solid var(--bg-card)',
-          }} />
-        )}
-      </div>
-
-      <input
-        type="number" min="0" step="0.01"
-        value={item.unit_price}
-        onChange={e => onPriceChange(item._id, 'unit_price', Number(e.target.value) || 0)}
-        style={NUM_INPUT_STYLE}
-      />
-      <input
-        type="number" min="0" max="100" step="0.5"
-        value={item.tax_rate}
-        onChange={e => onTaxChange(item._id, 'tax_rate', Number(e.target.value) || 0)}
-        style={NUM_INPUT_STYLE}
-      />
-      <span style={{
-        fontSize: 13, fontWeight: 700,
-        color: 'var(--text-primary)', textAlign: 'right',
-      }}>
-        {formatCurrency(s + t)}
-      </span>
-      <button
-        type="button"
-        onClick={() => onRemove(item._id)}
-        disabled={!canRemove}
-        title="Remove item"
-        style={{
-          background: 'none', border: 'none', padding: 4,
-          cursor: canRemove ? 'pointer' : 'not-allowed',
-          color: canRemove ? '#ef4444' : 'var(--text-muted)',
-          fontSize: 20, lineHeight: 1, borderRadius: 6,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}
-      >
-        ×
-      </button>
-    </div>
-  );
-});
-
-/* ─── Helper components ──────────────────────────────────────────────────── */
-
-function SummaryRow({ label, value, bold, muted }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ fontSize: 13.5, color: muted ? 'var(--text-muted)' : 'var(--text-secondary)' }}>
-        {label}
-      </span>
-      <span
-        style={{
-          fontSize: bold ? 16 : 13.5,
-          fontWeight: bold ? 700 : 500,
-          color: bold ? 'var(--text-primary)' : 'var(--text-secondary)',
-        }}
-      >
-        {value}
-      </span>
-    </div>
   );
 }

@@ -404,17 +404,21 @@ def adjust_stock(
                 )
 
         # ── Update product stock ─────────────────────────────────────────────
+        # updated_by → set here, consistent with PUT /products/{prod_id} pattern.
+        # updated_at → intentionally omitted; fn_set_updated_at trigger handles it.
         db.execute(
             text("""
                 UPDATE products
-                SET prod_stock_qty = :new_stock
+                SET prod_stock_qty = :new_stock,
+                    updated_by     = CAST(:user_id AS uuid)
                 WHERE prod_id = CAST(:prod_id AS uuid)
                   AND business_id = CAST(:business_id AS uuid)
             """),
             {
-                "new_stock":    new_stock,
-                "prod_id":      str(data.product_id),
-                "business_id":  business_id
+                "new_stock":   new_stock,
+                "user_id":     user_id,
+                "prod_id":     str(data.product_id),
+                "business_id": business_id
             }
         )
 

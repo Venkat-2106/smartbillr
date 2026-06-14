@@ -32,7 +32,6 @@ function SearchIcon({ size = 15, color = 'currentColor' }) {
 function MiniSpinner() {
   return (
     <>
-      <style>{`@keyframes sb-spin { to { transform: rotate(360deg) } }`}</style>
       <svg width="14" height="14" viewBox="0 0 16 16" style={{ animation: 'sb-spin 0.7s linear infinite' }}>
         <circle cx="8" cy="8" r="6" fill="none" stroke="var(--accent-600)" strokeWidth="2.5" strokeDasharray="28" strokeDashoffset="10" strokeLinecap="round" />
       </svg>

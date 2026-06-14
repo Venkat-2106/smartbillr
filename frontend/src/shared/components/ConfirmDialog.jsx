@@ -1,4 +1,28 @@
-import { useEffect, useCallback } from 'react'
+// src/shared/components/ConfirmDialog.jsx
+//
+// FIX APPLIED (Viewport-centering / portal):
+//   The backdrop + centering wrapper now render through <ModalPortal> — the
+//   same shared portal used by Modal.jsx — instead of a duplicated
+//   position:fixed/inset:0 implementation rendered inline in the page tree.
+//
+//   ROOT CAUSE: DashboardLayout wraps every page's <Outlet/> in a
+//   <div className="fade-up">, whose `fadeUp` keyframe animation leaves a
+//   persistent `transform: translateY(0)` on that div (animation-fill-mode:
+//   both). A non-`none` transform on an ancestor makes that ancestor the
+//   containing block for `position: fixed` descendants — so this dialog's
+//   `inset: 0` was being measured against the page's full content height
+//   instead of the real viewport. On long pages, "center" landed below the
+//   visible viewport, forcing the user to scroll to reach Confirm/Cancel.
+//
+//   <ModalPortal> renders straight to document.body (outside `.fade-up`),
+//   guaranteeing `position: fixed; inset: 0` always means the real viewport
+//   — exactly like the Edit/Create modals. It also locks background scroll
+//   and handles the Escape key, so that logic is no longer duplicated here.
+//
+//   Visual design (icon, title, message, button layout, animation) is 100%
+//   unchanged.
+
+import ModalPortal from './ModalPortal'
 import Button from './Button'
 
 export default function ConfirmDialog({
@@ -12,19 +36,6 @@ export default function ConfirmDialog({
   variant = 'danger',
   loading = false,
 }) {
-  const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Escape') onClose?.()
-  }, [onClose])
-
-  useEffect(() => {
-    if (open) {
-      document.addEventListener('keydown', handleKeyDown)
-    }
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [open, handleKeyDown])
-
   if (!open) return null
 
   const iconMap = { danger: '🗑️', warning: '⚠️' }
@@ -35,122 +46,100 @@ export default function ConfirmDialog({
     : 'linear-gradient(135deg, #F59E0B, #F97316)'
 
   return (
-    <>
-
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0,
-          background: 'rgba(0,0,0,0.45)',
-          backdropFilter: 'blur(3px)',
-          zIndex: 1100,
-        }}
-      />
-
+    <ModalPortal open={open} onClose={onClose} zIndex={1100}>
       {/* Dialog */}
-      <div style={{
-        position: 'fixed', inset: 0,
-        zIndex: 1101,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '20px 16px',
-        pointerEvents: 'none',
-      }}>
-        <div
-          onClick={e => e.stopPropagation()}
-          style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border)',
-            borderRadius: 18,
-            boxShadow: 'var(--shadow-elevated, 0 20px 60px rgba(0,0,0,0.18))',
-            width: '100%',
-            maxWidth: 420,
-            padding: '28px 28px 24px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            textAlign: 'center',
-            gap: 12,
-            animation: 'confirm-in 0.2s cubic-bezier(0.34,1.26,0.64,1)',
-            pointerEvents: 'auto',
-            boxSizing: 'border-box',
-          }}
-        >
-          {/* Icon */}
-          <div style={{
-            width: 52, height: 52,
-            borderRadius: '50%',
-            background: iconBg,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 22,
-            marginBottom: 4,
-            flexShrink: 0,
-            boxShadow: variant === 'danger'
-              ? '0 4px 14px rgba(239,68,68,0.3)'
-              : '0 4px 14px rgba(245,158,11,0.3)',
-          }}>
-            {icon}
-          </div>
-
-          {/* Title */}
-          <h3 style={{
-            margin: 0,
-            fontSize: 16,
-            fontWeight: 700,
-            color: 'var(--text-primary)',
-            letterSpacing: '-0.3px',
-            fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
-            wordBreak: 'break-word',
-          }}>
-            {title}
-          </h3>
-
-          {/* Message */}
-          {message && (
-            <p style={{
-              margin: 0,
-              fontSize: 13.5,
-              color: 'var(--text-muted)',
-              fontWeight: 400,
-              lineHeight: 1.55,
-              fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
-            }}>
-              {message}
-            </p>
-          )}
-
-          {/* Buttons */}
-          <div style={{
-            display: 'flex',
-            gap: 10,
-            marginTop: 8,
-            width: '100%',
-            boxSizing: 'border-box',
-          }}>
-            <Button
-              variant="secondary"
-              onClick={onClose}
-              disabled={loading}
-              style={{ flex: 1, minWidth: 0 }}
-            >
-              {cancelText}
-            </Button>
-            <Button
-              variant={variant === 'warning' ? 'primary' : 'danger'}
-              onClick={onConfirm}
-              loading={loading}
-              style={{ flex: 1, minWidth: 0 }}
-            >
-              {confirmText}
-            </Button>
-          </div>
-
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderRadius: 18,
+          boxShadow: 'var(--shadow-elevated, 0 20px 60px rgba(0,0,0,0.18))',
+          width: '100%',
+          maxWidth: 420,
+          padding: '28px 28px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
+          gap: 12,
+          animation: 'confirm-in 0.2s cubic-bezier(0.34,1.26,0.64,1)',
+          pointerEvents: 'auto',
+          boxSizing: 'border-box',
+        }}
+      >
+        {/* Icon */}
+        <div style={{
+          width: 52, height: 52,
+          borderRadius: '50%',
+          background: iconBg,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 22,
+          marginBottom: 4,
+          flexShrink: 0,
+          boxShadow: variant === 'danger'
+            ? '0 4px 14px rgba(239,68,68,0.3)'
+            : '0 4px 14px rgba(245,158,11,0.3)',
+        }}>
+          {icon}
         </div>
+
+        {/* Title */}
+        <h3 style={{
+          margin: 0,
+          fontSize: 16,
+          fontWeight: 700,
+          color: 'var(--text-primary)',
+          letterSpacing: '-0.3px',
+          fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
+          wordBreak: 'break-word',
+        }}>
+          {title}
+        </h3>
+
+        {/* Message */}
+        {message && (
+          <p style={{
+            margin: 0,
+            fontSize: 13.5,
+            color: 'var(--text-muted)',
+            fontWeight: 400,
+            lineHeight: 1.55,
+            fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
+          }}>
+            {message}
+          </p>
+        )}
+
+        {/* Buttons */}
+        <div style={{
+          display: 'flex',
+          gap: 10,
+          marginTop: 8,
+          width: '100%',
+          boxSizing: 'border-box',
+        }}>
+          <Button
+            variant="secondary"
+            onClick={onClose}
+            disabled={loading}
+            style={{ flex: 1, minWidth: 0 }}
+          >
+            {cancelText}
+          </Button>
+          <Button
+            variant={variant === 'warning' ? 'primary' : 'danger'}
+            onClick={onConfirm}
+            loading={loading}
+            style={{ flex: 1, minWidth: 0 }}
+          >
+            {confirmText}
+          </Button>
+        </div>
+
       </div>
-    </>
+    </ModalPortal>
   )
 }

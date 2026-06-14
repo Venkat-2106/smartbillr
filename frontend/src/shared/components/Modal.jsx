@@ -1,6 +1,6 @@
 // src/shared/components/Modal.jsx
 //
-// FIX APPLIED:
+// FIX APPLIED (Close button hover):
 //   Close button was using onMouseEnter/Leave to mutate e.currentTarget.style
 //   directly (same DOM mutation bug that was already fixed in Table.jsx,
 //   DashboardLayout.jsx, and StatCard). When any state inside the Modal changes
@@ -9,8 +9,17 @@
 //   the button. Fixed by tracking hover in a single useState variable inside
 //   the Modal component — the same pattern used everywhere else in the project.
 //   No visual change at all — identical appearance and animation.
+//
+// FIX APPLIED (Viewport-centering / portal):
+//   The backdrop + centering wrapper now render through <ModalPortal>, which
+//   portals them to document.body and locks background scroll while open.
+//   This fixes the Modal being centered relative to the page's total content
+//   height (via the .fade-up transform containing-block) instead of the
+//   visible viewport. See ModalPortal.jsx for the full root-cause writeup.
+//   The dialog panel itself (markup, styling, animation, sizes) is unchanged.
 
-import { useState, useEffect, useCallback, Children, isValidElement } from 'react'
+import { useState, Children, isValidElement } from 'react'
+import ModalPortal from './ModalPortal'
 
 const SIZE_MAP = {
   sm: 400,
@@ -52,22 +61,6 @@ export default function Modal({
   // FIX: single boolean tracks close-button hover — no DOM mutation needed
   const [closeBtnHovered, setCloseBtnHovered] = useState(false)
 
-  // Close on Escape key
-  const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Escape') onClose?.()
-  }, [onClose])
-
-  useEffect(() => {
-    if (open) {
-      document.addEventListener('keydown', handleKeyDown)
-      // Do NOT lock body scroll — the modal panel itself scrolls internally.
-      // Locking body scroll prevented scrolling inside the modal on some browsers.
-    }
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [open, handleKeyDown])
-
   if (!open) return null
 
   // Separate Modal.Footer children from body children so the footer
@@ -86,135 +79,109 @@ export default function Modal({
   const stickyFooter = footerChildren.length > 0 ? footerChildren : null
 
   return (
-    <>
-
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0,
-          background: 'rgba(0,0,0,0.45)',
-          backdropFilter: 'blur(3px)',
-          zIndex: 1000,
-          animation: 'backdrop-in 0.18s ease',
-        }}
-      />
-
+    <ModalPortal open={open} onClose={onClose} zIndex={1000}>
       {/* Panel */}
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
+        onClick={e => e.stopPropagation()}
         style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 1001,
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderRadius: 18,
+          boxShadow: 'var(--shadow-elevated, 0 20px 60px rgba(0,0,0,0.18))',
+          width: '100%',
+          maxWidth: maxW,
+          maxHeight: 'calc(100vh - 80px)',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '20px 16px',
-          pointerEvents: 'none',
+          flexDirection: 'column',
+          animation: 'modal-in 0.22s cubic-bezier(0.34,1.26,0.64,1)',
+          pointerEvents: 'auto',
+          overflow: 'hidden',
         }}
       >
-        <div
-          onClick={e => e.stopPropagation()}
-          style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border)',
-            borderRadius: 18,
-            boxShadow: 'var(--shadow-elevated, 0 20px 60px rgba(0,0,0,0.18))',
-            width: '100%',
-            maxWidth: maxW,
-            maxHeight: 'calc(100vh - 80px)',
+        {/* Header */}
+        {(title || !hideClose) && (
+          <div style={{
             display: 'flex',
-            flexDirection: 'column',
-            animation: 'modal-in 0.22s cubic-bezier(0.34,1.26,0.64,1)',
-            pointerEvents: 'auto',
-            overflow: 'hidden',
-          }}
-        >
-          {/* Header */}
-          {(title || !hideClose) && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              padding: '20px 24px 18px',
-              borderBottom: '1px solid var(--border)',
-              flexShrink: 0,
-              gap: 12,
-            }}>
-              <div>
-                {title && (
-                  <h2
-                    id="modal-title"
-                    style={{
-                      margin: 0,
-                      fontSize: 16,
-                      fontWeight: 700,
-                      color: 'var(--text-primary)',
-                      letterSpacing: '-0.3px',
-                      lineHeight: 1.2,
-                    }}
-                  >
-                    {title}
-                  </h2>
-                )}
-                {subtitle && (
-                  <p style={{
-                    margin: '4px 0 0',
-                    fontSize: 12.5,
-                    color: 'var(--text-muted)',
-                    fontWeight: 400,
-                  }}>
-                    {subtitle}
-                  </p>
-                )}
-              </div>
-
-              {!hideClose && (
-                // FIX: onMouseEnter/Leave now set React state instead of mutating
-                // e.currentTarget.style directly. The computed style is derived
-                // from closeBtnHovered — same visual result, no DOM mutation.
-                <button
-                  onClick={onClose}
-                  aria-label="Close modal"
-                  onMouseEnter={() => setCloseBtnHovered(true)}
-                  onMouseLeave={() => setCloseBtnHovered(false)}
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            padding: '20px 24px 18px',
+            borderBottom: '1px solid var(--border)',
+            flexShrink: 0,
+            gap: 12,
+          }}>
+            <div>
+              {title && (
+                <h2
+                  id="modal-title"
                   style={{
-                    width: 30, height: 30,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: closeBtnHovered ? 'var(--bg-hover)' : 'var(--bg-subtle)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                    color: closeBtnHovered ? 'var(--text-primary)' : 'var(--text-muted)',
+                    margin: 0,
                     fontSize: 16,
-                    lineHeight: 1,
-                    flexShrink: 0,
-                    transition: 'all 0.14s',
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                    letterSpacing: '-0.3px',
+                    lineHeight: 1.2,
                   }}
                 >
-                  ✕
-                </button>
+                  {title}
+                </h2>
+              )}
+              {subtitle && (
+                <p style={{
+                  margin: '4px 0 0',
+                  fontSize: 12.5,
+                  color: 'var(--text-muted)',
+                  fontWeight: 400,
+                }}>
+                  {subtitle}
+                </p>
               )}
             </div>
-          )}
 
-          {/* Body — scrollable */}
-          <div style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: '20px 24px',
-          }}>
-            {bodyChildren}
+            {!hideClose && (
+              // FIX: onMouseEnter/Leave now set React state instead of mutating
+              // e.currentTarget.style directly. The computed style is derived
+              // from closeBtnHovered — same visual result, no DOM mutation.
+              <button
+                onClick={onClose}
+                aria-label="Close modal"
+                onMouseEnter={() => setCloseBtnHovered(true)}
+                onMouseLeave={() => setCloseBtnHovered(false)}
+                style={{
+                  width: 30, height: 30,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: closeBtnHovered ? 'var(--bg-hover)' : 'var(--bg-subtle)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  color: closeBtnHovered ? 'var(--text-primary)' : 'var(--text-muted)',
+                  fontSize: 16,
+                  lineHeight: 1,
+                  flexShrink: 0,
+                  transition: 'all 0.14s',
+                }}
+              >
+                ✕
+              </button>
+            )}
           </div>
+        )}
 
-          {/* Footer — sticky at bottom. Renders Modal.Footer children OR the footer prop */}
-          {stickyFooter || footer}
+        {/* Body — scrollable */}
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '20px 24px',
+        }}>
+          {bodyChildren}
         </div>
+
+        {/* Footer — sticky at bottom. Renders Modal.Footer children OR the footer prop */}
+        {stickyFooter || footer}
       </div>
-    </>
+    </ModalPortal>
   )
 }
 

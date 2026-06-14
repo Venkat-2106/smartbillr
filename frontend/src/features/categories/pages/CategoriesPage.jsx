@@ -224,7 +224,7 @@ export default function CategoriesPage() {
           ),
         }]
       : []),
-  ], [canManage]); // re-compute only when canManage changes
+  ], [canManage]) // re-compute only when canManage changes
 
   return (
     <>

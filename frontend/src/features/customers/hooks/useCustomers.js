@@ -23,13 +23,19 @@
 //   the UTC ISO boundaries of that local day before sending to the API.
 //   This mirrors the pattern already used in useSales.js.
 //
+// REFACTOR — useServerTableState:
+//   The ~40 lines of UI-state plumbing (page / search / debounce / sort /
+//   dateFrom / dateTo / handlers) have been replaced by a single call to
+//   useServerTableState() from shared/hooks/useServerTableState.js.
+//   The public return shape of this hook is UNCHANGED — CustomersPage.jsx
+//   does not need any modifications.
+//
 // ARCHITECTURE UNCHANGED:
 //   - Server data via React Query (never fetch in component)
 //   - No direct localStorage (Zustand persist handles it)
 //   - authStore not imported in the API file
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState }                               from 'react'
 import toast                                      from 'react-hot-toast'
 import useAuthStore                               from '../../../store/authStore'
 import {
@@ -40,8 +46,8 @@ import {
   updateCustomer,
   deleteCustomer,
 } from '../api/customersApi'
-import { localDayStartUTC, localDayEndUTC } from '../../../shared/utils/dateUtils'
-import { useDebounce } from '../../../shared/hooks/useDebounce'
+import { localDayStartUTC, localDayEndUTC }  from '../../../shared/utils/dateUtils'
+import { useServerTableState }               from '../../../shared/hooks/useServerTableState'
 const PAGE_SIZE = 20
 
 
@@ -62,16 +68,22 @@ export function useCustomers() {
   const user        = useAuthStore(s => s.user)
   const queryClient = useQueryClient()
 
-  // ── Filter / sort / page state ──────────────────────────────────────────
-  const [search,   setSearchRaw] = useState('')
-  const [sortKey,  setSortKey]   = useState('updated_at')
-  const [sortDir,  setSortDir]   = useState('desc')
-  const [page,     setPage]      = useState(1)
-  const [dateFrom, setDateFrom]  = useState('')
-  const [dateTo,   setDateTo]    = useState('')
-
-  // Debounce: wait 350ms after the user stops typing before sending to server
-  const debouncedSearch = useDebounce(search, 350)
+  // ── UI state (page / search / sort / dates) ─────────────────────────────
+  // Replaces ~40 lines of useState + useDebounce + handler boilerplate.
+  // initialSortKey/Dir match the previous useState defaults exactly.
+  // Public names returned here are identical to what CustomersPage.jsx expects.
+  const {
+    page,   setPage,
+    search, debouncedSearch, setSearch,
+    sortKey, sortDir, handleSort,
+    dateFrom, setDateFrom,
+    dateTo,   setDateTo,
+    unwrapPagination,
+  } = useServerTableState({
+    initialSortKey: 'updated_at',
+    initialSortDir: 'desc',
+    debounceMs:     350,
+  })
 
   // ── FETCH (React Query — server paginated) ──────────────────────────────
   // queryKey includes every filter param so any change triggers a fresh fetch.
@@ -101,11 +113,8 @@ export function useCustomers() {
     enabled:         !!user,
   })
 
-  // Unwrap pagination envelope
-  const customers  = serverData?.items       ?? []
-  const pagination = serverData?.pagination  ?? {}
-  const totalItems = pagination.total        ?? 0
-  const totalPages = pagination.total_pages  ?? 1
+  // ── Unwrap pagination envelope ───────────────────────────────────────────
+  const { items: customers, pagination, totalItems, totalPages } = unwrapPagination(serverData)
 
   // ── LAZY EXPORT ──────────────────────────────────────────────────────────
   // Only runs when the Export button is clicked.
@@ -129,32 +138,6 @@ export function useCustomers() {
       toast.error('Export failed — please try again')
       return []
     }
-  }
-
-  // ── EVENT HANDLERS ──────────────────────────────────────────────────────
-  function handleSearch(val) {
-    setSearchRaw(val)
-    setPage(1)
-  }
-
-  function handleSort(key) {
-    if (sortKey === key) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortKey(key)
-      setSortDir('asc')
-    }
-    setPage(1)
-  }
-
-  function handleDateFrom(val) {
-    setDateFrom(val)
-    setPage(1)
-  }
-
-  function handleDateTo(val) {
-    setDateTo(val)
-    setPage(1)
   }
 
   // ── MUTATIONS ────────────────────────────────────────────────────────────
@@ -201,13 +184,13 @@ export function useCustomers() {
     isFetching,
     isError,
 
-    // Search
+    // Search (setSearch from useServerTableState resets page automatically)
     search,
-    setSearch: handleSearch,
+    setSearch,
 
-    // Date range
-    dateFrom,  setDateFrom: handleDateFrom,
-    dateTo,    setDateTo:   handleDateTo,
+    // Date range (setDateFrom/setDateTo from useServerTableState reset page)
+    dateFrom,  setDateFrom,
+    dateTo,    setDateTo,
 
     // Sort (passed to Table.jsx)
     sortKey,

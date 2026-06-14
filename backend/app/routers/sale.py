@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Query
 from fastapi import Body
-from pydantic import BaseModel
+from pydantic import BaseModel,  field_validator
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
@@ -32,6 +32,14 @@ router = APIRouter(prefix="/sales", tags=["Sales"])
 # ─────────────────────────────────────────
 class SaleStatusUpdate(BaseModel):
     status: str
+    paid_amount: Optional[Decimal] = None
+
+    @field_validator("paid_amount")
+    @classmethod
+    def paid_amount_must_be_positive(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError("Paid amount must be greater than zero")
+        return v
 
 
 # ─────────────────────────────────────────
@@ -634,30 +642,71 @@ def update_payment_status(
 
     old_status = sale.sales_payment_status
 
-    if old_status == status:
+    # ── Get sale final amount from DB ─────────────────────────────────────
+    sale_row = db.execute(
+        text("SELECT sales_final_amount FROM sales WHERE sales_id = CAST(:sid AS uuid)"),
+        {"sid": sales_id}
+    ).fetchone()
+    sale_final = float(sale_row.sales_final_amount) if sale_row and sale_row.sales_final_amount else 0
+
+    # ── Get current cumulative paid from active payment row ───────────────
+    active_row = db.execute(
+        text("""
+            SELECT COALESCE(cumulative_paid, 0) AS already_paid
+            FROM payments
+            WHERE sale_id  = CAST(:sid AS uuid)
+              AND is_active = true
+        """),
+        {"sid": sales_id}
+    ).fetchone()
+    already_paid = float(active_row.already_paid) if active_row else 0.0
+    remaining    = round(sale_final - already_paid, 2)
+
+    # ── No-op if same status and no paid_amount provided ──────────────────
+    if old_status == status and body.paid_amount is None:
         return success_response({"message": f"Sale is already '{status}'", "status": status})
 
     reconciliation_inserted = False
+    response_note = None
+    new_total_paid = already_paid
+    new_remaining  = remaining
 
-    if status == "paid" and old_status != "paid":
-        sale_row = db.execute(
-            text("SELECT sales_final_amount FROM sales WHERE sales_id = CAST(:sid AS uuid)"),
-            {"sid": sales_id}
-        ).fetchone()
-        sale_final = float(sale_row.sales_final_amount) if sale_row and sale_row.sales_final_amount else 0
+    # ── PATH 1: paid_amount explicitly provided → derive status from it ────
+    if body.paid_amount is not None:
+        paid_input = float(body.paid_amount)
 
-        active_row = db.execute(
-            text("""
-                SELECT COALESCE(cumulative_paid, 0) AS already_paid
-                FROM payments
-                WHERE sale_id  = CAST(:sid AS uuid)
-                  AND is_active = true
-            """),
-            {"sid": sales_id}
-        ).fetchone()
-        already_paid = float(active_row.already_paid) if active_row else 0.0
-        remaining    = round(sale_final - already_paid, 2)
+        if paid_input <= 0:
+            return error_response("Paid amount must be greater than zero", 400)
 
+        if paid_input > remaining:
+            return error_response(
+                f"Payment of {paid_input} exceeds the remaining balance of "
+                f"{remaining}. Please enter {remaining} or less.",
+                400
+            )
+
+        total_paid = round(already_paid + paid_input, 2)
+        derived_status = calculate_payment_status(total_paid, sale_final)
+
+        record_payment_and_sync(
+            db              = db,
+            business_id     = current_user["business_id"],
+            sale_id         = sales_id,
+            sale_final      = sale_final,
+            payment_amount  = paid_input,
+            payment_method  = "adjustment" if already_paid > 0 else (sale.sales_payment_method or "cash"),
+            new_status      = derived_status,
+            cumulative_paid = total_paid
+        )
+        reconciliation_inserted = True
+        new_total_paid = total_paid
+        new_remaining  = round(sale_final - total_paid, 2)
+        if new_remaining < 0:
+            new_remaining = 0
+        response_note = f"Payment recorded: ₹{paid_input}. Total paid: ₹{total_paid}."
+
+    # ── PATH 2: status="paid" without explicit paid_amount → auto-pay remaining ─
+    elif status == "paid" and old_status != "paid":
         if remaining > 0:
             record_payment_and_sync(
                 db              = db,
@@ -670,6 +719,12 @@ def update_payment_status(
                 cumulative_paid = round(already_paid + remaining, 2)
             )
             reconciliation_inserted = True
+            new_total_paid = round(already_paid + remaining, 2)
+            new_remaining  = 0
+            response_note = (
+                "A reconciliation payment row was automatically created "
+                "in the payments table to record the remaining balance as an adjustment."
+            )
         else:
             db.execute(
                 text("""
@@ -682,7 +737,18 @@ def update_payment_status(
                 text("UPDATE sales SET sales_payment_status = 'paid' WHERE sales_id = CAST(:sid AS uuid)"),
                 {"sid": sales_id}
             )
+            new_total_paid = already_paid
+            new_remaining  = 0
 
+    # ── PATH 3: status="partial" without paid_amount → error ──────────────
+    elif status == "partial" and body.paid_amount is None:
+        return error_response(
+            "Paid amount is required when setting payment status to 'partial'. "
+            "Please provide the amount received.",
+            400
+        )
+
+    # ── PATH 4: status="pending" → just update label (no payment recorded) ──
     else:
         db.execute(
             text("UPDATE sales SET sales_payment_status = :status WHERE sales_id = CAST(:sid AS uuid)"),
@@ -698,12 +764,14 @@ def update_payment_status(
 
     db.commit()
 
-    response_data = {"message": "Payment status updated", "status": status}
-    if reconciliation_inserted:
-        response_data["note"] = (
-            "A reconciliation payment row was automatically created "
-            "in the payments table to record the remaining balance as an adjustment."
-        )
+    response_data = {
+        "message":             "Payment status updated",
+        "status":              status,
+        "total_paid":          new_total_paid,
+        "remaining_balance":   new_remaining,
+    }
+    if response_note:
+        response_data["note"] = response_note
 
     return success_response(response_data)
 

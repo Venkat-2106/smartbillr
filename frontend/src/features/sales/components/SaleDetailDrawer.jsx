@@ -20,7 +20,7 @@ import {
   PrinterIcon,
 } from '@heroicons/react/24/outline';
 import { fetchSale } from '../api/salesApi';
-import { Badge, Button, Spinner } from '../../../shared/components';
+import { Badge, Button, Spinner, Input } from '../../../shared/components';
 import { selectStyle } from '../../../shared/components/FormField';
 import { formatCurrency } from '../../../shared/utils/formatCurrency';
 import { formatDate }     from '../../../shared/utils/formatDate';
@@ -215,6 +215,8 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
   const [displayStatus, setDisplayStatus] = useState(sale?.sales_payment_status || 'pending');
   const [editingStatus, setEditingStatus] = useState(false);
   const [newStatus,     setNewStatus]     = useState(sale?.sales_payment_status || 'paid');
+  const [partialAmount, setPartialAmount] = useState('');
+  const [partialError,  setPartialError]  = useState('');
 
   const { data: detail, isLoading, isError } = useQuery({
     queryKey: ['sale', sale?.sales_id],
@@ -263,12 +265,33 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
   }
 
   function handleStatusSave() {
+    setPartialError('');
+
+    if (newStatus === 'partial') {
+      const amt = parseFloat(partialAmount);
+      if (isNaN(amt) || amt <= 0) {
+        setPartialError('Amount received must be greater than zero');
+        return;
+      }
+      const outstanding = detail?.remaining_balance ?? remaining;
+      if (amt > outstanding) {
+        setPartialError(
+          `Amount received (${formatCurrency(amt)}) exceeds outstanding balance (${formatCurrency(outstanding)})`
+        );
+        return;
+      }
+    }
+
+    const paidAmount = newStatus === 'partial' ? parseFloat(partialAmount) : undefined;
+
     statusMutation.mutate(
-      { id: sale.sales_id, status: newStatus },
+      { id: sale.sales_id, status: newStatus, paid_amount: paidAmount },
       {
         onSuccess: () => {
           setDisplayStatus(newStatus);
           setEditingStatus(false);
+          setPartialAmount('');
+          setPartialError('');
         },
       }
     );
@@ -390,7 +413,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                 <InfoRow
                   icon={<BanknotesIcon />}
                   label="Status"
-                  isLast={!editingStatus}
+                  isLast={!editingStatus || newStatus !== 'partial'}
                   value={
                     <Badge
                       variant={STATUS_VARIANT[displayStatus] || 'default'}
@@ -400,35 +423,119 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                   }
                 />
                 {editingStatus && (
-                  <div style={{
-                    padding: '12px 14px',
-                    borderTop: '1px solid var(--border)',
-                    display: 'flex', gap: 8, alignItems: 'center',
-                  }}>
-                    <select
-                      className="sb-select"
-                      value={newStatus}
-                      onChange={e => setNewStatus(e.target.value)}
-                      style={{ ...selectStyle, flex: 1, fontSize: 13, padding: '8px 10px' }}
-                    >
-                      <option value="paid">Paid</option>
-                      <option value="partial">Partial</option>
-                      <option value="pending">Unpaid</option>
-                    </select>
-                    <Button size="sm" variant="primary"
-                      loading={statusMutation.isPending}
-                      onClick={handleStatusSave}>
-                      Save
-                    </Button>
-                    <Button size="sm" variant="ghost"
-                      onClick={() => setEditingStatus(false)}>
-                      Cancel
-                    </Button>
-                  </div>
+                  <>
+                    <div style={{
+                      padding: '12px 14px',
+                      borderTop: '1px solid var(--border)',
+                      display: 'flex', gap: 8, alignItems: 'center',
+                    }}>
+                      <select
+                        className="sb-select"
+                        value={newStatus}
+                        onChange={e => {
+                          setNewStatus(e.target.value);
+                          setPartialAmount('');
+                          setPartialError('');
+                        }}
+                        style={{ ...selectStyle, flex: 1, fontSize: 13, padding: '8px 10px' }}
+                      >
+                        <option value="paid">Paid</option>
+                        <option value="partial">Partial</option>
+                        <option value="pending">Unpaid</option>
+                      </select>
+                      <Button size="sm" variant="primary"
+                        loading={statusMutation.isPending}
+                        onClick={handleStatusSave}>
+                        Save
+                      </Button>
+                      <Button size="sm" variant="ghost"
+                        onClick={() => {
+                          setEditingStatus(false);
+                          setPartialAmount('');
+                          setPartialError('');
+                        }}>
+                        Cancel
+                      </Button>
+                    </div>
+
+                    {newStatus === 'partial' && (
+                      <div style={{
+                        padding: '12px 14px',
+                        borderTop: '1px solid var(--border)',
+                      }}>
+                        <div style={{
+                          background: 'var(--bg-card)',
+                          borderRadius: 10,
+                          border: '1px solid var(--border)',
+                          overflow: 'hidden',
+                        }}>
+                          <div style={{
+                            padding: '10px 12px',
+                            borderBottom: '1px solid var(--border)',
+                            fontSize: 10.5, fontWeight: 700,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.08em',
+                            color: 'var(--text-muted)',
+                          }}>
+                            Payment Collection
+                          </div>
+
+                          <div style={{ padding: '10px 12px' }}>
+                            <div style={{
+                              display: 'flex', justifyContent: 'space-between',
+                              fontSize: 12.5, color: 'var(--text-secondary)',
+                              marginBottom: 6,
+                            }}>
+                              <span>Invoice Total</span>
+                              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                {formatCurrency(finalAmount)}
+                              </span>
+                            </div>
+                            <div style={{
+                              display: 'flex', justifyContent: 'space-between',
+                              fontSize: 12.5, color: 'var(--text-secondary)',
+                              marginBottom: 6,
+                            }}>
+                              <span>Already Paid</span>
+                              <span style={{ fontWeight: 600, color: '#059669' }}>
+                                {formatCurrency(totalPaid)}
+                              </span>
+                            </div>
+                            <div style={{
+                              display: 'flex', justifyContent: 'space-between',
+                              fontSize: 12.5, color: 'var(--text-secondary)',
+                              marginBottom: 12,
+                              paddingBottom: 12,
+                              borderBottom: '1px solid var(--border)',
+                            }}>
+                              <span>Outstanding</span>
+                              <span style={{ fontWeight: 700, color: '#ef4444' }}>
+                                {formatCurrency(remaining)}
+                              </span>
+                            </div>
+
+                            <Input
+                              type="number"
+                              label="Amount Received"
+                              placeholder="Enter amount received"
+                              value={partialAmount}
+                              onChange={e => {
+                                setPartialAmount(e.target.value);
+                                setPartialError('');
+                              }}
+                              error={partialError || undefined}
+                              min={0}
+                              step="0.01"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </DrawerSection>
 
-              {!editingStatus && (
+              {!editingStatus && displayStatus !== 'paid' && (
                 <div style={{ marginBottom: 20 }}>
                   <Button
                     variant="secondary" size="sm"

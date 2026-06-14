@@ -3,17 +3,24 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // FRONTEND TAX DISPLAY UTILITIES
 //
-// Display-only helpers. Tax AMOUNTS are always computed server-side.
-// These functions translate the server's tax columns into UI labels.
+// These are display-only helpers. They do NOT determine tax amounts —
+// that is done server-side. These functions translate server tax columns
+// into human-readable labels for UI components.
+//
+// KEY PRINCIPLE: The UI reads tax amounts from the server response columns
+// (cgst_total, sgst_total, igst_total, tax_total) and only uses these
+// functions to decide what LABEL to show next to those amounts.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Returns the tax label for a country code.
+ * Returns the correct tax label for a given country code.
  *
- * getTaxLabel('IN') → 'GST'
- * getTaxLabel('US') → 'Sales Tax'
- * getTaxLabel('GB') → 'VAT'
- * getTaxLabel('XX') → 'Tax'   ← safe generic fallback for unknown countries
+ * Examples:
+ *   getTaxLabel('IN')  → 'GST'
+ *   getTaxLabel('US')  → 'Sales Tax'
+ *   getTaxLabel('GB')  → 'VAT'
+ *   getTaxLabel('AE')  → 'VAT'
+ *   getTaxLabel('XX')  → 'Tax'  ← unknown country, safe generic fallback
  */
 export function getTaxLabel(countryCode = '') {
   const map = {
@@ -38,13 +45,18 @@ export function getTaxLabel(countryCode = '') {
 }
 
 /**
- * Detects what tax type a server record used, by reading the tax columns.
- * Use this to decide which labels to show in drawers and invoices.
+ * Given a sale/purchase response from the server, determines whether
+ * the transaction used CGST+SGST or IGST (or generic tax).
+ *
+ * Use this to decide which tax breakdown labels to show in drawers and invoices.
  *
  * Returns: "cgst_sgst" | "igst" | "generic"
  *
- * Works with both Sale records (cgst_total / sgst_total / igst_total)
- * and Purchase records (pur_cgst_total / pur_sgst_total / pur_igst_total).
+ * Usage:
+ *   const taxType = detectTaxType(saleDetail)
+ *   if (taxType === 'cgst_sgst') → show CGST and SGST rows
+ *   if (taxType === 'igst')      → show IGST row
+ *   if (taxType === 'generic')   → show single "Tax" row
  */
 export function detectTaxType(record) {
   if (!record) return 'generic'
@@ -59,11 +71,13 @@ export function detectTaxType(record) {
 }
 
 /**
- * Returns breakdown label array for a given country and sale type.
+ * Returns tax breakdown labels for India (CGST + SGST or IGST).
+ * For non-India countries, returns a single 'Tax' label.
  *
- * getTaxBreakdown('IN', 'intrastate') → ['CGST', 'SGST']
- * getTaxBreakdown('IN', 'interstate') → ['IGST']
- * getTaxBreakdown('US')               → ['Tax']
+ * Usage:
+ *   getTaxBreakdown('IN', 'intrastate') → ['CGST', 'SGST']
+ *   getTaxBreakdown('IN', 'interstate') → ['IGST']
+ *   getTaxBreakdown('US')              → ['Tax']
  */
 export function getTaxBreakdown(countryCode = '', saleType = 'intrastate') {
   if ((countryCode || '').toUpperCase() === 'IN') {
@@ -75,7 +89,8 @@ export function getTaxBreakdown(countryCode = '', saleType = 'intrastate') {
 /**
  * Formats a tax amount with its label.
  *
- * formatTaxAmount(90, 'IN') → 'GST: ₹90.00'
+ * Example:
+ *   formatTaxAmount(90, 'IN') → 'GST: ₹90.00'
  */
 export function formatTaxAmount(amount, countryCode = '') {
   if (amount === null || amount === undefined || isNaN(amount)) return '—'

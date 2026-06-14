@@ -127,11 +127,12 @@ export function useSales() {
 
   // ── Status mutation ───────────────────────────────────────────────────────
   const statusMutation = useMutation({
-    mutationFn: ({ id, status }) => updateSaleStatus(id, status),
-    onSuccess: (_, variables) => {
+    mutationFn: ({ id, status, paid_amount }) => updateSaleStatus(id, status, paid_amount),
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['sale', variables.id] });
-      toast.success('Payment status updated');
+      const msg = data?.data?.note || 'Payment status updated';
+      toast.success(msg);
     },
     onError: (err) =>
       toast.error(err?.response?.data?.message || 'Failed to update status'),

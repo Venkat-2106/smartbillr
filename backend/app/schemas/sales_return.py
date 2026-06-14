@@ -1,3 +1,4 @@
+# app/schemas/sales_return.py
 from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from uuid import UUID
@@ -6,8 +7,8 @@ from datetime import datetime
 
 
 class ReturnItemCreate(BaseModel):
-    product_id: UUID
-    return_qty: int
+    product_id:    UUID
+    return_qty:    int
     refund_amount: Decimal
 
     @field_validator("return_qty")
@@ -19,29 +20,31 @@ class ReturnItemCreate(BaseModel):
 
     @field_validator("refund_amount")
     @classmethod
-    def amount_must_be_positive(cls, v):
-        if v <= 0:
-            raise ValueError("Refund amount must be greater than zero")
+    def amount_must_be_non_negative(cls, v):
+        # Zero is valid: returns for replacement/warranty with no cash refund.
+        # Negative refund amounts are never valid here.
+        if v < 0:
+            raise ValueError("Refund amount cannot be negative")
         return v
 
 
 class ReturnItemOut(BaseModel):
-    return_item_id: UUID
-    product_id: UUID
-    return_qty: float
-    refund_amount: Decimal
-    return_item_subtotal: Optional[Decimal] = None
+    return_item_id:        UUID
+    product_id:            UUID
+    return_qty:            float
+    refund_amount:         Decimal
+    return_item_subtotal:  Optional[Decimal] = None
 
     class Config:
         from_attributes = True
 
 
 class SalesReturnCreate(BaseModel):
-    sale_id: UUID
+    sale_id:       UUID
     return_reason: Optional[str] = None
     return_status: Optional[str] = "pending"
-    restock: Optional[bool] = False
-    items: List[ReturnItemCreate]
+    restock:       Optional[bool] = False
+    items:         List[ReturnItemCreate]
 
     @field_validator("items")
     @classmethod
@@ -61,7 +64,7 @@ class SalesReturnCreate(BaseModel):
 
 class SalesReturnUpdate(BaseModel):
     return_status: str
-    restock: Optional[bool] = False
+    restock:       Optional[bool] = False
 
     @field_validator("return_status")
     @classmethod
@@ -73,22 +76,21 @@ class SalesReturnUpdate(BaseModel):
 
 
 class SalesReturnOut(BaseModel):
-    return_id: UUID
-    business_id: UUID
-    sale_id: UUID
-    return_amount: Decimal
-    return_reason: Optional[str] = None
-    return_status: str
-    restock: Optional[bool] = False
-    # FIX: Added all DB columns that were missing from schema
-    stock_updated: Optional[bool] = False
-    refund_method: Optional[str] = None
-    approved_by: Optional[UUID] = None
-    approved_at: Optional[datetime] = None
-    rejected_reason: Optional[str] = None
+    return_id:        UUID
+    business_id:      UUID
+    sale_id:          UUID
+    return_amount:    Decimal
+    return_reason:    Optional[str] = None
+    return_status:    str
+    restock:          Optional[bool] = False
+    stock_updated:    Optional[bool] = False
+    refund_method:    Optional[str] = None
+    approved_by:      Optional[UUID] = None
+    approved_at:      Optional[datetime] = None
+    rejected_reason:  Optional[str] = None
     return_created_at: Optional[str] = None
-    created_by: Optional[UUID] = None
-    items: Optional[List[ReturnItemOut]] = []
+    created_by:       Optional[UUID] = None
+    items:            Optional[List[ReturnItemOut]] = []
 
     class Config:
         from_attributes = True

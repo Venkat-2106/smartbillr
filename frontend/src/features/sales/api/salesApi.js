@@ -63,8 +63,12 @@ export const createSale = async (body) => {
 }
 
 // ── Update payment status ─────────────────────────────────────────────────────
-export const updateSaleStatus = async (id, payment_status) => {
-  const res = await api.patch(`/sales/${id}/status`, { status: payment_status })
+export const updateSaleStatus = async (id, payment_status, paid_amount) => {
+  const payload = { status: payment_status }
+  if (paid_amount !== undefined && paid_amount !== null) {
+    payload.paid_amount = paid_amount
+  }
+  const res = await api.patch(`/sales/${id}/status`, payload)
   return res.data
 }
 

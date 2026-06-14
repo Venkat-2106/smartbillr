@@ -61,20 +61,11 @@ function LogoMark({ px, label }) {
 
   return (
     <>
-      <style>{`
-        @keyframes sb-breathe {
-          0%, 100% { opacity: 1;   transform: scale(1);    }
-          50%       { opacity: 0.55; transform: scale(0.91); }
-        }
-        .sb-logo-loader {
-          animation: sb-breathe 1.7s ease-in-out infinite;
-          transform-origin: center;
-        }
-      `}</style>
 
       <div
-        className="sb-logo-loader"
         style={{
+          animation:       'sb-breathe 1.7s ease-in-out infinite',
+          transformOrigin: 'center',
           width:           px,
           height:          px,
           borderRadius:    radius,
@@ -118,16 +109,7 @@ function TinyDots({ size }) {
   const dot = Math.max(3, Math.round(size * 0.28))
   return (
     <>
-      <style>{`
-        @keyframes sb-dot-pulse {
-          0%, 80%, 100% { opacity: 0.2; transform: scale(0.7); }
-          40%            { opacity: 1;   transform: scale(1);   }
-        }
-        .sb-dot { border-radius: 50%; background: currentColor; display: inline-block; }
-        .sb-dot:nth-child(1) { animation: sb-dot-pulse 1.1s ease-in-out infinite 0s;    }
-        .sb-dot:nth-child(2) { animation: sb-dot-pulse 1.1s ease-in-out infinite 0.18s; }
-        .sb-dot:nth-child(3) { animation: sb-dot-pulse 1.1s ease-in-out infinite 0.36s; }
-      `}</style>
+      
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: dot, lineHeight: 1 }}>
         <span className="sb-dot" style={{ width: dot, height: dot }} />
         <span className="sb-dot" style={{ width: dot, height: dot }} />

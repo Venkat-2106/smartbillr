@@ -115,12 +115,6 @@ export default function Button({
 
   return (
     <>
-      <style>{`
-        @keyframes btn-spin {
-          to { transform: rotate(360deg) }
-        }
-      `}</style>
-
       <button
         type={type}
         onClick={onClick}

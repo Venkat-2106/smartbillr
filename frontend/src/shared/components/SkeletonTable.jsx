@@ -69,13 +69,6 @@ export default function SkeletonTable({ rows = 5, columns = 6 }) {
         </tbody>
       </table>
 
-      {/* Keyframe lives here so no global CSS change needed */}
-      <style>{`
-        @keyframes skeleton-pulse {
-          0%, 100% { opacity: 0.5; }
-          50%       { opacity: 1;   }
-        }
-      `}</style>
     </div>
   );
 }

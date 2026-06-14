@@ -57,8 +57,13 @@ export default function SalesPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // run once on mount only — location.state is stable at mount time
 
-  // ── Column definitions ───────────────────────────────────────────────────
-  const columns = [
+// ── Column definitions ───────────────────────────────────────────────────
+  // PERF: columns only reference `row` data and module-level constants
+  // (STATUS_VARIANT, STATUS_LABEL, formatCurrency, formatDate). There are no
+  // component-scope dependencies, so the array is stable for the lifetime of
+  // the component. setDrawerSale is used on the Table's onRowClick prop, not
+  // inside these column definitions, so it is not a dependency here.
+  const columns = useMemo(() => [
     {
       key: 'invoice_no',
       label: 'Invoice No',
@@ -140,7 +145,7 @@ export default function SalesPage() {
         </span>
       ),
     },
-  ];
+  ], []); // no component-scope deps — STATUS_VARIANT/STATUS_LABEL are module-level constants
 
   const activeCount =
     (activeSearch ? 1 : 0) + (activeDateFilter ? 1 : 0) + (activeStatusFilter ? 1 : 0);

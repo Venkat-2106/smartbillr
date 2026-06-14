@@ -11,7 +11,7 @@
 //   ✅ FIX B — Last Updated By column
 //   ✅ ExportButton with CATEGORY_CSV_COLUMNS
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -144,7 +144,12 @@ export default function CategoriesPage() {
 
   const activeFilters = [search.trim(), dateFrom, dateTo].filter(Boolean).length
 
-  const columns = [
+  // PERF: memoized so Table doesn't see a new `columns` reference on every
+  // render caused by search typing, pagination clicks, etc.
+  // Dependencies: only canManage changes the column list (actions column is
+  // conditionally spread in). setEditTarget/setDeleteTarget are stable
+  // useState setters — not listed.
+  const columns = useMemo(() => [
     {
       key: 'category_name',
       label: 'Category Name',
@@ -219,7 +224,7 @@ export default function CategoriesPage() {
           ),
         }]
       : []),
-  ]
+  ], [canManage]); // re-compute only when canManage changes
 
   return (
     <>

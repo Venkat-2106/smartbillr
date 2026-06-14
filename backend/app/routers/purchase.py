@@ -1,3 +1,5 @@
+# app/routers/purchase.py
+
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -11,54 +13,17 @@ from app.schemas.purchase import PurchaseCreate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts
+from app.utils.tax_engine import calculate_item_tax
 from decimal import Decimal
 import uuid
 from pydantic import BaseModel
 
+
 class PurchaseStatusUpdate(BaseModel):
     status: str
 
+
 router = APIRouter(prefix="/purchases", tags=["Purchases"])
-
-
-# ─────────────────────────────────────────
-# HELPER: Global Tax Engine for Purchases
-# ─────────────────────────────────────────
-def calculate_purchase_item_tax(
-    unit_price: Decimal,
-    quantity: int,
-    tax_rate: Decimal,
-    country_code: str,
-    seller_state: str,
-    supplier_state: str
-):
-    subtotal = unit_price * quantity
-    total_tax = (subtotal * tax_rate) / Decimal("100")
-
-    cgst = Decimal("0")
-    sgst = Decimal("0")
-    igst = Decimal("0")
-    pur_tax_total = Decimal("0")
-
-    if country_code == "IN":
-        if seller_state and supplier_state and \
-           seller_state.strip().lower() == supplier_state.strip().lower():
-            cgst = total_tax / Decimal("2")
-            sgst = total_tax / Decimal("2")
-        else:
-            igst = total_tax
-    else:
-        pur_tax_total = total_tax
-
-    return {
-        "subtotal":           subtotal,
-        "cgst_amount":        cgst,
-        "sgst_amount":        sgst,
-        "igst_amount":        igst,
-        "pur_tax_total":      pur_tax_total,
-        "item_tax_total":     total_tax,
-        "item_total_with_tax": subtotal + total_tax
-    }
 
 
 # ─────────────────────────────────────────
@@ -110,24 +75,24 @@ def fetch_purchase_items(db: Session, pur_id: str):
 # ─────────────────────────────────────────
 def purchase_row_to_dict(row, items):
     return {
-        "pur_id":           str(row.pur_id),
-        "business_id":      str(row.business_id),
-        "supp_id":          str(row.supp_id) if row.supp_id else None,
-        "supp_name":        row.supp_name if hasattr(row, "supp_name") else None,
-        "pur_total_amount": float(row.pur_total_amount),
-        "pur_discount":     float(row.pur_discount) if row.pur_discount else 0,
-        "pur_cgst_total":   float(row.pur_cgst_total) if row.pur_cgst_total else 0,
-        "pur_sgst_total":   float(row.pur_sgst_total) if row.pur_sgst_total else 0,
-        "pur_igst_total":   float(row.pur_igst_total) if row.pur_igst_total else 0,
-        "pur_tax_total":    float(row.pur_tax_total) if row.pur_tax_total else 0,
-        "pur_final_amount": float(row.pur_final_amount) if row.pur_final_amount else None,
+        "pur_id":             str(row.pur_id),
+        "business_id":        str(row.business_id),
+        "supp_id":            str(row.supp_id) if row.supp_id else None,
+        "supp_name":          row.supp_name if hasattr(row, "supp_name") else None,
+        "pur_total_amount":   float(row.pur_total_amount),
+        "pur_discount":       float(row.pur_discount) if row.pur_discount else 0,
+        "pur_cgst_total":     float(row.pur_cgst_total) if row.pur_cgst_total else 0,
+        "pur_sgst_total":     float(row.pur_sgst_total) if row.pur_sgst_total else 0,
+        "pur_igst_total":     float(row.pur_igst_total) if row.pur_igst_total else 0,
+        "pur_tax_total":      float(row.pur_tax_total) if row.pur_tax_total else 0,
+        "pur_final_amount":   float(row.pur_final_amount) if row.pur_final_amount else None,
         "pur_payment_status": row.pur_payment_status,
-        "is_deleted":       row.is_deleted,
-        "pur_created_at":   fmt_ts(row.pur_created_at),
-        "updated_at":       fmt_ts(row.updated_at) if hasattr(row, "updated_at") else None,
-        "last_updated_by":  row.last_updated_by if hasattr(row, "last_updated_by") else None,
-        "created_by":       str(row.created_by) if row.created_by else None,
-        "items":            [purchase_item_to_dict(i) for i in items]
+        "is_deleted":         row.is_deleted,
+        "pur_created_at":     fmt_ts(row.pur_created_at),
+        "updated_at":         fmt_ts(row.updated_at) if hasattr(row, "updated_at") else None,
+        "last_updated_by":    row.last_updated_by if hasattr(row, "last_updated_by") else None,
+        "created_by":         str(row.created_by) if row.created_by else None,
+        "items":              [purchase_item_to_dict(i) for i in items]
     }
 
 
@@ -136,18 +101,18 @@ def purchase_row_to_dict(row, items):
 # ─────────────────────────────────────────
 def purchase_item_to_dict(row):
     return {
-        "item_id":           str(row.item_id),
-        "product_id":        str(row.product_id),
-        "prod_name":         row.prod_name if hasattr(row, "prod_name") else None,
-        "pur_item_qty":      row.pur_item_qty,
-        "item_unit_price":   float(row.item_unit_price),
-        "item_subtotal":     float(row.item_subtotal) if row.item_subtotal else None,
-        "gst_rate":          float(row.gst_rate) if row.gst_rate else 0,
-        "cgst_amount":       float(row.cgst_amount) if row.cgst_amount else 0,
-        "sgst_amount":       float(row.sgst_amount) if row.sgst_amount else 0,
-        "igst_amount":       float(row.igst_amount) if row.igst_amount else 0,
-        "pur_tax_total":     float(row.pur_tax_total) if row.pur_tax_total else 0,
-        "item_tax_total":    float(row.item_tax_total) if row.item_tax_total else 0,
+        "item_id":             str(row.item_id),
+        "product_id":          str(row.product_id),
+        "prod_name":           row.prod_name if hasattr(row, "prod_name") else None,
+        "pur_item_qty":        row.pur_item_qty,
+        "item_unit_price":     float(row.item_unit_price),
+        "item_subtotal":       float(row.item_subtotal) if row.item_subtotal else None,
+        "gst_rate":            float(row.gst_rate) if row.gst_rate else 0,
+        "cgst_amount":         float(row.cgst_amount) if row.cgst_amount else 0,
+        "sgst_amount":         float(row.sgst_amount) if row.sgst_amount else 0,
+        "igst_amount":         float(row.igst_amount) if row.igst_amount else 0,
+        "pur_tax_total":       float(row.pur_tax_total) if row.pur_tax_total else 0,
+        "item_tax_total":      float(row.item_tax_total) if row.item_tax_total else 0,
         "item_total_with_tax": float(row.item_total_with_tax) if row.item_total_with_tax else None
     }
 
@@ -162,7 +127,7 @@ def create_purchase(
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
-    user_id = current_user["user_id"]
+    user_id     = current_user["user_id"]
 
     try:
         # Step 1 → Get business country and state for tax engine
@@ -175,32 +140,34 @@ def create_purchase(
             {"bid": business_id}
         ).fetchone()
 
-        country_code = business.business_country_code if business else ""
-        seller_state = business.business_state if business else ""
+        biz_country = (business.business_country_code or "").strip() if business else ""
+        biz_state   = (business.business_state or "").strip()         if business else ""
 
-        # Step 2 → Get supplier state (for Indian GST interstate detection)
-        supplier_state = ""
+        # Step 2 → Get supplier country + state (needed for GST inter/intra detection)
+        supp_country = ""
+        supp_state   = ""
         if data.supp_id:
             supplier = db.query(Supplier).filter(
-                Supplier.supp_id == data.supp_id,
+                Supplier.supp_id     == data.supp_id,
                 Supplier.business_id == business_id,
-                Supplier.is_deleted == False
+                Supplier.is_deleted  == False
             ).first()
 
             if not supplier:
                 return error_response("Supplier not found", status_code=404)
-            # Use supplier's state for GST interstate/intrastate detection
-            supplier_state = supplier.supp_state or ""
 
-        # Step 3 → Validate products and calculate totals
-        total_amount = Decimal("0")
-        cgst_total   = Decimal("0")
-        sgst_total   = Decimal("0")
-        igst_total   = Decimal("0")
-        tax_total    = Decimal("0")
+            supp_country = (supplier.supp_country_code or "").strip()
+            supp_state   = (supplier.supp_state or "").strip()
+
+        # Step 3 → Validate products and calculate tax via centralized engine
+        total_amount     = Decimal("0")
+        cgst_total       = Decimal("0")
+        sgst_total       = Decimal("0")
+        igst_total       = Decimal("0")
+        tax_total        = Decimal("0")
         calculated_items = []
 
-        # Step 3 → Bulk product lookup (1 query for ALL items — same pattern as sale.py)
+        # Bulk product lookup — one query for all items
         requested_ids = [str(item.product_id) for item in data.items]
         products_bulk = db.query(Product).filter(
             Product.prod_id.in_(requested_ids),
@@ -219,29 +186,43 @@ def create_purchase(
                 )
 
             tax_rate = product.tax_rate or Decimal("0")
-            tax_calc = calculate_purchase_item_tax(
-                item.item_unit_price, item.pur_item_qty, tax_rate,
-                country_code or "", seller_state or "", supplier_state or ""
+
+            # ── CENTRALIZED TAX ENGINE ────────────────────────────────────────
+            # calculate_item_tax() applies the full global rule set:
+            #   non-India biz               → generic_tax only
+            #   India + foreign supplier    → IGST
+            #   India + same-state supplier → CGST + SGST
+            #   India + blank-state supplier→ CGST + SGST (safe default)
+            #   India + diff-state supplier → IGST
+            tax_calc = calculate_item_tax(
+                unit_price                = item.item_unit_price,
+                quantity                  = item.pur_item_qty,
+                tax_rate                  = tax_rate,
+                business_country_code     = biz_country,
+                business_state            = biz_state,
+                counterparty_country_code = supp_country,
+                counterparty_state        = supp_state,
             )
 
             total_amount += tax_calc["subtotal"]
             cgst_total   += tax_calc["cgst_amount"]
             sgst_total   += tax_calc["sgst_amount"]
             igst_total   += tax_calc["igst_amount"]
-            tax_total    += tax_calc["pur_tax_total"]
+            tax_total    += tax_calc["generic_tax_total"]
 
             calculated_items.append({
-                "product_id":   str(item.product_id),
-                "quantity":     item.pur_item_qty,
-                "unit_price":   str(item.item_unit_price),
-                "tax_rate":     str(tax_rate),
-                "cgst_amount":  str(tax_calc["cgst_amount"]),
-                "sgst_amount":  str(tax_calc["sgst_amount"]),
-                "igst_amount":  str(tax_calc["igst_amount"]),
-                "pur_tax_total": str(tax_calc["pur_tax_total"])
+                "product_id":    str(item.product_id),
+                "quantity":      item.pur_item_qty,
+                "unit_price":    str(item.item_unit_price),
+                "tax_rate":      str(tax_rate),
+                "cgst_amount":   str(tax_calc["cgst_amount"]),
+                "sgst_amount":   str(tax_calc["sgst_amount"]),
+                "igst_amount":   str(tax_calc["igst_amount"]),
+                "pur_tax_total": str(tax_calc["generic_tax_total"]),
             })
 
         # Step 4 → Insert purchase header via raw SQL
+        # pur_final_amount is a DB generated column — never insert it.
         discount   = str(data.pur_discount or Decimal("0"))
         new_pur_id = str(uuid.uuid4())
 
@@ -265,21 +246,23 @@ def create_purchase(
                 )
             """),
             {
-                "pur_id":          new_pur_id,
-                "business_id":     business_id,
-                "supp_id":         str(data.supp_id) if data.supp_id else None,
-                "pur_total_amount": str(total_amount),
-                "pur_discount":     discount,
-                "pur_cgst_total":   str(cgst_total),
-                "pur_sgst_total":   str(sgst_total),
-                "pur_igst_total":   str(igst_total),
-                "pur_tax_total":    str(tax_total),
+                "pur_id":            new_pur_id,
+                "business_id":       business_id,
+                "supp_id":           str(data.supp_id) if data.supp_id else None,
+                "pur_total_amount":  str(total_amount),
+                "pur_discount":      discount,
+                "pur_cgst_total":    str(cgst_total),
+                "pur_sgst_total":    str(sgst_total),
+                "pur_igst_total":    str(igst_total),
+                "pur_tax_total":     str(tax_total),
                 "pur_payment_status": data.pur_payment_status,
-                "created_by":      user_id
+                "created_by":        user_id
             }
         )
 
         # Step 5 → Insert purchase items (DB trigger auto-increases stock)
+        # GENERATED columns (item_subtotal, item_tax_total, item_total_with_tax)
+        # are never inserted — DB computes them.
         for calc in calculated_items:
             db.execute(
                 text("""
@@ -313,17 +296,12 @@ def create_purchase(
                 }
             )
 
-        # ── FIX 4: Auto-create expense record when purchase is paid immediately ──
-        # WHY: If the business pays for a purchase right away (cash purchase),
-        # we must record it in the expenses table automatically so the expenses
-        # report is accurate. Without this, the accountant would need to
-        # manually add an expense for every cash purchase — that's error-prone.
-        #
-        # The expense_category is set to "purchase" so reports can filter it.
-        # The expense_amount uses pur_final_amount (after discount + tax).
-        # ─────────────────────────────────────────────────────────────────────
+        # Step 6 → Auto-create expense record when purchase is paid immediately
+        # WHY: Cash purchase = money leaves the business immediately.
+        # Without this, the accountant must manually add an expense for every
+        # cash purchase — that is error-prone.
         if data.pur_payment_status == "paid":
-            pur_row = fetch_full_purchase(db, new_pur_id)
+            pur_row      = fetch_full_purchase(db, new_pur_id)
             final_amount = float(pur_row.pur_final_amount) if pur_row and pur_row.pur_final_amount else float(total_amount)
 
             db.execute(
@@ -370,9 +348,9 @@ def create_purchase(
 # ─────────────────────────────────────────
 @router.get("/")
 def get_all_purchases(
-    current_user: dict = Depends(require_permission("purchases.view")),
-    db:           Session = Depends(get_db),
-    pagination:   dict   = Depends(paginate),
+    current_user: dict       = Depends(require_permission("purchases.view")),
+    db:           Session    = Depends(get_db),
+    pagination:   dict       = Depends(paginate),
     search:       Optional[str] = Query(default=None),
     status:       Optional[str] = Query(default=None),
     sort_by:      Optional[str] = Query(default="pur_created_at"),
@@ -383,17 +361,17 @@ def get_all_purchases(
     business_id = current_user["business_id"]
 
     SORTABLE = {
-        "pur_created_at":    "p.pur_created_at",
-        "pur_final_amount":  "p.pur_final_amount",
-        "pur_payment_status":"p.pur_payment_status",
-        "supp_name":         "s.supp_name",
-        "updated_at":        "p.updated_at",
+        "pur_created_at":     "p.pur_created_at",
+        "pur_final_amount":   "p.pur_final_amount",
+        "pur_payment_status": "p.pur_payment_status",
+        "supp_name":          "s.supp_name",
+        "updated_at":         "p.updated_at",
     }
     order_col = SORTABLE.get(sort_by, "p.pur_created_at")
     order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
 
     extra_where = ""
-    params = {"bid": business_id}
+    params      = {"bid": business_id}
 
     if search and search.strip():
         extra_where += " AND s.supp_name ILIKE :search"
@@ -445,7 +423,7 @@ def get_all_purchases(
     rows = db.execute(text(list_sql), params).fetchall()
 
     # BATCH: fetch ALL items for this page in one query
-    pur_ids = [str(row.pur_id) for row in rows]
+    pur_ids   = [str(row.pur_id) for row in rows]
     all_items = []
     if pur_ids:
         all_items = db.execute(
@@ -478,6 +456,7 @@ def get_all_purchases(
         pagination_response(result, total, pagination["page"], pagination["limit"])
     )
 
+
 # ─────────────────────────────────────────
 # GET /purchases/{pur_id} → Get one purchase
 # Includes: purchase details + items + all returns for this purchase
@@ -490,7 +469,6 @@ def get_purchase(
 ):
     business_id = current_user["business_id"]
 
-    # Step 1 → Fetch purchase header with supplier name
     row = db.execute(
         text("""
             SELECT p.pur_id, p.business_id, p.supp_id,
@@ -514,10 +492,9 @@ def get_purchase(
     if not row:
         return error_response("Purchase not found", status_code=404)
 
-    # Step 2 → Fetch purchase items
     items = fetch_purchase_items(db, pur_id)
 
-    # Step 3 → Fetch all purchase returns for this purchase
+    # Fetch all purchase returns for this purchase
     return_rows = db.execute(text("""
         SELECT
             pr.return_id,
@@ -547,7 +524,7 @@ def get_purchase(
     """), {"pid": pur_id, "bid": business_id}).fetchall()
 
     # BATCH: fetch ALL return items for all returns in one query
-    ret_ids = [str(ret.return_id) for ret in return_rows]
+    ret_ids      = [str(ret.return_id) for ret in return_rows]
     all_ret_items = []
     if ret_ids:
         all_ret_items = db.execute(text("""
@@ -569,21 +546,20 @@ def get_purchase(
     returns = []
     for ret in return_rows:
         return_items = ret_items_by_return.get(str(ret.return_id), [])
-
         ret_dict = {
-            "return_id":         str(ret.return_id),
-            "pur_id":            str(ret.pur_id),
-            "return_reason":     ret.return_reason,
-            "return_status":     ret.return_status,
-            "restock":           ret.restock,
-            "stock_updated":     ret.stock_updated,
-            "refund_method":     ret.refund_method,
-            "approved_by":       str(ret.approved_by) if ret.approved_by else None,
-            "approved_at":       fmt_ts(ret.approved_at),
-            "rejected_reason":   ret.rejected_reason,
-            "return_amount":     float(ret.return_amount) if ret.return_amount else 0.0,
-            "return_created_at": fmt_ts(ret.return_created_at),
-            "created_by":        str(ret.created_by) if ret.created_by else None,
+            "return_id":           str(ret.return_id),
+            "pur_id":              str(ret.pur_id),
+            "return_reason":       ret.return_reason,
+            "return_status":       ret.return_status,
+            "restock":             ret.restock,
+            "stock_updated":       ret.stock_updated,
+            "refund_method":       ret.refund_method,
+            "approved_by":         str(ret.approved_by) if ret.approved_by else None,
+            "approved_at":         fmt_ts(ret.approved_at),
+            "rejected_reason":     ret.rejected_reason,
+            "return_amount":       float(ret.return_amount) if ret.return_amount else 0.0,
+            "return_created_at":   fmt_ts(ret.return_created_at),
+            "created_by":          str(ret.created_by) if ret.created_by else None,
             "total_refund_amount": float(ret.total_refund_amount or 0),
             "items": [
                 {
@@ -599,38 +575,28 @@ def get_purchase(
         }
         returns.append(ret_dict)
 
-    # Step 5 → Build final response
     purchase_data = purchase_row_to_dict(row, items)
     purchase_data["returns"]             = returns
     purchase_data["total_returns"]       = len(returns)
-    purchase_data["total_refund_amount"] = float(
-        sum(r["return_amount"] for r in returns)
-    )
+    purchase_data["total_refund_amount"] = float(sum(r["return_amount"] for r in returns))
 
     return success_response(purchase_data)
+
 
 # ─────────────────────────────────────────
 # PATCH /purchases/{pur_id}/status → Update payment status
 #
-# FIX 4 — Purchase ↔ Expenses sync:
-# This is the mirror of PATCH /sales/{sales_id}/status.
-# When a purchase is manually marked as "paid" here, we auto-insert
-# an expense record so the expenses ledger stays in sync.
-#
-# RULE:
-#   pending → paid   : insert expense record (purchase cost becomes an expense)
-#   paid → pending   : this is a reversal — we do NOT auto-delete the expense
-#                      (accountant must handle reversals manually to preserve
-#                       the audit trail in expenses)
+# When a purchase is manually marked as "paid", we auto-insert an expense
+# record so the expenses ledger stays in sync.
 # ─────────────────────────────────────────
 @router.patch("/{pur_id}/status")
 def update_purchase_status(
     pur_id: str,
-    body: PurchaseStatusUpdate,       # ← reads from JSON body now
+    body: PurchaseStatusUpdate,
     current_user: dict = Depends(require_permission("purchases.edit")),
     db: Session = Depends(get_db)
 ):
-    status = body.status              # ← add this line at the top of the function
+    status  = body.status
     allowed = ["pending", "paid", "partial"]
     if status not in allowed:
         return error_response(f"Status must be one of: {allowed}", 400)
@@ -639,9 +605,9 @@ def update_purchase_status(
     user_id     = current_user["user_id"]
 
     purchase = db.query(Purchase).filter(
-        Purchase.pur_id == pur_id,
+        Purchase.pur_id      == pur_id,
         Purchase.business_id == business_id,
-        Purchase.is_deleted == False
+        Purchase.is_deleted  == False
     ).first()
 
     if not purchase:
@@ -652,13 +618,7 @@ def update_purchase_status(
 
     expense_created = False
 
-    # ── Auto-create expense when purchase is marked paid ─────────────────────
-    # WHY: "paid" means cash has left the business to pay the supplier.
-    # That is an expense. We record it automatically so the accounts are
-    # complete without manual entry.
-    # ─────────────────────────────────────────────────────────────────────────
     if status == "paid" and old_status != "paid":
-
         pur_row = db.execute(
             text("SELECT pur_final_amount FROM purchases WHERE pur_id = CAST(:pid AS uuid)"),
             {"pid": pur_id}
@@ -666,7 +626,6 @@ def update_purchase_status(
         final_amount = float(pur_row.pur_final_amount) if pur_row and pur_row.pur_final_amount else 0
 
         # Check if an expense for this purchase was already recorded
-        # (e.g., it was paid at creation time)
         existing_expense = db.execute(
             text("""
                 SELECT expense_id FROM expenses
@@ -674,10 +633,7 @@ def update_purchase_status(
                   AND expense_notes LIKE :note_pattern
                   AND is_deleted = false
             """),
-            {
-                "bid":          business_id,
-                "note_pattern": f"%{pur_id}%"
-            }
+            {"bid": business_id, "note_pattern": f"%{pur_id}%"}
         ).fetchone()
 
         if not existing_expense:
@@ -708,10 +664,7 @@ def update_purchase_status(
 
     db.commit()
 
-    response_data = {
-        "message": "Purchase payment status updated",
-        "status":  status
-    }
+    response_data = {"message": "Purchase payment status updated", "status": status}
     if expense_created:
         response_data["note"] = (
             "An expense record was automatically created in the expenses table "
@@ -733,9 +686,9 @@ def delete_purchase(
     business_id = current_user["business_id"]
 
     purchase = db.query(Purchase).filter(
-        Purchase.pur_id == pur_id,
+        Purchase.pur_id      == pur_id,
         Purchase.business_id == business_id,
-        Purchase.is_deleted == False
+        Purchase.is_deleted  == False
     ).first()
 
     if not purchase:

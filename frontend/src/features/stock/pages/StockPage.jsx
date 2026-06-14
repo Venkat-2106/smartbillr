@@ -34,15 +34,29 @@ import { fetchCategories } from '../../categories/api/categoriesApi'
 import { useStock, useStockMovements, useStockAlerts } from '../hooks/useStock'
 import AdjustStockModal from '../components/AdjustStockModal'
 
+// ── Helper: resolve display label for the reference column ────────────────────
+function getReferenceLabel(row) {
+  if (row.sale_invoice_no)       return row.sale_invoice_no
+  if (row.purchase_reference_no) return row.purchase_reference_no.slice(0, 8) + '…'
+  return '—'
+}
+
+function getReferenceRaw(v, row) {
+  if (row.sale_invoice_no)       return row.sale_invoice_no
+  if (row.purchase_reference_no) return row.purchase_reference_no
+  return ''
+}
+
 // ── Movement CSV columns ──────────────────────────────────────────────────────
 const MOVEMENTS_CSV_COLUMNS = [
-  { key: 'prod_name',       label: 'Product' },
-  { key: 'move_type',       label: 'Movement Type' },
-  { key: 'move_qty',        label: 'Qty Change' },
-  { key: 'move_prev_stock', label: 'Before' },
-  { key: 'move_new_stock',  label: 'After' },
-  { key: 'move_notes',      label: 'Reason', format: v => v ?? '' },
-  { key: 'move_created_at', label: 'Date & Time', format: v => v ?? '' },
+  { key: 'prod_name',           label: 'Product' },
+  { key: 'move_type',           label: 'Movement Type' },
+  { key: 'reference_display',   label: 'Reference Invoice', format: getReferenceRaw },
+  { key: 'move_qty',            label: 'Qty Change' },
+  { key: 'move_prev_stock',     label: 'Before' },
+  { key: 'move_new_stock',      label: 'After' },
+  { key: 'move_notes',          label: 'Reason', format: v => v ?? '' },
+  { key: 'move_created_at',     label: 'Date & Time', format: v => v ?? '' },
 ]
 
 // ── Tab bar ────────────────────────────────────────────────────────────────────
@@ -444,6 +458,17 @@ function StockMovementsTab({ active }) {
       sortable: true,
       width:    120,
       render: (row) => <MoveTypeBadge type={row.move_type} />,
+    },
+    {
+      key:      'reference_display',
+      label:    'Reference',
+      sortable: false,
+      width:    140,
+      render: (row) => (
+        <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+          {getReferenceLabel(row)}
+        </span>
+      ),
     },
     {
       key:      'move_qty',

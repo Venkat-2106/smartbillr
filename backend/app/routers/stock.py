@@ -111,14 +111,16 @@ sort_dir:     Optional[str] = Query(default="desc"),
         text(f"""
             SELECT COUNT(*)
             FROM stock_movements sm
-            LEFT JOIN products p ON p.prod_id = sm.product_id
+            LEFT JOIN products  p   ON p.prod_id = sm.product_id
+            LEFT JOIN sales     s   ON s.sales_id = sm.sale_reference_id
+            LEFT JOIN purchases pur ON pur.pur_id = sm.purchase_reference_id
             WHERE sm.business_id = CAST(:business_id AS uuid)
             {extra_where}
         """),
         params
     ).scalar()
 
-    # ── Data query — raw SQL with JOIN so prod_name is available in one trip ──
+    # ── Data query — raw SQL with JOINs so prod_name + invoice refs are available in one trip ──
     rows = db.execute(
         text(f"""
             SELECT
@@ -128,9 +130,13 @@ sort_dir:     Optional[str] = Query(default="desc"),
                 sm.sale_reference_id, sm.purchase_reference_id,
                 sm.reference_type, sm.reference_id,
                 sm.move_notes, sm.move_created_at, sm.move_created_by,
-                p.prod_name
+                p.prod_name,
+                s.invoice_no AS sale_invoice_no,
+                pur.pur_id   AS pur_reference_id
             FROM stock_movements sm
-            LEFT JOIN products p ON p.prod_id = sm.product_id
+            LEFT JOIN products  p   ON p.prod_id = sm.product_id
+            LEFT JOIN sales     s   ON s.sales_id = sm.sale_reference_id
+            LEFT JOIN purchases pur ON pur.pur_id = sm.purchase_reference_id
             WHERE sm.business_id = CAST(:business_id AS uuid)
             {extra_where}
             ORDER BY {order_col} {order_dir}
@@ -154,6 +160,8 @@ sort_dir:     Optional[str] = Query(default="desc"),
             "purchase_reference_id": str(r.purchase_reference_id) if r.purchase_reference_id else None,
             "reference_type":        r.reference_type,
             "reference_id":          str(r.reference_id) if r.reference_id else None,
+            "sale_invoice_no":       r.sale_invoice_no,
+            "purchase_reference_no": str(r.pur_reference_id) if r.pur_reference_id else None,
             "move_notes":            r.move_notes,
             "move_created_at":       fmt_ts(r.move_created_at),
             "move_created_by":       str(r.move_created_by) if r.move_created_by else None,

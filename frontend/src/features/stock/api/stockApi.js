@@ -107,6 +107,13 @@ export async function fetchAlerts({ page = 1, limit = 20 } = {}) {
   return res.data  // { items: [...], pagination: {...} }
 }
 
+// ── Mark Alert as Read ────────────────────────────────────────────────────────
+// Backend: PUT /stock/alerts/{alert_id}/read
+export async function markAlertRead(alertId) {
+  const res = await api.put(`/stock/alerts/${alertId}/read`)
+  return res.data
+}
+
 // ── Adjust Stock ──────────────────────────────────────────────────────────────
 // Backend: POST /stock/adjust
 //   Body: { product_id, adjustment_type: "add"|"remove"|"set", qty, move_notes? }

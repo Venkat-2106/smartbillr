@@ -33,6 +33,7 @@ import useAuthStore        from '../../../store/authStore'
 import { fetchCategories } from '../../categories/api/categoriesApi'
 import { useStock, useStockMovements, useStockAlerts } from '../hooks/useStock'
 import AdjustStockModal from '../components/AdjustStockModal'
+import { useStockAlertRead } from '../hooks/useStock'
 
 // ── Helper: resolve display label for the reference column ────────────────────
 function getReferenceLabel(row) {
@@ -624,6 +625,14 @@ function LowStockAlertsTab({ active }) {
     page, setPage,
     refetch,
   } = useStockAlerts({ active })
+  const { markRead, isMarkingRead } = useStockAlertRead()
+
+  const handleAlertClick = useCallback((row) => {
+    // Only mark as read if it is currently unread
+    if (row.alert_status === 'unread') {
+      markRead(row.alert_id)
+    }
+  }, [markRead])
 
   const columns = useMemo(() => [
     {
@@ -648,24 +657,27 @@ function LowStockAlertsTab({ active }) {
       label:    'Urgency',
       sortable: false,
       width:    130,
-      render: (row) => <AlertBadge stockQty={row.alert_stock_qty} />,
+      render: (row) => <AlertBadge stockQty={row.current_stock ?? row.alert_stock_qty} />,
     },
     {
-      key:      'alert_stock_qty',
+      key:      'current_stock',
       label:    'Current Stock',
       sortable: false,
       width:    120,
-      render: (row) => (
-        <span style={{
-          fontWeight: 700,
-          fontSize: 15,
-          color: row.alert_stock_qty === 0
-            ? 'var(--danger-text, #DC2626)'
-            : 'var(--warning-text, #D97706)',
-        }}>
-          {row.alert_stock_qty}
-        </span>
-      ),
+      render: (row) => {
+        const qty = row.current_stock ?? row.alert_stock_qty
+        return (
+          <span style={{
+            fontWeight: 700,
+            fontSize: 15,
+            color: qty === 0
+              ? 'var(--danger-text, #DC2626)'
+              : 'var(--warning-text, #D97706)',
+          }}>
+            {qty}
+          </span>
+        )
+      },
     },
     {
       key:      'alert_threshold',
@@ -684,7 +696,9 @@ function LowStockAlertsTab({ active }) {
       sortable: false,
       width:    100,
       render: (row) => {
-        const shortage = row.alert_threshold - row.alert_stock_qty
+        const qty     = row.current_stock ?? row.alert_stock_qty
+        const thresh  = row.alert_threshold
+        const shortage = thresh - qty
         return (
           <span style={{
             fontWeight: 600, fontSize: 13.5,
@@ -775,6 +789,7 @@ function LowStockAlertsTab({ active }) {
           sortKey={null}
           sortDir={null}
           onSort={null}
+          onRowClick={handleAlertClick}
           emptyText="🎉 No low stock alerts — all products are well stocked!"
         />
       </div>

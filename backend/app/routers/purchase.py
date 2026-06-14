@@ -328,6 +328,22 @@ def create_purchase(
                 }
             )
 
+        # ── Revalidate low-stock alerts ──────────────────────────────────────
+        # Purchase increases stock. Remove stale alerts for products now above
+        # their low-stock threshold so replenished items disappear from alerts.
+        for calc in calculated_items:
+            db.execute(
+                text("""
+                    DELETE FROM low_stock_alerts la
+                    USING products p
+                    WHERE p.prod_id = la.product_id
+                      AND la.product_id  = CAST(:pid AS uuid)
+                      AND la.business_id = CAST(:bid AS uuid)
+                      AND p.prod_stock_qty > p.prod_low_stock_alert
+                """),
+                {"pid": calc["product_id"], "bid": business_id}
+            )
+
         db.commit()
 
         pur_row   = fetch_full_purchase(db, new_pur_id)

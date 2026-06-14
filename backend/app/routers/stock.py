@@ -56,6 +56,44 @@ def alert_to_dict(a):
 
 
 # ─────────────────────────────────────────
+# HELPER: Revalidate low-stock alerts for a product
+#
+# Called after every stock-affecting operation to ensure the
+# low_stock_alerts table stays in sync with actual inventory.
+#
+#   - If current stock > threshold → remove all alerts for this product
+#     (stock is fine, no alert needed)
+#   - If current stock <= threshold → do nothing here; the DB trigger
+#     trg_low_stock_alert (AFTER UPDATE ON products) already inserted
+#     a new alert row
+# ─────────────────────────────────────────
+def cleanup_product_alerts(db: Session, business_id: str, product_id: str):
+    product = db.query(Product).filter(
+        Product.prod_id      == product_id,
+        Product.business_id  == business_id,
+        Product.is_deleted   == False
+    ).first()
+
+    if not product:
+        return
+
+    # If stock is above the configured threshold, the product no longer
+    # qualifies for a low-stock alert — remove all its alert records.
+    if product.prod_stock_qty > product.prod_low_stock_alert:
+        db.execute(
+            text("""
+                DELETE FROM low_stock_alerts
+                WHERE business_id = CAST(:business_id AS uuid)
+                  AND product_id  = CAST(:product_id AS uuid)
+            """),
+            {
+                "business_id": business_id,
+                "product_id":  product_id
+            }
+        )
+
+
+# ─────────────────────────────────────────
 # GET /stock/movements → All stock movements
 # ─────────────────────────────────────────
 @router.get("/movements")
@@ -466,6 +504,10 @@ def adjust_stock(
             }
         )
 
+        # ── Revalidate low-stock alerts ──────────────────────────────────────
+        # If stock is now above the threshold, remove stale alert records.
+        cleanup_product_alerts(db, business_id, str(data.product_id))
+
         db.commit()
 
         return success_response({
@@ -486,14 +528,20 @@ def adjust_stock(
 # ─────────────────────────────────────────
 # GET /stock/alerts → Low stock alerts
 #
-# FIX — duplicate entries:
+# FIX — duplicate entries + stale alert cleanup:
 # The low_stock_alerts table appends a new row every time stock drops below
 # the threshold, so one product can accumulate dozens of alert rows.
 # The old ORM query returned all of them, causing duplicate display.
 #
-# Fix: DISTINCT ON (product_id) keeps only the LATEST alert per product.
-# Also adds a LEFT JOIN to products so prod_name is available in the response
-# (previously missing, showing only product_id in the UI).
+# Fixes applied:
+#   1. DISTINCT ON (product_id) keeps only the LATEST alert per product.
+#   2. LEFT JOIN to products so prod_name is available in the response.
+#   3. WHERE clause compares actual current stock (p.prod_stock_qty) against
+#      the threshold so products that have been restocked above their reorder
+#      level are excluded — even if stale alert rows remain in the table.
+#   4. Returns real-time current_stock (p.prod_stock_qty) instead of the
+#      potentially stale snapshot in la.alert_stock_qty.
+#   5. Excludes soft-deleted products (p.is_deleted = false).
 # ─────────────────────────────────────────
 @router.get("/alerts")
 def get_low_stock_alerts(
@@ -508,29 +556,36 @@ def get_low_stock_alerts(
         "limit":       pagination["limit"],
     }
 
-    # COUNT — count distinct products with active alerts, not raw alert rows
+    # COUNT — only products whose CURRENT stock is still at or below threshold
     total = db.execute(
         text("""
             SELECT COUNT(*) FROM (
                 SELECT DISTINCT ON (la.product_id) la.alert_id
                 FROM low_stock_alerts la
+                JOIN products p ON p.prod_id = la.product_id
                 WHERE la.business_id = CAST(:business_id AS uuid)
+                  AND p.is_deleted   = false
+                  AND p.prod_stock_qty <= p.prod_low_stock_alert
             ) sub
         """),
         params
     ).scalar()
 
-    # DATA — one row per product (latest alert), joined to products for name
+    # DATA — one row per product (latest alert), real-time stock from products
     rows = db.execute(
         text("""
             SELECT DISTINCT ON (la.product_id)
                 la.alert_id, la.business_id, la.product_id,
                 la.alert_stock_qty, la.alert_threshold,
                 la.alert_status, la.alert_created_at,
-                p.prod_name, p.barcode, p.unit
+                p.prod_name, p.barcode, p.unit,
+                p.prod_stock_qty      AS current_stock,
+                p.prod_low_stock_alert AS current_threshold
             FROM low_stock_alerts la
-            LEFT JOIN products p ON p.prod_id = la.product_id
+            JOIN products p ON p.prod_id = la.product_id
             WHERE la.business_id = CAST(:business_id AS uuid)
+              AND p.is_deleted   = false
+              AND p.prod_stock_qty <= p.prod_low_stock_alert
             ORDER BY la.product_id, la.alert_created_at DESC
             OFFSET :offset LIMIT :limit
         """),
@@ -540,15 +595,16 @@ def get_low_stock_alerts(
     data = []
     for r in rows:
         data.append({
-            "alert_id":        str(r.alert_id),
-            "business_id":     str(r.business_id),
-            "product_id":      str(r.product_id),
-            "prod_name":       r.prod_name,
-            "barcode":         r.barcode,
-            "unit":            r.unit,
-            "alert_stock_qty": r.alert_stock_qty,
-            "alert_threshold": r.alert_threshold,
-            "alert_status":    r.alert_status,
+            "alert_id":         str(r.alert_id),
+            "business_id":      str(r.business_id),
+            "product_id":       str(r.product_id),
+            "prod_name":        r.prod_name,
+            "barcode":          r.barcode,
+            "unit":             r.unit,
+            "alert_stock_qty":  r.current_stock,       # real-time stock, not snapshot
+            "alert_threshold":  r.current_threshold,    # real-time threshold
+            "current_stock":    r.current_stock,
+            "alert_status":     r.alert_status,
             "alert_created_at": fmt_ts(r.alert_created_at),
         })
 
@@ -577,7 +633,10 @@ def mark_alert_read(
         return error_response("Alert not found", status_code=404)
 
     if alert.alert_status == "read":
-        return error_response("Alert is already marked as read", status_code=400)
+        return success_response({
+            "message":  "Alert was already marked as read",
+            "alert_id": alert_id
+        })
 
     alert.alert_status = "read"
     db.commit()

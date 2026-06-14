@@ -23,6 +23,7 @@ import {
   fetchAllMovementsForExport,
   fetchAlerts,
   adjustStock,
+  markAlertRead,
 } from '../api/stockApi'
 
 const PAGE_SIZE = 20
@@ -135,6 +136,10 @@ export function useStockAdjust() {
       queryClient.invalidateQueries({ queryKey: ['stock'] })
       // Invalidate movements so new adjustment row appears
       queryClient.invalidateQueries({ queryKey: ['stock-movements'] })
+      // Invalidate alerts — stock change may resolve or create a low-stock alert
+      queryClient.invalidateQueries({ queryKey: ['stock-alerts'] })
+      // Invalidate dashboard summar count
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       toast.success(
         data?.message ?? 'Stock adjusted successfully'
       )
@@ -147,6 +152,30 @@ export function useStockAdjust() {
   return {
     doAdjust:    (payload, callbacks) => mutation.mutate(payload, callbacks),
     isAdjusting: mutation.isPending,
+  }
+}
+
+// ── useStockAlertRead — mark a single alert as read ──────────────────────────
+// Also invalidates the dashboard alert count so the badge stays in sync.
+export function useStockAlertRead() {
+  const queryClient = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: markAlertRead,
+    onSuccess:  () => {
+      // Invalidate both the alerts list and the dashboard summary so the
+      // unread count stays accurate after the user views an alert.
+      queryClient.invalidateQueries({ queryKey: ['stock-alerts'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Failed to mark alert as read')
+    },
+  })
+
+  return {
+    markRead:    (alertId, callbacks) => mutation.mutate(alertId, callbacks),
+    isMarkingRead: mutation.isPending,
   }
 }
 

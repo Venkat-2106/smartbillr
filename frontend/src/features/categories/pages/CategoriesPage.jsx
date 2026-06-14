@@ -279,6 +279,19 @@ export default function CategoriesPage() {
           {totalItems} record{totalItems !== 1 ? 's' : ''}
           {activeFilters > 0 && ' (filtered)'}
         </span>
+        {activeFilters > 0 && (
+          <button
+            onClick={() => { setSearch(''); handleDateChange('from', ''); handleDateChange('to', '') }}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: 12, color: 'var(--accent-600)', fontWeight: 600,
+              padding: '2px 6px',
+              fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+            }}
+          >
+            ✕ Clear filters
+          </button>
+        )}
       </div>
 
       {isError && (

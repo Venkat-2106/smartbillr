@@ -1,4 +1,4 @@
-from fastapi.responses import JSONResponse
+from fastapi.responses import Response
 from uuid import UUID
 from datetime import datetime, date
 import json
@@ -12,7 +12,7 @@ class CustomEncoder(json.JSONEncoder):
         return super().default(obj)
 
 def success_response(data, status_code: int = 200):
-    return JSONResponse(
+    return Response(
         status_code=status_code,
         content=json.dumps(data, cls=CustomEncoder),
         media_type="application/json"

@@ -556,7 +556,7 @@ def get_low_stock_alerts(
         "limit":       pagination["limit"],
     }
 
-    # COUNT — only products whose CURRENT stock is still at or below threshold
+    # COUNT — only unread alerts whose CURRENT stock is still at or below threshold
     total = db.execute(
         text("""
             SELECT COUNT(*) FROM (
@@ -565,13 +565,14 @@ def get_low_stock_alerts(
                 JOIN products p ON p.prod_id = la.product_id
                 WHERE la.business_id = CAST(:business_id AS uuid)
                   AND p.is_deleted   = false
+                  AND la.alert_status = 'unread'
                   AND p.prod_stock_qty <= p.prod_low_stock_alert
             ) sub
         """),
         params
     ).scalar()
 
-    # DATA — one row per product (latest alert), real-time stock from products
+    # DATA — latest unread alert per product with real-time stock
     rows = db.execute(
         text("""
             SELECT DISTINCT ON (la.product_id)
@@ -585,6 +586,7 @@ def get_low_stock_alerts(
             JOIN products p ON p.prod_id = la.product_id
             WHERE la.business_id = CAST(:business_id AS uuid)
               AND p.is_deleted   = false
+              AND la.alert_status = 'unread'
               AND p.prod_stock_qty <= p.prod_low_stock_alert
             ORDER BY la.product_id, la.alert_created_at DESC
             OFFSET :offset LIMIT :limit

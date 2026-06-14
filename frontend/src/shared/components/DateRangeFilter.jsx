@@ -38,19 +38,6 @@ export default function DateRangeFilter({ label = 'Date', from, to, onChange }) 
         onChange={e => onChange('to', e.target.value)}
         style={dateInputStyle}
       />
-      {(from || to) && (
-        <button
-          onClick={() => { onChange('from', ''); onChange('to', '') }}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            fontSize: 11.5, color: 'var(--accent-600)', fontWeight: 600,
-            padding: '2px 6px',
-            fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
-          }}
-        >
-          Clear
-        </button>
-      )}
     </div>
   )
 }

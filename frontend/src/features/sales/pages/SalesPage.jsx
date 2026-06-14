@@ -203,6 +203,19 @@ export default function SalesPage() {
               {totalItems} invoice{totalItems !== 1 ? 's' : ''}
               {activeCount > 0 && ' (filtered)'}
             </span>
+            {anyFilterActive && (
+              <button
+                onClick={() => { setSearch(''); setStatusFilter(''); handleDateChange('from', ''); handleDateChange('to', '') }}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: 12, color: 'var(--accent-600)', fontWeight: 600,
+                  padding: '2px 6px',
+                  fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+                }}
+              >
+                ✕ Clear filters
+              </button>
+            )}
           </div>
           <DateRangeFilter
             label="Invoice Date"

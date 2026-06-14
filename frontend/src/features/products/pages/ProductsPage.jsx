@@ -96,19 +96,6 @@ function DateRangeFilter({ from, to, onChange }) {
       <input type="date" value={from} onChange={e => onChange('from', e.target.value)} style={dateInputStyle} />
       <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>to</span>
       <input type="date" value={to}   onChange={e => onChange('to',   e.target.value)} style={dateInputStyle} />
-      {(from || to) && (
-        <button
-          onClick={() => { onChange('from', ''); onChange('to', '') }}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            fontSize: 11.5, color: 'var(--accent-600)', fontWeight: 600,
-            padding: '2px 6px',
-            fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
-          }}
-        >
-          Clear
-        </button>
-      )}
     </div>
   )
 }
@@ -666,6 +653,7 @@ export default function ProductsPage() {
 
   const activeSearch     = search.trim().length > 0
   const activeDateFilter = dateFrom || dateTo
+  const activeFilters    = activeSearch || activeDateFilter
 
   const csvColumns = canViewProfit ? PRODUCT_CSV_COLUMNS : PRODUCT_CSV_COLUMNS_NO_PROFIT
 
@@ -724,8 +712,21 @@ export default function ProductsPage() {
           </div>
           <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
             {totalCount} product{totalCount !== 1 ? 's' : ''}
-            {(activeSearch || activeDateFilter) && ' (filtered)'}
+            {activeFilters && ' (filtered)'}
           </span>
+          {activeFilters && (
+            <button
+              onClick={() => { setSearch(''); handleDateChange('from', ''); handleDateChange('to', '') }}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 12, color: 'var(--accent-600)', fontWeight: 600,
+                padding: '2px 6px',
+                fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+              }}
+            >
+              ✕ Clear filters
+            </button>
+          )}
         </div>
         <DateRangeFilter from={dateFrom} to={dateTo} onChange={handleDateChange} />
       </div>
@@ -751,11 +752,9 @@ export default function ProductsPage() {
           sortDir={sortDir}
           onSort={handleSort}
           emptyText={
-            activeSearch
-              ? 'No products match your search.'
-              : activeDateFilter
-                ? 'No products in the selected date range.'
-                : 'No products yet. Add your first product to get started.'
+            activeFilters
+              ? 'No products match your current filters.'
+              : 'No products yet. Add your first product to get started.'
           }
         />
       </div>

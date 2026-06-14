@@ -269,6 +269,19 @@ export default function SuppliersPage() {
               {totalItems} record{totalItems !== 1 ? 's' : ''}
               {activeFiltersCount > 0 && ' (filtered)'}
             </span>
+            {(activeSearch || activeDateFilter) && (
+              <button
+                onClick={() => { setSearch(''); setDateFrom(''); setDateTo('') }}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: 12, color: 'var(--accent-600)', fontWeight: 600,
+                  padding: '2px 6px',
+                  fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+                }}
+              >
+                ✕ Clear filters
+              </button>
+            )}
           </div>
           <DateRangeFilter
             label="Last Updated"

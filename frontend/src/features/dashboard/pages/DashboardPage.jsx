@@ -108,7 +108,8 @@ function StatCard({ label, value, sub, icon, gradient, loading, onClick }) {
 
 // ─── Sales Trend Chart (pure SVG) ────────────────────────────────────────────
 function SalesTrendChart({ period, onPeriodChange }) {
-  const { data: points = [], isLoading, isError } = useSalesTrend(period)
+  const { data: raw, isLoading, isError } = useSalesTrend(period)
+  const points = Array.isArray(raw) ? raw : []
 
   const W = 600
   const H = 180

@@ -222,6 +222,19 @@ export default function PaymentsPage() {
             {totalItems} invoice{totalItems !== 1 ? 's' : ''}
             {activeFilters > 0 && ' (filtered)'}
           </span>
+          {activeFilters > 0 && (
+            <button
+              onClick={() => { setSearch(''); setStatus(''); setDateFrom(''); setDateTo('') }}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 12, color: 'var(--accent-600)', fontWeight: 600,
+                padding: '2px 6px',
+                fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+              }}
+            >
+              ✕ Clear filters
+            </button>
+          )}
         </div>
         <DateRangeFilter
           label="Last Payment"

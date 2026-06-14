@@ -392,6 +392,7 @@ def delete_supplier(
         return error_response("Supplier not found", 404)
 
     supplier.is_deleted = True
+    supplier.updated_by = current_user["user_id"]
     db.commit()
 
     return success_response({"message": "Supplier deleted successfully"})

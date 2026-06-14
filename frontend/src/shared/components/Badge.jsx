@@ -110,7 +110,9 @@ export default function Badge({
     : { fontSize: 11.5, padding: '3px 10px', gap: 5 }
 
   return (
-    <span style={{
+    <span
+      title={label}
+      style={{
       display: 'inline-flex',
       alignItems: 'center',
       background: c.bg,

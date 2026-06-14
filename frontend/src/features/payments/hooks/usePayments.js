@@ -19,7 +19,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState }                               from 'react'
 import toast                                      from 'react-hot-toast'
 import useAuthStore                               from '../../../store/authStore'
-import { useDebounce }                            from '../../../shared/hooks/useDebounce'
+import { useServerTableState }                    from '../../../shared/hooks/useServerTableState'
 import { localDayStartUTC, localDayEndUTC }       from '../../../shared/utils/dateUtils'
 import {
   fetchPayments,
@@ -31,7 +31,6 @@ import {
 const PAGE_SIZE = 20
 
 // ── usePaymentHistory (singular sale) ────────────────────────────────────────
-// Used by PaymentHistoryDrawer to fetch full history + summary for one sale.
 export function usePaymentHistory(saleId) {
   return useQuery({
     queryKey:  ['payment-history', saleId],
@@ -46,55 +45,47 @@ export function usePayments() {
   const user        = useAuthStore(s => s.user)
   const queryClient = useQueryClient()
 
-  // ── Filter / sort / page state ──────────────────────────────────────────
-  const [search,   setSearchRaw]  = useState('')
-  const [status,   setStatusRaw]  = useState('')
-  const [sortKey,  setSortKey]    = useState('payment_paid_at')
-  const [sortDir,  setSortDir]    = useState('desc')
-  const [page,     setPage]       = useState(1)
-  const [dateFrom, setDateFrom]   = useState('')
-  const [dateTo,   setDateTo]     = useState('')
+  const tbl = useServerTableState({
+    initialSortKey: 'payment_paid_at',
+    initialSortDir: 'desc',
+  })
 
-  const debouncedSearch = useDebounce(search, 350)
+  const [status, setStatusRaw] = useState('')
+  function handleStatus(val) { setStatusRaw(val); tbl.setPage(1) }
 
-  // ── FETCH ────────────────────────────────────────────────────────────────
   const {
     data:      serverData,
     isLoading,
     isError,
     isFetching,
   } = useQuery({
-    queryKey: ['payments', page, debouncedSearch, status, sortKey, sortDir, dateFrom, dateTo],
+    queryKey: ['payments', tbl.page, tbl.debouncedSearch, status, tbl.sortKey, tbl.sortDir, tbl.dateFrom, tbl.dateTo],
     queryFn:  () => fetchPayments({
-      page,
-      limit:     PAGE_SIZE,
-      search:    debouncedSearch,
+      page:       tbl.page,
+      limit:      PAGE_SIZE,
+      search:     tbl.debouncedSearch,
       status,
-      sort_by:   sortKey,
-      sort_dir:  sortDir,
-      date_from: dateFrom ? localDayStartUTC(dateFrom) : undefined,
-      date_to:   dateTo   ? localDayEndUTC(dateTo)     : undefined,
+      sort_by:    tbl.sortKey,
+      sort_dir:   tbl.sortDir,
+      date_from:  tbl.dateFrom ? localDayStartUTC(tbl.dateFrom) : undefined,
+      date_to:    tbl.dateTo   ? localDayEndUTC(tbl.dateTo)     : undefined,
     }),
     staleTime:       30_000,
     placeholderData: (prev) => prev,
     enabled:         !!user,
   })
 
-  const payments   = serverData?.items      ?? []
-  const pagination = serverData?.pagination ?? {}
-  const totalItems = pagination.total       ?? 0
-  const totalPages = pagination.total_pages ?? 1
+  const { items: payments, pagination, totalItems, totalPages } = tbl.unwrapPagination(serverData)
 
-  // ── LAZY EXPORT ──────────────────────────────────────────────────────────
   async function handleExport() {
     try {
       const rows = await fetchAllPaymentsForExport({
-        search:    debouncedSearch,
+        search:    tbl.debouncedSearch,
         status,
-        sort_by:   sortKey,
-        sort_dir:  sortDir,
-        date_from: dateFrom ? localDayStartUTC(dateFrom) : undefined,
-        date_to:   dateTo   ? localDayEndUTC(dateTo)     : undefined,
+        sort_by:   tbl.sortKey,
+        sort_dir:  tbl.sortDir,
+        date_from: tbl.dateFrom ? localDayStartUTC(tbl.dateFrom) : undefined,
+        date_to:   tbl.dateTo   ? localDayEndUTC(tbl.dateTo)     : undefined,
       })
       if (serverData?.pagination?.truncated) {
         toast('Export limited to 10,000 records.', { icon: '⚠️' })
@@ -106,35 +97,9 @@ export function usePayments() {
     }
   }
 
-  // ── EVENT HANDLERS ───────────────────────────────────────────────────────
-  function handleSearch(val) {
-    setSearchRaw(val)
-    setPage(1)
-  }
-
-  function handleStatus(val) {
-    setStatusRaw(val)
-    setPage(1)
-  }
-
-  function handleSort(key) {
-    if (sortKey === key) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortKey(key)
-      setSortDir('asc')
-    }
-    setPage(1)
-  }
-
-  function handleDateFrom(val) { setDateFrom(val); setPage(1) }
-  function handleDateTo(val)   { setDateTo(val);   setPage(1) }
-
-  // ── RECORD PAYMENT MUTATION ───────────────────────────────────────────────
   const recordMutation = useMutation({
     mutationFn: recordPayment,
     onSuccess: (_, variables) => {
-      // Invalidate both the list and the specific sale's history
       queryClient.invalidateQueries({ queryKey: ['payments'] })
       queryClient.invalidateQueries({ queryKey: ['payment-history', variables.sale_id] })
       queryClient.invalidateQueries({ queryKey: ['sales'] })
@@ -146,29 +111,15 @@ export function usePayments() {
   })
 
   return {
-    // Table data
     payments,
-    isLoading,
-    isFetching,
-    isError,
+    isLoading, isFetching, isError,
 
-    // Filters
-    search,    setSearch: handleSearch,
-    status,    setStatus: handleStatus,
-    dateFrom,  setDateFrom: handleDateFrom,
-    dateTo,    setDateTo:   handleDateTo,
+    ...tbl.tableProps,
+    status, setStatus: handleStatus,
 
-    // Sort
-    sortKey, sortDir, handleSort,
-
-    // Pagination
-    page, setPage, totalPages, totalItems,
-    pagination,
-
-    // Export
+    totalItems, totalPages, pagination,
     handleExport,
 
-    // Mutation
     recordPayment:   (data, callbacks) => recordMutation.mutate(data, callbacks),
     isRecording:     recordMutation.isPending,
   }

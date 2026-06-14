@@ -256,15 +256,13 @@ def get_customers_lean(
     Only returns: cust_id, cust_name, cust_phone.
     No pagination — returns all active customers (no cap).
 
+    Note: the frontend handles filtering client-side via the existing
+    idx_customers_lean_dropdown covering index.
+
     """
     business_id = current_user["business_id"]
 
 # No LIMIT — returns all active customers for the business.
-    # This endpoint is a covering-index scan on idx_customers_lean_dropdown
-    # (business_id, cust_name, cust_phone, cust_id) so it never touches
-    # the heap. Even 50,000 customers returns in <100 ms on a normal index scan.
-    # The frontend dropdown uses virtualisation / search-as-you-type so the
-    # full list in memory is fine.
     rows = db.execute(
         text("""
             SELECT cust_id, cust_name, cust_phone
@@ -590,6 +588,7 @@ def delete_customer(
         return error_response("Customer not found", 404)
 
     customer.is_deleted = True
+    customer.updated_by = current_user["user_id"]
     db.commit()
 
     return success_response({"message": "Customer deleted successfully"})

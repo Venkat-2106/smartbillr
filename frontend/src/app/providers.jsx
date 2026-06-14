@@ -30,9 +30,11 @@ export default function Providers({ children }) {
             boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
           },
           success: {
+            duration: 3000,
             iconTheme: { primary: '#16A34A', secondary: '#fff' },
           },
           error: {
+            duration: 5500,
             iconTheme: { primary: '#DC2626', secondary: '#fff' },
           },
         }}

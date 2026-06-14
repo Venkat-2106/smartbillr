@@ -713,6 +713,7 @@ def delete_purchase(
         return error_response("Purchase not found", status_code=404)
 
     purchase.is_deleted = True
+    purchase.updated_by = current_user["user_id"]
     db.commit()
 
     return success_response({"message": "Purchase deleted successfully"})

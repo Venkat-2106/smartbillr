@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import toast from 'react-hot-toast'
+import { ErrorBoundary } from '../../shared/components'
 
 const THEME_KEY  = 'sb-theme'
 const ACCENT_KEY = 'sb-accent'
@@ -68,6 +69,7 @@ const NAV = [
       icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
   ]},
 ]
+const NAV_FLAT = NAV.flatMap(s => s.items)
 
 const SLIM = 64, FULL = 248
 
@@ -286,14 +288,13 @@ export default function DashboardLayout() {
   const businessName = business?.business_name || 'Your Business'
   const userRole     = profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : 'Staff'
   const initials     = userName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-  const hour         = new Date().getHours()
-  const greeting     = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const greeting     = useMemo(() => {
+    const h = new Date().getHours()
+    return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
+  }, [])
 
-  // FIX 4: memoized — only recalculates when the URL actually changes
   const currentPage = useMemo(() =>
-    NAV.flatMap(s => s.items)
-      .find(item => location.pathname.startsWith(item.path))
-      ?.label || 'Dashboard',
+    NAV_FLAT.find(item => location.pathname.startsWith(item.path))?.label || 'Dashboard',
     [location.pathname]
   )
 
@@ -424,7 +425,7 @@ export default function DashboardLayout() {
         </header>
 
         <main style={{ flex: 1, padding: '32px 36px', overflowY: 'auto', overflowX: 'hidden' }}>
-          <div className="fade-up"><Outlet /></div>
+          <div className="fade-up"><ErrorBoundary><Outlet /></ErrorBoundary></div>
         </main>
       </div>
 

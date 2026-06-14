@@ -90,11 +90,8 @@ def get_dashboard_summary(
                 (SELECT COUNT(*) FROM products
                   WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false)      AS total_products,
                 (SELECT COUNT(*) FROM low_stock_alerts la
-                  JOIN products p ON p.prod_id = la.product_id
                   WHERE la.business_id = CAST(:bid AS uuid)
-                    AND la.alert_status = 'unread'
-                    AND p.is_deleted    = false
-                    AND p.prod_stock_qty <= p.prod_low_stock_alert)                   AS low_stock_alerts,
+                    AND la.alert_status = 'unread')                                   AS low_stock_alerts,
                 (SELECT COALESCE(SUM(expense_amount), 0) FROM expenses
                   WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false)      AS total_expenses
             FROM sales

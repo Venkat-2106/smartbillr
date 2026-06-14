@@ -863,6 +863,7 @@ def delete_product(
         return error_response("Product not found", status_code=404)
 
     product.is_deleted = True
+    product.updated_by = current_user["user_id"]
     db.commit()
 
     return success_response({"message": "Product deleted successfully"})

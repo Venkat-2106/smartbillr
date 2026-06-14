@@ -358,16 +358,18 @@ def delete_category(
     db.execute(
         text("""
             UPDATE products
-            SET is_deleted = true
+            SET is_deleted = true,
+                updated_by = CAST(:uid AS uuid)
             WHERE category_id = CAST(:cid AS uuid)
               AND business_id  = CAST(:bid AS uuid)
               AND is_deleted   = false
         """),
-        {"cid": category_id, "bid": business_id}
+        {"cid": category_id, "bid": business_id, "uid": current_user["user_id"]}
     )
 
     # Step 3 — Soft-delete the category itself
     category.is_deleted = True
+    category.updated_by = current_user["user_id"]
     db.commit()
 
     return success_response({

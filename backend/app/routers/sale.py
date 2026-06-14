@@ -446,21 +446,16 @@ def get_sales(
 
     payment_map = {}
     if sale_ids:
-        id_placeholders = ", ".join(
-            f"CAST(:id_{i} AS uuid)" for i in range(len(sale_ids))
-        )
-        id_params = {f"id_{i}": sid for i, sid in enumerate(sale_ids)}
-
         payment_rows = db.execute(
-            text(f"""
+            text("""
                 SELECT sale_id,
                        COALESCE(cumulative_paid, 0) AS total_paid,
                        payment_status
                 FROM payments
-                WHERE sale_id  IN ({id_placeholders})
+                WHERE sale_id  = ANY(CAST(:ids AS uuid[]))
                   AND is_active = true
             """),
-            id_params
+            {"ids": "{" + ",".join(sale_ids) + "}"}
         ).fetchall()
         payment_map = {
             str(row.sale_id): {
@@ -795,6 +790,7 @@ def delete_sale(
         return error_response("Sale not found", 404)
 
     sale.is_deleted = True
+    sale.updated_by = current_user["user_id"]
     db.commit()
 
     return success_response({"message": "Sale deleted successfully"})

@@ -225,6 +225,7 @@ def delete_expense(
         return error_response("Expense not found", status_code=404)
 
     expense.is_deleted = True
+    expense.updated_by = current_user["user_id"]
     db.commit()
 
     return success_response({

@@ -97,22 +97,14 @@ import { formatCurrency } from '../../../shared/utils/formatCurrency';
 import useAuthStore from '../../../store/authStore';
 import { useDebounce } from '../../../shared/hooks/useDebounce';
 import { getAutoPrintInvoice, setAutoPrintInvoice } from '../../../shared/utils/preferences';
+import { NUM_INPUT_STYLE } from '../../../shared/constants/styles';
 import SaleLineItemRow from '../components/SaleLineItemRow';
 import OrderSummaryRow from '../components/OrderSummaryRow';
 import AddCustomerModal from '../components/AddCustomerModal';
 import StockOverrideModal from '../components/StockOverrideModal';
 
 // ── Module-level constants ─────────────────────────────────────────────────────
-// FIX 4: Moved out of component — created once, never re-created on render.
-const NUM_INPUT_STYLE = {
-  width: '100%', padding: '7px 9px',
-  border: '1.5px solid var(--border)',
-  borderRadius: 8, fontSize: 13,
-  background: 'var(--bg-page)',
-  color: 'var(--text-primary)',
-  outline: 'none', boxSizing: 'border-box',
-  fontFamily: 'inherit',
-};
+// FIX 4: NUM_INPUT_STYLE now imported from shared/constants/styles.js
 
 // FIX 1 (key): Stable empty array reference for closed dropdowns.
 const EMPTY_ARRAY = [];
@@ -162,6 +154,8 @@ export default function CreateSalePage() {
   const [barcodeError,   setBarcodeError]   = useState('');
   const [barcodeLoading, setBarcodeLoading] = useState(false);
   const barcodeRef = useRef(null);
+  const barcodeInputRef = useRef('');
+  useEffect(() => { barcodeInputRef.current = barcodeInput; }, [barcodeInput]);
 
   // ── Per-item product search state ─────────────────────────────────────────
   const [searchMap,   setSearchMap]   = useState({});
@@ -340,7 +334,7 @@ export default function CreateSalePage() {
   // FIX 3: `items` removed from useCallback deps — uses itemsRef.current instead.
   const handleBarcodeScan = useCallback(async (e) => {
     if (e.key !== 'Enter') return;
-    const raw = barcodeInput.trim();
+    const raw = barcodeInputRef.current.trim();
     if (!raw) return;
 
     let qty = 1, code = raw;
@@ -386,7 +380,7 @@ export default function CreateSalePage() {
       setBarcodeLoading(false);
       setTimeout(() => barcodeRef.current?.focus(), 50);
     }
-  }, [barcodeInput]);
+  }, []);
 
   // ── Build mutation body ───────────────────────────────────────────────────
   const buildBody = useCallback((overrideFlag = false) => {

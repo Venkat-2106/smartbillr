@@ -11,7 +11,7 @@ function Skeleton({ w = '60%', h = 28 }) {
       height: h, width: w,
       background: 'var(--bg-hover)',
       borderRadius: 6,
-      animation: 'shimmer 1.5s ease-in-out infinite',
+      animation: 'pulse-shimmer 1.5s ease-in-out infinite',
     }} />
   )
 }
@@ -108,7 +108,7 @@ function StatCard({ label, value, sub, icon, gradient, loading, onClick }) {
 
 // ─── Sales Trend Chart (pure SVG) ────────────────────────────────────────────
 function SalesTrendChart({ period, onPeriodChange }) {
-  const { data: points = [], isLoading } = useSalesTrend(period)
+  const { data: points = [], isLoading, isError } = useSalesTrend(period)
 
   const W = 600
   const H = 180
@@ -215,7 +215,15 @@ function SalesTrendChart({ period, onPeriodChange }) {
         </div>
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <div style={{
+          height: H, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'var(--danger-text)', fontSize: 13.5, flexDirection: 'column', gap: 8,
+        }}>
+          <span style={{ fontSize: 24 }}>⚠️</span>
+          <span>Failed to load trend data.</span>
+        </div>
+      ) : isLoading ? (
         <div style={{ height: H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Skeleton w="80%" h={H - 60} />
         </div>
@@ -697,13 +705,6 @@ export default function DashboardPage() {
 
   return (
     <>
-      <style>{`
-        @keyframes shimmer {
-          0%, 100% { opacity: 1 }
-          50%       { opacity: 0.4 }
-        }
-      `}</style>
-
       {/* ── Page header ── */}
       <div style={{ marginBottom: 40 }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px', margin: '0 0 6px' }}>

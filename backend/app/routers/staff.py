@@ -12,9 +12,9 @@
 #   4. Backend inserts into profiles with that id as profiles.id
 #   5. Returns the new profile
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import func, text
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 import httpx
@@ -23,6 +23,7 @@ import os
 from app.database import get_db
 from app.middleware.rbac import require_permission
 from app.utils.response import success_response, error_response
+from app.utils.pagination import paginate, pagination_response
 
 router = APIRouter(prefix="/staff", tags=["Staff"])
 
@@ -190,44 +191,73 @@ def create_staff(
     }, status_code=201)
 
 
-# ── GET /staff — List all staff in this business ──────────────────────────────
+# ── GET /staff — List all staff in this business (paginated) ──────────────────
 
 @router.get("")
 def list_staff(
     current_user: dict    = Depends(require_permission("staff.manage")),
     db:           Session = Depends(get_db),
+    pagination:   dict    = Depends(paginate),
+    search:       Optional[str] = Query(default=None),
+    is_active:    Optional[bool] = Query(default=None),
 ):
     business_id = current_user["business_id"]
 
-    rows = db.execute(
-        text("""
-            SELECT
-                p.id,
-                p.full_name,
-                p.email,
-                p.role,
-                p.is_active,
-                p.created_at,
-                r.name AS role_name
-            FROM profiles p
-            LEFT JOIN roles r ON r.id = p.role_id
-            WHERE p.business_id = :business_id
-            ORDER BY p.created_at ASC
-        """),
-        {"business_id": business_id}
-    ).fetchall()
+    extra_where = ""
+    params = {"business_id": business_id}
 
-    return success_response([
+    if search and search.strip():
+        extra_where += " AND (p.full_name ILIKE :search OR p.email ILIKE :search)"
+        params["search"] = f"%{search.strip()}%"
+
+    if is_active is not None:
+        extra_where += " AND p.is_active = :is_active"
+        params["is_active"] = is_active
+
+    count_sql = f"""
+        SELECT COUNT(p.id)
+        FROM profiles p
+        WHERE p.business_id = :business_id
+        {extra_where}
+    """
+    total = db.execute(text(count_sql), params).scalar() or 0
+
+    params["offset"] = pagination["offset"]
+    params["limit"] = pagination["limit"]
+
+    list_sql = f"""
+        SELECT
+            p.id,
+            p.full_name,
+            p.email,
+            p.role,
+            p.is_active,
+            p.created_at,
+            r.name AS role_name
+        FROM profiles p
+        LEFT JOIN roles r ON r.id = p.role_id
+        WHERE p.business_id = :business_id
+        {extra_where}
+        ORDER BY p.created_at ASC
+        OFFSET :offset LIMIT :limit
+    """
+    rows = db.execute(text(list_sql), params).fetchall()
+
+    staff_list = [
         {
-            "id":        str(row.id),
-            "full_name": row.full_name,
-            "email":     row.email,
-            "role":      row.role_name or row.role,
-            "is_active": row.is_active,
+            "id":         str(row.id),
+            "full_name":  row.full_name,
+            "email":      row.email,
+            "role":       row.role_name or row.role,
+            "is_active":  row.is_active,
             "created_at": row.created_at.isoformat() if row.created_at else None,
         }
         for row in rows
-    ])
+    ]
+
+    return success_response(
+        pagination_response(staff_list, total, pagination["page"], pagination["limit"])
+    )
 
 
 # ── PATCH /staff/{id} — Update staff name, role, or active status ─────────────

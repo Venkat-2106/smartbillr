@@ -56,7 +56,7 @@ class SalesReturnCreate(BaseModel):
     @field_validator("return_status")
     @classmethod
     def valid_create_status(cls, v):
-        allowed = ["pending", "approved", "rejected", "done"]
+        allowed = ["pending", "approved", "rejected"]
         if v is not None and v not in allowed:
             raise ValueError(f"Status must be one of: {allowed}")
         return v
@@ -69,7 +69,7 @@ class SalesReturnUpdate(BaseModel):
     @field_validator("return_status")
     @classmethod
     def valid_status(cls, v):
-        allowed = ["pending", "approved", "rejected", "done"]
+        allowed = ["pending", "approved", "rejected"]
         if v not in allowed:
             raise ValueError(f"Status must be one of: {allowed}")
         return v

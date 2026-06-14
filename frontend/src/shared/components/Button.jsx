@@ -4,7 +4,7 @@
 // Sizes:    sm | md | lg
 // Props:    loading (shows spinner), disabled, leftIcon, rightIcon, fullWidth
 
-import { clsx } from 'clsx'
+import { useState } from 'react'
 
 const BASE = {
   display: 'inline-flex',
@@ -98,16 +98,21 @@ export default function Button({
   ...rest
 }) {
   const isDisabled = disabled || loading
+  const [hovered, setHovered] = useState(false)
+  const [pressed, setPressed] = useState(false)
 
   const variantStyle = VARIANT_STYLE[variant] || VARIANT_STYLE.primary
   const sizeStyle    = SIZE[size] || SIZE.md
+  const hoverStyle   = !isDisabled && hovered ? (VARIANT_HOVER[variant] || {}) : {}
 
   const merged = {
     ...BASE,
     ...sizeStyle,
     ...variantStyle,
+    ...hoverStyle,
     width: fullWidth ? '100%' : undefined,
-    opacity: isDisabled ? 0.55 : 1,
+    opacity: isDisabled ? 0.55 : (hovered ? hoverStyle.opacity ?? 1 : 1),
+    transform: pressed && !isDisabled ? 'scale(0.97)' : (hovered && !isDisabled ? hoverStyle.transform ?? 'translateY(0)' : 'translateY(0)'),
     cursor: isDisabled ? 'not-allowed' : 'pointer',
     pointerEvents: isDisabled ? 'none' : 'auto',
     ...extraStyle,
@@ -120,23 +125,10 @@ export default function Button({
         onClick={onClick}
         disabled={isDisabled}
         style={merged}
-        onMouseEnter={e => {
-          if (isDisabled) return
-          const h = VARIANT_HOVER[variant] || {}
-          Object.assign(e.currentTarget.style, h)
-        }}
-        onMouseLeave={e => {
-          if (isDisabled) return
-          Object.assign(e.currentTarget.style, variantStyle)
-          e.currentTarget.style.transform = 'translateY(0)'
-          e.currentTarget.style.opacity = '1'
-        }}
-        onMouseDown={e => {
-          if (!isDisabled) e.currentTarget.style.transform = 'scale(0.97)'
-        }}
-        onMouseUp={e => {
-          if (!isDisabled) e.currentTarget.style.transform = 'translateY(-1px)'
-        }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => { setHovered(false); setPressed(false) }}
+        onMouseDown={() => !isDisabled && setPressed(true)}
+        onMouseUp={() => !isDisabled && setPressed(false)}
         {...rest}
       >
         {loading

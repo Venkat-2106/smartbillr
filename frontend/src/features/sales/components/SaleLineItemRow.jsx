@@ -17,18 +17,8 @@
 import { memo, useRef } from 'react';
 import { formatCurrency } from '../../../shared/utils/formatCurrency';
 import { selectStyle } from '../../../shared/components/FormField';
+import { NUM_INPUT_STYLE } from '../../../shared/constants/styles';
 import ProductSearchDropdownPortal from './ProductSearchDropdownPortal';
-
-// Module-level constant — created once, never re-created on render (FIX 4 pattern).
-const NUM_INPUT_STYLE = {
-  width: '100%', padding: '7px 9px',
-  border: '1.5px solid var(--border)',
-  borderRadius: 8, fontSize: 13,
-  background: 'var(--bg-page)',
-  color: 'var(--text-primary)',
-  outline: 'none', boxSizing: 'border-box',
-  fontFamily: 'inherit',
-};
 
 const SaleLineItemRow = memo(function SaleLineItemRow({
   item,

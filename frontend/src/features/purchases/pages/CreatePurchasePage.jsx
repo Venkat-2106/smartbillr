@@ -31,17 +31,7 @@ import { useDebounce }          from '../../../shared/hooks/useDebounce'
 import PurchaseLineItemRow      from '../components/PurchaseLineItemRow'
 import PurchaseOrderSummaryRow  from '../components/PurchaseOrderSummaryRow'
 import PurchaseSectionCard      from '../components/PurchaseSectionCard'
-
-// ── Module-level constants (created once, never recreated on render) ──────────
-const NUM_INPUT_STYLE = {
-  width: '100%', padding: '8px 10px',
-  border: '1.5px solid var(--border)',
-  borderRadius: 8, fontSize: 13,
-  background: 'var(--bg-page)',
-  color: 'var(--text-primary)',
-  outline: 'none', boxSizing: 'border-box',
-  fontFamily: 'inherit',
-}
+import { NUM_INPUT_STYLE } from '../../../shared/constants/styles'
 
 // Stable empty array — passed to closed dropdown rows so React.memo skips re-render
 const EMPTY_ARRAY = []
@@ -96,6 +86,7 @@ export default function CreatePurchasePage() {
     queryFn:  () => searchProductsLean(debouncedProductSearch),
     enabled:  debouncedProductSearch.length >= 2,
     staleTime: 60 * 1000,
+    placeholderData: (prev) => prev,
   })
 
   // ── Supplier combobox filtered list ──────────────────────────────────────
@@ -130,6 +121,9 @@ export default function CreatePurchasePage() {
     setSuppDropOpen(false)
   }
 
+  // ── Add-item button hover state ───────────────────────────────────────────
+  const [addBtnHovered, setAddBtnHovered] = useState(false)
+
   // ── Line item handlers — stable useCallback ([]) ─────────────────────────
   const handleItemSearchChange = useCallback((itemId, text) => {
     setSearchMap(prev   => ({ ...prev, [itemId]: text }))
@@ -155,6 +149,8 @@ export default function CreatePurchasePage() {
 
   const handleCloseDropdown = useCallback((itemId) => {
     setOpenDropMap(prev => ({ ...prev, [itemId]: false }))
+    setSearchMap(prev => ({ ...prev, [itemId]: '' }))
+    setActiveItemSearch('')
   }, [])
 
   const handleOpenDropdown = useCallback((itemId) => {
@@ -397,16 +393,16 @@ export default function CreatePurchasePage() {
               <button
                 type="button"
                 onClick={addItem}
+                onMouseEnter={() => setAddBtnHovered(true)}
+                onMouseLeave={() => setAddBtnHovered(false)}
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   gap: 6, marginTop: 12, width: '100%',
-                  background: 'none', border: '1.5px dashed var(--border)',
+                  background: 'none', border: `1.5px dashed ${addBtnHovered ? 'var(--accent-400)' : 'var(--border)'}`,
                   borderRadius: 10, padding: '9px 0',
                   cursor: 'pointer', color: 'var(--text-muted)',
                   fontSize: 13, fontFamily: 'inherit',
                 }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent-400)'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
               >
                 + Add another line item
               </button>
@@ -417,6 +413,8 @@ export default function CreatePurchasePage() {
           <div style={{
             display: 'flex', flexDirection: 'column', gap: 16,
             position: 'sticky', top: 24,
+            maxHeight: 'calc(100dvh - 156px)',
+            overflowY: 'auto',
           }}>
             <PurchaseSectionCard title="Order Summary">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

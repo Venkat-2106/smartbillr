@@ -18,20 +18,10 @@
 //
 // Extracted from CreatePurchasePage.jsx (Step 5.16 refactor) — zero behaviour change.
 
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { selectStyle }    from '../../../shared/components/FormField'
-
-// Module-level constant — created once, never re-created on render.
-const NUM_INPUT_STYLE = {
-  width: '100%', padding: '8px 10px',
-  border: '1.5px solid var(--border)',
-  borderRadius: 8, fontSize: 13,
-  background: 'var(--bg-page)',
-  color: 'var(--text-primary)',
-  outline: 'none', boxSizing: 'border-box',
-  fontFamily: 'inherit',
-}
+import { NUM_INPUT_STYLE } from '../../../shared/constants/styles'
 
 const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
   item,
@@ -49,6 +39,7 @@ const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
   onRemove,
   canRemove,
 }) {
+  const [hoveredProd, setHoveredProd] = useState(null)
   const s = (Number(item.unit_price) || 0) * (Number(item.quantity) || 0)
   const t = s * ((Number(item.tax_rate) || 0) / 100)
 
@@ -112,13 +103,14 @@ const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
                     <div
                       key={p.prod_id}
                       onMouseDown={() => onProductSelect(item._id, p)}
+                      onMouseEnter={() => setHoveredProd(p.prod_id)}
+                      onMouseLeave={() => setHoveredProd(null)}
                       style={{
                         padding: '9px 14px', cursor: 'pointer',
                         borderBottom: '1px solid var(--border)',
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        background: hoveredProd === p.prod_id ? 'var(--bg-subtle)' : 'transparent',
                       }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-subtle)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       <div>
                         <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>

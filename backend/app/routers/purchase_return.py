@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
@@ -83,28 +84,54 @@ def validate_return_items(
     items,
     exclude_return_id: str = None
 ):
-    for item in items:
-        product_id = str(item.product_id)
-
-        # Step 1 → Was this product part of the purchase?
-        # FIX: products PK is prod_id not product_id
-        purchase_item = db.execute(text("""
-            SELECT pi.pur_item_qty, pi.item_unit_price, p.prod_name
+    # Batch Step 1 → Fetch ALL purchase items for this purchase in one query
+    prod_ids = [str(item.product_id) for item in items]
+    purchase_items = {}
+    if prod_ids:
+        rows = db.execute(text("""
+            SELECT pi.product_id, pi.pur_item_qty, pi.item_unit_price, p.prod_name
             FROM purchase_items pi
             JOIN products p ON p.prod_id = pi.product_id
             WHERE pi.pur_id = CAST(:pur_id AS uuid)
-              AND pi.product_id = CAST(:product_id AS uuid)
-            LIMIT 1
+              AND pi.product_id = ANY(CAST(:pids AS uuid[]))
         """), {
-            "pur_id":     pur_id,
-            "product_id": product_id
-        }).fetchone()
+            "pur_id": pur_id,
+            "pids": "{" + ",".join(prod_ids) + "}"
+        }).fetchall()
+        for row in rows:
+            purchase_items[str(row.product_id)] = row
+
+    # Batch Step 2 → Fetch ALL already-returned quantities in one GROUP BY query
+    already_returned_map = {}
+    if prod_ids:
+        q = """
+            SELECT pri.product_id, COALESCE(SUM(pri.return_qty), 0) AS total_returned
+            FROM purchase_return_items pri
+            JOIN purchase_returns pr ON pr.return_id = pri.return_id
+            WHERE pr.pur_id = CAST(:pur_id AS uuid)
+              AND pri.product_id = ANY(CAST(:pids AS uuid[]))
+              AND pr.return_status != 'rejected'
+              AND pr.business_id = CAST(:business_id AS uuid)
+        """
+        params = {
+            "pur_id": pur_id,
+            "pids": "{" + ",".join(prod_ids) + "}",
+            "business_id": business_id
+        }
+        if exclude_return_id:
+            q += " AND pr.return_id != CAST(:exclude_id AS uuid)"
+            params["exclude_id"] = exclude_return_id
+        q += " GROUP BY pri.product_id"
+        for row in db.execute(text(q), params).fetchall():
+            already_returned_map[str(row.product_id)] = int(row.total_returned)
+
+    for item in items:
+        product_id = str(item.product_id)
+        purchase_item = purchase_items.get(product_id)
 
         if not purchase_item:
             return f"Product '{product_id}' was not part of purchase '{pur_id}'"
 
-        # Step 2 → refund_amount must not exceed original purchase unit price
-        # Only validate on create (item has refund_amount), not on approval revalidation
         if hasattr(item, "refund_amount") and item.refund_amount is not None:
             if float(item.refund_amount) > float(purchase_item.item_unit_price):
                 return (
@@ -113,30 +140,7 @@ def validate_return_items(
                     f"({float(purchase_item.item_unit_price)})"
                 )
 
-        # Step 3 → return_qty must not exceed available returnable qty
-        query = """
-            SELECT COALESCE(SUM(pri.return_qty), 0) AS total_returned
-            FROM purchase_return_items pri
-            JOIN purchase_returns pr ON pr.return_id = pri.return_id
-            WHERE pr.pur_id       = CAST(:pur_id AS uuid)
-              AND pri.product_id  = CAST(:product_id AS uuid)
-              AND pr.return_status != 'rejected'
-              AND pr.business_id  = CAST(:business_id AS uuid)
-        """
-        params = {
-            "pur_id":      pur_id,
-            "product_id":  product_id,
-            "business_id": business_id
-        }
-
-        # When updating — exclude current return from already_returned count
-        if exclude_return_id:
-            query += " AND pr.return_id != CAST(:exclude_id AS uuid)"
-            params["exclude_id"] = exclude_return_id
-
-        already_returned = int(
-            db.execute(text(query), params).fetchone().total_returned
-        )
+        already_returned = already_returned_map.get(product_id, 0)
         available = purchase_item.pur_item_qty - already_returned
 
         if item.return_qty > available:
@@ -355,18 +359,67 @@ def create_purchase_return(
 def get_all_purchase_returns(
     current_user: dict = Depends(require_permission("purchase_returns.manage")),
     db: Session = Depends(get_db),
-    pagination: dict = Depends(paginate)
+    pagination: dict = Depends(paginate),
+    search: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    sort_by: Optional[str] = Query(default="return_created_at"),
+    sort_dir: Optional[str] = Query(default="desc"),
+    date_from: Optional[str] = Query(default=None),
+    date_to: Optional[str] = Query(default=None),
 ):
     business_id = current_user["business_id"]
 
-    total = db.query(func.count(PurchaseReturn.return_id)).filter(
-        PurchaseReturn.business_id == business_id
-    ).scalar()
+    SORTABLE = {
+        "return_created_at": "pr.return_created_at",
+        "return_status":     "pr.return_status",
+        "return_amount":     "pr.return_amount",
+    }
+    order_col = SORTABLE.get(sort_by, "pr.return_created_at")
+    order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
 
-    returns = db.query(PurchaseReturn).filter(
-        PurchaseReturn.business_id == business_id
-    ).order_by(PurchaseReturn.return_created_at.desc()) \
-     .offset(pagination["offset"]).limit(pagination["limit"]).all()
+    extra_where = ""
+    params = {"bid": business_id}
+
+    if search and search.strip():
+        extra_where += " AND (pr.return_reason ILIKE :search OR s.supp_name ILIKE :search)"
+        params["search"] = f"%{search.strip()}%"
+
+    if status and status.strip():
+        extra_where += " AND pr.return_status = :status"
+        params["status"] = status.strip()
+
+    if date_from:
+        extra_where += " AND pr.return_created_at >= :date_from"
+        params["date_from"] = date_from
+
+    if date_to:
+        extra_where += " AND pr.return_created_at <= :date_to"
+        params["date_to"] = date_to
+
+    count_sql = f"""
+        SELECT COUNT(pr.return_id)
+        FROM purchase_returns pr
+        LEFT JOIN purchases p ON p.pur_id = pr.pur_id
+        LEFT JOIN suppliers s ON s.supp_id = p.supp_id
+        WHERE pr.business_id = CAST(:bid AS uuid)
+        {extra_where}
+    """
+    total = db.execute(text(count_sql), params).scalar() or 0
+
+    params["offset"] = pagination["offset"]
+    params["limit"] = pagination["limit"]
+
+    list_sql = f"""
+        SELECT pr.*
+        FROM purchase_returns pr
+        LEFT JOIN purchases p ON p.pur_id = pr.pur_id
+        LEFT JOIN suppliers s ON s.supp_id = p.supp_id
+        WHERE pr.business_id = CAST(:bid AS uuid)
+        {extra_where}
+        ORDER BY {order_col} {order_dir}
+        OFFSET :offset LIMIT :limit
+    """
+    returns = db.execute(text(list_sql), params).fetchall()
 
     # BATCH: fetch all return items in one query
     ret_ids = [str(r.return_id) for r in returns]

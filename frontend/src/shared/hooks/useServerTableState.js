@@ -54,8 +54,8 @@
 // useCustomers.js so that migrating it is a near-zero diff.
 // Do not rename these fields without updating every adopting hook.
 
-import { useState }      from 'react'
-import { useDebounce }   from './useDebounce'
+import { useState, useCallback } from 'react'
+import { useDebounce }           from './useDebounce'
 
 // ── unwrapPagination ──────────────────────────────────────────────────────────
 // Pure helper — also exported standalone so callers can import it directly
@@ -127,15 +127,15 @@ export function useServerTableState({
   // All handlers reset page to 1 — any filter change means the current page
   // number is no longer valid against the new result set.
 
-  function handleSearch(val) {
+  const handleSearch = useCallback((val) => {
     setSearchRaw(val)
     setPage(1)
-  }
+  }, [])
 
   // handleSort: clicking the same column header toggles direction; clicking
   // a different column switches to it and resets direction to 'asc'.
   // This is the verbatim toggle logic copied from all four source hooks.
-  function handleSort(key) {
+  const handleSort = useCallback((key) => {
     if (sortKey === key) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     } else {
@@ -143,17 +143,17 @@ export function useServerTableState({
       setSortDir('asc')
     }
     setPage(1)
-  }
+  }, [sortKey])
 
-  function handleDateFrom(val) {
+  const handleDateFrom = useCallback((val) => {
     setDateFromRaw(val)
     setPage(1)
-  }
+  }, [])
 
-  function handleDateTo(val) {
+  const handleDateTo = useCallback((val) => {
     setDateToRaw(val)
     setPage(1)
-  }
+  }, [])
 
 
   // ── RETURN SHAPE ─────────────────────────────────────────────────────────

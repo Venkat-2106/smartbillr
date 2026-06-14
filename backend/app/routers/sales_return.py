@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
@@ -75,37 +76,49 @@ def return_item_to_dict(row):
 #      matching the DB trigger's validation logic exactly.
 # ─────────────────────────────────────────
 def validate_return_items(db: Session, sale_id: str, items, exclude_return_id: str = None):
-    for item in items:
-        # Get original sale item — must reference by sale_id + product_id
-        sale_item = db.execute(
+    # Batch Step 1 → Fetch ALL sale items for this sale in one query
+    prod_ids = [str(item.product_id) for item in items]
+    sale_item_map = {}
+    already_returned_map = {}
+
+    if prod_ids:
+        rows = db.execute(
             text("""
-                SELECT sale_item_id, sale_item_quantity, sale_item_unit_price, p.prod_name
+                SELECT si.product_id, si.sale_item_id, si.sale_item_quantity,
+                       si.sale_item_unit_price, p.prod_name
                 FROM sale_items si
                 JOIN products p ON p.prod_id = si.product_id
                 WHERE si.sale_id = CAST(:sale_id AS uuid)
-                  AND si.product_id = CAST(:product_id AS uuid)
+                  AND si.product_id = ANY(CAST(:pids AS uuid[]))
             """),
-            {"sale_id": sale_id, "product_id": str(item.product_id)}
-        ).fetchone()
+            {"sale_id": sale_id, "pids": "{" + ",".join(prod_ids) + "}"}
+        ).fetchall()
+        sale_item_map = {str(r.product_id): r for r in rows}
 
-        if not sale_item:
-            return f"Product '{item.product_id}' was not part of this sale"
-
-        # Already returned qty for this sale_item (excluding current return if updating)
-        query = """
-            SELECT COALESCE(SUM(sri.return_qty), 0) AS total_returned
+        # Batch Step 2 → Fetch ALL already-returned quantities in one GROUP BY query
+        q = """
+            SELECT sri.product_id, COALESCE(SUM(sri.return_qty), 0) AS total_returned
             FROM sales_return_items sri
             JOIN sales_returns sr ON sr.return_id = sri.return_id
-            WHERE sri.sale_item_id = CAST(:sale_item_id AS uuid)
+            WHERE sri.product_id = ANY(CAST(:pids AS uuid[]))
               AND sr.return_status != 'rejected'
         """
-        params = {"sale_item_id": str(sale_item.sale_item_id)}
-
+        params = {"pids": "{" + ",".join(prod_ids) + "}"}
         if exclude_return_id:
-            query += " AND sr.return_id != CAST(:return_id AS uuid)"
+            q += " AND sr.return_id != CAST(:return_id AS uuid)"
             params["return_id"] = exclude_return_id
+        q += " GROUP BY sri.product_id"
+        for row in db.execute(text(q), params).fetchall():
+            already_returned_map[str(row.product_id)] = float(row.total_returned)
 
-        already_returned = float(db.execute(text(query), params).fetchone().total_returned)
+    for item in items:
+        product_id = str(item.product_id)
+        sale_item = sale_item_map.get(product_id)
+
+        if not sale_item:
+            return f"Product '{product_id}' was not part of this sale"
+
+        already_returned = already_returned_map.get(product_id, 0)
         available = float(sale_item.sale_item_quantity) - already_returned
 
         if item.return_qty > available:
@@ -157,19 +170,31 @@ def create_sales_return(
             return error_response(error, status_code=400)
 
         # Step 3 → Resolve sale_item_id and calc totals for each return item
+        # BATCH: single query for all items instead of N individual lookups
         total_refund = Decimal("0")
         calculated_items = []
 
-        for item in data.items:
-            sale_item = db.execute(
+        sale_item_rows = {}
+        if data.items:
+            prod_ids = [str(item.product_id) for item in data.items]
+            rows = db.execute(
                 text("""
-                    SELECT sale_item_id, sale_item_quantity, sale_item_unit_price
+                    SELECT product_id, sale_item_id, sale_item_quantity, sale_item_unit_price
                     FROM sale_items
                     WHERE sale_id = CAST(:sale_id AS uuid)
-                      AND product_id = CAST(:product_id AS uuid)
+                      AND product_id = ANY(CAST(:pids AS uuid[]))
                 """),
-                {"sale_id": str(data.sale_id), "product_id": str(item.product_id)}
-            ).fetchone()
+                {"sale_id": str(data.sale_id), "pids": "{" + ",".join(prod_ids) + "}"}
+            ).fetchall()
+            sale_item_rows = {str(r.product_id): r for r in rows}
+
+        for item in data.items:
+            sale_item = sale_item_rows.get(str(item.product_id))
+            if not sale_item:
+                return error_response(
+                    f"Product '{item.product_id}' was not part of this sale",
+                    status_code=400
+                )
 
             total_refund += item.refund_amount * item.return_qty
             calculated_items.append({
@@ -269,18 +294,65 @@ def create_sales_return(
 def get_all_sales_returns(
     current_user: dict = Depends(require_permission("sales_returns.manage")),
     db: Session = Depends(get_db),
-    pagination: dict = Depends(paginate)
+    pagination: dict = Depends(paginate),
+    search: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    sort_by: Optional[str] = Query(default="return_created_at"),
+    sort_dir: Optional[str] = Query(default="desc"),
+    date_from: Optional[str] = Query(default=None),
+    date_to: Optional[str] = Query(default=None),
 ):
     business_id = current_user["business_id"]
 
-    total = db.query(func.count(SalesReturn.return_id)).filter(
-        SalesReturn.business_id == business_id
-    ).scalar()
+    SORTABLE = {
+        "return_created_at": "sr.return_created_at",
+        "return_status":     "sr.return_status",
+        "return_amount":     "sr.return_amount",
+    }
+    order_col = SORTABLE.get(sort_by, "sr.return_created_at")
+    order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
 
-    returns = db.query(SalesReturn).filter(
-        SalesReturn.business_id == business_id
-    ).order_by(SalesReturn.return_created_at.desc())\
-     .offset(pagination["offset"]).limit(pagination["limit"]).all()
+    extra_where = ""
+    params = {"bid": business_id}
+
+    if search and search.strip():
+        extra_where += " AND (sr.return_reason ILIKE :search OR s.invoice_no ILIKE :search)"
+        params["search"] = f"%{search.strip()}%"
+
+    if status and status.strip():
+        extra_where += " AND sr.return_status = :status"
+        params["status"] = status.strip()
+
+    if date_from:
+        extra_where += " AND sr.return_created_at >= :date_from"
+        params["date_from"] = date_from
+
+    if date_to:
+        extra_where += " AND sr.return_created_at <= :date_to"
+        params["date_to"] = date_to
+
+    count_sql = f"""
+        SELECT COUNT(sr.return_id)
+        FROM sales_returns sr
+        LEFT JOIN sales s ON s.sales_id = sr.sale_id
+        WHERE sr.business_id = CAST(:bid AS uuid)
+        {extra_where}
+    """
+    total = db.execute(text(count_sql), params).scalar() or 0
+
+    params["offset"] = pagination["offset"]
+    params["limit"] = pagination["limit"]
+
+    list_sql = f"""
+        SELECT sr.*
+        FROM sales_returns sr
+        LEFT JOIN sales s ON s.sales_id = sr.sale_id
+        WHERE sr.business_id = CAST(:bid AS uuid)
+        {extra_where}
+        ORDER BY {order_col} {order_dir}
+        OFFSET :offset LIMIT :limit
+    """
+    returns = db.execute(text(list_sql), params).fetchall()
 
     # BATCH: fetch all return items for this page in one query
     ret_ids = [str(r.return_id) for r in returns]
@@ -358,8 +430,8 @@ def update_sales_return(
     if not sales_return:
         return error_response("Sales return not found", status_code=404)
 
-    if sales_return.return_status == "done":
-        return error_response("Cannot update return — already completed", status_code=400)
+    if sales_return.return_status == "approved":
+        return error_response("Cannot update return — already approved", status_code=400)
 
     try:
         if data.return_status == "approved":

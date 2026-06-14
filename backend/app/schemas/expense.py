@@ -4,7 +4,7 @@ from uuid import UUID
 from decimal import Decimal
 from datetime import date, datetime
 
-ALLOWED_CATEGORIES = ["rent", "salary", "electricity", "internet", "maintenance", "marketing", "other"]
+ALLOWED_CATEGORIES = ["rent", "salary", "electricity", "internet", "maintenance", "marketing", "purchase", "other"]
 
 class ExpenseCreate(BaseModel):
     expense_category: Optional[str] = None

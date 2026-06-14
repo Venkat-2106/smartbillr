@@ -14,7 +14,8 @@ class CustomEncoder(json.JSONEncoder):
 def success_response(data, status_code: int = 200):
     return JSONResponse(
         status_code=status_code,
-        content=json.loads(json.dumps(data, cls=CustomEncoder))
+        content=json.dumps(data, cls=CustomEncoder),
+        media_type="application/json"
     )
 
 def error_response(message: str, status_code: int = 400):

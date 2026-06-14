@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from typing import Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 from app.database import get_db
 from app.middleware.rbac import require_permission
 from app.models.expense import Expense
@@ -67,24 +68,72 @@ def create_expense(
 def get_all_expenses(
     current_user: dict = Depends(require_permission("expenses.manage")),
     db: Session = Depends(get_db),
-    pagination: dict = Depends(paginate)
+    pagination: dict = Depends(paginate),
+    search: Optional[str] = Query(default=None),
+    category: Optional[str] = Query(default=None),
+    sort_by: Optional[str] = Query(default="expense_date"),
+    sort_dir: Optional[str] = Query(default="desc"),
+    date_from: Optional[str] = Query(default=None),
+    date_to: Optional[str] = Query(default=None),
 ):
     business_id = current_user["business_id"]
 
-    total = db.query(func.count(Expense.expense_id)).filter(
-        Expense.business_id == business_id,
-        Expense.is_deleted == False
-    ).scalar()
+    SORTABLE = {
+        "expense_date":   "e.expense_date",
+        "expense_amount": "e.expense_amount",
+        "expense_category": "e.expense_category",
+        "created_at":     "e.created_at",
+    }
+    order_col = SORTABLE.get(sort_by, "e.expense_date")
+    order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
 
-    expenses = db.query(Expense).filter(
-        Expense.business_id == business_id,
-        Expense.is_deleted == False
-    ).order_by(Expense.expense_date.desc())\
-     .offset(pagination["offset"]).limit(pagination["limit"]).all()
+    extra_where = ""
+    params = {"bid": business_id}
+
+    if search and search.strip():
+        extra_where += " AND (e.expense_notes ILIKE :search OR e.expense_category ILIKE :search)"
+        params["search"] = f"%{search.strip()}%"
+
+    if category and category.strip():
+        extra_where += " AND e.expense_category = :category"
+        params["category"] = category.strip()
+
+    if date_from:
+        extra_where += " AND e.expense_date >= :date_from"
+        params["date_from"] = date_from
+
+    if date_to:
+        extra_where += " AND e.expense_date <= :date_to"
+        params["date_to"] = date_to
+
+    count_sql = f"""
+        SELECT COUNT(e.expense_id)
+        FROM expenses e
+        WHERE e.business_id = CAST(:bid AS uuid)
+          AND e.is_deleted = false
+        {extra_where}
+    """
+    total = db.execute(text(count_sql), params).scalar() or 0
+
+    params["offset"] = pagination["offset"]
+    params["limit"] = pagination["limit"]
+
+    list_sql = f"""
+        SELECT e.expense_id, e.business_id, e.expense_category,
+               e.expense_amount, e.expense_date, e.expense_notes,
+               e.is_deleted, e.created_at, e.created_by
+        FROM expenses e
+        WHERE e.business_id = CAST(:bid AS uuid)
+          AND e.is_deleted = false
+        {extra_where}
+        ORDER BY {order_col} {order_dir}
+        OFFSET :offset LIMIT :limit
+    """
+    rows = db.execute(text(list_sql), params).fetchall()
 
     return success_response(
         pagination_response(
-            [expense_to_dict(e) for e in expenses],
+            [expense_to_dict(e) for e in rows],
             total,
             pagination["page"],
             pagination["limit"]

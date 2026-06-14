@@ -21,6 +21,8 @@
 //     }
 //   />
 
+import { useState } from 'react'
+
 export default function PageHeader({
   title,
   subtitle,
@@ -28,11 +30,15 @@ export default function PageHeader({
   back = false,
   onBack,
 }) {
+  const [backHovered, setBackHovered] = useState(false)
+
   return (
     <div style={{ marginBottom: 32 }}>
       {back && (
         <button
           onClick={onBack}
+          onMouseEnter={() => setBackHovered(true)}
+          onMouseLeave={() => setBackHovered(false)}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -40,17 +46,18 @@ export default function PageHeader({
             background: 'none',
             border: 'none',
             cursor: 'pointer',
-            color: 'var(--text-muted)',
+            color: backHovered ? 'var(--accent-600)' : 'var(--text-muted)',
             fontSize: 12.5,
             fontWeight: 500,
             fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
             padding: '0 0 10px',
             transition: 'color 0.14s',
           }}
-          onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
-          onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
         >
-          ← Back
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 2 }}>
+            <path d="M19 12H5m7-7l-7 7 7 7"/>
+          </svg>
+          Back
         </button>
       )}
 

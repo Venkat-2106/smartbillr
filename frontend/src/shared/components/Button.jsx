@@ -45,9 +45,9 @@ const VARIANT_STYLE = {
     boxShadow: 'none',
   },
   danger: {
-    background: 'linear-gradient(135deg, #EF4444, #DC2626)',
+    background: 'linear-gradient(135deg, var(--danger), var(--danger-text))',
     color: '#fff',
-    boxShadow: '0 2px 10px rgba(239,68,68,0.28)',
+    boxShadow: '0 2px 10px color-mix(in srgb, var(--danger) 28%, transparent)',
   },
   ghost: {
     background: 'transparent',

@@ -14,6 +14,8 @@ export default function ResetPasswordPage() {
   const [showPass,    setShowPass]    = useState(false)
   const [focused,     setFocused]     = useState('')
   const [errors,      setErrors]      = useState({})
+  const [submitHovered, setSubmitHovered] = useState(false)
+  const [linkHovered,   setLinkHovered]   = useState(false)
   const [sessionReady, setSessionReady] = useState(false)
   const [checking,    setChecking]    = useState(true)
 
@@ -70,17 +72,17 @@ export default function ResetPasswordPage() {
     return {
       width: '100%',
       padding: '10px 12px 10px 36px',
-      background: isFocused ? '#FFFFFF' : '#F8FAFC',
-      border: `1px solid ${hasError ? '#DC2626' : isFocused ? '#3B82F6' : '#E2E8F0'}`,
+      background: isFocused ? 'var(--bg-card)' : 'var(--bg-subtle)',
+      border: `1px solid ${hasError ? 'var(--danger-text)' : isFocused ? 'var(--accent-500)' : 'var(--border)'}`,
       borderRadius: '10px',
       fontSize: '0.82rem',
       fontFamily: 'inherit',
-      color: '#0F172A',
+      color: 'var(--text-primary)',
       outline: 'none',
       boxShadow: hasError
-        ? '0 0 0 4px rgba(220,38,38,0.1)'
+        ? '0 0 0 3px var(--danger-bg)'
         : isFocused
-          ? '0 0 0 4px rgba(59,130,246,0.15)'
+          ? '0 0 0 3px color-mix(in srgb, var(--accent-500) 20%, transparent)'
           : 'none',
       transition: 'all 0.2s ease',
     }
@@ -93,13 +95,13 @@ export default function ResetPasswordPage() {
         <div style={{ textAlign: 'center', padding: '32px 0' }}>
           <div style={{
             width: 40, height: 40, margin: '0 auto 16px',
-            border: '3px solid #E2E8F0',
-            borderTopColor: '#4F46E5',
+            border: '3px solid var(--border)',
+            borderTopColor: 'var(--accent-600)',
             borderRadius: '50%',
             animation: 'spin 0.7s linear infinite',
           }} />
           <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-          <p style={{ fontSize: '0.85rem', color: '#64748B', margin: 0 }}>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
             Verifying your reset link...
           </p>
         </div>
@@ -111,10 +113,10 @@ export default function ResetPasswordPage() {
     <AuthLayout>
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
-        <p style={{ fontSize: '1.3rem', fontWeight: 700, color: '#0F172A', marginBottom: 4 }}>
+        <p style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
           Set new password
         </p>
-        <p style={{ fontSize: '0.82rem', color: '#64748B', margin: 0 }}>
+        <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: 0 }}>
           Choose a strong password for your SmartBillr account
         </p>
       </div>
@@ -143,7 +145,7 @@ export default function ResetPasswordPage() {
                 transform: 'translateY(-50%)',
                 background: 'none', border: 'none', cursor: 'pointer',
                 fontSize: '0.6rem', fontWeight: 700, letterSpacing: '1px',
-                color: '#64748B', fontFamily: 'inherit',
+                color: 'var(--text-secondary)', fontFamily: 'inherit',
               }}
             >
               {showPass ? 'HIDE' : 'SHOW'}
@@ -174,24 +176,17 @@ export default function ResetPasswordPage() {
         <button
           type="submit"
           disabled={isLoading || !sessionReady}
-          onMouseEnter={e => {
-            if (!isLoading) {
-              e.currentTarget.style.transform = 'translateY(-2px)'
-              e.currentTarget.style.boxShadow = '0 15px 30px rgba(79,70,229,0.45)'
-            }
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.transform = 'translateY(0)'
-            e.currentTarget.style.boxShadow = '0 10px 25px rgba(79,70,229,0.35)'
-          }}
+          onMouseEnter={() => !isLoading && setSubmitHovered(true)}
+          onMouseLeave={() => setSubmitHovered(false)}
           style={{
             width: '100%', padding: '11px',
-            background: isLoading ? '#93C5FD' : 'linear-gradient(135deg, #2563EB, #4F46E5)',
-            boxShadow: isLoading ? 'none' : '0 10px 25px rgba(79,70,229,0.35)',
+            background: isLoading ? 'var(--accent-300)' : 'linear-gradient(135deg, var(--accent-600), var(--accent-700))',
+            boxShadow: isLoading || !submitHovered ? 'none' : '0 12px 28px color-mix(in srgb, var(--accent-600) 40%, transparent)',
             color: '#fff', border: 'none', borderRadius: '12px',
             fontSize: '0.875rem', fontWeight: 600,
             fontFamily: 'inherit',
             cursor: isLoading ? 'not-allowed' : 'pointer',
+            transform: submitHovered ? 'translateY(-2px)' : 'translateY(0)',
             transition: 'transform 0.15s, box-shadow 0.15s',
           }}
         >
@@ -204,13 +199,13 @@ export default function ResetPasswordPage() {
       <div style={{ textAlign: 'center', marginTop: 20 }}>
         <span
           onClick={() => navigate('/login')}
+          onMouseEnter={() => setLinkHovered(true)}
+          onMouseLeave={() => setLinkHovered(false)}
           style={{
-            fontSize: '0.74rem', color: '#3B82F6',
+            fontSize: '0.74rem', color: linkHovered ? 'var(--accent-700)' : 'var(--accent-500)',
             fontWeight: 500, cursor: 'pointer',
             transition: 'color 0.14s',
           }}
-          onMouseEnter={e => e.currentTarget.style.color = '#1D4ED8'}
-          onMouseLeave={e => e.currentTarget.style.color = '#3B82F6'}
         >
           ← Back to sign in
         </span>
@@ -221,7 +216,7 @@ export default function ResetPasswordPage() {
 
 const labelStyle = {
   display: 'block', fontSize: '0.74rem',
-  fontWeight: 600, color: '#374151', marginBottom: 5,
+  fontWeight: 600, color: 'var(--text-primary)', marginBottom: 5,
 }
 const iconWrap = {
   position: 'absolute', left: '10px',
@@ -230,5 +225,5 @@ const iconWrap = {
 }
 const errorStyle = {
   marginTop: '0.3rem', fontSize: '0.74rem',
-  color: '#DC2626', fontWeight: 500,
+  color: 'var(--danger-text)', fontWeight: 500,
 }

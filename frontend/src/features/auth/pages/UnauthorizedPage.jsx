@@ -6,6 +6,7 @@
 // Uses the same CSS variables as the rest of the app (DashboardLayout uses them).
 // Does NOT use DashboardLayout — stands alone like LoginPage.
 
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../../../store/authStore'
 
@@ -15,6 +16,8 @@ export default function UnauthorizedPage() {
   const role     = profile?.role
     ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1)
     : 'Staff'
+  const [backHovered, setBackHovered] = useState(false)
+  const [dashHovered, setDashHovered] = useState(false)
 
   return (
     <div style={{
@@ -41,8 +44,8 @@ export default function UnauthorizedPage() {
         <div style={{
           width:          '60px',
           height:         '60px',
-          background:     '#FEF2F2',
-          border:         '1px solid #FECACA',
+          background:     'var(--danger-bg)',
+          border:         '1px solid var(--danger-border)',
           borderRadius:   '16px',
           display:        'flex',
           alignItems:     'center',
@@ -52,7 +55,7 @@ export default function UnauthorizedPage() {
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
             <path
               d="M12 2C9.24 2 7 4.24 7 7v2H6a2 2 0 00-2 2v9a2 2 0 002 2h12a2 2 0 002-2v-9a2 2 0 00-2-2h-1V7c0-2.76-2.24-5-5-5zm0 2c1.66 0 3 1.34 3 3v2H9V7c0-1.66 1.34-3 3-3zm0 9a2 2 0 110 4 2 2 0 010-4z"
-              fill="#EF4444"
+              fill="var(--danger-text)"
             />
           </svg>
         </div>
@@ -89,25 +92,19 @@ export default function UnauthorizedPage() {
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
           <button
             onClick={() => navigate(-1)}
+            onMouseEnter={() => setBackHovered(true)}
+            onMouseLeave={() => setBackHovered(false)}
             style={{
               padding:      '9px 18px',
-              border:       '1px solid var(--border, #E2E8F0)',
+              border:       `1px solid ${backHovered ? 'var(--border-hover)' : 'var(--border)'}`,
               borderRadius: '10px',
-              background:   'var(--bg-subtle, #F8FAFC)',
-              color:        'var(--text-primary, #0F172A)',
+              background:   backHovered ? 'var(--bg-hover)' : 'var(--bg-subtle)',
+              color:        'var(--text-primary)',
               fontSize:     '13px',
               fontWeight:   '600',
               cursor:       'pointer',
               fontFamily:   'inherit',
               transition:   'all 0.13s',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background    = 'var(--bg-hover, #F1F5F9)'
-              e.currentTarget.style.borderColor   = 'var(--border-hover, #CBD5E1)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background    = 'var(--bg-subtle, #F8FAFC)'
-              e.currentTarget.style.borderColor   = 'var(--border, #E2E8F0)'
             }}
           >
             Go Back
@@ -115,20 +112,21 @@ export default function UnauthorizedPage() {
 
           <button
             onClick={() => navigate('/dashboard')}
+            onMouseEnter={() => setDashHovered(true)}
+            onMouseLeave={() => setDashHovered(false)}
             style={{
               padding:      '9px 18px',
               border:       'none',
               borderRadius: '10px',
-              background:   'var(--accent-600, #4F46E5)',
-              color:        '#FFFFFF',
+              background:   'var(--accent-600)',
+              color:        '#fff',
               fontSize:     '13px',
               fontWeight:   '600',
               cursor:       'pointer',
               fontFamily:   'inherit',
+              opacity:      dashHovered ? 0.88 : 1,
               transition:   'opacity 0.13s',
             }}
-            onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
-            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
           >
             Go to Dashboard
           </button>

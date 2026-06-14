@@ -16,7 +16,7 @@
 //   const [q, setQ] = useState('')
 //   <SearchBar value={q} onChange={setQ} onSearch={val => refetch with val} />
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useDebounce } from '../hooks/useDebounce'
 
 // Magnifier icon (inline SVG — no heroicons dependency needed here)
@@ -48,6 +48,7 @@ export default function SearchBar({
   width = '260px',
   loading = false,
 }) {
+  const [focused, setFocused] = useState(false)
   const debouncedValue = useDebounce(value, debounceMs)
   const isFirstRender = useRef(true)
 
@@ -72,11 +73,12 @@ export default function SearchBar({
       <span style={{
         position: 'absolute',
         left: 11,
-        color: 'var(--text-muted)',
+        color: focused ? 'var(--accent-600)' : 'var(--text-muted)',
         display: 'flex',
         alignItems: 'center',
         pointerEvents: 'none',
         zIndex: 1,
+        transition: 'color 0.15s',
       }}>
         <SearchIcon />
       </span>
@@ -86,11 +88,13 @@ export default function SearchBar({
         value={value}
         onChange={e => onChange?.(e.target.value)}
         placeholder={placeholder}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         style={{
           width: '100%',
           padding: '8px 36px 8px 34px',
           background: 'var(--bg-card)',
-          border: '1.5px solid var(--border)',
+          border: `1.5px solid ${focused ? 'var(--accent-600)' : 'var(--border)'}`,
           borderRadius: 10,
           fontSize: 13,
           fontWeight: 400,
@@ -98,14 +102,7 @@ export default function SearchBar({
           fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
           outline: 'none',
           transition: 'border-color 0.15s, box-shadow 0.15s',
-        }}
-        onFocus={e => {
-          e.currentTarget.style.borderColor = 'var(--accent-600)'
-          e.currentTarget.style.boxShadow = '0 0 0 3px var(--accent-glow, rgba(79,70,229,0.14))'
-        }}
-        onBlur={e => {
-          e.currentTarget.style.borderColor = 'var(--border)'
-          e.currentTarget.style.boxShadow = 'none'
+          boxShadow: focused ? '0 0 0 3px var(--accent-glow, rgba(79,70,229,0.14))' : 'none',
         }}
       />
 

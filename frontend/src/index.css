@@ -325,6 +325,11 @@ body {
   0%, 100% { opacity: 1;    transform: scale(1);    }
   50%      { opacity: 0.55; transform: scale(0.91); }
 }
+@keyframes drawer-slide-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
 @keyframes sb-dot-pulse {
   0%, 80%, 100% { opacity: 0.2; transform: scale(0.7); }
   40%           { opacity: 1;   transform: scale(1);   }
@@ -349,6 +354,14 @@ body {
 .stagger > *:nth-child(4) { animation-delay:120ms; }
 .stagger > *:nth-child(5) { animation-delay:160ms; }
 .stagger > *:nth-child(6) { animation-delay:200ms; }
+
+/* ─────────────────────────────────────────
+   SEARCH RESULTS HOVER
+   Used by SaleLineItemRow search dropdown
+───────────────────────────────────────── */
+.search-result-item:hover {
+  background: var(--bg-subtle);
+}
 
 /* ─────────────────────────────────────────
    SKELETON LOADING
@@ -586,6 +599,16 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Smooth transitions on interactive elements */
+a, button, input, select, textarea, [role="button"] {
+  transition: all var(--duration-fast) var(--ease-out);
+}
+button:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent-600);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
 }
 .sr-only {
   position: absolute;

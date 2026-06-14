@@ -175,6 +175,7 @@ export default function CreateSalePage() {
   // ── Stock override dialog state ───────────────────────────────────────────
   const [stockErrors,  setStockErrors]  = useState([]);
   const [pendingBody,  setPendingBody]  = useState(null);  // eslint-disable-line no-unused-vars
+  const [addItemHovered, setAddItemHovered] = useState(false)
 
   // ── Fetch customers (lean) ─────────────────────────────────────────────────
   const { data: allCustomers = [], isLoading: loadingCust } = useQuery({
@@ -776,7 +777,7 @@ export default function CreateSalePage() {
                 )}
               </div>
               {barcodeError && (
-                <div style={{ fontSize: 11.5, color: '#ef4444', marginTop: 4, fontWeight: 500 }}>
+                <div style={{ fontSize: 11.5, color: 'var(--danger-text)', marginTop: 4, fontWeight: 500 }}>
                   ⚠ {barcodeError}
                 </div>
               )}
@@ -858,8 +859,8 @@ export default function CreateSalePage() {
                 {items.some(i => i.prod_stock_qty != null && Number(i.quantity) > Number(i.prod_stock_qty)) && (
                   <div style={{
                     marginTop: 10, padding: '8px 12px',
-                    background: '#FFFBEB', border: '1px solid #FDE68A',
-                    borderRadius: 8, fontSize: 12, color: '#92400E', fontWeight: 500,
+                    background: 'var(--warning-bg)', border: '1px solid var(--warning-border)',
+                    borderRadius: 8, fontSize: 12, color: 'var(--warning-text)', fontWeight: 500,
                   }}>
                     ⚠ One or more items exceed available stock. You will be asked to confirm before saving.
                   </div>
@@ -869,16 +870,18 @@ export default function CreateSalePage() {
               <button
                 type="button"
                 onClick={addItem}
+                onMouseEnter={() => setAddItemHovered(true)}
+                onMouseLeave={() => setAddItemHovered(false)}
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   gap: 6, marginTop: 10, width: '100%',
-                  background: 'none', border: '1.5px dashed var(--border)',
+                  background: 'none',
+                  border: `1.5px dashed ${addItemHovered ? 'var(--accent-400)' : 'var(--border)'}`,
                   borderRadius: 10, padding: '8px 0',
-                  cursor: 'pointer', color: 'var(--text-muted)',
+                  cursor: 'pointer', color: addItemHovered ? 'var(--accent-600)' : 'var(--text-muted)',
                   fontSize: 13, fontFamily: 'inherit',
+                  transition: 'border-color 0.15s, color 0.15s',
                 }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent-400)'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
               >
                 + Add another line item
               </button>
@@ -908,7 +911,7 @@ export default function CreateSalePage() {
                   {totals.autoDiscount > 0 && (
                     <OrderSummaryRow
                       label="You Saved (vs MRP)"
-                      value={<span style={{ color: '#059669' }}>{formatCurrency(totals.autoDiscount)}</span>}
+                      value={<span style={{ color: 'var(--success-text)' }}>{formatCurrency(totals.autoDiscount)}</span>}
                       muted
                     />
                   )}
@@ -922,7 +925,7 @@ export default function CreateSalePage() {
                       <OrderSummaryRow
                         label="Remaining Due"
                         value={
-                          <span style={{ color: '#ef4444', fontWeight: 700 }}>
+                          <span style={{ color: 'var(--danger-text)', fontWeight: 700 }}>
                             {formatCurrency(Math.max(0, totals.grandTotal - parsedPaidAmount))}
                           </span>
                         }
@@ -981,13 +984,13 @@ export default function CreateSalePage() {
                       style={{
                         ...NUM_INPUT_STYLE,
                         borderColor:
-                          paidAmount && !paidAmountValid ? '#ef4444'
+                          paidAmount && !paidAmountValid ? 'var(--danger-text)'
                           : parsedPaidAmount > 0 && paidAmountValid ? 'var(--accent-600)'
                           : undefined,
                       }}
                     />
                     {paidAmount && !paidAmountValid && (
-                      <div style={{ fontSize: 12, color: '#ef4444', marginTop: 4 }}>
+                      <div style={{ fontSize: 12, color: 'var(--danger-text)', marginTop: 4 }}>
                         {parsedPaidAmount <= 0
                           ? 'Amount must be greater than 0'
                           : `Cannot exceed total (${formatCurrency(totals.grandTotal)})`}

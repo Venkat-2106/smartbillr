@@ -522,7 +522,7 @@ export default function ProductsPage() {
         const isLow = row.prod_stock_qty <= row.prod_low_stock_alert
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontWeight: 600, fontSize: 13.5, color: isLow ? '#EF4444' : 'var(--text-primary)' }}>
+            <span style={{ fontWeight: 600, fontSize: 13.5, color: isLow ? 'var(--danger-text)' : 'var(--text-primary)' }}>
               {row.prod_stock_qty}
             </span>
             <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{row.unit ?? 'pcs'}</span>
@@ -587,7 +587,7 @@ export default function ProductsPage() {
               if (profit == null) return <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
               const isNeg  = Number(profit) < 0
               return (
-                <span style={{ fontSize: 13, fontWeight: 600, color: isNeg ? '#EF4444' : '#10B981' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: isNeg ? 'var(--danger-text)' : 'var(--success-text)' }}>
                   {isNeg ? '' : '+'}{formatCurrency(profit, countryCode)}
                 </span>
               )

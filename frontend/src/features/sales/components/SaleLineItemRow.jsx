@@ -112,9 +112,9 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
                         padding: '9px 14px', cursor: 'pointer',
                         borderBottom: '1px solid var(--border)',
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        transition: 'background 0.1s',
                       }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-subtle)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      className="search-result-item"
                     >
                       <div>
                         <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>

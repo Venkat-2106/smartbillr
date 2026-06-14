@@ -487,7 +487,7 @@ function SupplierForm({ form, onSubmit, onCancel, loading, submitLabel }) {
 function fieldInput(hasError) {
   return {
     width: '100%', padding: '10px 14px',
-    border: `1.5px solid ${hasError ? '#ef4444' : 'var(--border)'}`,
+    border: `1.5px solid ${hasError ? 'var(--danger-text)' : 'var(--border)'}`,
     borderRadius: 10, fontSize: 14,
     background: 'var(--bg-page)',
     color: 'var(--text-primary)',

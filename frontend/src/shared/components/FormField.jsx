@@ -64,7 +64,7 @@ export default function FormField({
         }}>
           {label}
           {required && (
-            <span style={{ color: '#EF4444', fontSize: 13 }} aria-hidden="true">*</span>
+            <span style={{ color: 'var(--danger-text)', fontSize: 13 }} aria-hidden="true">*</span>
           )}
         </label>
       )}

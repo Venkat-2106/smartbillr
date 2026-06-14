@@ -141,31 +141,41 @@ function Table({
                   <td
                     colSpan={columns.length}
                     style={{
-                      padding: '56px 24px',
+                      padding: '64px 24px',
                       textAlign: 'center',
                       color: 'var(--text-muted)',
                       fontSize: 13.5,
                       fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
                     }}
                   >
-                    {emptyText}
+                    <div style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+                    }}>
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text-disabled)" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      {emptyText}
+                    </div>
                   </td>
                 </tr>
               ) : (
-                rows.map((row, i) => (
+                rows.map((row, i) => {
+                  const rowId = row[rowKey] ?? i
+                  const isHovered = hoveredRow === rowId
+                  return (
                   <tr
-                    key={row[rowKey] ?? i}
+                    key={rowId}
                     onClick={() => onRowClick?.(row)}
-                    onMouseEnter={() => setHoveredRow(row[rowKey] ?? i)}
+                    onMouseEnter={() => setHoveredRow(rowId)}
                     onMouseLeave={() => setHoveredRow(null)}
                     style={{
                       borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none',
                       cursor: onRowClick ? 'pointer' : 'default',
-                      transition: 'background 0.12s',
-                      background: hoveredRow === (row[rowKey] ?? i) ? 'var(--bg-subtle)' : 'transparent',
+                      transition: 'background 0.15s',
+                      background: isHovered ? 'var(--bg-hover)' : 'transparent',
                     }}
                   >
-                    {columns.map(col => (
+                    {columns.map((col, ci) => (
                       <td
                         key={col.key}
                         style={{
@@ -177,13 +187,16 @@ function Table({
                           textAlign: col.align === 'right'  ? 'right'
                                    : col.align === 'center' ? 'center' : 'left',
                           verticalAlign: 'middle',
+                          borderLeft: isHovered && ci === 0 ? '2px solid var(--accent-500)' : '2px solid transparent',
+                          transition: 'border-color 0.15s, background 0.15s',
                         }}
                       >
                         {col.render ? col.render(row) : (row[col.key] ?? '—')}
                       </td>
                     ))}
                   </tr>
-                ))
+                  )
+                })
               )}
             </tbody>
           </table>

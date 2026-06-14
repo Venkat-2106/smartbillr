@@ -19,11 +19,6 @@ function Skeleton({ w = '60%', h = 28 }) {
 // ─── Stat Card (Premium Colored) ──────────────────────────────────────────────
 function StatCard({ label, value, sub, icon, gradient, loading, onClick }) {
   const isClickable = typeof onClick === 'function'
-  // FIX: hover was handled via direct DOM mutation (onMouseEnter set
-  // e.currentTarget.style.transform / boxShadow directly). React wipes those
-  // inline styles whenever the component re-renders (e.g. when dashboard data
-  // loads), causing the hover effect to snap off while the mouse is still hovering.
-  // Fix: one boolean state drives all three style values declaratively.
   const [hovered, setHovered] = useState(false)
 
   return (
@@ -34,16 +29,16 @@ function StatCard({ label, value, sub, icon, gradient, loading, onClick }) {
       style={{
         background: 'var(--bg-card)',
         border: `1px solid ${hovered
-          ? (isClickable ? 'var(--accent-600)' : 'var(--border-hover)')
+          ? (isClickable ? 'var(--accent-500)' : 'var(--border-hover)')
           : 'var(--border)'}`,
         borderRadius: 18,
-        padding: '22px 20px 20px',
+        padding: '24px 22px 22px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 16,
-        boxShadow: hovered ? 'var(--shadow-elevated)' : 'var(--shadow-card)',
-        transform: hovered ? 'translateY(-3px)' : 'translateY(0)',
-        transition: 'transform 0.18s var(--ease-out), box-shadow 0.18s var(--ease-out), border-color 0.18s',
+        gap: 18,
+        boxShadow: hovered ? '0 8px 30px var(--accent-glow), var(--shadow-elevated)' : 'var(--shadow-card)',
+        transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
+        transition: 'transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), border-color 0.2s',
         minWidth: 0,
         overflow: 'hidden',
         position: 'relative',
@@ -52,17 +47,17 @@ function StatCard({ label, value, sub, icon, gradient, loading, onClick }) {
     >
       {/* Subtle top gradient stripe */}
       <div style={{
-        position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+        position: 'absolute', top: 0, left: 0, right: 0, height: 3.5,
         background: gradient,
         borderRadius: '18px 18px 0 0',
       }} />
 
       {/* Icon pill */}
       <div style={{
-        width: 44, height: 44, borderRadius: 14,
+        width: 46, height: 46, borderRadius: 14,
         background: gradient,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 20,
+        fontSize: 22,
         flexShrink: 0,
         boxShadow: '0 4px 12px rgba(0,0,0,0.10)',
       }}>
@@ -74,10 +69,10 @@ function StatCard({ label, value, sub, icon, gradient, loading, onClick }) {
         ? <Skeleton w="70%" h={28} />
         : (
           <div style={{
-            fontSize: 'clamp(17px, 2.2vw, 26px)',
+            fontSize: 'clamp(18px, 2.4vw, 28px)',
             fontWeight: 800,
             color: 'var(--text-primary)',
-            letterSpacing: '-0.5px',
+            letterSpacing: '-0.6px',
             lineHeight: 1.1,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -90,15 +85,15 @@ function StatCard({ label, value, sub, icon, gradient, loading, onClick }) {
 
       {/* Label + sub */}
       <div>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3 }}>
           {label}
           {isClickable && (
-            <span style={{ marginLeft: 5, fontSize: 11, color: 'var(--accent-600)', verticalAlign: 'middle' }}>
+            <span style={{ marginLeft: 6, fontSize: 12, color: 'var(--accent-500)', verticalAlign: 'middle', fontWeight: 700 }}>
               →
             </span>
           )}
         </div>
-        <div style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 400 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}>
           {sub}
         </div>
       </div>
@@ -183,11 +178,11 @@ function SalesTrendChart({ period, onPeriodChange }) {
         marginBottom: 20, flexWrap: 'wrap', gap: 12,
       }}>
         <div>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 3px' }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px' }}>
             Sales Trend
           </h2>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, fontWeight: 400 }}>
-            Invoices raised over time — all history
+            Invoices raised over time
           </p>
         </div>
         <div style={{
@@ -297,9 +292,9 @@ function PaymentDonut({ paid = 0, partial = 0, unpaid = 0, loading }) {
   const rawTotal = paid + partial + unpaid
   const total    = rawTotal || 1
   const segments = [
-    { label: 'Paid',    value: paid,    color: '#10B981' },
-    { label: 'Partial', value: partial, color: '#F59E0B' },
-    { label: 'Unpaid',  value: unpaid,  color: '#EF4444' },
+    { label: 'Paid',    value: paid,    color: 'var(--success)' },
+    { label: 'Partial', value: partial, color: 'var(--warning)' },
+    { label: 'Unpaid',  value: unpaid,  color: 'var(--danger)' },
   ]
 
   // Build SVG arc paths. cx,cy = center, r = radius, hole = donut hole radius
@@ -411,8 +406,8 @@ function RevenueExpensesBar({ revenue, expenses, country, loading }) {
   const profitPct = revenue > 0 ? Math.round((profit / revenue) * 100) : 0
 
   const bars = [
-    { label: 'Revenue',  value: revenue  || 0, pct: revenueW,  color: '#10B981' },
-    { label: 'Expenses', value: expenses || 0, pct: expensesW, color: '#EF4444' },
+    { label: 'Revenue',  value: revenue  || 0, pct: revenueW,  color: 'var(--success)' },
+    { label: 'Expenses', value: expenses || 0, pct: expensesW, color: 'var(--danger)' },
   ]
 
   return (
@@ -438,8 +433,8 @@ function RevenueExpensesBar({ revenue, expenses, country, loading }) {
         {!loading && (
           <div style={{
             padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700,
-            background: profit >= 0 ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
-            color: profit >= 0 ? '#10B981' : '#EF4444',
+            background: profit >= 0 ? 'var(--success-bg)' : 'var(--danger-bg)',
+            color: profit >= 0 ? 'var(--success-text)' : 'var(--danger-text)',
           }}>
             {profit >= 0 ? '▲' : '▼'} {Math.abs(profitPct)}% margin
           </div>
@@ -483,7 +478,7 @@ function RevenueExpensesBar({ revenue, expenses, country, loading }) {
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Net Profit</span>
             <span style={{
               fontSize: 14, fontWeight: 800,
-              color: profit >= 0 ? '#10B981' : '#EF4444',
+              color: profit >= 0 ? 'var(--success-text)' : 'var(--danger-text)',
             }}>
               {formatCurrency(Math.abs(profit), country)}
               <span style={{ fontSize: 11, fontWeight: 500, marginLeft: 4 }}>
@@ -532,7 +527,7 @@ function HealthScore({ data, loading }) {
 
   const score = Math.min(100, collectionScore + stockScore + expenseScore)
 
-  const scoreColor = score >= 75 ? '#10B981' : score >= 50 ? '#F59E0B' : '#EF4444'
+  const scoreColor = score >= 75 ? 'var(--success-text)' : score >= 50 ? 'var(--warning-text)' : 'var(--danger-text)'
   const scoreLabel = score >= 75 ? 'Healthy' : score >= 50 ? 'Moderate' : 'Needs Attention'
 
   // SVG arc for the score gauge
@@ -607,7 +602,7 @@ function HealthScore({ data, loading }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{
               padding: '4px 12px', borderRadius: 8, fontSize: 13, fontWeight: 700,
-              background: score >= 75 ? 'rgba(16,185,129,0.12)' : score >= 50 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)',
+              background: score >= 75 ? 'var(--success-bg)' : score >= 50 ? 'var(--warning-bg)' : 'var(--danger-bg)',
               color: scoreColor, display: 'inline-block', alignSelf: 'flex-start',
             }}>
               {scoreLabel}
@@ -708,12 +703,25 @@ export default function DashboardPage() {
     <>
       {/* ── Page header ── */}
       <div style={{ marginBottom: 40 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px', margin: '0 0 6px' }}>
-          Overview
-        </h1>
-        <p style={{ fontSize: 13.5, color: 'var(--text-muted)', margin: 0, fontWeight: 400 }}>
-          {business?.business_name || 'Your store'} · live summary
-        </p>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px', margin: '0 0 6px' }}>
+              Overview
+            </h1>
+            <p style={{ fontSize: 13.5, color: 'var(--text-muted)', margin: 0, fontWeight: 400 }}>
+              {business?.business_name || 'Your store'} · live summary
+            </p>
+          </div>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '6px 12px', background: 'var(--bg-subtle)',
+            border: '1px solid var(--border)', borderRadius: 10,
+            fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 500, flexShrink: 0,
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', flexShrink: 0 }} />
+            Live
+          </div>
+        </div>
       </div>
 
       {/* ── Error banner ── */}
@@ -730,8 +738,8 @@ export default function DashboardPage() {
       {/* ── Stat cards grid ── */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-        gap: 16,
+        gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+        gap: 18,
         marginBottom: 40,
       }}>
         {(isLoading ? Array(5).fill(null) : allCards).map((card, i) => (
@@ -745,8 +753,8 @@ export default function DashboardPage() {
       {/* ── BI Visuals row ── */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-        gap: 16,
+        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+        gap: 18,
         marginBottom: 40,
       }}>
         <PaymentDonut

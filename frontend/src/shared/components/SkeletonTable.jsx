@@ -18,7 +18,14 @@ export default function SkeletonTable({ rows = 5, columns = 6 }) {
   });
 
   return (
-    <div style={{ padding: '0 0 8px 0', overflowX: 'auto' }}>
+    <div style={{
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border)',
+      borderRadius: 18,
+      boxShadow: 'var(--shadow-card)',
+      overflow: 'hidden',
+    }}>
+      <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         {/* Fake header row */}
         <thead>
@@ -27,10 +34,10 @@ export default function SkeletonTable({ rows = 5, columns = 6 }) {
               <th
                 key={ci}
                 style={{
-                  padding: '14px 16px',
+                  padding: '11px 20px',
                   width: w,
                   textAlign: 'left',
-                  background: 'var(--bg-page)',
+                  background: 'var(--bg-subtle)',
                   borderBottom: '1px solid var(--border)',
                 }}
               >
@@ -68,7 +75,7 @@ export default function SkeletonTable({ rows = 5, columns = 6 }) {
           ))}
         </tbody>
       </table>
-
+      </div>
     </div>
   );
 }

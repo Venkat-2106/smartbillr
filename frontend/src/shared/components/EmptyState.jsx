@@ -29,56 +29,53 @@ export default function EmptyState({
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '72px 24px',
+      padding: '80px 24px',
       textAlign: 'center',
-      gap: 14,
+      gap: 16,
     }}>
-      {/* Icon circle */}
       <div style={{
-        width: 72,
-        height: 72,
+        width: 80,
+        height: 80,
         borderRadius: '50%',
         background: 'var(--bg-subtle)',
         border: '1px solid var(--border)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: 32,
+        fontSize: 36,
         marginBottom: 4,
+        transition: 'transform 0.2s var(--ease-out)',
       }}>
         {icon}
       </div>
 
-      {/* Title */}
       <p style={{
         margin: 0,
-        fontSize: 15,
+        fontSize: 16,
         fontWeight: 700,
         color: 'var(--text-primary)',
         fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
-        letterSpacing: '-0.2px',
+        letterSpacing: '-0.3px',
       }}>
         {title}
       </p>
 
-      {/* Description */}
       {description && (
         <p style={{
           margin: 0,
-          fontSize: 13,
+          fontSize: 13.5,
           color: 'var(--text-muted)',
           fontWeight: 400,
-          maxWidth: 320,
-          lineHeight: 1.55,
+          maxWidth: 340,
+          lineHeight: 1.6,
           fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
         }}>
           {description}
         </p>
       )}
 
-      {/* Action (button etc.) */}
       {action && (
-        <div style={{ marginTop: 6 }}>
+        <div style={{ marginTop: 8 }}>
           {action}
         </div>
       )}

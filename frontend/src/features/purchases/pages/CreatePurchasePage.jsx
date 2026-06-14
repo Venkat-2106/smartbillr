@@ -425,7 +425,7 @@ export default function CreatePurchasePage() {
                 {totals.discountAmt > 0 && (
                   <PurchaseOrderSummaryRow
                     label="Discount"
-                    value={<span style={{ color: '#059669' }}>−{formatCurrency(totals.discountAmt)}</span>}
+                    value={<span style={{ color: 'var(--success-text)' }}>−{formatCurrency(totals.discountAmt)}</span>}
                     muted
                   />
                 )}

@@ -42,8 +42,8 @@ export default function ConfirmDialog({
   const icon = iconMap[variant] || iconMap.danger
 
   const iconBg = variant === 'danger'
-    ? 'linear-gradient(135deg, #EF4444, #DC2626)'
-    : 'linear-gradient(135deg, #F59E0B, #F97316)'
+    ? 'linear-gradient(135deg, var(--danger), var(--danger-text))'
+    : 'linear-gradient(135deg, var(--warning), var(--warning-text))'
 
   return (
     <ModalPortal open={open} onClose={onClose} zIndex={1100}>
@@ -80,8 +80,8 @@ export default function ConfirmDialog({
           marginBottom: 4,
           flexShrink: 0,
           boxShadow: variant === 'danger'
-            ? '0 4px 14px rgba(239,68,68,0.3)'
-            : '0 4px 14px rgba(245,158,11,0.3)',
+            ? '0 4px 14px color-mix(in srgb, var(--danger) 30%, transparent)'
+            : '0 4px 14px color-mix(in srgb, var(--warning) 30%, transparent)',
         }}>
           {icon}
         </div>

@@ -5,6 +5,7 @@
 //   - Category summary (total products, low stock, out of stock, stock value)
 //   - Full product list for that category with stock status
 
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { XMarkIcon, TagIcon, PrinterIcon } from '@heroicons/react/24/outline'
 import { fetchCategory } from '../api/categoriesApi'
@@ -115,6 +116,7 @@ function buildCategoryPrintHTML(business, category, detail, summary, products) {
 }
 
 export default function CategoryDetailDrawer({ category, onClose }) {
+  const [printHovered, setPrintHovered] = useState(false)
   const { data, isLoading, isError } = useQuery({
     queryKey: ['category', category?.category_id],
     queryFn:  () => fetchCategory(category.category_id),
@@ -187,9 +189,12 @@ export default function CategoryDetailDrawer({ category, onClose }) {
               onClick={handlePrint}
               disabled={isLoading || !!isError}
               title="Print category report"
+              onMouseEnter={() => setPrintHovered(true)}
+              onMouseLeave={() => setPrintHovered(false)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
-                background: 'var(--bg-page)', border: '1px solid var(--border)',
+                background: printHovered && !isLoading && !isError ? 'var(--bg-hover)' : 'var(--bg-page)',
+                border: '1px solid var(--border)',
                 cursor: isLoading || isError ? 'not-allowed' : 'pointer',
                 padding: '6px 12px', borderRadius: 8,
                 color: isLoading || isError ? 'var(--text-muted)' : 'var(--text-secondary)',
@@ -197,8 +202,6 @@ export default function CategoryDetailDrawer({ category, onClose }) {
                 fontFamily: 'inherit', opacity: isLoading || isError ? 0.5 : 1,
                 transition: 'background 0.12s',
               }}
-              onMouseEnter={e => { if (!isLoading && !isError) e.currentTarget.style.background = 'var(--bg-hover)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-page)' }}
             >
               <PrinterIcon style={{ width: 15, height: 15 }} />
               Print

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { formatDate } from '../../../shared/utils/formatDate';
 import {
   XMarkIcon,
@@ -61,6 +61,7 @@ function buildSupplierPrintHTML(business, supplier) {
 }
 
 export default function SupplierDetailDrawer({ supplier, onClose }) {
+  const [printHovered, setPrintHovered] = useState(false)
   if (!supplier) return null;
 
   function handlePrint() {
@@ -127,15 +128,16 @@ export default function SupplierDetailDrawer({ supplier, onClose }) {
             <button
               onClick={handlePrint}
               title="Print supplier profile"
+              onMouseEnter={() => setPrintHovered(true)}
+              onMouseLeave={() => setPrintHovered(false)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
-                background: 'var(--bg-page)', border: '1px solid var(--border)',
+                background: printHovered ? 'var(--bg-hover)' : 'var(--bg-page)',
+                border: '1px solid var(--border)',
                 cursor: 'pointer', padding: '6px 12px', borderRadius: 8,
                 color: 'var(--text-secondary)', fontSize: 12.5, fontWeight: 600,
                 fontFamily: 'inherit', transition: 'background 0.12s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-page)'; }}
             >
               <PrinterIcon style={{ width: 15, height: 15 }} />
               Print

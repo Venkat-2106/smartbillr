@@ -757,12 +757,12 @@ function LowStockAlertsTab({ active }) {
 
       {/* Info note */}
       <div style={{
-        background: 'rgba(14,165,233,0.07)',
-        border: '1px solid rgba(14,165,233,0.2)',
+        background: 'color-mix(in srgb, var(--accent-500) 8%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--accent-500) 20%, transparent)',
         borderRadius: 10,
         padding: '10px 14px',
         fontSize: 12.5,
-        color: '#0284C7',
+        color: 'var(--accent-600)',
         marginBottom: 18,
         fontWeight: 500,
       }}>

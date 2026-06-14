@@ -50,7 +50,7 @@ export default function Pagination({ pagination, onPageChange }) {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
+    borderRadius: 9,
     border: '1px solid var(--border)',
     background: 'var(--bg-card)',
     fontSize: 13,
@@ -58,7 +58,7 @@ export default function Pagination({ pagination, onPageChange }) {
     cursor: 'pointer',
     color: 'var(--text-secondary)',
     fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
-    transition: 'all 0.14s',
+    transition: 'all 0.14s var(--ease-out)',
     userSelect: 'none',
     flexShrink: 0,
   }
@@ -66,8 +66,8 @@ export default function Pagination({ pagination, onPageChange }) {
   const activeStyle = {
     background: 'linear-gradient(135deg, var(--accent-600), var(--accent-500))',
     color: '#fff',
-    borderColor: 'var(--accent-600)',
-    boxShadow: '0 2px 8px var(--accent-glow, rgba(79,70,229,0.25))',
+    borderColor: 'transparent',
+    boxShadow: '0 2px 8px var(--accent-glow, rgba(79,70,229,0.3))',
     fontWeight: 700,
   }
 
@@ -129,19 +129,25 @@ function PaginationInner({ current, total, pages, pagination, onPageChange, btnB
       flexWrap: 'wrap',
       gap: 12,
       marginTop: 20,
+      padding: '4px 0',
     }}>
       {/* Info text */}
       <span style={{
         fontSize: 12.5,
         color: 'var(--text-muted)',
         fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
+        fontWeight: 500,
       }}>
         Page {current} of {total}
-        {pagination.total != null && ` · ${pagination.total} records`}
+        {pagination.total != null && (
+          <span style={{ color: 'var(--text-disabled)' }}>
+            {' · '}<span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>{pagination.total.toLocaleString()}</span> records
+          </span>
+        )}
       </span>
 
       {/* Controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <NavBtn direction="prev" />
 
         {pages.map((p, i) =>

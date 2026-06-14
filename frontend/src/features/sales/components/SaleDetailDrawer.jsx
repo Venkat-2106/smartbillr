@@ -217,6 +217,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
   const [newStatus,     setNewStatus]     = useState(sale?.sales_payment_status || 'paid');
   const [partialAmount, setPartialAmount] = useState('');
   const [partialError,  setPartialError]  = useState('');
+  const [printHovered,  setPrintHovered]  = useState(false);
 
   const { data: detail, isLoading, isError } = useQuery({
     queryKey: ['sale', sale?.sales_id],
@@ -306,6 +307,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
           position: 'fixed', inset: 0,
           background: 'rgba(0,0,0,0.35)',
           zIndex: 1000, backdropFilter: 'blur(3px)',
+          animation: 'fadeIn 0.18s ease',
         }}
       />
 
@@ -320,6 +322,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
           zIndex: 1001,
           display: 'flex', flexDirection: 'column',
           overflow: 'hidden',
+          animation: 'drawer-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
       >
         {/* Header */}
@@ -352,19 +355,20 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
               onClick={handlePrint}
               disabled={isLoading || !!isError}
               title="Print Invoice"
+              onMouseEnter={() => !isLoading && !isError && setPrintHovered(true)}
+              onMouseLeave={() => setPrintHovered(false)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
-                background: 'var(--bg-page)', border: '1px solid var(--border)',
+                background: printHovered ? 'var(--bg-hover)' : 'var(--bg-page)',
+                border: `1px solid ${printHovered ? 'var(--border-hover)' : 'var(--border)'}`,
                 cursor: isLoading || isError ? 'not-allowed' : 'pointer',
                 padding: '6px 12px', borderRadius: 8,
                 color: isLoading || isError ? 'var(--text-muted)' : 'var(--text-secondary)',
                 fontSize: 12.5, fontWeight: 600,
                 fontFamily: 'inherit',
                 opacity: isLoading || isError ? 0.5 : 1,
-                transition: 'background 0.12s',
+                transition: 'all 0.13s',
               }}
-              onMouseEnter={e => { if (!isLoading && !isError) e.currentTarget.style.background = 'var(--bg-hover)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-page)'; }}
             >
               <PrinterIcon style={{ width: 15, height: 15 }} />
               Print

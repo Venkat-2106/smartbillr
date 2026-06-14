@@ -23,7 +23,7 @@
 //     reliably across browsers. Writing literal hex colors and px values
 //     into the print node guarantees the output looks correct.
 
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { Button, Spinner, EmptyState } from '../../../shared/components'
 import { useCustomer } from '../hooks/useCustomers'
 import { formatDate }     from '../../../shared/utils/formatDate'
@@ -241,6 +241,7 @@ function buildCustomerPrintHTML(business, customer, summary, salesHistory) {
 // ── Main Drawer ───────────────────────────────────────────────────────────────
 export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManage }) {
   const { data, isLoading, isError } = useCustomer(custId)
+  const [printHovered, setPrintHovered] = useState(false)
 
   const customer     = data
   const summary      = data?.summary
@@ -264,6 +265,7 @@ export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManag
       zIndex: 500,
       display: 'flex', flexDirection: 'column',
       overflow: 'hidden',
+      animation: 'drawer-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
     }}>
       {/* Header */}
       <div style={{
@@ -302,19 +304,19 @@ export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManag
             <button
               onClick={handlePrint}
               title="Print customer report"
+              onMouseEnter={() => setPrintHovered(true)}
+              onMouseLeave={() => setPrintHovered(false)}
               style={{
                 background: 'none',
-                border: '1.5px solid var(--border)',
+                border: `1.5px solid ${printHovered ? 'var(--accent-500)' : 'var(--border)'}`,
                 borderRadius: 8,
                 width: 32, height: 32,
                 cursor: 'pointer',
                 fontSize: 14,
-                color: 'var(--text-muted)',
+                color: printHovered ? 'var(--accent-600)' : 'var(--text-muted)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 transition: 'border-color 0.13s, color 0.13s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-600)'; e.currentTarget.style.color = 'var(--accent-600)' }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}
             >
               🖨️
             </button>

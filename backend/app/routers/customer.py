@@ -121,13 +121,14 @@ def get_all_customers(
     business_id = current_user["business_id"]
 
     SORTABLE = {
-        "cust_name":    "c.cust_name",
-        "cust_phone":   "c.cust_phone",
-        "cust_email":   "c.cust_email",
-        "cust_state":   "c.cust_state",
+        "cust_name":       "c.cust_name",
+        "cust_phone":      "c.cust_phone",
+        "cust_email":      "c.cust_email",
+        "cust_state":      "c.cust_state",
         "cust_created_at": "c.cust_created_at",
+        "updated_at":      "c.updated_at",
     }
-    order_col = SORTABLE.get(sort_by, "c.cust_name")
+    order_col = SORTABLE.get(sort_by, "c.updated_at")
     order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
 
     extra_where = ""
@@ -173,8 +174,12 @@ def get_all_customers(
                 c.cust_address, c.cust_state, c.cust_country_code,
                 c.cust_tax_number,
                 c.cust_created_at,
+                c.updated_at,
+                c.updated_by,
+                prof.full_name AS last_updated_by,
                 COUNT(*) OVER() AS total_count
             FROM customers c
+            LEFT JOIN profiles prof ON prof.id = c.updated_by
             WHERE c.business_id = CAST(:bid AS uuid)
               AND c.is_deleted   = false
               {extra_where}
@@ -198,6 +203,9 @@ def get_all_customers(
             "cust_country_code": r.cust_country_code,
             "cust_tax_number":   r.cust_tax_number,
             "cust_created_at":   fmt_ts(r.cust_created_at),
+            "updated_at":        fmt_ts(r.updated_at),
+            "updated_by":        str(r.updated_by)  if r.updated_by  else None,
+            "last_updated_by":   r.last_updated_by,
         }
         for r in rows
     ]
@@ -233,30 +241,35 @@ def get_all_customers(
 # ══════════════════════════════════════════════════════════════════
 @router.get("/lean")
 def get_customers_lean(
-    current_user: dict = Depends(require_permission("customers.manage")),
-    db:           Session = Depends(get_db),
+    current_user: dict          = Depends(require_permission("customers.manage")),
+    db:           Session       = Depends(get_db),
+    search:       Optional[str] = Query(default=None, description="Filter by name or phone"),
 ):
     """
     Returns a minimal customer list for the sales creation dropdown.
     Only returns: cust_id, cust_name, cust_phone.
-    No pagination — returns all active customers (no cap).
-
-    Note: the frontend handles filtering client-side via the existing
-    idx_customers_lean_dropdown covering index.
+    Capped at 1000 rows — the frontend filters client-side.
 
     """
     business_id = current_user["business_id"]
+    params: dict = {"bid": business_id}
+    where_extra = ""
 
-# No LIMIT — returns all active customers for the business.
+    if search and search.strip():
+        where_extra = """ AND (c.cust_name ILIKE :q OR c.cust_phone ILIKE :q)"""
+        params["q"] = f"%{search.strip()}%"
+
     rows = db.execute(
-        text("""
+        text(f"""
             SELECT cust_id, cust_name, cust_phone
-            FROM customers
+            FROM customers c
             WHERE business_id = CAST(:bid AS uuid)
               AND is_deleted   = false
+              {where_extra}
             ORDER BY cust_name ASC
+            LIMIT 1000
         """),
-        {"bid": business_id}
+        params
     ).fetchall()
 
     return success_response([

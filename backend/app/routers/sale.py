@@ -27,6 +27,7 @@ from app.services.sale_service import (
     update_sale_status,
     update_payment_status,
 )
+from app.utils.payment_helpers import record_payment_and_sync, calculate_payment_status
 import uuid
 
 router = APIRouter(prefix="/sales", tags=["Sales"])
@@ -137,7 +138,7 @@ def get_sale(
 
 
 @router.patch("/{sales_id}/status")
-def update_payment_status(
+def handle_sale_status_patch(
     sales_id: str,
     body: SaleStatusUpdate,
     current_user: dict = Depends(require_permission("sales.edit")),
@@ -180,7 +181,6 @@ def update_payment_status(
                 400
             )
 
-        from app.utils.payment_helpers import record_payment_and_sync, calculate_payment_status
         total_paid = round(already_paid + paid_input, 2)
         derived_status = calculate_payment_status(total_paid, sale_final)
 
@@ -203,7 +203,6 @@ def update_payment_status(
 
     elif body.status == "paid" and old_status != "paid":
         if remaining > 0:
-            from app.utils.payment_helpers import record_payment_and_sync
             record_payment_and_sync(
                 db=db,
                 business_id=current_user["business_id"],

@@ -71,7 +71,7 @@ export default function AppRouter() {
             }
           />
           <Route
-            path="/sales"
+            path="sales"
             element={
               <ProtectedRoute permission="sales.view">
                 <SalesPage />
@@ -79,7 +79,7 @@ export default function AppRouter() {
             }
           />
           <Route
-            path="/sales/new"
+            path="sales/new"
             element={
               <ProtectedRoute permission="sales.view">
                 <CreateSalePage />
@@ -134,7 +134,7 @@ export default function AppRouter() {
             }
           />
           <Route
-            path="/suppliers"
+            path="suppliers"
             element={
               <ProtectedRoute permission="suppliers.manage">
                 <SuppliersPage />

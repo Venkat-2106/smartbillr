@@ -26,7 +26,8 @@ export { default as ConfirmDialog }  from './ConfirmDialog';
 export { default as PageHeader }     from './PageHeader';
 export { default as FormField }      from './FormField';
 export { selectStyle, textareaStyle } from './FormField';
-export { default as DateRangeFilter } from './DateRangeFilter'; 
+export { default as DateRangeFilter } from './DateRangeFilter';
+export { default as SelectField }    from './SelectField'; 
 
 // ── NEW COMPONENTS (added in this review session) ─────────────────────────────
 export { default as StateDropdown }  from './StateDropdown';   // Country-aware state/province picker

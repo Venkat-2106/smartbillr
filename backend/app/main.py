@@ -1,6 +1,7 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 from app.middleware.auth import verify_token
 from app.utils.response import success_response, error_response
 from app.routers import (
@@ -36,6 +37,17 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+# ── Global exception handler ──────────────────────────────────────────────
+# All unhandled exceptions return {"success": false, "error": "Internal Server Error"}
+# instead of FastAPI's default {"detail": "Internal Server Error"}.
+# The frontend reads error.response?.data?.message — which maps to "error" here.
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"success": False, "error": "Internal Server Error"},
+    )
 
 app.include_router(business.router)
 app.include_router(category.router)

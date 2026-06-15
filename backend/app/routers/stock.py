@@ -155,11 +155,13 @@ sort_dir:     Optional[str] = Query(default="desc"),
                 sm.reference_type, sm.reference_id,
                 sm.move_notes, sm.move_created_at, sm.move_created_by,
                 p.prod_name,
+                p2.full_name AS created_by_name,
                 s.invoice_no AS sale_invoice_no,
                 pur.pur_id   AS pur_reference_id,
                 COUNT(*) OVER() AS total_count
             FROM stock_movements sm
             LEFT JOIN products  p   ON p.prod_id = sm.product_id
+            LEFT JOIN profiles  p2  ON p2.id     = sm.move_created_by
             LEFT JOIN sales     s   ON s.sales_id = sm.sale_reference_id
             LEFT JOIN purchases pur ON pur.pur_id = sm.purchase_reference_id
             WHERE sm.business_id = CAST(:business_id AS uuid)
@@ -173,6 +175,7 @@ sort_dir:     Optional[str] = Query(default="desc"),
 
     data = []
     for r in rows:
+        adjusted_by = r.created_by_name if r.move_type == "adjustment" and r.created_by_name else None
         data.append({
             "move_id":               str(r.move_id),
             "business_id":           str(r.business_id),
@@ -184,8 +187,8 @@ sort_dir:     Optional[str] = Query(default="desc"),
             "move_new_stock":        r.move_new_stock,
             "sale_reference_id":     str(r.sale_reference_id)     if r.sale_reference_id     else None,
             "purchase_reference_id": str(r.purchase_reference_id) if r.purchase_reference_id else None,
-            "reference_type":        r.reference_type,
-            "reference_id":          str(r.reference_id) if r.reference_id else None,
+            "reference_type":        "adjusted_by" if adjusted_by else r.reference_type,
+            "reference_id":          adjusted_by or (str(r.reference_id) if r.reference_id else None),
             "sale_invoice_no":       r.sale_invoice_no,
             "purchase_reference_no": str(r.pur_reference_id) if r.pur_reference_id else None,
             "move_notes":            r.move_notes,

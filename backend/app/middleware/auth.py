@@ -51,8 +51,10 @@ security = HTTPBearer()
 # TTL:   60 seconds
 # Purge strategy: lazy — expired entries are skipped on lookup and overwritten
 #                 on next fetch. No background sweep needed.
+# Size limit: 1000 entries — beyond that, oldest entries are evicted.
 _permissions_cache: dict[str, dict] = {}
 _PERM_CACHE_TTL = 60
+_PERM_CACHE_MAX = 1000
 
 
 def _get_cached_user(user_id: str) -> dict | None:
@@ -63,6 +65,10 @@ def _get_cached_user(user_id: str) -> dict | None:
 
 
 def _set_cached_user(user_id: str, data: dict) -> None:
+    if len(_permissions_cache) >= _PERM_CACHE_MAX:
+        oldest = min(_permissions_cache.keys(),
+                     key=lambda k: _permissions_cache[k]["expires_at"])
+        del _permissions_cache[oldest]
     _permissions_cache[user_id] = {
         "data": data,
         "expires_at": time.time() + _PERM_CACHE_TTL,

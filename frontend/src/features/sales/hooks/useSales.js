@@ -131,6 +131,8 @@ export function useSales() {
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['sale', variables.id] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-trend'] });
       const msg = data?.data?.note || 'Payment status updated';
       toast.success(msg);
     },

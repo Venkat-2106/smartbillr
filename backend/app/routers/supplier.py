@@ -169,6 +169,7 @@ def get_all_suppliers(
         "supp_state":        "s.supp_state",
         "supp_country_code": "s.supp_country_code",
         "supp_created_at":   "s.supp_created_at",
+        "updated_at":        "s.updated_at",
     }
     order_col = SORTABLE.get(sort_by, "s.updated_at")
     order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
@@ -205,7 +206,6 @@ def get_all_suppliers(
         extra_where += " AND s.updated_at <= :updated_to"
         params["updated_to"] = updated_to
 
-    # ── DATA (no audit fields — list doesn't need is_deleted/updated_by) ──
     rows = db.execute(
         text(f"""
             SELECT
@@ -214,8 +214,12 @@ def get_all_suppliers(
                 s.supp_address, s.supp_state, s.supp_country_code,
                 s.supp_tax_number,
                 s.supp_created_at,
+                s.updated_at,
+                s.updated_by,
+                prof.full_name AS last_updated_by,
                 COUNT(*) OVER() AS total_count
             FROM suppliers s
+            LEFT JOIN profiles prof ON prof.id = s.updated_by
             WHERE s.business_id = CAST(:bid AS uuid)
               AND s.is_deleted   = false
               {extra_where}
@@ -239,6 +243,9 @@ def get_all_suppliers(
             "supp_country_code": r.supp_country_code,
             "supp_tax_number":   r.supp_tax_number,
             "supp_created_at":   fmt_ts(r.supp_created_at),
+            "updated_at":        fmt_ts(r.updated_at),
+            "updated_by":        str(r.updated_by)  if r.updated_by  else None,
+            "last_updated_by":   r.last_updated_by,
         }
         for r in rows
     ]

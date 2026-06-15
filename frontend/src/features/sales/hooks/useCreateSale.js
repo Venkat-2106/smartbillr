@@ -209,6 +209,8 @@ export default function useCreateSale() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['products-search-lean'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-trend'] });
       const inv = data?.invoice_no || '';
       toast.success(`Invoice${inv ? ` ${inv}` : ''} created successfully!`);
       navigate('/sales', {

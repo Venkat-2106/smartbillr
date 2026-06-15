@@ -114,7 +114,7 @@ export default function CreateSalePage() {
             />
           </div>
 
-          <div style={{
+          <div className="create-sale-grid" style={{
             display: 'grid',
             gridTemplateColumns: '1fr 360px',
             gap: 16,

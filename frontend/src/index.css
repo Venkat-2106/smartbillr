@@ -621,6 +621,17 @@ button:focus-visible, a:focus-visible {
 }
 
 /* ─────────────────────────────────────────
+   RESPONSIVE: Sale creation page grid
+   Stacks the order summary below the line items
+   on screens narrower than 900px.
+───────────────────────────────────────── */
+@media (max-width: 900px) {
+  .create-sale-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ─────────────────────────────────────────
    PRINT STYLES
    Both SaleDetailDrawer and CustomerDetailDrawer use the
    #sb-print-root pattern: they write plain HTML with literal

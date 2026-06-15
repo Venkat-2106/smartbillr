@@ -41,7 +41,7 @@ export function useSales() {
   const [drawerSale, setDrawerSale] = useState(null);
 
   // ── Debounce search — shared hook, 300ms (same as useCustomers) ───────────
-  const debouncedSearch = useDebounce(search, 300);
+  const debouncedSearch = useDebounce(search, 400);
 
   // ── CSV export ────────────────────────────────────────────────────────────
   const [isExporting, setIsExporting] = useState(false);

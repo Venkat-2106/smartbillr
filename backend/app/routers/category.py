@@ -111,28 +111,13 @@ def get_categories(
         extra_where += " AND c.updated_at <= :updated_to"
         params["updated_to"] = updated_to
 
-    total = db.execute(
-        text(f"""
-            SELECT COUNT(*)
-            FROM categories c
-            WHERE c.business_id = CAST(:bid AS uuid)
-              AND c.is_deleted   = false
-              {extra_where}
-        """),
-        params
-    ).scalar()
-
     rows = db.execute(
         text(f"""
             SELECT
                 c.category_id, c.business_id, c.category_name,
-                c.is_deleted, c.created_at, c.created_by,
-                c.updated_at, c.updated_by,
-                p1.full_name AS last_updated_by,
-                p2.full_name AS created_by_name
+                c.created_at,
+                COUNT(*) OVER() AS total_count
             FROM categories c
-            LEFT JOIN profiles p1 ON p1.id = c.updated_by
-            LEFT JOIN profiles p2 ON p2.id = c.created_by
             WHERE c.business_id = CAST(:bid AS uuid)
               AND c.is_deleted   = false
               {extra_where}
@@ -142,18 +127,14 @@ def get_categories(
         params
     ).fetchall()
 
+    total = rows[0].total_count if rows else 0
+
     data = [
         {
             "category_id":     str(r.category_id),
             "business_id":     str(r.business_id),
             "category_name":   r.category_name,
-            "is_deleted":      r.is_deleted,
             "created_at":      fmt_ts(r.created_at),
-            "created_by":      str(r.created_by)  if r.created_by  else None,
-            "created_by_name": r.created_by_name  if r.created_by_name  else None,
-            "updated_at":      fmt_ts(r.updated_at),
-            "updated_by":      str(r.updated_by)  if r.updated_by  else None,
-            "last_updated_by": r.last_updated_by  if r.last_updated_by  else None,
         }
         for r in rows
     ]

@@ -492,13 +492,13 @@
 | public | categories | idx\_categories\_name\_trgm | CREATE INDEX idx\_categories\_name\_trgm ON public.categories USING gin (category\_name gin\_trgm\_ops) WHERE (is\_deleted = false) |
 | public | categories | categories\_pkey | CREATE UNIQUE INDEX categories\_pkey ON public.categories USING btree (category\_id) |
 | public | categories | idx\_categories\_business\_updated | CREATE INDEX idx\_categories\_business\_updated ON public.categories USING btree (business\_id, updated\_at DESC) WHERE (is\_deleted = false) |
-| public | customers | idx\_customers\_business\_deleted | CREATE INDEX idx\_customers\_business\_deleted ON public.customers USING btree (business\_id, is\_deleted) |
+| public | customers | idx\_customers\_business\_id | CREATE INDEX idx\_customers\_business\_id ON public.customers USING btree (business\_id) WHERE (is\_deleted = false) |
 | public | customers | idx\_customers\_cust\_name | CREATE INDEX idx\_customers\_cust\_name ON public.customers USING btree (cust\_name) |
 | public | customers | idx\_customers\_email\_trgm | CREATE INDEX idx\_customers\_email\_trgm ON public.customers USING gin (cust\_email gin\_trgm\_ops) |
 | public | customers | idx\_customers\_phone\_trgm | CREATE INDEX idx\_customers\_phone\_trgm ON public.customers USING gin (cust\_phone gin\_trgm\_ops) |
 | public | customers | idx\_customers\_name\_trgm | CREATE INDEX idx\_customers\_name\_trgm ON public.customers USING gin (cust\_name gin\_trgm\_ops) |
+| public | customers | idx\_customers\_business\_deleted | CREATE INDEX idx\_customers\_business\_deleted ON public.customers USING btree (business\_id, is\_deleted) |
 | public | customers | customers\_pkey | CREATE UNIQUE INDEX customers\_pkey ON public.customers USING btree (cust\_id) |
-| public | customers | idx\_customers\_business\_id | CREATE INDEX idx\_customers\_business\_id ON public.customers USING btree (business\_id) WHERE (is\_deleted = false) |
 | public | customers | idx\_customers\_business\_lower\_trim\_name | CREATE INDEX idx\_customers\_business\_lower\_trim\_name ON public.customers USING btree (business\_id, lower(TRIM(BOTH FROM cust\_name))) WHERE (is\_deleted = false) |
 | public | customers | idx\_customers\_lean\_dropdown | CREATE INDEX idx\_customers\_lean\_dropdown ON public.customers USING btree (business\_id, cust\_name, cust\_phone, cust\_id) WHERE (is\_deleted = false) |
 | public | customers | idx\_customers\_business\_name | CREATE INDEX idx\_customers\_business\_name ON public.customers USING btree (business\_id, cust\_name) WHERE (is\_deleted = false) |
@@ -509,91 +509,93 @@
 | public | expenses | idx\_expenses\_date | CREATE INDEX idx\_expenses\_date ON public.expenses USING btree (business\_id, expense\_date DESC) |
 | public | low\_stock\_alerts | idx\_low\_stock\_alerts\_business | CREATE INDEX idx\_low\_stock\_alerts\_business ON public.low\_stock\_alerts USING btree (business\_id, alert\_status) |
 | public | low\_stock\_alerts | low\_stock\_alerts\_pkey | CREATE UNIQUE INDEX low\_stock\_alerts\_pkey ON public.low\_stock\_alerts USING btree (alert\_id) |
-| public | payments | idx\_payments\_business\_id | CREATE INDEX idx\_payments\_business\_id ON public.payments USING btree (business\_id) WHERE (is\_active = true) |
 | public | payments | idx\_payments\_sale\_active | CREATE INDEX idx\_payments\_sale\_active ON public.payments USING btree (sale\_id, is\_active) |
-| public | payments | idx\_payments\_business\_active | CREATE INDEX idx\_payments\_business\_active ON public.payments USING btree (business\_id, is\_active) |
 | public | payments | payments\_pkey | CREATE UNIQUE INDEX payments\_pkey ON public.payments USING btree (payment\_id) |
+| public | payments | idx\_payments\_business\_id | CREATE INDEX idx\_payments\_business\_id ON public.payments USING btree (business\_id) WHERE (is\_active = true) |
 | public | payments | idx\_payments\_sale\_id | CREATE INDEX idx\_payments\_sale\_id ON public.payments USING btree (sale\_id) |
+| public | payments | idx\_payments\_business\_active | CREATE INDEX idx\_payments\_business\_active ON public.payments USING btree (business\_id, is\_active) |
+| public | payments | idx\_payments\_business\_active\_paid\_at | CREATE INDEX idx\_payments\_business\_active\_paid\_at ON public.payments USING btree (business\_id, is\_active, payment\_paid\_at DESC) |
 | public | permissions | permissions\_pkey | CREATE UNIQUE INDEX permissions\_pkey ON public.permissions USING btree (id) |
 | public | permissions | permissions\_code\_key | CREATE UNIQUE INDEX permissions\_code\_key ON public.permissions USING btree (code) |
 | public | permissions | idx\_permissions\_id | CREATE INDEX idx\_permissions\_id ON public.permissions USING btree (id) |
 | public | products | idx\_products\_category | CREATE INDEX idx\_products\_category ON public.products USING btree (category\_id) WHERE (category\_id IS NOT NULL) |
-| public | products | idx\_products\_barcode | CREATE INDEX idx\_products\_barcode ON public.products USING btree (barcode) WHERE (barcode IS NOT NULL) |
-| public | products | idx\_products\_business\_name\_active | CREATE INDEX idx\_products\_business\_name\_active ON public.products USING btree (business\_id, prod\_name) WHERE (is\_deleted = false) |
+| public | products | idx\_products\_business\_updated | CREATE INDEX idx\_products\_business\_updated ON public.products USING btree (business\_id, updated\_at DESC) WHERE (is\_deleted = false) |
 | public | products | uix\_products\_barcode\_business | CREATE UNIQUE INDEX uix\_products\_barcode\_business ON public.products USING btree (business\_id, barcode) WHERE (barcode IS NOT NULL) |
 | public | products | uix\_products\_name\_business | CREATE UNIQUE INDEX uix\_products\_name\_business ON public.products USING btree (business\_id, lower(TRIM(BOTH FROM prod\_name))) WHERE (is\_deleted = false) |
+| public | products | idx\_products\_barcode | CREATE INDEX idx\_products\_barcode ON public.products USING btree (barcode) WHERE (barcode IS NOT NULL) |
 | public | products | idx\_products\_business\_deleted | CREATE INDEX idx\_products\_business\_deleted ON public.products USING btree (business\_id, is\_deleted) |
 | public | products | idx\_products\_business\_id | CREATE INDEX idx\_products\_business\_id ON public.products USING btree (business\_id) WHERE (is\_deleted = false) |
 | public | products | idx\_products\_business | CREATE INDEX idx\_products\_business ON public.products USING btree (business\_id) |
 | public | products | products\_pkey | CREATE UNIQUE INDEX products\_pkey ON public.products USING btree (prod\_id) |
+| public | products | idx\_products\_business\_category\_active | CREATE INDEX idx\_products\_business\_category\_active ON public.products USING btree (business\_id, category\_id) WHERE (is\_deleted = false) |
 | public | products | idx\_products\_barcode\_trgm | CREATE INDEX idx\_products\_barcode\_trgm ON public.products USING gin (barcode gin\_trgm\_ops) WHERE ((barcode IS NOT NULL) AND (is\_deleted = false)) |
 | public | products | idx\_products\_name\_trgm | CREATE INDEX idx\_products\_name\_trgm ON public.products USING gin (prod\_name gin\_trgm\_ops) WHERE (is\_deleted = false) |
 | public | products | idx\_products\_business\_barcode\_active | CREATE INDEX idx\_products\_business\_barcode\_active ON public.products USING btree (business\_id, barcode) WHERE ((is\_deleted = false) AND (barcode IS NOT NULL)) |
-| public | products | idx\_products\_business\_updated | CREATE INDEX idx\_products\_business\_updated ON public.products USING btree (business\_id, updated\_at DESC) WHERE (is\_deleted = false) |
+| public | products | idx\_products\_business\_name\_active | CREATE INDEX idx\_products\_business\_name\_active ON public.products USING btree (business\_id, prod\_name) WHERE (is\_deleted = false) |
 | public | profiles | profiles\_pkey | CREATE UNIQUE INDEX profiles\_pkey ON public.profiles USING btree (id) |
 | public | profiles | idx\_profiles\_business | CREATE INDEX idx\_profiles\_business ON public.profiles USING btree (business\_id) |
 | public | profiles | idx\_profiles\_business\_id | CREATE INDEX idx\_profiles\_business\_id ON public.profiles USING btree (business\_id) |
 | public | profiles | idx\_profiles\_id\_active | CREATE INDEX idx\_profiles\_id\_active ON public.profiles USING btree (id) WHERE (is\_active = true) |
 | public | profiles | profiles\_email\_unique | CREATE UNIQUE INDEX profiles\_email\_unique ON public.profiles USING btree (email) |
-| public | purchase\_items | idx\_purchase\_items\_purchase | CREATE INDEX idx\_purchase\_items\_purchase ON public.purchase\_items USING btree (pur\_id) |
-| public | purchase\_items | purchase\_items\_pkey | CREATE UNIQUE INDEX purchase\_items\_pkey ON public.purchase\_items USING btree (item\_id) |
 | public | purchase\_items | idx\_purchase\_items\_product | CREATE INDEX idx\_purchase\_items\_product ON public.purchase\_items USING btree (product\_id) |
+| public | purchase\_items | purchase\_items\_pkey | CREATE UNIQUE INDEX purchase\_items\_pkey ON public.purchase\_items USING btree (item\_id) |
+| public | purchase\_items | idx\_purchase\_items\_purchase | CREATE INDEX idx\_purchase\_items\_purchase ON public.purchase\_items USING btree (pur\_id) |
 | public | purchase\_return\_items | purchase\_return\_items\_pkey | CREATE UNIQUE INDEX purchase\_return\_items\_pkey ON public.purchase\_return\_items USING btree (return\_item\_id) |
 | public | purchase\_return\_items | idx\_purchase\_return\_items\_return | CREATE INDEX idx\_purchase\_return\_items\_return ON public.purchase\_return\_items USING btree (return\_id) |
+| public | purchase\_returns | idx\_purchase\_returns\_pur | CREATE INDEX idx\_purchase\_returns\_pur ON public.purchase\_returns USING btree (pur\_id) |
 | public | purchase\_returns | idx\_purchase\_returns\_business | CREATE INDEX idx\_purchase\_returns\_business ON public.purchase\_returns USING btree (business\_id) |
 | public | purchase\_returns | purchase\_returns\_pkey | CREATE UNIQUE INDEX purchase\_returns\_pkey ON public.purchase\_returns USING btree (return\_id) |
 | public | purchase\_returns | idx\_purchase\_returns\_status | CREATE INDEX idx\_purchase\_returns\_status ON public.purchase\_returns USING btree (business\_id, return\_status) |
-| public | purchase\_returns | idx\_purchase\_returns\_pur | CREATE INDEX idx\_purchase\_returns\_pur ON public.purchase\_returns USING btree (pur\_id) |
-| public | purchases | idx\_purchases\_supplier | CREATE INDEX idx\_purchases\_supplier ON public.purchases USING btree (supp\_id) WHERE (supp\_id IS NOT NULL) |
 | public | purchases | purchases\_pkey | CREATE UNIQUE INDEX purchases\_pkey ON public.purchases USING btree (pur\_id) |
-| public | purchases | idx\_purchases\_business\_deleted | CREATE INDEX idx\_purchases\_business\_deleted ON public.purchases USING btree (business\_id, is\_deleted) |
-| public | purchases | idx\_purchases\_business | CREATE INDEX idx\_purchases\_business ON public.purchases USING btree (business\_id) |
+| public | purchases | idx\_purchases\_supplier | CREATE INDEX idx\_purchases\_supplier ON public.purchases USING btree (supp\_id) WHERE (supp\_id IS NOT NULL) |
 | public | purchases | idx\_purchases\_payment\_status | CREATE INDEX idx\_purchases\_payment\_status ON public.purchases USING btree (business\_id, pur\_payment\_status) WHERE (is\_deleted = false) |
+| public | purchases | idx\_purchases\_business | CREATE INDEX idx\_purchases\_business ON public.purchases USING btree (business\_id) |
+| public | purchases | idx\_purchases\_business\_deleted | CREATE INDEX idx\_purchases\_business\_deleted ON public.purchases USING btree (business\_id, is\_deleted) |
 | public | purchases | idx\_purchases\_created\_at | CREATE INDEX idx\_purchases\_created\_at ON public.purchases USING btree (business\_id, pur\_created\_at DESC) |
-| public | role\_permissions | idx\_role\_permissions\_role\_id | CREATE INDEX idx\_role\_permissions\_role\_id ON public.role\_permissions USING btree (role\_id) |
 | public | role\_permissions | role\_permissions\_pkey | CREATE UNIQUE INDEX role\_permissions\_pkey ON public.role\_permissions USING btree (role\_id, permission\_id) |
-| public | roles | roles\_name\_key | CREATE UNIQUE INDEX roles\_name\_key ON public.roles USING btree (name) |
+| public | role\_permissions | idx\_role\_permissions\_role\_id | CREATE INDEX idx\_role\_permissions\_role\_id ON public.role\_permissions USING btree (role\_id) |
 | public | roles | roles\_pkey | CREATE UNIQUE INDEX roles\_pkey ON public.roles USING btree (id) |
+| public | roles | roles\_name\_key | CREATE UNIQUE INDEX roles\_name\_key ON public.roles USING btree (name) |
+| public | sale\_items | idx\_sale\_items\_product\_id | CREATE INDEX idx\_sale\_items\_product\_id ON public.sale\_items USING btree (product\_id) |
 | public | sale\_items | sale\_items\_pkey | CREATE UNIQUE INDEX sale\_items\_pkey ON public.sale\_items USING btree (sale\_item\_id) |
 | public | sale\_items | idx\_sale\_items\_sale\_id | CREATE INDEX idx\_sale\_items\_sale\_id ON public.sale\_items USING btree (sale\_id) |
 | public | sale\_items | idx\_sale\_items\_business | CREATE INDEX idx\_sale\_items\_business ON public.sale\_items USING btree (business\_id) |
-| public | sale\_items | idx\_sale\_items\_product\_id | CREATE INDEX idx\_sale\_items\_product\_id ON public.sale\_items USING btree (product\_id) |
-| public | sales | sales\_invoice\_no\_key | CREATE UNIQUE INDEX sales\_invoice\_no\_key ON public.sales USING btree (invoice\_no) |
-| public | sales | idx\_sales\_business | CREATE INDEX idx\_sales\_business ON public.sales USING btree (business\_id) |
+| public | sales | idx\_sales\_business\_status\_date | CREATE INDEX idx\_sales\_business\_status\_date ON public.sales USING btree (business\_id, sales\_payment\_status, sales\_created\_at DESC) WHERE (is\_deleted = false) |
+| public | sales | idx\_sales\_customer\_id | CREATE INDEX idx\_sales\_customer\_id ON public.sales USING btree (customer\_id) |
+| public | sales | idx\_sales\_invoice\_no | CREATE INDEX idx\_sales\_invoice\_no ON public.sales USING btree (invoice\_no) |
 | public | sales | idx\_sales\_invoice\_trgm | CREATE INDEX idx\_sales\_invoice\_trgm ON public.sales USING gin (invoice\_no gin\_trgm\_ops) WHERE (is\_deleted = false) |
 | public | sales | idx\_sales\_payment\_status | CREATE INDEX idx\_sales\_payment\_status ON public.sales USING btree (business\_id, sales\_payment\_status) WHERE (is\_deleted = false) |
 | public | sales | idx\_sales\_customer | CREATE INDEX idx\_sales\_customer ON public.sales USING btree (customer\_id) WHERE (customer\_id IS NOT NULL) |
 | public | sales | idx\_sales\_business\_deleted | CREATE INDEX idx\_sales\_business\_deleted ON public.sales USING btree (business\_id, is\_deleted) |
-| public | sales | idx\_sales\_business\_id | CREATE INDEX idx\_sales\_business\_id ON public.sales USING btree (business\_id) WHERE (is\_deleted = false) |
 | public | sales | idx\_sales\_created\_at | CREATE INDEX idx\_sales\_created\_at ON public.sales USING btree (business\_id, sales\_created\_at DESC) WHERE (is\_deleted = false) |
-| public | sales | idx\_sales\_customer\_id | CREATE INDEX idx\_sales\_customer\_id ON public.sales USING btree (customer\_id) |
-| public | sales | idx\_sales\_invoice\_no | CREATE INDEX idx\_sales\_invoice\_no ON public.sales USING btree (invoice\_no) |
-| public | sales | idx\_sales\_business\_status\_date | CREATE INDEX idx\_sales\_business\_status\_date ON public.sales USING btree (business\_id, sales\_payment\_status, sales\_created\_at DESC) WHERE (is\_deleted = false) |
-| public | sales | idx\_sales\_business\_created | CREATE INDEX idx\_sales\_business\_created ON public.sales USING btree (business\_id, sales\_created\_at DESC) WHERE (is\_deleted = false) |
+| public | sales | idx\_sales\_business\_id | CREATE INDEX idx\_sales\_business\_id ON public.sales USING btree (business\_id) WHERE (is\_deleted = false) |
+| public | sales | idx\_sales\_business | CREATE INDEX idx\_sales\_business ON public.sales USING btree (business\_id) |
+| public | sales | sales\_invoice\_no\_key | CREATE UNIQUE INDEX sales\_invoice\_no\_key ON public.sales USING btree (invoice\_no) |
 | public | sales | sales\_pkey | CREATE UNIQUE INDEX sales\_pkey ON public.sales USING btree (sales\_id) |
+| public | sales | idx\_sales\_business\_created | CREATE INDEX idx\_sales\_business\_created ON public.sales USING btree (business\_id, sales\_created\_at DESC) WHERE (is\_deleted = false) |
 | public | sales\_return\_items | ux\_return\_item\_unique | CREATE UNIQUE INDEX ux\_return\_item\_unique ON public.sales\_return\_items USING btree (return\_id, sale\_item\_id) |
 | public | sales\_return\_items | sales\_return\_items\_pkey | CREATE UNIQUE INDEX sales\_return\_items\_pkey ON public.sales\_return\_items USING btree (return\_item\_id) |
 | public | sales\_return\_items | idx\_return\_items\_product\_id | CREATE INDEX idx\_return\_items\_product\_id ON public.sales\_return\_items USING btree (product\_id) |
-| public | sales\_return\_items | idx\_sales\_return\_items\_return | CREATE INDEX idx\_sales\_return\_items\_return ON public.sales\_return\_items USING btree (return\_id) |
 | public | sales\_return\_items | idx\_sales\_return\_items\_sale\_item | CREATE INDEX idx\_sales\_return\_items\_sale\_item ON public.sales\_return\_items USING btree (sale\_item\_id) |
+| public | sales\_return\_items | idx\_sales\_return\_items\_return | CREATE INDEX idx\_sales\_return\_items\_return ON public.sales\_return\_items USING btree (return\_id) |
 | public | sales\_returns | sales\_returns\_pkey | CREATE UNIQUE INDEX sales\_returns\_pkey ON public.sales\_returns USING btree (return\_id) |
-| public | sales\_returns | idx\_sales\_returns\_business | CREATE INDEX idx\_sales\_returns\_business ON public.sales\_returns USING btree (business\_id) |
 | public | sales\_returns | idx\_sales\_returns\_sale | CREATE INDEX idx\_sales\_returns\_sale ON public.sales\_returns USING btree (sale\_id) |
 | public | sales\_returns | idx\_sales\_returns\_status | CREATE INDEX idx\_sales\_returns\_status ON public.sales\_returns USING btree (business\_id, return\_status) |
+| public | sales\_returns | idx\_sales\_returns\_business | CREATE INDEX idx\_sales\_returns\_business ON public.sales\_returns USING btree (business\_id) |
+| public | stock\_movements | stock\_movements\_pkey | CREATE UNIQUE INDEX stock\_movements\_pkey ON public.stock\_movements USING btree (move\_id) |
+| public | stock\_movements | idx\_stock\_movements\_created | CREATE INDEX idx\_stock\_movements\_created ON public.stock\_movements USING btree (product\_id, move\_created\_at DESC) |
 | public | stock\_movements | idx\_stock\_movements\_business | CREATE INDEX idx\_stock\_movements\_business ON public.stock\_movements USING btree (business\_id) |
 | public | stock\_movements | idx\_stock\_movements\_product | CREATE INDEX idx\_stock\_movements\_product ON public.stock\_movements USING btree (product\_id) |
-| public | stock\_movements | idx\_stock\_movements\_business\_created | CREATE INDEX idx\_stock\_movements\_business\_created ON public.stock\_movements USING btree (business\_id, move\_created\_at DESC) |
-| public | stock\_movements | stock\_movements\_pkey | CREATE UNIQUE INDEX stock\_movements\_pkey ON public.stock\_movements USING btree (move\_id) |
-| public | stock\_movements | idx\_stock\_movements\_sale\_ref | CREATE INDEX idx\_stock\_movements\_sale\_ref ON public.stock\_movements USING btree (sale\_reference\_id) WHERE (sale\_reference\_id IS NOT NULL) |
 | public | stock\_movements | idx\_stock\_movements\_product\_biz | CREATE INDEX idx\_stock\_movements\_product\_biz ON public.stock\_movements USING btree (business\_id, product\_id, move\_created\_at DESC) |
-| public | stock\_movements | idx\_stock\_movements\_created | CREATE INDEX idx\_stock\_movements\_created ON public.stock\_movements USING btree (product\_id, move\_created\_at DESC) |
-| public | suppliers | idx\_suppliers\_business\_updated | CREATE INDEX idx\_suppliers\_business\_updated ON public.suppliers USING btree (business\_id, updated\_at DESC) WHERE (is\_deleted = false) |
-| public | suppliers | idx\_suppliers\_email\_trgm | CREATE INDEX idx\_suppliers\_email\_trgm ON public.suppliers USING gin (supp\_email gin\_trgm\_ops) |
-| public | suppliers | idx\_suppliers\_name\_trgm | CREATE INDEX idx\_suppliers\_name\_trgm ON public.suppliers USING gin (supp\_name gin\_trgm\_ops) |
-| public | suppliers | idx\_suppliers\_phone\_trgm | CREATE INDEX idx\_suppliers\_phone\_trgm ON public.suppliers USING gin (supp\_phone gin\_trgm\_ops) WHERE (supp\_phone IS NOT NULL) |
+| public | stock\_movements | idx\_stock\_movements\_sale\_ref | CREATE INDEX idx\_stock\_movements\_sale\_ref ON public.stock\_movements USING btree (sale\_reference\_id) WHERE (sale\_reference\_id IS NOT NULL) |
+| public | stock\_movements | idx\_stock\_movements\_business\_created | CREATE INDEX idx\_stock\_movements\_business\_created ON public.stock\_movements USING btree (business\_id, move\_created\_at DESC) |
 | public | suppliers | suppliers\_pkey | CREATE UNIQUE INDEX suppliers\_pkey ON public.suppliers USING btree (supp\_id) |
 | public | suppliers | idx\_suppliers\_business\_deleted | CREATE INDEX idx\_suppliers\_business\_deleted ON public.suppliers USING btree (business\_id, is\_deleted) |
 | public | suppliers | idx\_suppliers\_phone | CREATE INDEX idx\_suppliers\_phone ON public.suppliers USING btree (supp\_phone) WHERE (supp\_phone IS NOT NULL) |
+| public | suppliers | idx\_suppliers\_name\_trgm | CREATE INDEX idx\_suppliers\_name\_trgm ON public.suppliers USING gin (supp\_name gin\_trgm\_ops) |
+| public | suppliers | idx\_suppliers\_email\_trgm | CREATE INDEX idx\_suppliers\_email\_trgm ON public.suppliers USING gin (supp\_email gin\_trgm\_ops) |
+| public | suppliers | idx\_suppliers\_business\_updated | CREATE INDEX idx\_suppliers\_business\_updated ON public.suppliers USING btree (business\_id, updated\_at DESC) WHERE (is\_deleted = false) |
+| public | suppliers | idx\_suppliers\_phone\_trgm | CREATE INDEX idx\_suppliers\_phone\_trgm ON public.suppliers USING gin (supp\_phone gin\_trgm\_ops) WHERE (supp\_phone IS NOT NULL) |
 
 ## triggers
 | table\_name | trigger\_name | event\_manipulation | action\_timing | action\_statement |

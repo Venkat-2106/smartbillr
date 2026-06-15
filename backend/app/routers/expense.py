@@ -30,6 +30,18 @@ def expense_to_dict(e):
     }
 
 
+def expense_to_dict_list(row):
+    return {
+        "expense_id": str(row.expense_id),
+        "business_id": str(row.business_id),
+        "expense_category": row.expense_category,
+        "expense_amount": float(row.expense_amount),
+        "expense_date": fmt_date(row.expense_date),
+        "expense_notes": row.expense_notes,
+        "created_at": fmt_ts(row.created_at),
+    }
+
+
 # ─────────────────────────────────────────
 # POST /expenses → Create new expense
 # ─────────────────────────────────────────
@@ -106,22 +118,14 @@ def get_all_expenses(
         extra_where += " AND e.expense_date <= :date_to"
         params["date_to"] = date_to
 
-    count_sql = f"""
-        SELECT COUNT(e.expense_id)
-        FROM expenses e
-        WHERE e.business_id = CAST(:bid AS uuid)
-          AND e.is_deleted = false
-        {extra_where}
-    """
-    total = db.execute(text(count_sql), params).scalar() or 0
-
     params["offset"] = pagination["offset"]
     params["limit"] = pagination["limit"]
 
     list_sql = f"""
         SELECT e.expense_id, e.business_id, e.expense_category,
                e.expense_amount, e.expense_date, e.expense_notes,
-               e.is_deleted, e.created_at, e.created_by
+               e.created_at,
+               COUNT(*) OVER() AS total_count
         FROM expenses e
         WHERE e.business_id = CAST(:bid AS uuid)
           AND e.is_deleted = false
@@ -131,9 +135,11 @@ def get_all_expenses(
     """
     rows = db.execute(text(list_sql), params).fetchall()
 
+    total = rows[0].total_count if rows else 0
+
     return success_response(
         pagination_response(
-            [expense_to_dict(e) for e in rows],
+            [expense_to_dict_list(e) for e in rows],
             total,
             pagination["page"],
             pagination["limit"]

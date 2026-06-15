@@ -138,6 +138,28 @@ def row_to_dict(row, show_profit: bool = True):
     }
 
 
+# ── Helper: format one product row for list response (no audit fields) ──
+def row_to_dict_list(row, show_profit: bool = True):
+    return {
+        "prod_id":              str(row.prod_id),
+        "business_id":          str(row.business_id),
+        "category_id":          str(row.category_id) if row.category_id else None,
+        "category_name":        row.category_name if row.category_name else None,
+        "prod_name":            row.prod_name,
+        "prod_sell_price":      float(row.prod_sell_price),
+        "prod_mrp":             float(row.prod_mrp) if row.prod_mrp is not None else None,
+        "prod_cost_price":      float(row.prod_cost_price) if show_profit else None,
+        "prod_profit":          float(row.prod_profit) if (show_profit and row.prod_profit is not None) else None,
+        "prod_stock_qty":       row.prod_stock_qty,
+        "prod_low_stock_alert": row.prod_low_stock_alert,
+        "tax_rate":             float(row.tax_rate) if row.tax_rate is not None else 0,
+        "tax_code":             row.tax_code,
+        "barcode":              row.barcode,
+        "unit":                 row.unit,
+        "prod_created_at":      fmt_ts(row.prod_created_at),
+    }
+
+
 # ── Helper: check for duplicate product name within a business ────────────────
 # Returns the conflicting prod_id (truthy) if a duplicate exists, else None.
 #
@@ -358,18 +380,6 @@ def get_all_products(
         extra_where += " AND p.updated_at <= :updated_to"
         params["updated_to"] = updated_to
 
-    total = db.execute(
-        text(f"""
-            SELECT COUNT(*)
-            FROM products p
-            LEFT JOIN categories c ON c.category_id = p.category_id
-            WHERE p.business_id = CAST(:business_id AS uuid)
-              AND p.is_deleted = false
-              {extra_where}
-        """),
-        params
-    ).scalar()
-
     rows = db.execute(
         text(f"""
             SELECT
@@ -377,16 +387,12 @@ def get_all_products(
                 p.prod_sell_price, p.prod_mrp,
                 p.prod_cost_price, p.prod_profit,
                 p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
-                p.tax_code, p.barcode, p.unit, p.is_deleted,
-                p.prod_created_at, p.updated_at,
-                p.created_by, p.updated_by,
+                p.tax_code, p.barcode, p.unit,
+                p.prod_created_at,
                 c.category_name,
-                pr1.full_name AS last_updated_by,
-                pr2.full_name AS created_by_name
+                COUNT(*) OVER() AS total_count
             FROM products p
-            LEFT JOIN categories c   ON c.category_id  = p.category_id
-            LEFT JOIN profiles   pr1 ON pr1.id = p.updated_by
-            LEFT JOIN profiles   pr2 ON pr2.id = p.created_by
+            LEFT JOIN categories c ON c.category_id = p.category_id
             WHERE p.business_id = CAST(:business_id AS uuid)
               AND p.is_deleted   = false
               {extra_where}
@@ -396,9 +402,11 @@ def get_all_products(
         params
     ).fetchall()
 
+    total = rows[0].total_count if rows else 0
+
     return success_response(
         pagination_response(
-            [row_to_dict(r, show_profit=show_profit) for r in rows],
+            [row_to_dict_list(r, show_profit=show_profit) for r in rows],
             total,
             pagination["page"],
             pagination["limit"]

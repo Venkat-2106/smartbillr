@@ -17,11 +17,14 @@ def success_response(data, status_code: int = 200):
         content=json.loads(json.dumps(data, cls=CustomEncoder))
     )
 
-def error_response(message: str, status_code: int = 400):
+def error_response(message: str, status_code: int = 400, extensions: dict = None):
+    content = {
+        "success": False,
+        "message": message
+    }
+    if extensions:
+        content.update(extensions)
     return JSONResponse(
         status_code=status_code,
-        content={
-            "success": False,
-            "message": message
-        }
+        content=content
     )

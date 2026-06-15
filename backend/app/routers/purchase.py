@@ -71,7 +71,7 @@ def fetch_purchase_items(db: Session, pur_id: str):
 
 
 # ─────────────────────────────────────────
-# HELPER: Format purchase row as dict
+# HELPER: Format purchase row as dict (includes audit fields, used by detail)
 # ─────────────────────────────────────────
 def purchase_row_to_dict(row, items):
     return {
@@ -93,6 +93,25 @@ def purchase_row_to_dict(row, items):
         "last_updated_by":    row.last_updated_by if hasattr(row, "last_updated_by") else None,
         "created_by":         str(row.created_by) if row.created_by else None,
         "items":              [purchase_item_to_dict(i) for i in items]
+    }
+
+
+# ── Helper: format purchase row for list response (no audit fields) ──
+def purchase_row_to_dict_list(row):
+    return {
+        "pur_id":             str(row.pur_id),
+        "business_id":        str(row.business_id),
+        "supp_id":            str(row.supp_id) if row.supp_id else None,
+        "supp_name":          row.supp_name,
+        "pur_total_amount":   float(row.pur_total_amount),
+        "pur_discount":       float(row.pur_discount) if row.pur_discount else 0,
+        "pur_cgst_total":     float(row.pur_cgst_total) if row.pur_cgst_total else 0,
+        "pur_sgst_total":     float(row.pur_sgst_total) if row.pur_sgst_total else 0,
+        "pur_igst_total":     float(row.pur_igst_total) if row.pur_igst_total else 0,
+        "pur_tax_total":      float(row.pur_tax_total) if row.pur_tax_total else 0,
+        "pur_final_amount":   float(row.pur_final_amount) if row.pur_final_amount else None,
+        "pur_payment_status": row.pur_payment_status,
+        "pur_created_at":     fmt_ts(row.pur_created_at),
     }
 
 
@@ -407,16 +426,6 @@ def get_all_purchases(
         extra_where += " AND p.pur_created_at <= :date_to"
         params["date_to"] = date_to
 
-    count_sql = f"""
-        SELECT COUNT(p.pur_id)
-        FROM purchases p
-        LEFT JOIN suppliers s ON s.supp_id = p.supp_id
-        WHERE p.business_id = CAST(:bid AS uuid)
-          AND p.is_deleted = false
-        {extra_where}
-    """
-    total = db.execute(text(count_sql), params).scalar() or 0
-
     params["offset"] = pagination["offset"]
     params["limit"]  = pagination["limit"]
 
@@ -426,12 +435,11 @@ def get_all_purchases(
                p.pur_total_amount, p.pur_discount,
                p.pur_cgst_total, p.pur_sgst_total, p.pur_igst_total,
                p.pur_tax_total, p.pur_final_amount,
-               p.pur_payment_status, p.is_deleted,
-               p.pur_created_at, p.updated_at, p.created_by,
-               pr.full_name AS last_updated_by
+               p.pur_payment_status,
+               p.pur_created_at,
+               COUNT(*) OVER() AS total_count
         FROM purchases p
-        LEFT JOIN suppliers s  ON s.supp_id = p.supp_id
-        LEFT JOIN profiles  pr ON pr.id      = p.updated_by
+        LEFT JOIN suppliers s ON s.supp_id = p.supp_id
         WHERE p.business_id = CAST(:bid AS uuid)
           AND p.is_deleted = false
         {extra_where}
@@ -439,36 +447,11 @@ def get_all_purchases(
         OFFSET :offset LIMIT :limit
     """
     rows = db.execute(text(list_sql), params).fetchall()
-
-    # BATCH: fetch ALL items for this page in one query
-    pur_ids   = [str(row.pur_id) for row in rows]
-    all_items = []
-    if pur_ids:
-        all_items = db.execute(
-            text("""
-                SELECT pi.item_id, pi.pur_id, pi.product_id,
-                       p.prod_name,
-                       pi.pur_item_qty,
-                       pi.item_unit_price, pi.item_subtotal,
-                       pi.gst_rate, pi.cgst_amount, pi.sgst_amount,
-                       pi.igst_amount, pi.pur_tax_total,
-                       pi.item_tax_total, pi.item_total_with_tax
-                FROM purchase_items pi
-                LEFT JOIN products p ON p.prod_id = pi.product_id
-                WHERE pi.pur_id = ANY(CAST(:ids AS uuid[]))
-            """),
-            {"ids": "{" + ",".join(pur_ids) + "}"}
-        ).fetchall()
-
-    items_by_pur = {}
-    for it in all_items:
-        key = str(it.pur_id)
-        items_by_pur.setdefault(key, []).append(it)
+    total = rows[0].total_count if rows else 0
 
     result = []
     for row in rows:
-        items = items_by_pur.get(str(row.pur_id), [])
-        result.append(purchase_row_to_dict(row, items))
+        result.append(purchase_row_to_dict_list(row))
 
     return success_response(
         pagination_response(result, total, pagination["page"], pagination["limit"])

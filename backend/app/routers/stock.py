@@ -144,21 +144,7 @@ sort_dir:     Optional[str] = Query(default="desc"),
         extra_where += " AND sm.move_created_at <= :date_to"
         params["date_to"] = date_to.strip()
 
-    # ── COUNT query ───────────────────────────────────────────────────────────
-    total = db.execute(
-        text(f"""
-            SELECT COUNT(*)
-            FROM stock_movements sm
-            LEFT JOIN products  p   ON p.prod_id = sm.product_id
-            LEFT JOIN sales     s   ON s.sales_id = sm.sale_reference_id
-            LEFT JOIN purchases pur ON pur.pur_id = sm.purchase_reference_id
-            WHERE sm.business_id = CAST(:business_id AS uuid)
-            {extra_where}
-        """),
-        params
-    ).scalar()
-
-    # ── Data query — raw SQL with JOINs so prod_name + invoice refs are available in one trip ──
+    # ── Combined data + count query ──────────────────────────────────────────
     rows = db.execute(
         text(f"""
             SELECT
@@ -170,7 +156,8 @@ sort_dir:     Optional[str] = Query(default="desc"),
                 sm.move_notes, sm.move_created_at, sm.move_created_by,
                 p.prod_name,
                 s.invoice_no AS sale_invoice_no,
-                pur.pur_id   AS pur_reference_id
+                pur.pur_id   AS pur_reference_id,
+                COUNT(*) OVER() AS total_count
             FROM stock_movements sm
             LEFT JOIN products  p   ON p.prod_id = sm.product_id
             LEFT JOIN sales     s   ON s.sales_id = sm.sale_reference_id
@@ -182,6 +169,7 @@ sort_dir:     Optional[str] = Query(default="desc"),
         """),
         params
     ).fetchall()
+    total = rows[0].total_count if rows else 0
 
     data = []
     for r in rows:
@@ -312,21 +300,7 @@ def get_current_stock(
         elif s == "in_stock":
             extra_where += " AND p.prod_stock_qty > p.prod_low_stock_alert"
 
-    # ── COUNT query — same WHERE clauses as data query ────────────────────────
-    total = db.execute(
-        text(f"""
-            SELECT COUNT(*)
-            FROM products p
-            LEFT JOIN categories c ON c.category_id = p.category_id
-            WHERE p.business_id = CAST(:business_id AS uuid)
-              {extra_where}
-        """),
-        params
-    ).scalar()
-
-    # ── Data query ─────────────────────────────────────────────────────────────
-    # stock_value = prod_stock_qty * prod_cost_price (matches existing
-    # inventory valuation logic — same fields used everywhere else).
+    # ── Combined data + count query ──────────────────────────────────────────
     rows = db.execute(
         text(f"""
             SELECT
@@ -334,8 +308,8 @@ def get_current_stock(
                 p.prod_stock_qty, p.prod_low_stock_alert,
                 p.prod_cost_price, p.prod_sell_price,
                 (p.prod_stock_qty * p.prod_cost_price) AS stock_value,
-                p.is_deleted, p.updated_at,
-                c.category_name
+                c.category_name,
+                COUNT(*) OVER() AS total_count
             FROM products p
             LEFT JOIN categories c ON c.category_id = p.category_id
             WHERE p.business_id = CAST(:business_id AS uuid)
@@ -345,6 +319,7 @@ def get_current_stock(
         """),
         params
     ).fetchall()
+    total = rows[0].total_count if rows else 0
 
     data = []
     for r in rows:
@@ -359,20 +334,18 @@ def get_current_stock(
             stock_status = "in_stock"
 
         data.append({
-            "prod_id":             str(r.prod_id),
-            "prod_name":           r.prod_name,
-            "barcode":             r.barcode,
-            "category_name":       r.category_name,
-            "unit":                r.unit,
-            "prod_stock_qty":      r.prod_stock_qty,
+            "prod_id":              str(r.prod_id),
+            "prod_name":            r.prod_name,
+            "barcode":              r.barcode,
+            "category_name":        r.category_name,
+            "unit":                 r.unit,
+            "prod_stock_qty":       r.prod_stock_qty,
             "prod_low_stock_alert": r.prod_low_stock_alert,
-            "available_stock":     r.prod_stock_qty,
-            "prod_sell_price":     float(r.prod_sell_price) if r.prod_sell_price is not None else None,
-            "prod_cost_price":     float(r.prod_cost_price) if (show_profit and r.prod_cost_price is not None) else None,
-            "stock_value":         float(r.stock_value) if (show_profit and r.stock_value is not None) else None,
-            "stock_status":        stock_status,
-            "is_active":           not r.is_deleted,
-            "updated_at":          fmt_ts(r.updated_at),
+            "available_stock":      r.prod_stock_qty,
+            "prod_sell_price":      float(r.prod_sell_price) if r.prod_sell_price is not None else None,
+            "prod_cost_price":      float(r.prod_cost_price) if (show_profit and r.prod_cost_price is not None) else None,
+            "stock_value":          float(r.stock_value) if (show_profit and r.stock_value is not None) else None,
+            "stock_status":         stock_status,
         })
 
     return success_response(
@@ -556,23 +529,7 @@ def get_low_stock_alerts(
         "limit":       pagination["limit"],
     }
 
-    # COUNT — only unread alerts whose CURRENT stock is still at or below threshold
-    total = db.execute(
-        text("""
-            SELECT COUNT(*) FROM (
-                SELECT DISTINCT ON (la.product_id) la.alert_id
-                FROM low_stock_alerts la
-                JOIN products p ON p.prod_id = la.product_id
-                WHERE la.business_id = CAST(:business_id AS uuid)
-                  AND p.is_deleted   = false
-                  AND la.alert_status = 'unread'
-                  AND p.prod_stock_qty <= p.prod_low_stock_alert
-            ) sub
-        """),
-        params
-    ).scalar()
-
-    # DATA — latest unread alert per product with real-time stock
+    # Combined data + count — latest unread alert per product with real-time stock
     rows = db.execute(
         text("""
             SELECT DISTINCT ON (la.product_id)
@@ -581,7 +538,8 @@ def get_low_stock_alerts(
                 la.alert_status, la.alert_created_at,
                 p.prod_name, p.barcode, p.unit,
                 p.prod_stock_qty      AS current_stock,
-                p.prod_low_stock_alert AS current_threshold
+                p.prod_low_stock_alert AS current_threshold,
+                COUNT(*) OVER() AS total_count
             FROM low_stock_alerts la
             JOIN products p ON p.prod_id = la.product_id
             WHERE la.business_id = CAST(:business_id AS uuid)
@@ -593,6 +551,7 @@ def get_low_stock_alerts(
         """),
         params
     ).fetchall()
+    total = rows[0].total_count if rows else 0
 
     data = []
     for r in rows:

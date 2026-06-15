@@ -168,7 +168,6 @@ def get_all_suppliers(
         "supp_email":        "s.supp_email",
         "supp_state":        "s.supp_state",
         "supp_country_code": "s.supp_country_code",
-        "updated_at":        "s.updated_at",
         "supp_created_at":   "s.supp_created_at",
     }
     order_col = SORTABLE.get(sort_by, "s.updated_at")
@@ -206,30 +205,17 @@ def get_all_suppliers(
         extra_where += " AND s.updated_at <= :updated_to"
         params["updated_to"] = updated_to
 
-    # ── COUNT (same WHERE so total is always filter-accurate) ─────────────
-    total = db.execute(
-        text(f"""
-            SELECT COUNT(*)
-            FROM suppliers s
-            WHERE s.business_id = CAST(:bid AS uuid)
-              AND s.is_deleted   = false
-              {extra_where}
-        """),
-        params
-    ).scalar()
-
-    # ── DATA (with LEFT JOIN to resolve last_updated_by name) ────────────
+    # ── DATA (no audit fields — list doesn't need is_deleted/updated_by) ──
     rows = db.execute(
         text(f"""
             SELECT
                 s.supp_id, s.business_id,
                 s.supp_name, s.supp_phone, s.supp_email,
                 s.supp_address, s.supp_state, s.supp_country_code,
-                s.supp_tax_number, s.is_deleted,
-                s.supp_created_at, s.updated_at, s.updated_by,
-                p.full_name AS last_updated_by
+                s.supp_tax_number,
+                s.supp_created_at,
+                COUNT(*) OVER() AS total_count
             FROM suppliers s
-            LEFT JOIN profiles p ON p.id = s.updated_by
             WHERE s.business_id = CAST(:bid AS uuid)
               AND s.is_deleted   = false
               {extra_where}
@@ -238,6 +224,8 @@ def get_all_suppliers(
         """),
         params
     ).fetchall()
+
+    total = rows[0].total_count if rows else 0
 
     data = [
         {
@@ -250,11 +238,7 @@ def get_all_suppliers(
             "supp_state":        r.supp_state,
             "supp_country_code": r.supp_country_code,
             "supp_tax_number":   r.supp_tax_number,
-            "is_deleted":        r.is_deleted,
             "supp_created_at":   fmt_ts(r.supp_created_at),
-            "updated_at":        fmt_ts(r.updated_at),
-            "updated_by":        str(r.updated_by)      if r.updated_by      else None,
-            "last_updated_by":   r.last_updated_by      if r.last_updated_by else None,
         }
         for r in rows
     ]

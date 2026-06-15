@@ -27,6 +27,12 @@
 #     Every API call now makes 1 DB round trip instead of 2 for auth.
 #     Dashboard load (5-6 parallel calls) saves 5-6 DB round trips.
 #     Over the course of a session this is a significant speedup.
+#
+#   FIX — In-memory permissions cache (TTL = 60s).
+#     After the first request, subsequent requests from the same user within
+#     the TTL window skip the DB query entirely.
+#     Permissions change rarely (only when admin edits roles), so a 60s lag
+#     is acceptable and eliminates the auth DB query from ~99% of requests.
 
 from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -38,6 +44,29 @@ import json
 import time
 
 security = HTTPBearer()
+
+# ── In-memory permissions cache ─────────────────────────────────────────
+# Key:   user_id (str)
+# Value: {"data": {...}, "expires_at": float(epoch)}
+# TTL:   60 seconds
+# Purge strategy: lazy — expired entries are skipped on lookup and overwritten
+#                 on next fetch. No background sweep needed.
+_permissions_cache: dict[str, dict] = {}
+_PERM_CACHE_TTL = 60
+
+
+def _get_cached_user(user_id: str) -> dict | None:
+    entry = _permissions_cache.get(user_id)
+    if entry and entry["expires_at"] > time.time():
+        return entry["data"]
+    return None
+
+
+def _set_cached_user(user_id: str, data: dict) -> None:
+    _permissions_cache[user_id] = {
+        "data": data,
+        "expires_at": time.time() + _PERM_CACHE_TTL,
+    }
 
 
 def decode_token_payload(token: str) -> dict:
@@ -121,7 +150,12 @@ def verify_token(
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token: no user found")
 
-    # ── Single query — fetches profile + role + all permissions at once ───────
+    # ── Check in-memory cache first — eliminates DB query for ~99% of requests ──
+    cached = _get_cached_user(user_id)
+    if cached is not None:
+        return cached
+
+    # ── Cache miss — single DB query fetches profile + role + all permissions ──
     #
     # HOW IT WORKS:
     #   LEFT JOIN roles        → gets the role name (admin/manager/staff)
@@ -164,9 +198,14 @@ def verify_token(
     permissions_csv = result.permissions_csv or ""
     permissions = set(permissions_csv.split(",")) if permissions_csv else set()
 
-    return {
+    user_data = {
         "user_id":     user_id,
         "business_id": str(result.business_id),
         "role":        result.role or "staff",
         "permissions": permissions,
     }
+
+    # Cache for 60s so subsequent requests skip the DB query.
+    _set_cached_user(user_id, user_data)
+
+    return user_data

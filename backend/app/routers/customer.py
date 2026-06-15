@@ -125,7 +125,6 @@ def get_all_customers(
         "cust_phone":   "c.cust_phone",
         "cust_email":   "c.cust_email",
         "cust_state":   "c.cust_state",
-        "updated_at":   "c.updated_at",
         "cust_created_at": "c.cust_created_at",
     }
     order_col = SORTABLE.get(sort_by, "c.cust_name")
@@ -166,28 +165,16 @@ def get_all_customers(
         extra_where += " AND c.updated_at <= :updated_to"
         params["updated_to"] = updated_to
 
-    total = db.execute(
-        text(f"""
-            SELECT COUNT(*)
-            FROM customers c
-            WHERE c.business_id = CAST(:bid AS uuid)
-              AND c.is_deleted   = false
-              {extra_where}
-        """),
-        params
-    ).scalar()
-
     rows = db.execute(
         text(f"""
             SELECT
                 c.cust_id, c.business_id,
                 c.cust_name, c.cust_phone, c.cust_email,
                 c.cust_address, c.cust_state, c.cust_country_code,
-                c.cust_tax_number, c.is_deleted,
-                c.cust_created_at, c.updated_at, c.updated_by,
-                p.full_name AS last_updated_by
+                c.cust_tax_number,
+                c.cust_created_at,
+                COUNT(*) OVER() AS total_count
             FROM customers c
-            LEFT JOIN profiles p ON p.id = c.updated_by
             WHERE c.business_id = CAST(:bid AS uuid)
               AND c.is_deleted   = false
               {extra_where}
@@ -196,6 +183,8 @@ def get_all_customers(
         """),
         params
     ).fetchall()
+
+    total = rows[0].total_count if rows else 0
 
     data = [
         {
@@ -208,11 +197,7 @@ def get_all_customers(
             "cust_state":        r.cust_state,
             "cust_country_code": r.cust_country_code,
             "cust_tax_number":   r.cust_tax_number,
-            "is_deleted":        r.is_deleted,
             "cust_created_at":   fmt_ts(r.cust_created_at),
-            "updated_at":        fmt_ts(r.updated_at),
-            "updated_by":        str(r.updated_by)      if r.updated_by      else None,
-            "last_updated_by":   r.last_updated_by      if r.last_updated_by else None,
         }
         for r in rows
     ]

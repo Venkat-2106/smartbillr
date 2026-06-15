@@ -13,9 +13,9 @@
 //
 //   No visual change — identical appearance and transition.
 
-import { useState } from 'react'
+import { useState, memo } from 'react'
 
-export default function Pagination({ pagination, onPageChange }) {
+function Pagination({ pagination, onPageChange }) {
   if (!pagination) return null
 
   // Backend sends: { page, total_pages, total, has_next, has_prev }
@@ -184,3 +184,5 @@ function PaginationInner({ current, total, pages, pagination, onPageChange, btnB
     </div>
   )
 }
+
+export default memo(Pagination)

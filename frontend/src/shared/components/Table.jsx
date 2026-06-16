@@ -162,6 +162,7 @@ function Table({
                 rows.map((row, i) => {
                   const rowId = row[rowKey] ?? i
                   const isHovered = hoveredRow === rowId
+                  const delay = Math.min(i * 30, 300)
                   return (
                   <tr
                     key={rowId}
@@ -173,6 +174,8 @@ function Table({
                       cursor: onRowClick ? 'pointer' : 'default',
                       transition: 'background 0.15s',
                       background: isHovered ? 'var(--bg-hover)' : 'transparent',
+                      animation: `row-in 0.25s var(--ease-out) both`,
+                      animationDelay: `${delay}ms`,
                     }}
                   >
                     {columns.map((col, ci) => (

@@ -97,6 +97,7 @@
   --bg-hover:        #F3F4F6;
   --bg-input:        #F9FAFB;
   --bg-input-focus:  #FFFFFF;
+  --bg-page-gradient: radial-gradient(ellipse 80% 60% at 50% -20%, color-mix(in srgb, var(--accent-500) 6%, transparent), transparent);
 
   /* Sidebar */
   --sb-bg:           #0B0F1A;
@@ -118,12 +119,12 @@
   --border-hover:    #D1D5DB;
   --border-strong:   #9CA3AF;
 
-  /* Shadows — restrained, purposeful */
+  /* Shadows — dimensional, premium */
   --shadow-xs:   0 1px 2px rgba(0,0,0,0.05);
   --shadow-sm:   0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
   --shadow-md:   0 4px 6px rgba(0,0,0,0.04), 0 2px 4px rgba(0,0,0,0.04);
-  --shadow-card: 0 0 0 1px rgba(0,0,0,0.05), 0 1px 3px rgba(0,0,0,0.04);
-  --shadow-elevated: 0 10px 25px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04);
+  --shadow-card: 0 0 0 1px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03);
+  --shadow-elevated: 0 8px 30px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04), 0 20px 60px rgba(0,0,0,0.06);
 
   /* Topbar */
   --topbar-bg:     rgba(255,255,255,0.92);
@@ -236,11 +237,13 @@ html {
 body {
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--bg-page);
+  background-image: var(--bg-page-gradient);
   color: var(--text-primary);
   font-size: 14px;
   line-height: 1.6;
   min-height: 100vh;
   transition: background var(--duration-slow) var(--ease-out),
+              background-image var(--duration-slow) var(--ease-out),
               color var(--duration-slow) var(--ease-out);
 }
 
@@ -259,7 +262,7 @@ body {
    FOCUS
 ───────────────────────────────────────── */
 :focus-visible {
-  outline: 2px solid var(--accent-600);
+  outline: 2px solid var(--accent-500);
   outline-offset: 2px;
   border-radius: var(--r-sm);
 }
@@ -348,12 +351,33 @@ body {
 .scale-in  { animation: scaleIn 0.22s var(--ease-spring) both; }
 
 /* Staggered children */
-.stagger > *:nth-child(1) { animation-delay:  0ms; }
-.stagger > *:nth-child(2) { animation-delay: 40ms; }
-.stagger > *:nth-child(3) { animation-delay: 80ms; }
-.stagger > *:nth-child(4) { animation-delay:120ms; }
-.stagger > *:nth-child(5) { animation-delay:160ms; }
-.stagger > *:nth-child(6) { animation-delay:200ms; }
+.stagger > *:nth-child(1)  { animation-delay:  0ms; }
+.stagger > *:nth-child(2)  { animation-delay: 40ms; }
+.stagger > *:nth-child(3)  { animation-delay: 80ms; }
+.stagger > *:nth-child(4)  { animation-delay:120ms; }
+.stagger > *:nth-child(5)  { animation-delay:160ms; }
+.stagger > *:nth-child(6)  { animation-delay:200ms; }
+.stagger > *:nth-child(7)  { animation-delay:240ms; }
+.stagger > *:nth-child(8)  { animation-delay:280ms; }
+.stagger > *:nth-child(9)  { animation-delay:320ms; }
+.stagger > *:nth-child(10) { animation-delay:360ms; }
+
+/* Row entrance — slide in from below with fade */
+@keyframes row-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.row-in { animation: row-in 0.25s var(--ease-out) both; }
+
+/* Card hover lift — consistent across all cards */
+.card-hover {
+  transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), border-color 0.2s var(--ease-out);
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-elevated);
+  border-color: var(--border-hover);
+}
 
 /* ─────────────────────────────────────────
    SEARCH RESULTS HOVER
@@ -628,6 +652,43 @@ button:focus-visible, a:focus-visible {
 @media (max-width: 900px) {
   .create-sale-grid {
     grid-template-columns: 1fr !important;
+  }
+}
+
+/* ─────────────────────────────────────────
+   RESPONSIVE: AuthLayout — collapse to single column
+   on small screens (≤ 768px).
+───────────────────────────────────────── */
+@media (max-width: 768px) {
+  .auth-layout {
+    grid-template-columns: 1fr !important;
+  }
+  .auth-hero {
+    display: none !important;
+  }
+  .auth-form {
+    padding: 1.5rem !important;
+  }
+}
+
+/* ─────────────────────────────────────────
+   RESPONSIVE: SearchBar — full width on mobile
+───────────────────────────────────────── */
+@media (max-width: 640px) {
+  .search-bar-responsive {
+    width: 100% !important;
+  }
+}
+
+/* ─────────────────────────────────────────
+   RESPONSIVE: PageHeader font sizes
+───────────────────────────────────────── */
+@media (max-width: 640px) {
+  .page-header-title {
+    font-size: 18px !important;
+  }
+  .page-header-subtitle {
+    font-size: 12px !important;
   }
 }
 

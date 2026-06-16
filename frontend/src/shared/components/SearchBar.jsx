@@ -62,7 +62,7 @@ export default function SearchBar({
   }, [debouncedValue]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div style={{
+    <div className="search-bar-responsive" style={{
       position: 'relative',
       display: 'flex',
       alignItems: 'center',

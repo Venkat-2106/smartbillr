@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import toast from 'react-hot-toast'
 import { ErrorBoundary } from '../../shared/components'
+import useMediaQuery from '../../shared/hooks/useMediaQuery'
 
 const THEME_KEY  = 'sb-theme'
 const ACCENT_KEY = 'sb-accent'
@@ -72,6 +73,7 @@ const NAV = [
 const NAV_FLAT = NAV.flatMap(s => s.items)
 
 const SLIM = 64, FULL = 248
+const MOBILE_BREAK = 768
 
 function Logo({ collapsed }) {
   return (
@@ -136,9 +138,6 @@ function LogoutDialog({ onConfirm, onCancel }) {
   )
 }
 
-// ── FIX 5: IconButton — topbar icon buttons (bell, theme switcher)
-// Uses React useState for hover instead of DOM mutation.
-// Design is identical to the original — same dimensions, colors, border, radius.
 function IconButton({ onClick, children, style = {} }) {
   const [hovered, setHovered] = useState(false)
   return (
@@ -163,10 +162,7 @@ function IconButton({ onClick, children, style = {} }) {
   )
 }
 
-// ── FIX 5: UserPill — topbar user chip (avatar + name + role + chevron)
-// Uses React useState for hover instead of DOM mutation.
-// Design is identical to the original.
-function UserPill({ initials, userName, userRole }) {
+function UserPill({ initials, userName, userRole, minimal }) {
   const [hovered, setHovered] = useState(false)
   return (
     <div
@@ -185,24 +181,25 @@ function UserPill({ initials, userName, userRole }) {
       <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--accent-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 700, color: '#fff', flexShrink: 0 }}>
         {initials}
       </div>
-      <div>
-        <p style={{ fontSize: '0.74rem', fontWeight: 650, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.1px', lineHeight: 1.3, textTransform: 'capitalize' }}>
-          {userName}
-        </p>
-        <p style={{ fontSize: '0.62rem', color: 'var(--text-muted)', margin: 0 }}>
-          {userRole}
-        </p>
-      </div>
-      <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="var(--text-muted)" strokeWidth={2.5} style={{ marginLeft: 2 }}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
-      </svg>
+      {!minimal && (
+        <>
+          <div>
+            <p style={{ fontSize: '0.74rem', fontWeight: 650, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.1px', lineHeight: 1.3, textTransform: 'capitalize' }}>
+              {userName}
+            </p>
+            <p style={{ fontSize: '0.62rem', color: 'var(--text-muted)', margin: 0 }}>
+              {userRole}
+            </p>
+          </div>
+          <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="var(--text-muted)" strokeWidth={2.5} style={{ marginLeft: 2 }}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
+          </svg>
+        </>
+      )}
     </div>
   )
 }
 
-// ── FIX 5: LogoutButton — sidebar footer logout icon
-// Uses React useState for hover instead of DOM mutation.
-// Design is identical to the original — same red tint colors.
 function LogoutButton({ onClick }) {
   const [hovered, setHovered] = useState(false)
   return (
@@ -228,13 +225,13 @@ function LogoutButton({ onClick }) {
   )
 }
 
-// ── FIX 2 (from NavItem fix — already in your codebase, unchanged here)
-function NavItem({ item, collapsed }) {
+function NavItem({ item, collapsed, onNavClick }) {
   const [hovered, setHovered] = useState(false)
   return (
     <NavLink
       to={item.path}
       title={collapsed ? item.label : undefined}
+      onClick={onNavClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={({ isActive }) => ({
@@ -271,7 +268,9 @@ function NavItem({ item, collapsed }) {
 }
 
 export default function DashboardLayout() {
+  const isMobile = useMediaQuery(`(max-width: ${MOBILE_BREAK}px)`)
   const [collapsed,       setCollapsed]       = useState(false)
+  const [mobileOpen,      setMobileOpen]      = useState(false)
   const [showLogout,      setShowLogout]      = useState(false)
   const [showTheme,       setShowTheme]       = useState(false)
 
@@ -294,23 +293,63 @@ export default function DashboardLayout() {
     [location.pathname]
   )
 
+  // Close mobile sidebar on navigation
+  useEffect(() => { setMobileOpen(false) }, [location.pathname])
+
   function handleLogout() { clearAuth(); toast.success('Signed out successfully'); navigate('/login') }
 
   const visibleNav = useMemo(() =>NAV
     .map(section => ({ ...section, items: section.items.filter(item => hasPermission(item.permission)) }))
     .filter(section => section.items.length > 0),[hasPermission])
 
-  const W = collapsed ? SLIM : FULL
+  const W = isMobile ? FULL : (collapsed ? SLIM : FULL)
+  const sidebarOpen = isMobile ? mobileOpen : true
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily:"'Plus Jakarta Sans', -apple-system, sans-serif", background: 'var(--bg-page)' }}>
 
+      {/* Mobile sidebar overlay backdrop */}
+      {isMobile && mobileOpen && (
+        <div
+          onClick={() => setMobileOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 99,
+            background: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(4px)',
+            animation: 'fadeIn 0.15s var(--ease-out)',
+          }}
+        />
+      )}
+
       {/* ── SIDEBAR ── */}
-      <aside style={{ width: W, minHeight: '100vh', background: 'var(--sb-bg)', display: 'flex', flexDirection: 'column', position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 100, transition: 'width 0.2s var(--ease-out)', overflow: 'hidden', borderRight: '1px solid var(--sb-border)' }}>
+      <aside style={{
+        width: isMobile ? FULL : W,
+        minHeight: '100vh',
+        background: 'var(--sb-bg)',
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        bottom: 0,
+        zIndex: isMobile ? 100 : 100,
+        transform: isMobile ? `translateX(${mobileOpen ? '0' : `-${FULL}px`})` : 'none',
+        transition: 'width 0.2s var(--ease-out), transform 0.22s var(--ease-out)',
+        overflow: 'hidden',
+        borderRight: '1px solid var(--sb-border)',
+        boxShadow: isMobile && mobileOpen ? 'var(--shadow-elevated)' : 'none',
+      }}>
 
         {/* Logo */}
-        <div style={{ height: 60, display: 'flex', alignItems: 'center', padding: collapsed?'0 18px':'0 16px', justifyContent: collapsed?'center':'space-between', borderBottom: '1px solid var(--sb-border)', flexShrink: 0 }}>
-          {collapsed ? (
+        <div style={{ height: 60, display: 'flex', alignItems: 'center', padding: collapsed && !isMobile?'0 18px':'0 16px', justifyContent: (collapsed && !isMobile) ?'center':'space-between', borderBottom: '1px solid var(--sb-border)', flexShrink: 0 }}>
+          {isMobile ? (
+            <>
+              <Logo collapsed={false} />
+              <button onClick={() => setMobileOpen(false)} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 7, width: 26, height: 26, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--sb-text-muted)', flexShrink: 0 }}>
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </>
+          ) : collapsed ? (
             <button onClick={() => setCollapsed(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}><Logo collapsed /></button>
           ) : (
             <>
@@ -335,26 +374,25 @@ export default function DashboardLayout() {
         )}
 
         {/* Nav */}
-        <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: collapsed?'10px 8px':'6px 8px', scrollbarWidth: 'none' }}>
+        <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: collapsed && !isMobile?'10px 8px':'6px 8px', scrollbarWidth: 'none' }}>
           {visibleNav.map(section => (
             <div key={section.label} style={{ marginBottom: 2 }}>
               {!collapsed && <p style={{ fontSize: '0.58rem', fontWeight: 700, color: 'var(--sb-text-section)', textTransform: 'uppercase', letterSpacing: '0.1em', padding: '12px 10px 4px', margin: 0 }}>{section.label}</p>}
-              {collapsed && <div style={{ height: 6 }} />}
-              {section.items.map(item => <NavItem key={item.path} item={item} collapsed={collapsed} />)}
+              {collapsed && !isMobile && <div style={{ height: 6 }} />}
+              {section.items.map(item => <NavItem key={item.path} item={item} collapsed={collapsed && !isMobile} />)}
             </div>
           ))}
         </nav>
 
         {/* User footer */}
-        <div style={{ padding: collapsed?'12px 8px':'12px 10px', borderTop: '1px solid var(--sb-border)', flexShrink: 0 }}>
-          {!collapsed ? (
+        <div style={{ padding: collapsed && !isMobile?'12px 8px':'12px 10px', borderTop: '1px solid var(--sb-border)', flexShrink: 0 }}>
+          {(!collapsed || isMobile) ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--accent-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem', fontWeight: 700, color: '#fff', flexShrink: 0 }}>{initials}</div>
               <div style={{ flex: 1, overflow: 'hidden' }}>
                 <p style={{ fontSize: '0.75rem', fontWeight: 650, color: 'var(--sb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0, textTransform: 'capitalize' }}>{userName}</p>
                 <p style={{ fontSize: '0.6rem', color: 'var(--sb-text-muted)', margin: 0 }}>{userRole}</p>
               </div>
-              {/* FIX 5: replaced DOM-mutation button with LogoutButton component */}
               <LogoutButton onClick={() => setShowLogout(true)} />
             </div>
           ) : (
@@ -366,19 +404,61 @@ export default function DashboardLayout() {
       </aside>
 
       {/* ── MAIN CONTENT ── */}
-      <div style={{ flex: 1, minWidth: 0, marginLeft: W, transition: 'margin-left 0.2s var(--ease-out)', display: 'flex', flexDirection: 'column', height: '100vh', overflowX: 'hidden' }}>
+      <div style={{
+        flex: 1, minWidth: 0,
+        marginLeft: isMobile ? 0 : W,
+        transition: 'margin-left 0.2s var(--ease-out)',
+        display: 'flex', flexDirection: 'column',
+        height: '100vh', overflowX: 'hidden',
+      }}>
 
         {/* Topbar */}
-        <header style={{ height: 60, background: 'var(--topbar-bg)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderBottom: '1px solid var(--topbar-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 32px', position: 'sticky', top: 0, zIndex: 50 }}>
-          <div>
-            <h1 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.2px' }}>{greeting}, {userName.split(' ')[0]} 👋</h1>
-            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0, marginTop: 1 }}>{currentPage} · {businessName}</p>
+        <header style={{
+          height: 60,
+          background: 'var(--topbar-bg)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          borderBottom: '1px solid var(--topbar-border)',
+          display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: isMobile ? '0 16px' : '0 32px',
+          position: 'sticky', top: 0, zIndex: 50,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {isMobile && (
+              <button
+                onClick={() => setMobileOpen(true)}
+                style={{
+                  background: 'var(--bg-subtle)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8, width: 34, height: 34,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'var(--text-secondary)', flexShrink: 0,
+                }}
+              >
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                  <path d="M3 6h18M3 12h18M3 18h18"/>
+                </svg>
+              </button>
+            )}
+            <div>
+              <h1 style={{
+                fontSize: isMobile ? '0.8rem' : '0.875rem',
+                fontWeight: 700, color: 'var(--text-primary)', margin: 0,
+                letterSpacing: '-0.2px',
+              }}>
+                {greeting}, {userName.split(' ')[0]} 👋
+              </h1>
+              <p style={{
+                fontSize: isMobile ? '0.65rem' : '0.7rem',
+                color: 'var(--text-muted)', margin: 0, marginTop: 1,
+              }}>
+                {currentPage} · {businessName}
+              </p>
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 8 }}>
 
-
-
-            {/* FIX 5: Bell — replaced DOM-mutation button with IconButton */}
             <IconButton style={{ position: 'relative' }}>
               <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.9}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
@@ -388,7 +468,6 @@ export default function DashboardLayout() {
 
             <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
 
-            {/* FIX 5: Theme switcher — replaced DOM-mutation button with IconButton */}
             <div style={{ position: 'relative' }}>
               <IconButton onClick={() => setShowTheme(v => !v)}>
                 <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.9}>
@@ -398,13 +477,16 @@ export default function DashboardLayout() {
               {showTheme && <ThemePanel theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} onClose={() => setShowTheme(false)} />}
             </div>
 
-            {/* FIX 5: User pill — replaced DOM-mutation div with UserPill component */}
-            <UserPill initials={initials} userName={userName} userRole={userRole} />
+            <UserPill initials={initials} userName={userName} userRole={userRole} minimal={isMobile} />
 
           </div>
         </header>
 
-        <main style={{ flex: 1, padding: '32px 36px', overflowY: 'auto', overflowX: 'hidden' }}>
+        <main style={{
+          flex: 1,
+          padding: isMobile ? '20px 16px' : '32px 36px',
+          overflowY: 'auto', overflowX: 'hidden',
+        }}>
           <div className="fade-up"><ErrorBoundary><Outlet /></ErrorBoundary></div>
         </main>
       </div>

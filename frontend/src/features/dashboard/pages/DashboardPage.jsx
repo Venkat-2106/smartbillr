@@ -38,11 +38,12 @@ function StatCard({ label, value, sub, icon, gradient, loading, onClick }) {
         gap: 18,
         boxShadow: hovered ? '0 8px 30px var(--accent-glow), var(--shadow-elevated)' : 'var(--shadow-card)',
         transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
-        transition: 'transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), border-color 0.2s',
+        transition: 'transform 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out), border-color 0.25s',
         minWidth: 0,
         overflow: 'hidden',
         position: 'relative',
         cursor: isClickable ? 'pointer' : 'default',
+        willChange: 'transform',
       }}
     >
       {/* Subtle top gradient stripe */}

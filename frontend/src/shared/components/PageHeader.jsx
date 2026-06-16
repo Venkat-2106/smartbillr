@@ -33,7 +33,7 @@ export default function PageHeader({
   const [backHovered, setBackHovered] = useState(false)
 
   return (
-    <div style={{ marginBottom: 32 }}>
+    <div style={{ marginBottom: 32, animation: 'fadeUp 0.28s var(--ease-out) both' }}>
       {back && (
         <button
           onClick={onBack}
@@ -70,7 +70,7 @@ export default function PageHeader({
       }}>
         {/* Left: title + subtitle */}
         <div>
-          <h1 style={{
+          <h1 className="page-header-title" style={{
             margin: '0 0 5px',
             fontSize: 22,
             fontWeight: 800,
@@ -82,7 +82,7 @@ export default function PageHeader({
             {title}
           </h1>
           {subtitle && (
-            <p style={{
+            <p className="page-header-subtitle" style={{
               margin: 0,
               fontSize: 13,
               color: 'var(--text-muted)',

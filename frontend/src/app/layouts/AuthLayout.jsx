@@ -1,13 +1,13 @@
 export default function AuthLayout({ children }) {
   return (
-    <div style={{
+    <div className="auth-layout" style={{
       minHeight: '100vh',
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
     }}>
 
       {/* LEFT — Dark hero panel */}
-      <div style={{
+      <div className="auth-hero" style={{
         background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
         padding: '3.5rem',
         display: 'flex',
@@ -131,7 +131,7 @@ export default function AuthLayout({ children }) {
       </div>
 
       {/* RIGHT — Form area */}
-      <div style={{
+      <div className="auth-form" style={{
         background: 'var(--bg-page)',
         display: 'flex',
         alignItems: 'center',
@@ -148,10 +148,7 @@ export default function AuthLayout({ children }) {
           padding: '2rem',
           boxShadow: 'var(--shadow-elevated)',
           transition: 'transform 0.25s ease',
-        }}
-          onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'}
-          onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-        >
+        }}>
           {children}
         </div>
       </div>

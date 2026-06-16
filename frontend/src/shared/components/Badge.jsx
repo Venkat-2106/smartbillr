@@ -97,6 +97,7 @@ export default function Badge({
   label: labelProp,
   dot = false,
   size = 'md',
+  pulse = false,
 }) {
   // Resolve from status shortcut OR explicit variant+label
   const resolved = status ? STATUS_MAP[status] : null
@@ -131,6 +132,7 @@ export default function Badge({
           borderRadius: '50%',
           background: c.dot,
           flexShrink: 0,
+          animation: pulse ? 'pulse-dot 1.8s ease-in-out infinite' : 'none',
         }} />
       )}
       {label}

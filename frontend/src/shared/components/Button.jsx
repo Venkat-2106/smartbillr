@@ -37,6 +37,7 @@ const VARIANT_STYLE = {
     background: 'linear-gradient(135deg, var(--accent-600), var(--accent-500))',
     color: '#fff',
     boxShadow: '0 2px 10px var(--accent-glow, rgba(79,70,229,0.28))',
+    willChange: 'transform, box-shadow',
   },
   secondary: {
     background: 'var(--bg-subtle)',
@@ -57,9 +58,9 @@ const VARIANT_STYLE = {
 }
 
 const VARIANT_HOVER = {
-  primary:   { opacity: 0.88, transform: 'translateY(-1px)' },
+  primary:   { opacity: 0.92, transform: 'translateY(-1px)', boxShadow: '0 6px 20px var(--accent-glow, rgba(79,70,229,0.35))' },
   secondary: { background: 'var(--bg-hover)', borderColor: 'var(--border-hover)', transform: 'translateY(-1px)' },
-  danger:    { opacity: 0.88, transform: 'translateY(-1px)' },
+  danger:    { opacity: 0.92, transform: 'translateY(-1px)', boxShadow: '0 6px 20px color-mix(in srgb, var(--danger) 30%, transparent)' },
   ghost:     { background: 'var(--bg-hover)', color: 'var(--text-primary)' },
 }
 

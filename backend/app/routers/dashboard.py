@@ -23,13 +23,13 @@
 #                         if user lacks it, those fields return null
 
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import get_db
 from app.middleware.rbac import require_permission, get_current_user_with_permissions
 from app.utils.response import success_response, error_response
-import datetime
+from datetime import datetime, timedelta, timezone
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -143,6 +143,7 @@ def get_dashboard_summary(
 @router.get("/trend")
 def get_dashboard_trend(
     period: str = "weekly",
+    tz_offset_minutes: int = Query(default=0, description="Client timezone offset from Date.getTimezoneOffset()"),
     current_user: dict = Depends(require_permission("dashboard.view")),
     db: Session = Depends(get_db)
 ):
@@ -151,47 +152,47 @@ def get_dashboard_trend(
     if period not in ("weekly", "monthly", "yearly"):
         return error_response("period must be weekly, monthly, or yearly", 400)
 
+    # Compute user-local date boundaries
+    utc_now = datetime.now(timezone.utc)
+    user_now = utc_now - timedelta(minutes=tz_offset_minutes)
+    user_today = user_now.date()
+    loc_offset = -tz_offset_minutes  # minutes to add to UTC to get user local time
+
     if period == "weekly":
-        # Last 7 days — group by calendar day
-        # WHY THIS REWRITE: the old query joined generate_series to sales using
-        # `s.sales_created_at::date = gs::date`. Wrapping the column in ::date
-        # makes the existing index idx_sales_business_created
-        # (business_id, sales_created_at DESC) WHERE is_deleted=false unusable —
-        # Postgres has to function-scan every row for the business.
-        #
-        # FIX: first filter sales with a sargable range predicate
-        # (sales_created_at >= start AND < end), which the index can use
-        # directly. Aggregate that small filtered set by day in a CTE, then
-        # LEFT JOIN to generate_series for zero-fill. ::date is only applied
-        # to the already-small aggregated rowset, not to the index lookup.
+        user_start = user_today - timedelta(days=6)
+        date_from = datetime.combine(user_start, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
+        date_to = datetime.combine(user_today + timedelta(days=1), datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
+
         rows = db.execute(
             text("""
                 WITH daily AS (
                     SELECT
-                        s.sales_created_at::date AS bucket,
-                        COUNT(s.sales_id)        AS invoice_count
+                        (s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date AS bucket,
+                        COUNT(s.sales_id) AS invoice_count
                     FROM sales s
                     WHERE s.business_id = CAST(:bid AS uuid)
                       AND s.is_deleted  = false
-                      AND s.sales_created_at >= NOW()::date - INTERVAL '6 days'
-                      AND s.sales_created_at <  NOW()::date + INTERVAL '1 day'
-                    GROUP BY s.sales_created_at::date
+                      AND s.sales_created_at >= CAST(:date_from AS timestamp)
+                      AND s.sales_created_at <  CAST(:date_to   AS timestamp)
+                    GROUP BY (s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date
                 )
                 SELECT
-                    gs::date                          AS bucket,
-                    COALESCE(d.invoice_count, 0)       AS invoice_count
-                FROM generate_series(
-                    NOW()::date - INTERVAL '6 days',
-                    NOW()::date,
-                    INTERVAL '1 day'
-                ) AS gs
-                LEFT JOIN daily d ON d.bucket = gs::date
+                    gs                                  AS bucket,
+                    COALESCE(d.invoice_count, 0)        AS invoice_count
+                FROM generate_series(:user_start, :user_today, INTERVAL '1 day') AS gs
+                LEFT JOIN daily d ON d.bucket = gs
                 ORDER BY gs
             """),
-            {"bid": business_id}
+            {
+                "bid": business_id,
+                "date_from": date_from,
+                "date_to": date_to,
+                "loc_offset": loc_offset,
+                "user_start": user_start,
+                "user_today": user_today,
+            }
         ).fetchall()
 
-        # Format labels as short weekday names (Mon, Tue, …)
         days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
         result = [
             {
@@ -202,35 +203,48 @@ def get_dashboard_trend(
         ]
 
     elif period == "monthly":
-        # Last 6 months — group by calendar month
-        # Same fix as weekly: filter sales with a sargable range predicate
-        # first (uses idx_sales_business_created), then date_trunc only on
-        # the small aggregated rowset.
+        user_today_month = user_today.replace(day=1)
+        if user_today_month.month > 5:
+            user_start_month = user_today_month.replace(month=user_today_month.month - 5)
+        else:
+            user_start_month = user_today_month.replace(year=user_today_month.year - 1, month=user_today_month.month + 7)
+
+        if user_today_month.month == 12:
+            user_end_month = user_today_month.replace(year=user_today_month.year + 1, month=1)
+        else:
+            user_end_month = user_today_month.replace(month=user_today_month.month + 1)
+
+        date_from = datetime.combine(user_start_month, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
+        date_to = datetime.combine(user_end_month, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
+
         rows = db.execute(
             text("""
                 WITH monthly AS (
                     SELECT
-                        date_trunc('month', s.sales_created_at) AS bucket,
-                        COUNT(s.sales_id)                       AS invoice_count
+                        date_trunc('month', s.sales_created_at + (:loc_offset * INTERVAL '1 minute')) AS bucket,
+                        COUNT(s.sales_id) AS invoice_count
                     FROM sales s
                     WHERE s.business_id = CAST(:bid AS uuid)
                       AND s.is_deleted  = false
-                      AND s.sales_created_at >= date_trunc('month', NOW() - INTERVAL '5 months')
-                      AND s.sales_created_at <  date_trunc('month', NOW()) + INTERVAL '1 month'
-                    GROUP BY date_trunc('month', s.sales_created_at)
+                      AND s.sales_created_at >= CAST(:date_from AS timestamp)
+                      AND s.sales_created_at <  CAST(:date_to   AS timestamp)
+                    GROUP BY date_trunc('month', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))
                 )
                 SELECT
                     gs                                  AS bucket,
                     COALESCE(m.invoice_count, 0)        AS invoice_count
-                FROM generate_series(
-                    date_trunc('month', NOW() - INTERVAL '5 months'),
-                    date_trunc('month', NOW()),
-                    INTERVAL '1 month'
-                ) AS gs
+                FROM generate_series(:user_start, :user_end, INTERVAL '1 month') AS gs
                 LEFT JOIN monthly m ON m.bucket = gs
                 ORDER BY gs
             """),
-            {"bid": business_id}
+            {
+                "bid": business_id,
+                "date_from": date_from,
+                "date_to": date_to,
+                "loc_offset": loc_offset,
+                "user_start": user_start_month,
+                "user_end": user_today_month,
+            }
         ).fetchall()
 
         month_short = ['Jan','Feb','Mar','Apr','May','Jun',
@@ -244,34 +258,40 @@ def get_dashboard_trend(
         ]
 
     else:  # yearly
-        # Last 5 years — group by calendar year
-        # Same fix: sargable range predicate first, date_trunc only on the
-        # small aggregated rowset.
+        user_start_year = user_today.replace(year=user_today.year - 4, month=1, day=1)
+        user_end_year = user_today.replace(year=user_today.year + 1, month=1, day=1)
+
+        date_from = datetime.combine(user_start_year, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
+        date_to = datetime.combine(user_end_year, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
+
         rows = db.execute(
             text("""
                 WITH yearly AS (
                     SELECT
-                        date_trunc('year', s.sales_created_at) AS bucket,
-                        COUNT(s.sales_id)                       AS invoice_count
+                        date_trunc('year', s.sales_created_at + (:loc_offset * INTERVAL '1 minute')) AS bucket,
+                        COUNT(s.sales_id) AS invoice_count
                     FROM sales s
                     WHERE s.business_id = CAST(:bid AS uuid)
                       AND s.is_deleted  = false
-                      AND s.sales_created_at >= date_trunc('year', NOW() - INTERVAL '4 years')
-                      AND s.sales_created_at <  date_trunc('year', NOW()) + INTERVAL '1 year'
-                    GROUP BY date_trunc('year', s.sales_created_at)
+                      AND s.sales_created_at >= CAST(:date_from AS timestamp)
+                      AND s.sales_created_at <  CAST(:date_to   AS timestamp)
+                    GROUP BY date_trunc('year', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))
                 )
                 SELECT
                     gs                                  AS bucket,
                     COALESCE(y.invoice_count, 0)        AS invoice_count
-                FROM generate_series(
-                    date_trunc('year', NOW() - INTERVAL '4 years'),
-                    date_trunc('year', NOW()),
-                    INTERVAL '1 year'
-                ) AS gs
+                FROM generate_series(:user_start, :user_end, INTERVAL '1 year') AS gs
                 LEFT JOIN yearly y ON y.bucket = gs
                 ORDER BY gs
             """),
-            {"bid": business_id}
+            {
+                "bid": business_id,
+                "date_from": date_from,
+                "date_to": date_to,
+                "loc_offset": loc_offset,
+                "user_start": user_start_year,
+                "user_end": user_end_year,
+            }
         ).fetchall()
 
         result = [

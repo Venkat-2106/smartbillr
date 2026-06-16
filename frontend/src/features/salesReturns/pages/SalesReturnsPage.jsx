@@ -8,8 +8,8 @@ import {
 } from '../../../shared/components'
 import { usePermissions } from '../../../shared/hooks/usePermissions'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
-import { formatDate } from '../../../shared/utils/formatDate'
 
+import { formatDate, formatDateCSV } from '../../../shared/utils/formatDate'
 import { useSalesReturns } from '../hooks/useSalesReturns'
 import SalesReturnDetailDrawer from '../components/SalesReturnDetailDrawer'
 
@@ -169,7 +169,7 @@ export default function SalesReturnsPage() {
               onFetch={handleExport}
               filename="sales-returns"
               columns={[
-                { key: 'return_created_at', label: 'Return Date', format: (v) => v ? new Date(v).toLocaleDateString() : '' },
+                { key: 'return_created_at', label: 'Return Date', format: (v) => formatDateCSV(v) },
                 { key: 'return_amount', label: 'Amount', format: (v) => formatCurrency(v) },
                 { key: 'return_status', label: 'Status' },
                 { key: 'return_reason', label: 'Reason' },

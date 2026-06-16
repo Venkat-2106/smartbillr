@@ -11,7 +11,7 @@ import {
 } from '../../../shared/components'
 import { selectStyle } from '../../../shared/components/FormField'
 import { usePermissions } from '../../../shared/hooks/usePermissions'
-import { formatDate } from '../../../shared/utils/formatDate'
+import { formatDate, formatDateCSV } from '../../../shared/utils/formatDate'
 
 import { useStaff } from '../hooks/useStaff'
 
@@ -195,7 +195,7 @@ export default function StaffPage() {
                 { key: 'email', label: 'Email' },
                 { key: 'role', label: 'Role' },
                 { key: 'is_active', label: 'Active', format: (v) => v ? 'Yes' : 'No' },
-                { key: 'created_at', label: 'Joined', format: (v) => v ? new Date(v).toLocaleDateString() : '' },
+                { key: 'created_at', label: 'Joined', format: (v) => formatDateCSV(v) },
               ]}
             />
             {canManage && (

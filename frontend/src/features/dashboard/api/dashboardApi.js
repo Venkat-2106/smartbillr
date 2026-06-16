@@ -14,6 +14,7 @@ export async function fetchDashboardSummary() {
 }
 
 export async function fetchSalesTrend(period = 'weekly') {
-  const res = await api.get('/dashboard/trend', { params: { period } })
+  const tzOffsetMinutes = new Date().getTimezoneOffset()
+  const res = await api.get('/dashboard/trend', { params: { period, tz_offset_minutes: tzOffsetMinutes } })
   return res.data
 }

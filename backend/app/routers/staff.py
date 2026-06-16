@@ -24,6 +24,7 @@ from app.database import get_db
 from app.middleware.rbac import require_permission
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
+from app.utils.timestamp import fmt_ts
 
 router = APIRouter(prefix="/staff", tags=["Staff"])
 
@@ -250,7 +251,7 @@ def list_staff(
             "email":      row.email,
             "role":       row.role_name or row.role,
             "is_active":  row.is_active,
-            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "created_at": fmt_ts(row.created_at),
         }
         for row in rows
     ]

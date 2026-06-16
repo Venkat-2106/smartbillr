@@ -115,9 +115,14 @@ def get_categories(
         text(f"""
             SELECT
                 c.category_id, c.business_id, c.category_name,
-                c.created_at,
+                c.created_at, c.updated_at,
+                c.created_by, c.updated_by,
+                p1.full_name AS created_by_name,
+                p2.full_name AS last_updated_by,
                 COUNT(*) OVER() AS total_count
             FROM categories c
+            LEFT JOIN profiles p1 ON p1.id = c.created_by
+            LEFT JOIN profiles p2 ON p2.id = c.updated_by
             WHERE c.business_id = CAST(:bid AS uuid)
               AND c.is_deleted   = false
               {extra_where}
@@ -135,6 +140,11 @@ def get_categories(
             "business_id":     str(r.business_id),
             "category_name":   r.category_name,
             "created_at":      fmt_ts(r.created_at),
+            "updated_at":      fmt_ts(r.updated_at),
+            "created_by":      str(r.created_by)  if r.created_by  else None,
+            "created_by_name": r.created_by_name  if r.created_by_name  else None,
+            "updated_by":      str(r.updated_by)  if r.updated_by  else None,
+            "last_updated_by": r.last_updated_by  if r.last_updated_by  else None,
         }
         for r in rows
     ]

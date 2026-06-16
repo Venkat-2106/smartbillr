@@ -138,7 +138,7 @@ def row_to_dict(row, show_profit: bool = True):
     }
 
 
-# ── Helper: format one product row for list response (no audit fields) ──
+# ── Helper: format one product row for list response ─────────────────────
 def row_to_dict_list(row, show_profit: bool = True):
     return {
         "prod_id":              str(row.prod_id),
@@ -157,6 +157,9 @@ def row_to_dict_list(row, show_profit: bool = True):
         "barcode":              row.barcode,
         "unit":                 row.unit,
         "prod_created_at":      fmt_ts(row.prod_created_at),
+        "updated_at":           fmt_ts(row.updated_at),
+        "updated_by":           str(row.updated_by)  if row.updated_by  else None,
+        "last_updated_by":      row.last_updated_by  if row.last_updated_by  else None,
     }
 
 
@@ -388,11 +391,14 @@ def get_all_products(
                 p.prod_cost_price, p.prod_profit,
                 p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
                 p.tax_code, p.barcode, p.unit,
-                p.prod_created_at,
+                p.prod_created_at, p.updated_at,
+                p.updated_by,
                 c.category_name,
+                pr.full_name AS last_updated_by,
                 COUNT(*) OVER() AS total_count
             FROM products p
             LEFT JOIN categories c ON c.category_id = p.category_id
+            LEFT JOIN profiles   pr ON pr.id = p.updated_by
             WHERE p.business_id = CAST(:business_id AS uuid)
               AND p.is_deleted   = false
               {extra_where}

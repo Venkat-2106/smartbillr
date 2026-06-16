@@ -38,10 +38,12 @@ def fetch_return_items(db: Session, return_id: str):
 # HELPER: Format return row as dict
 # ─────────────────────────────────────────
 def return_to_dict(r, items):
+    invoice_no = getattr(r, 'invoice_no', None)
     return {
         "return_id": str(r.return_id),
         "business_id": str(r.business_id),
         "sale_id": str(r.sale_id),
+        "invoice_no": invoice_no,
         "return_amount": float(r.return_amount),
         "return_reason": r.return_reason,
         "return_status": r.return_status,
@@ -344,7 +346,7 @@ def get_all_sales_returns(
     params["limit"] = pagination["limit"]
 
     list_sql = f"""
-        SELECT sr.*
+        SELECT sr.*, s.invoice_no
         FROM sales_returns sr
         LEFT JOIN sales s ON s.sales_id = sr.sale_id
         WHERE sr.business_id = CAST(:bid AS uuid)

@@ -274,11 +274,7 @@ export default function DashboardLayout() {
   const [collapsed,       setCollapsed]       = useState(false)
   const [showLogout,      setShowLogout]      = useState(false)
   const [showTheme,       setShowTheme]       = useState(false)
-  // FIX: search bar border was toggled via direct DOM mutation (onMouseEnter/Leave
-  // set e.currentTarget.style.borderColor directly). React wipes inline styles on
-  // re-render, causing the hover border to snap back while the mouse is still hovering.
-  // Fix: one boolean state drives the border color declaratively, same pattern as NavItem.
-  const [searchBarHovered, setSearchBarHovered] = useState(false)
+
   const { theme, setTheme, accent, setAccent } = useTheme()
   const { user, business, profile, clearAuth, hasPermission } = useAuthStore()
   const navigate = useNavigate()
@@ -380,23 +376,7 @@ export default function DashboardLayout() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
 
-            {/* Search bar — decorative placeholder (not yet functional) */}
-            <div
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                background: 'var(--bg-subtle)',
-                border: `1px solid ${searchBarHovered ? 'var(--border-hover)' : 'var(--border)'}`,
-                borderRadius: 'var(--r-md)', padding: '0 12px',
-                height: 34, minWidth: 200, cursor: 'text',
-                transition: 'border-color 0.13s',
-              }}
-              onMouseEnter={() => setSearchBarHovered(true)}
-              onMouseLeave={() => setSearchBarHovered(false)}
-            >
-              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="var(--text-muted)" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', flex: 1 }}>Search...</span>
-              <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 5px', fontFamily: "'DM Mono', monospace" }}>⌘K</span>
-            </div>
+
 
             {/* FIX 5: Bell — replaced DOM-mutation button with IconButton */}
             <IconButton style={{ position: 'relative' }}>

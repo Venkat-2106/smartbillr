@@ -1,6 +1,6 @@
 # app/schemas/supplier.py
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
@@ -58,5 +58,4 @@ class SupplierOut(BaseModel):
     is_deleted:        bool
     supp_created_at:   Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

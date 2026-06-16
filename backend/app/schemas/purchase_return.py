@@ -1,5 +1,5 @@
 # app/schemas/purchase_return.py
-from pydantic import BaseModel, UUID4, field_validator
+from pydantic import BaseModel, UUID4, field_validator, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 from decimal import Decimal
@@ -79,8 +79,7 @@ class PurchaseReturnItemResponse(BaseModel):
     refund_amount:        Decimal
     return_item_subtotal: Optional[Decimal] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ── Response for a full purchase return ───────────────────────────────────────
@@ -101,5 +100,4 @@ class PurchaseReturnResponse(BaseModel):
     created_by:        UUID4
     items:             Optional[List[PurchaseReturnItemResponse]] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

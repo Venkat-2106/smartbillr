@@ -1,8 +1,10 @@
 # Virtual Environment
 venv/
 
-# Environment file (contains passwords!)
+# Environment files (contain secrets!)
 .env
+backend/.env
+frontend/.env
 
 # Python cache
 __pycache__/

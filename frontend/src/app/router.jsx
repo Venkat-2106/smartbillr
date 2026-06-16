@@ -1,13 +1,3 @@
-// src/app/router.jsx
-//
-// CHANGES FROM EXISTING:
-//   1. Added /unauthorized route (public — anyone can land here)
-//   2. Sensitive routes now wrapped in ProtectedRoute with permission prop
-//      instead of all routes sharing one global ProtectedRoute
-//   3. ComingSoon component and all other routes unchanged
-//   4. Added /staff route (was missing)
-//   5. Step 5.13 — /customers now uses real CustomersPage (was ComingSoon)
-
 import React, { Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Spinner } from '../shared/components'
@@ -17,9 +7,6 @@ import ResetPasswordPage from '../features/auth/pages/ResetPasswordPage'
 import UnauthorizedPage from '../features/auth/pages/UnauthorizedPage'
 import ProtectedRoute from '../features/auth/components/ProtectedRoute'
 
-
-// FIX 5: React.lazy — each page loads only when first visited.
-// ComingSoon is defined inline in this file so it cannot be lazy-loaded.
 const DashboardPage  = React.lazy(() => import('../features/dashboard/pages/DashboardPage'))
 const CategoriesPage = React.lazy(() => import('../features/categories/pages/CategoriesPage'))
 const ProductsPage   = React.lazy(() => import('../features/products/pages/ProductsPage'))
@@ -31,7 +18,12 @@ const PaymentsPage   = React.lazy(() => import('../features/payments/pages/Payme
 const PurchasesPage  = React.lazy(() => import('../features/purchases/pages/PurchasesPage'))
 const CreatePurchasePage = React.lazy(() => import('../features/purchases/pages/CreatePurchasePage'))
 const StockPage = React.lazy(() => import('../features/stock/pages/StockPage'))
-const ComingSoon = React.lazy(() => import('../shared/components/ComingSoon'))
+const ExpensesPage = React.lazy(() => import('../features/expenses/pages/ExpensesPage'))
+const SalesReturnsPage = React.lazy(() => import('../features/salesReturns/pages/SalesReturnsPage'))
+const PurchaseReturnsPage = React.lazy(() => import('../features/purchaseReturns/pages/PurchaseReturnsPage'))
+const SettingsPage = React.lazy(() => import('../features/settings/pages/SettingsPage'))
+const StaffPage = React.lazy(() => import('../features/staff/pages/StaffPage'))
+const ReportsPage = React.lazy(() => import('../features/reports/pages/ReportsPage'))
 
 // ─── Router ───────────────────────────────────────────────────────────────────
 export default function AppRouter() {
@@ -113,8 +105,14 @@ export default function AppRouter() {
               </ProtectedRoute>
             }
           />
-          {/* Sales returns — all roles (staff can only see their own, enforced backend) */}
-          <Route path="sales-returns" element={<ComingSoon name="Sales Returns" />} />
+          <Route
+            path="sales-returns"
+            element={
+              <ProtectedRoute permission="sales_returns.manage">
+                <SalesReturnsPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* ── Manager + Admin ────────────────────────────────────────── */}
           <Route
@@ -153,7 +151,7 @@ export default function AppRouter() {
             path="expenses"
             element={
               <ProtectedRoute permission="expenses.manage">
-                <ComingSoon name="Expenses" />
+                <ExpensesPage />
               </ProtectedRoute>
             }
           />
@@ -161,7 +159,7 @@ export default function AppRouter() {
             path="purchase-returns"
             element={
               <ProtectedRoute permission="purchase_returns.manage">
-                <ComingSoon name="Purchase Returns" />
+                <PurchaseReturnsPage />
               </ProtectedRoute>
             }
           />
@@ -169,7 +167,7 @@ export default function AppRouter() {
             path="reports"
             element={
               <ProtectedRoute permission="reports.view">
-                <ComingSoon name="Reports" />
+                <ReportsPage />
               </ProtectedRoute>
             }
           />
@@ -179,7 +177,7 @@ export default function AppRouter() {
             path="settings"
             element={
               <ProtectedRoute permission="settings.manage">
-                <ComingSoon name="Settings" />
+                <SettingsPage />
               </ProtectedRoute>
             }
           />
@@ -187,7 +185,7 @@ export default function AppRouter() {
             path="staff"
             element={
               <ProtectedRoute permission="staff.manage">
-                <ComingSoon name="Staff" />
+                <StaffPage />
               </ProtectedRoute>
             }
           />

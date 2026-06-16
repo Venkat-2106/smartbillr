@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, ConfigDict
 from typing import Optional, List
 from uuid import UUID
 from decimal import Decimal
@@ -42,8 +42,7 @@ class SaleItemOut(BaseModel):
     item_tax_total: Optional[Decimal] = None
     item_total_with_tax: Optional[Decimal] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ─────────────────────────────────────────
@@ -129,5 +128,4 @@ class SaleOut(BaseModel):
     created_by: Optional[UUID] = None
     items: Optional[List[SaleItemOut]] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

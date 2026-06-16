@@ -37,10 +37,12 @@ def fetch_return_items(db: Session, return_id: str):
 # HELPER — format return row as dict
 # ─────────────────────────────────────────────
 def return_to_dict(r, items):
+    supp_name = getattr(r, 'supp_name', None)
     return {
         "return_id":         str(r.return_id),
         "business_id":       str(r.business_id),
         "pur_id":            str(r.pur_id),
+        "supp_name":         supp_name,
         "return_reason":     r.return_reason,
         "return_status":     r.return_status,
         "restock":           r.restock,
@@ -410,7 +412,7 @@ def get_all_purchase_returns(
     params["limit"] = pagination["limit"]
 
     list_sql = f"""
-        SELECT pr.*
+        SELECT pr.*, s.supp_name
         FROM purchase_returns pr
         LEFT JOIN purchases p ON p.pur_id = pr.pur_id
         LEFT JOIN suppliers s ON s.supp_id = p.supp_id

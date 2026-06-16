@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, ConfigDict
 from typing import Optional
 from uuid import UUID
 from decimal import Decimal
@@ -43,5 +43,4 @@ class ExpenseOut(BaseModel):
     created_at: Optional[datetime] = None
     created_by: Optional[UUID] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

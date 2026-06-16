@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, ConfigDict
 from typing import Optional
 from uuid import UUID
 from decimal import Decimal
@@ -40,5 +40,4 @@ class PaymentOut(BaseModel):
 
     payment_paid_at: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

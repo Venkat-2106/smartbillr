@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, ConfigDict
 from typing import Optional
 from uuid import UUID
 from enum import Enum
@@ -61,8 +61,7 @@ class StockMovementOut(BaseModel):
     move_created_at:       Optional[str] = None
     move_created_by:       Optional[UUID] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class LowStockAlertOut(BaseModel):
@@ -74,8 +73,7 @@ class LowStockAlertOut(BaseModel):
     alert_status:    str
     alert_created_at: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CurrentStockOut(BaseModel):
@@ -86,5 +84,4 @@ class CurrentStockOut(BaseModel):
     unit:                Optional[str] = None
     is_low_stock:        bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

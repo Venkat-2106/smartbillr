@@ -15,7 +15,7 @@
 #   so the user gets a clean "A product with this name already exists." message
 #   rather than a raw IntegrityError.
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, ConfigDict
 from typing import Optional
 from uuid import UUID
 from decimal import Decimal
@@ -128,5 +128,4 @@ class ProductOut(BaseModel):
     prod_created_at:      Optional[str]     = None
     updated_at:           Optional[str]     = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

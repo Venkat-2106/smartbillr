@@ -1,5 +1,5 @@
 # app/schemas/sales_return.py
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, ConfigDict
 from typing import Optional, List
 from uuid import UUID
 from decimal import Decimal
@@ -35,8 +35,7 @@ class ReturnItemOut(BaseModel):
     refund_amount:         Decimal
     return_item_subtotal:  Optional[Decimal] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SalesReturnCreate(BaseModel):
@@ -92,5 +91,4 @@ class SalesReturnOut(BaseModel):
     created_by:       Optional[UUID] = None
     items:            Optional[List[ReturnItemOut]] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

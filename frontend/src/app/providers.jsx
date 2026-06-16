@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
+import { ShortcutProvider } from '../shared/hooks/useShortcut'
 
 // QueryClient = the brain that manages all API data caching
 // We configure it once here and share it with the whole app
@@ -16,9 +17,10 @@ const queryClient = new QueryClient({
 export default function Providers({ children }) {
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
+      <ShortcutProvider>
+        {children}
 
-      {/* Toast notifications — appears in top-right corner */}
+        {/* Toast notifications — appears in top-right corner */}
       <Toaster
         position="top-right"
         toastOptions={{
@@ -39,6 +41,7 @@ export default function Providers({ children }) {
           },
         }}
       />
+      </ShortcutProvider>
     </QueryClientProvider>
   )
 }

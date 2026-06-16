@@ -676,6 +676,7 @@ export default function ProductsPage() {
                 variant="primary"
                 leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
                 onClick={() => setShowAdd(true)}
+                data-shortcut="new"
               >
                 Add Product
               </Button>

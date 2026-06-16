@@ -242,6 +242,7 @@ export default function SuppliersPage() {
               <Button
                 variant="primary"
                 onClick={() => { addForm.reset(EMPTY_FORM); setShowAdd(true); }}
+                data-shortcut="new"
               >
                 + Add Supplier
               </Button>

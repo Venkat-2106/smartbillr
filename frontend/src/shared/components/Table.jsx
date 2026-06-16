@@ -52,6 +52,8 @@ function Table({
   sortKey,
   sortDir,
   onSort,
+  selectedIndex,
+  onSelectedIndexChange,
 }) {
   const SKELETON_ROWS = 8
 
@@ -162,18 +164,29 @@ function Table({
                 rows.map((row, i) => {
                   const rowId = row[rowKey] ?? i
                   const isHovered = hoveredRow === rowId
+                  const isSelected = selectedIndex != null && i === selectedIndex
                   const delay = Math.min(i * 30, 300)
                   return (
                   <tr
                     key={rowId}
-                    onClick={() => onRowClick?.(row)}
+                    onClick={() => {
+                      onSelectedIndexChange?.(i)
+                      onRowClick?.(row)
+                    }}
                     onMouseEnter={() => setHoveredRow(rowId)}
                     onMouseLeave={() => setHoveredRow(null)}
                     style={{
                       borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none',
                       cursor: onRowClick ? 'pointer' : 'default',
                       transition: 'background 0.15s',
-                      background: isHovered ? 'var(--bg-hover)' : 'transparent',
+                      background: isSelected
+                        ? 'var(--accent-glow)'
+                        : isHovered
+                        ? 'var(--bg-hover)'
+                        : 'transparent',
+                      boxShadow: isSelected
+                        ? 'inset 2px 0 0 var(--accent-500)'
+                        : 'none',
                       animation: `row-in 0.25s var(--ease-out) both`,
                       animationDelay: `${delay}ms`,
                     }}
@@ -190,7 +203,11 @@ function Table({
                           textAlign: col.align === 'right'  ? 'right'
                                    : col.align === 'center' ? 'center' : 'left',
                           verticalAlign: 'middle',
-                          borderLeft: isHovered && ci === 0 ? '2px solid var(--accent-500)' : '2px solid transparent',
+                          borderLeft: isSelected && ci === 0
+                            ? '2px solid var(--accent-600)'
+                            : isHovered && ci === 0
+                            ? '2px solid var(--accent-500)'
+                            : '2px solid transparent',
                           transition: 'border-color 0.15s, background 0.15s',
                         }}
                       >

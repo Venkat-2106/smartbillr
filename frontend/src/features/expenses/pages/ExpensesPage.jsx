@@ -259,6 +259,7 @@ export default function ExpensesPage() {
               variant="primary"
               leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
               onClick={handleOpenAdd}
+              data-shortcut="new"
             >
               Add Expense
             </Button>

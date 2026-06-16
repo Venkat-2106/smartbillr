@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, PageHeader, FormField, Spinner } from '../../../shared/components';
 import { selectStyle } from '../../../shared/components/FormField';
@@ -11,6 +11,7 @@ import StockOverrideModal from '../components/StockOverrideModal';
 import CustomerCombobox from '../components/CustomerCombobox';
 import BarcodeScanner from '../components/BarcodeScanner';
 import useCreateSale from '../hooks/useCreateSale';
+import { useShortcut } from '../../../shared/hooks/useShortcut';
 
 const EMPTY_ARRAY = [];
 
@@ -41,6 +42,15 @@ export default function CreateSalePage() {
   } = useCreateSale();
 
   const [addItemHovered, setAddItemHovered] = useState(false);
+  const customerRef = useRef(null);
+
+  useShortcut('ctrl+p', () => { addItem(); }, { preventDefault: true })
+  useShortcut('ctrl+shift+c', () => {
+    const selects = document.querySelectorAll('.sb-select')
+    if (selects.length > 0) selects[0].focus()
+    else customerRef.current?.querySelector('input,select')?.focus()
+  }, { preventDefault: true })
+  useShortcut('ctrl+m', () => { setPaymentStatus('paid'); }, { preventDefault: true })
 
   return (
     <>
@@ -97,12 +107,14 @@ export default function CreateSalePage() {
             padding: '14px 20px',
             alignItems: 'start',
           }}>
-            <CustomerCombobox
-              customers={customers}
-              customerId={customerId}
-              onChange={handleCustomerChange}
-              onAddNew={handleOpenAddCust}
-            />
+            <div ref={customerRef}>
+              <CustomerCombobox
+                customers={customers}
+                customerId={customerId}
+                onChange={handleCustomerChange}
+                onAddNew={handleOpenAddCust}
+              />
+            </div>
 
             <BarcodeScanner
               value={barcodeInput}

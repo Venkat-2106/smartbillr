@@ -85,6 +85,7 @@ export default function SearchBar({
 
       <input
         type="text"
+        data-search-input
         value={value}
         onChange={e => onChange?.(e.target.value)}
         placeholder={placeholder}

@@ -34,3 +34,5 @@ export { default as StateDropdown }  from './StateDropdown';   // Country-aware 
 export { default as ExportButton }   from './ExportButton';    // One-click CSV export for any list page
 export { default as SkeletonTable }  from './SkeletonTable';  // Animated loading placeholder for tables
 export { default as ErrorBoundary }  from './ErrorBoundary';  // Catches render errors, shows fallback UI
+export { default as CommandPalette } from './CommandPalette';  // Ctrl+K command palette
+export { default as ShortcutHelp }   from './ShortcutHelp';    // ? keyboard shortcuts help

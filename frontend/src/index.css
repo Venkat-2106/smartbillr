@@ -693,6 +693,37 @@ button:focus-visible, a:focus-visible {
 }
 
 /* ─────────────────────────────────────────
+   KEYBOARD SHORTCUTS & KBD TAGS
+   Enhanced kbd styling for shortcut hints
+───────────────────────────────────────── */
+kbd, .kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'SF Mono', Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  min-width: 18px;
+  box-shadow: 0 1px 0 var(--border-hover);
+}
+kbd kbd { border: none; padding: 0; background: none; box-shadow: none; }
+.command-palette-item[data-active="true"] {
+  background: var(--accent-600) !important;
+  color: #fff !important;
+}
+.command-palette-item[data-active="true"] .kbd {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.8);
+}
+
+/* ─────────────────────────────────────────
    PRINT STYLES
    Both SaleDetailDrawer and CustomerDetailDrawer use the
    #sb-print-root pattern: they write plain HTML with literal

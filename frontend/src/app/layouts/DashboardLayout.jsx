@@ -1,9 +1,12 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import toast from 'react-hot-toast'
 import { ErrorBoundary } from '../../shared/components'
 import useMediaQuery from '../../shared/hooks/useMediaQuery'
+import { useShortcutContext } from '../../shared/hooks/useShortcut'
+import CommandPalette from '../../shared/components/CommandPalette'
+import ShortcutHelp from '../../shared/components/ShortcutHelp'
 
 const THEME_KEY  = 'sb-theme'
 const ACCENT_KEY = 'sb-accent'
@@ -296,6 +299,64 @@ export default function DashboardLayout() {
   // Close mobile sidebar on navigation
   useEffect(() => { setMobileOpen(false) }, [location.pathname])
 
+  // ── Global keyboard shortcuts ──────────────────────────────────────────
+  const { registerShortcut, paletteOpen, setPaletteOpen, helpOpen, setHelpOpen } = useShortcutContext()
+  const paletteOpenRef = useRef(paletteOpen)
+  paletteOpenRef.current = paletteOpen
+
+  const navMap = useMemo(() => ({
+    d: '/dashboard', c: '/customers', s: '/sales',
+    p: '/products',  u: '/suppliers', t: '/stock',
+    e: '/expenses',  r: '/reports',   h: '/settings',
+  }), [])
+
+  const handleNav = useCallback((path) => {
+    navigate(path)
+  }, [navigate])
+
+  useEffect(() => {
+    const unregisters = Object.entries(navMap).map(([key, path]) => {
+      const combo = 'g+' + key
+      return registerShortcut(combo, () => handleNav(path), { preventDefault: true })
+    })
+
+    const helpUnregister = registerShortcut('?', () => setHelpOpen(true), { preventDefault: true })
+
+    const ctrlKUnregister = registerShortcut('ctrl+k', () => {
+      if (paletteOpenRef.current) return
+      setPaletteOpen(true)
+    }, { preventDefault: true })
+
+    const ctrlNUnregister = registerShortcut('alt+n', () => {
+      document.querySelector('[data-shortcut="new"]')?.click()
+    }, { preventDefault: true })
+
+    const ctrlFUnregister = registerShortcut('ctrl+f', () => {
+      const input = document.querySelector('[data-search-input]')
+      if (input) { input.focus(); input.select() }
+    }, { preventDefault: true })
+
+    const f5Unregister = registerShortcut('f5', () => {
+      window.dispatchEvent(new CustomEvent('sb:refresh'))
+    }, { preventDefault: true })
+
+    return () => {
+      unregisters.forEach(fn => fn())
+      helpUnregister()
+      ctrlKUnregister()
+      ctrlNUnregister()
+      ctrlFUnregister()
+      f5Unregister()
+    }
+  }, [navMap, handleNav, registerShortcut, setHelpOpen, setPaletteOpen])
+
+  // ── Refresh listener (exposed via a global for pages to use) ───────────
+  useEffect(() => {
+    const handler = () => window.dispatchEvent(new CustomEvent('sb:data-refresh'))
+    window.addEventListener('sb:refresh', handler)
+    return () => window.removeEventListener('sb:refresh', handler)
+  }, [])
+
   function handleLogout() { clearAuth(); toast.success('Signed out successfully'); navigate('/login') }
 
   const visibleNav = useMemo(() =>NAV
@@ -303,7 +364,6 @@ export default function DashboardLayout() {
     .filter(section => section.items.length > 0),[hasPermission])
 
   const W = isMobile ? FULL : (collapsed ? SLIM : FULL)
-  const sidebarOpen = isMobile ? mobileOpen : true
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily:"'Plus Jakarta Sans', -apple-system, sans-serif", background: 'var(--bg-page)' }}>
@@ -492,6 +552,9 @@ export default function DashboardLayout() {
       </div>
 
       {showLogout && <LogoutDialog onConfirm={handleLogout} onCancel={() => setShowLogout(false)} />}
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   )
 }

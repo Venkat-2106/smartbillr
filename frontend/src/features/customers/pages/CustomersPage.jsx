@@ -20,6 +20,7 @@ import { useNavigate }                           from 'react-router-dom'
 
 import { useCustomers } from '../hooks/useCustomers'
 import useAuthStore     from '../../../store/authStore'
+import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
 
 import {
   Button, Input, Modal, Table, SearchBar,
@@ -320,6 +321,14 @@ export default function CustomersPage() {
     [canManage] // eslint-disable-line react-hooks/exhaustive-deps
   )
 
+  const { selectedIndex, setSelectedIndex } = useTableKeyboardNav({
+    rows: customers,
+    rowKey: 'cust_id',
+    onEnterRow: (row) => setSelectedCustomer(row),
+    onEditRow: (row) => handleOpenEdit(row),
+    onDeleteRow: (row) => handleDeleteClick(row),
+  })
+
   function handleDateChange(field, value) {
     if (field === 'from') setDateFrom(value)
     else                  setDateTo(value)
@@ -348,6 +357,7 @@ export default function CustomersPage() {
               variant="primary"
               leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
               onClick={handleOpenAdd}
+              data-shortcut="new"
             >
               Add Customer
             </Button>
@@ -411,16 +421,18 @@ export default function CustomersPage() {
 
       {/* TABLE */}
       <div style={{ overflowX: 'auto', width: '100%' }}>
-        <Table
-          columns={columns}
-          rows={customers}
-          rowKey="cust_id"
-          loading={isLoading}
-          sortKey={sortKey}
-          sortDir={sortDir}
-          onSort={handleSort}
-          onRowClick={(row) => setSelectedCustomer(row)}
-          emptyText={
+          <Table
+            columns={columns}
+            rows={customers}
+            rowKey="cust_id"
+            loading={isLoading}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onSort={handleSort}
+            selectedIndex={selectedIndex}
+            onSelectedIndexChange={setSelectedIndex}
+            onRowClick={(row) => setSelectedCustomer(row)}
+            emptyText={
             activeFilters > 0
               ? 'No customers match your current filters.'
               : 'No customers yet. Add your first customer to get started.'

@@ -117,15 +117,22 @@ export function getPrintRoot() {
           width: 100%;
         }
 
-        /* ── Page margins for A4 / Letter ── */
+        /* ── Page margins — compact default that works on all sizes ── */
         @page {
           size: auto;
-          margin: 15mm 14mm;
+          margin: 8mm 6mm;
         }
 
         /* ── Page break helpers — apply class="sb-page-break" in HTML ── */
         .sb-page-break { page-break-before: always; }
         .sb-no-break   { page-break-inside: avoid; }
+
+        /* ── Responsive table layout ── */
+        table { width: 100%; border-collapse: collapse; }
+        th, td { word-break: break-word; overflow-wrap: break-word; }
+        thead { display: table-header-group; }
+        tfoot { display: table-footer-group; }
+        tr    { page-break-inside: avoid; }
 
         /* ── WATERMARK ────────────────────────────────────────────────────
          *
@@ -164,9 +171,9 @@ export function getPrintRoot() {
           left: 50%;
           transform: translate(-50%, -50%) rotate(-45deg);
           font-family: 'Plus Jakarta Sans', -apple-system, Arial, sans-serif;
-          font-size: 72px;
+          font-size: clamp(28px, 6vw, 80px);
           font-weight: 900;
-          letter-spacing: 0.18em;
+          letter-spacing: 0.15em;
           color: #374151;
           opacity: 0.055;
           z-index: 0;
@@ -207,31 +214,33 @@ export function buildPrintHeader(business = {}) {
   return `
     <div style="
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       align-items: flex-start;
-      padding-bottom: 18px;
+      gap: 10px;
+      padding-bottom: 14px;
       border-bottom: 2.5px solid #111827;
-      margin-bottom: 22px;
+      margin-bottom: 18px;
     ">
       <!-- Left: Store name + address -->
-      <div>
-        <div style="font-size: 22px; font-weight: 800; color: #111827; letter-spacing: -0.5px; line-height: 1.1;">
+      <div style="flex: 1 1 55%; min-width: 200px;">
+        <div style="font-size: 20px; font-weight: 800; color: #111827; letter-spacing: -0.5px; line-height: 1.1;">
           ${name}
         </div>
-        ${addressLine ? `<div style="font-size: 12px; color: #6b7280; margin-top: 4px;">${addressLine}</div>` : ''}
-        ${phone ? `<div style="font-size: 12px; color: #6b7280; margin-top: 2px;">📞 ${phone}</div>` : ''}
-        ${email ? `<div style="font-size: 12px; color: #6b7280; margin-top: 2px;">✉ ${email}</div>` : ''}
+        ${addressLine ? `<div style="font-size: 11px; color: #6b7280; margin-top: 3px;">${addressLine}</div>` : ''}
+        ${phone ? `<div style="font-size: 11px; color: #6b7280; margin-top: 1px;">📞 ${phone}</div>` : ''}
+        ${email ? `<div style="font-size: 11px; color: #6b7280; margin-top: 1px;">✉ ${email}</div>` : ''}
       </div>
 
       <!-- Right: GSTIN + Generated On -->
-      <div style="text-align: right; min-width: 200px;">
+      <div style="text-align: right; flex: 0 1 auto;">
         ${gstin ? `
-          <div style="font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.07em;">GSTIN</div>
-          <div style="font-size: 13px; font-weight: 700; color: #111827; font-family: monospace; letter-spacing: 0.05em;">${gstin}</div>
+          <div style="font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.07em;">GSTIN</div>
+          <div style="font-size: 12px; font-weight: 700; color: #111827; font-family: monospace; letter-spacing: 0.05em;">${gstin}</div>
         ` : ''}
-        <div style="margin-top: ${gstin ? '10px' : '0'};">
-          <div style="font-size: 10px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.06em;">Generated On</div>
-          <div style="font-size: 11.5px; color: #374151; font-weight: 500; margin-top: 2px;">${formatGeneratedOn()}</div>
+        <div style="margin-top: ${gstin ? '8px' : '0'};">
+          <div style="font-size: 9px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.06em;">Generated On</div>
+          <div style="font-size: 10.5px; color: #374151; font-weight: 500; margin-top: 2px;">${formatGeneratedOn()}</div>
         </div>
       </div>
     </div>
@@ -376,14 +385,14 @@ export function buildPrintTable(columns, rows, emptyMessage = 'No records found.
   const headerCells = columns.map(col => `
     <th style="
       text-align: ${col.align || 'left'};
-      padding: 8px 8px;
-      font-size: 10.5px;
+      padding: 5px 5px;
+      font-size: 9px;
       font-weight: 700;
       color: #374151;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.04em;
       border-bottom: 2px solid #e5e7eb;
-      white-space: nowrap;
+      white-space: normal;
     ">${col.label}</th>
   `).join('');
 
@@ -394,8 +403,8 @@ export function buildPrintTable(columns, rows, emptyMessage = 'No records found.
       return `
         <td style="
           text-align: ${col.align || 'left'};
-          padding: 7px 8px;
-          font-size: 12px;
+          padding: 4px 5px;
+          font-size: 10.5px;
           color: #111827;
           border-bottom: 1px solid #f3f4f6;
         ">${val}</td>
@@ -436,7 +445,7 @@ export function triggerPrint(html) {
   // The outer div is position:relative so the watermark (position:fixed, z-index:0)
   // is layered behind, and all content (z-index:1) floats above it.
   printRoot.innerHTML = `
-    <div style="position: relative; z-index: 1; max-width: 750px; margin: 0 auto;">
+    <div style="position: relative; z-index: 1; width: 100%; box-sizing: border-box;">
       ${html}
     </div>
   `;

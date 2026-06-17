@@ -88,9 +88,9 @@ function buildInvoiceHTML(
   const totalSavings  = computeTotalSavings(items);
 
   const gstBreakdown = (cgst > 0 || sgst > 0 || igst > 0) ? `
-    <tr><td style="padding:5px 0;color:#6b7280;font-size:12px;">CGST</td><td style="padding:5px 0;text-align:right;font-size:12px;">${formatCurrency(cgst)}</td></tr>
-    <tr><td style="padding:5px 0;color:#6b7280;font-size:12px;">SGST</td><td style="padding:5px 0;text-align:right;font-size:12px;">${formatCurrency(sgst)}</td></tr>
-    ${igst > 0 ? `<tr><td style="padding:5px 0;color:#6b7280;font-size:12px;">IGST</td><td style="padding:5px 0;text-align:right;font-size:12px;">${formatCurrency(igst)}</td></tr>` : ''}
+    <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">CGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(cgst)}</td></tr>
+    <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">SGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(sgst)}</td></tr>
+    ${igst > 0 ? `<tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">IGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(igst)}</td></tr>` : ''}
   ` : '';
 
   // MRP FEATURE: build item rows with optional MRP + Discount columns
@@ -102,21 +102,21 @@ function buildInvoiceHTML(
                           ? (mrpVal - unitPrice) * qty
                           : null;
     const mrpCell     = showMRP
-      ? `<td style="padding:9px 8px;text-align:right;font-size:12px;color:#9ca3af;text-decoration:line-through;">${mrpVal != null ? formatCurrency(mrpVal) : '—'}</td>`
+      ? `<td style="padding:5px 5px;text-align:right;font-size:9.5px;color:#9ca3af;text-decoration:line-through;white-space:nowrap;">${mrpVal != null ? formatCurrency(mrpVal) : '—'}</td>`
       : '';
     const discCell    = showMRP
-      ? `<td style="padding:9px 8px;text-align:right;font-size:12px;color:#059669;font-weight:600;">${discAmt != null ? `−${formatCurrency(discAmt)}` : '—'}</td>`
+      ? `<td style="padding:5px 5px;text-align:right;font-size:9.5px;color:#059669;font-weight:600;white-space:nowrap;">${discAmt != null ? `−${formatCurrency(discAmt)}` : '—'}</td>`
       : '';
 
     return `
-      <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'};">
-        <td style="padding:9px 8px;font-size:12px;color:#111827;">${item.product_name || 'Product'}</td>
-        <td style="padding:9px 8px;text-align:center;font-size:12px;color:#374151;">${qty}</td>
+      <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'};page-break-inside:avoid;">
+        <td style="padding:5px 5px;font-size:10.5px;color:#111827;word-break:break-word;">${item.product_name || 'Product'}</td>
+        <td style="padding:5px 5px;text-align:center;font-size:10px;color:#374151;white-space:nowrap;">${qty}</td>
         ${mrpCell}
-        <td style="padding:9px 8px;text-align:right;font-size:12px;color:#374151;">${formatCurrency(unitPrice)}</td>
-        <td style="padding:9px 8px;text-align:right;font-size:12px;color:#374151;">${Number(item.item_tax_total) > 0 ? formatCurrency(item.item_tax_total) : '—'}</td>
+        <td style="padding:5px 5px;text-align:right;font-size:10px;color:#374151;white-space:nowrap;">${formatCurrency(unitPrice)}</td>
+        <td style="padding:5px 5px;text-align:right;font-size:10px;color:#374151;white-space:nowrap;">${Number(item.item_tax_total) > 0 ? formatCurrency(item.item_tax_total) : '—'}</td>
         ${discCell}
-        <td style="padding:9px 8px;text-align:right;font-size:12px;font-weight:700;color:#111827;">${formatCurrency(item.item_total_with_tax)}</td>
+        <td style="padding:5px 5px;text-align:right;font-size:10.5px;font-weight:700;color:#111827;white-space:nowrap;">${formatCurrency(item.item_total_with_tax)}</td>
       </tr>
     `;
   }).join('');
@@ -124,29 +124,29 @@ function buildInvoiceHTML(
   // MRP FEATURE: table header changes when MRP columns are shown
   const tableHeader = showMRP ? `
     <tr style="border-bottom:2px solid #111827;background:#f9fafb;">
-      <th style="text-align:left;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Item</th>
-      <th style="text-align:center;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Qty</th>
-      <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">MRP</th>
-      <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Rate</th>
-      <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Tax</th>
-      <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#059669;text-transform:uppercase;letter-spacing:0.06em;">Discount</th>
-      <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Total</th>
+      <th style="text-align:left;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Item</th>
+      <th style="text-align:center;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Qty</th>
+      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">MRP</th>
+      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Rate</th>
+      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Tax</th>
+      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#059669;text-transform:uppercase;letter-spacing:0.05em;">Discount</th>
+      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Total</th>
     </tr>
   ` : `
     <tr style="border-bottom:2px solid #111827;background:#f9fafb;">
-      <th style="text-align:left;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Item</th>
-      <th style="text-align:center;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Qty</th>
-      <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Rate</th>
-      <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Tax</th>
-      <th style="text-align:right;padding:9px 8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.06em;">Total</th>
+      <th style="text-align:left;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Item</th>
+      <th style="text-align:center;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Qty</th>
+      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Rate</th>
+      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Tax</th>
+      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Total</th>
     </tr>
   `;
 
   // MRP FEATURE: "You Saved" banner — only when savings > 0
   const savingsBanner = (showMRP && totalSavings > 0) ? `
-    <div style="background:#D1FAE5;border:1px solid #6EE7B7;border-radius:8px;padding:10px 16px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;">
-      <span style="font-size:12.5px;font-weight:700;color:#065F46;">🎉 Customer Saved</span>
-      <span style="font-size:14px;font-weight:900;color:#059669;">${formatCurrency(totalSavings)}</span>
+    <div style="background:#D1FAE5;border:1px solid #6EE7B7;border-radius:6px;padding:7px 12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:11px;font-weight:700;color:#065F46;">🎉 Customer Saved</span>
+      <span style="font-size:12px;font-weight:900;color:#059669;">${formatCurrency(totalSavings)}</span>
     </div>
   ` : '';
 
@@ -155,25 +155,25 @@ function buildInvoiceHTML(
     ${buildPrintHeader(business)}
 
     <!-- Invoice title row -->
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;">
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:16px;">
       <div>
-        <div style="font-size:26px;font-weight:900;color:#111827;letter-spacing:-1px;line-height:1;">INVOICE</div>
-        <div style="font-size:15px;font-weight:700;color:#4F46E5;margin-top:6px;letter-spacing:0.02em;">${sale.invoice_no || ''}</div>
+        <div style="font-size:24px;font-weight:900;color:#111827;letter-spacing:-1px;line-height:1;">INVOICE</div>
+        <div style="font-size:14px;font-weight:700;color:#4F46E5;margin-top:4px;letter-spacing:0.02em;">${sale.invoice_no || ''}</div>
       </div>
       <div style="text-align:right;">
-        <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:2px;">Invoice Date</div>
-        <div style="font-size:13px;font-weight:600;color:#111827;">${formatDate(detail?.sales_created_at || sale.sales_created_at)}</div>
-        <div style="margin-top:10px;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:4px;">Payment Status</div>
+        <div style="font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:2px;">Invoice Date</div>
+        <div style="font-size:12px;font-weight:600;color:#111827;">${formatDate(detail?.sales_created_at || sale.sales_created_at)}</div>
+        <div style="margin-top:8px;font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:3px;">Payment Status</div>
         ${paymentStatusBadge(payStatus)}
-        <div style="margin-top:8px;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:2px;">Payment Method</div>
-        <div style="font-size:12.5px;font-weight:600;color:#374151;">${payMethod}</div>
+        <div style="margin-top:6px;font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:2px;">Payment Method</div>
+        <div style="font-size:11px;font-weight:600;color:#374151;">${payMethod}</div>
       </div>
     </div>
 
     <!-- Bill To -->
-    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px 18px;margin-bottom:22px;">
-      <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Bill To</div>
-      <div style="font-size:15px;font-weight:700;color:#111827;">${detail?.customer_name || sale.customer_name || 'Walk-in Customer'}</div>
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:10px 14px;margin-bottom:16px;">
+      <div style="font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Bill To</div>
+      <div style="font-size:14px;font-weight:700;color:#111827;">${detail?.customer_name || sale.customer_name || 'Walk-in Customer'}</div>
     </div>
 
     <!-- Items table -->
@@ -186,24 +186,24 @@ function buildInvoiceHTML(
     ${savingsBanner}
 
     <!-- Totals block -->
-    <div style="display:flex;justify-content:flex-end;margin-bottom:32px;">
-      <table style="min-width:280px;">
-        <tr><td style="padding:5px 0;color:#6b7280;font-size:12px;">Subtotal</td><td style="padding:5px 0;text-align:right;font-size:12px;">${formatCurrency(subtotal)}</td></tr>
-        ${discount > 0 ? `<tr><td style="padding:5px 0;color:#059669;font-size:12px;">Discount</td><td style="padding:5px 0;text-align:right;font-size:12px;color:#059669;">−${formatCurrency(discount)}</td></tr>` : ''}
+    <div style="display:flex;justify-content:flex-end;margin-bottom:20px;">
+      <table style="width:auto;min-width:180px;max-width:100%;">
+        <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">Subtotal</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(subtotal)}</td></tr>
+        ${discount > 0 ? `<tr><td style="padding:4px 0;color:#059669;font-size:10.5px;">Discount</td><td style="padding:4px 0;text-align:right;font-size:10.5px;color:#059669;">−${formatCurrency(discount)}</td></tr>` : ''}
         ${gstBreakdown}
-        <tr><td style="padding:5px 0;color:#6b7280;font-size:12px;">Tax Total</td><td style="padding:5px 0;text-align:right;font-size:12px;">${formatCurrency(taxTotal)}</td></tr>
+        <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">Tax Total</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(taxTotal)}</td></tr>
         <tr style="border-top:2px solid #111827;">
-          <td style="padding:10px 0 6px;font-size:16px;font-weight:900;color:#111827;">Grand Total</td>
-          <td style="padding:10px 0 6px;text-align:right;font-size:16px;font-weight:900;color:#111827;">${formatCurrency(finalAmount)}</td>
+          <td style="padding:8px 0 4px;font-size:14px;font-weight:900;color:#111827;">Grand Total</td>
+          <td style="padding:8px 0 4px;text-align:right;font-size:14px;font-weight:900;color:#111827;">${formatCurrency(finalAmount)}</td>
         </tr>
-        ${totalPaid > 0 ? `<tr><td style="padding:4px 0;color:#10B981;font-size:12px;font-weight:600;">Amount Paid</td><td style="padding:4px 0;text-align:right;font-size:12px;color:#10B981;font-weight:600;">${formatCurrency(totalPaid)}</td></tr>` : ''}
-        ${remaining > 0 ? `<tr><td style="padding:4px 0;color:#EF4444;font-size:12.5px;font-weight:700;">Balance Due</td><td style="padding:4px 0;text-align:right;font-size:12.5px;color:#EF4444;font-weight:700;">${formatCurrency(remaining)}</td></tr>` : ''}
-        ${(showMRP && totalSavings > 0) ? `<tr><td style="padding:6px 0 0;color:#059669;font-size:12px;font-weight:700;">You Saved</td><td style="padding:6px 0 0;text-align:right;font-size:12px;color:#059669;font-weight:700;">${formatCurrency(totalSavings)}</td></tr>` : ''}
+        ${totalPaid > 0 ? `<tr><td style="padding:3px 0;color:#10B981;font-size:10.5px;font-weight:600;">Amount Paid</td><td style="padding:3px 0;text-align:right;font-size:10.5px;color:#10B981;font-weight:600;">${formatCurrency(totalPaid)}</td></tr>` : ''}
+        ${remaining > 0 ? `<tr><td style="padding:3px 0;color:#EF4444;font-size:11px;font-weight:700;">Balance Due</td><td style="padding:3px 0;text-align:right;font-size:11px;color:#EF4444;font-weight:700;">${formatCurrency(remaining)}</td></tr>` : ''}
+        ${(showMRP && totalSavings > 0) ? `<tr><td style="padding:5px 0 0;color:#059669;font-size:10.5px;font-weight:700;">You Saved</td><td style="padding:5px 0 0;text-align:right;font-size:10.5px;color:#059669;font-weight:700;">${formatCurrency(totalSavings)}</td></tr>` : ''}
       </table>
     </div>
 
     <!-- Thank you note -->
-    <div style="text-align:center;padding:14px;background:#f9fafb;border-radius:8px;font-size:12px;color:#6b7280;font-style:italic;margin-bottom:8px;">
+    <div style="text-align:center;padding:10px;background:#f9fafb;border-radius:6px;font-size:11px;color:#6b7280;font-style:italic;margin-bottom:6px;">
       Thank you for your business!
     </div>
 

@@ -5,6 +5,7 @@ import LandingFeatures from '../components/LandingFeatures'
 import LandingWhy from '../components/LandingWhy'
 import LandingPreview from '../components/LandingPreview'
 import LandingContact from '../components/LandingContact'
+import FeedbackSection from '../components/FeedbackSection'
 import LandingFooter from '../components/LandingFooter'
 
 export default function LandingPage() {
@@ -28,6 +29,7 @@ export default function LandingPage() {
         <LandingWhy />
         <LandingPreview />
         <LandingContact />
+        <FeedbackSection />
       </main>
       <LandingFooter />
     </div>

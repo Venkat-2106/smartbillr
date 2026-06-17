@@ -8,7 +8,7 @@ from app.routers import (
     business, category, customer, supplier,
     product, sale, payment, purchase, staff,
     stock, expense, sales_return, purchase_return, profiles,
-    dashboard
+    dashboard, reports
 )
 import os
 
@@ -64,6 +64,7 @@ app.include_router(purchase_return.router)
 app.include_router(profiles.router)
 app.include_router(staff.router)
 app.include_router(dashboard.router)
+app.include_router(reports.router)
 
 
 @app.get("/")

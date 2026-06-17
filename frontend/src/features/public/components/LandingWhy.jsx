@@ -2,7 +2,7 @@ const highlights = [
   { text: 'Fast and easy to use' },
   { text: 'Modern UI with dark mode' },
   { text: 'Secure authentication & RBAC' },
-  { text: 'Real-time analytics & KPIs' },
+  { text: 'Interactive dashboards & 12 reports' },
   { text: 'Inventory automation & alerts' },
   { text: 'Scalable cloud architecture' },
   { text: 'Mobile-friendly experience' },

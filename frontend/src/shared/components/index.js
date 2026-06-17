@@ -36,3 +36,8 @@ export { default as SkeletonTable }  from './SkeletonTable';  // Animated loadin
 export { default as ErrorBoundary }  from './ErrorBoundary';  // Catches render errors, shows fallback UI
 export { default as CommandPalette } from './CommandPalette';  // Ctrl+K command palette
 export { default as ShortcutHelp }   from './ShortcutHelp';    // ? keyboard shortcuts help
+
+// ── Chart components ─────────────────────────────────────────────────────────
+export { default as LineChart }     from './LineChart';       // SVG line/area chart
+export { default as BarChart }      from './BarChart';        // Horizontal bar chart
+export { default as DonutChart }    from './DonutChart';      // SVG donut chart

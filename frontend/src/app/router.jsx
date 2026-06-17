@@ -6,6 +6,7 @@ import LoginPage from '../features/auth/pages/LoginPage'
 import ResetPasswordPage from '../features/auth/pages/ResetPasswordPage'
 import UnauthorizedPage from '../features/auth/pages/UnauthorizedPage'
 import ProtectedRoute from '../features/auth/components/ProtectedRoute'
+import LandingPage from '../features/public/pages/LandingPage'
 
 const DashboardPage  = React.lazy(() => import('../features/dashboard/pages/DashboardPage'))
 const CategoriesPage = React.lazy(() => import('../features/categories/pages/CategoriesPage'))
@@ -37,25 +38,22 @@ export default function AppRouter() {
       <Routes>
 
         {/* Public routes — no auth needed */}
+        <Route path="/"               element={<LandingPage />} />
         <Route path="/login"          element={<LoginPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/unauthorized"   element={<UnauthorizedPage />} />
 
         {/* Protected routes — all inside DashboardLayout */}
         <Route
-          path="/"
           element={
             <ProtectedRoute>
               <DashboardLayout />
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="/dashboard" replace />} />
-
-          {/* ── All roles ──────────────────────────────────────────────── */}
-          <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route
-            path="payments"
+            path="/payments"
             element={
               <ProtectedRoute permission="payments.manage">
                 <PaymentsPage />
@@ -63,7 +61,7 @@ export default function AppRouter() {
             }
           />
           <Route
-            path="sales"
+            path="/sales"
             element={
               <ProtectedRoute permission="sales.view">
                 <SalesPage />
@@ -71,7 +69,7 @@ export default function AppRouter() {
             }
           />
           <Route
-            path="sales/new"
+            path="/sales/new"
             element={
               <ProtectedRoute permission="sales.view">
                 <CreateSalePage />
@@ -81,7 +79,7 @@ export default function AppRouter() {
 
           {/* ── Step 5.13 — Customers (real page, was ComingSoon) ──────── */}
           <Route
-            path="customers"
+            path="/customers"
             element={
               <ProtectedRoute permission="customers.manage">
                 <CustomersPage />
@@ -90,7 +88,7 @@ export default function AppRouter() {
           />
 
           <Route
-            path="products"
+            path="/products"
             element={
               <ProtectedRoute permission="products.view">
                 <ProductsPage />
@@ -98,7 +96,7 @@ export default function AppRouter() {
             }
           />
           <Route
-            path="stock"
+            path="/stock"
             element={
               <ProtectedRoute permission="stock.view">
                 <StockPage />
@@ -106,7 +104,7 @@ export default function AppRouter() {
             }
           />
           <Route
-            path="sales-returns"
+            path="/sales-returns"
             element={
               <ProtectedRoute permission="sales_returns.manage">
                 <SalesReturnsPage />
@@ -116,7 +114,7 @@ export default function AppRouter() {
 
           {/* ── Manager + Admin ────────────────────────────────────────── */}
           <Route
-            path="purchases"
+            path="/purchases"
             element={
               <ProtectedRoute permission="purchases.view">
                 <PurchasesPage />
@@ -124,7 +122,7 @@ export default function AppRouter() {
             }
           />
           <Route
-            path="purchases/new"
+            path="/purchases/new"
             element={
               <ProtectedRoute permission="purchases.view">
                 <CreatePurchasePage />
@@ -132,7 +130,7 @@ export default function AppRouter() {
             }
           />
           <Route
-            path="suppliers"
+            path="/suppliers"
             element={
               <ProtectedRoute permission="suppliers.manage">
                 <SuppliersPage />
@@ -140,7 +138,7 @@ export default function AppRouter() {
             }
           />
           <Route
-            path="categories"
+            path="/categories"
             element={
               <ProtectedRoute permission="products.view">
                 <CategoriesPage />
@@ -148,7 +146,7 @@ export default function AppRouter() {
             }
           />
           <Route
-            path="expenses"
+            path="/expenses"
             element={
               <ProtectedRoute permission="expenses.manage">
                 <ExpensesPage />
@@ -156,7 +154,7 @@ export default function AppRouter() {
             }
           />
           <Route
-            path="purchase-returns"
+            path="/purchase-returns"
             element={
               <ProtectedRoute permission="purchase_returns.manage">
                 <PurchaseReturnsPage />
@@ -164,7 +162,7 @@ export default function AppRouter() {
             }
           />
           <Route
-            path="reports"
+            path="/reports"
             element={
               <ProtectedRoute permission="reports.view">
                 <ReportsPage />
@@ -174,7 +172,7 @@ export default function AppRouter() {
 
           {/* ── Admin only ─────────────────────────────────────────────── */}
           <Route
-            path="settings"
+            path="/settings"
             element={
               <ProtectedRoute permission="settings.manage">
                 <SettingsPage />
@@ -182,7 +180,7 @@ export default function AppRouter() {
             }
           />
           <Route
-            path="staff"
+            path="/staff"
             element={
               <ProtectedRoute permission="staff.manage">
                 <StaffPage />

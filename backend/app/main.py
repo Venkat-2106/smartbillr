@@ -10,7 +10,13 @@ from app.routers import (
     stock, expense, sales_return, purchase_return, profiles,
     dashboard, reports
 )
+import logging
 import os
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 app = FastAPI(
     title="SmartBillr API",
@@ -44,6 +50,7 @@ app.add_middleware(
 # The frontend reads error.response?.data?.message — which maps to "error" here.
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    logging.exception(exc)
     return JSONResponse(
         status_code=500,
         content={"success": False, "error": "Internal Server Error"},

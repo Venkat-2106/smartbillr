@@ -15,30 +15,37 @@ router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
 # ─────────────────────────────────────────
 # HELPER: Format expense as dict
+# Accepts optional last_updated_by name string (resolved by caller via JOIN).
 # ─────────────────────────────────────────
-def expense_to_dict(e):
+def expense_to_dict(e, last_updated_by=None):
     return {
-        "expense_id": str(e.expense_id),
-        "business_id": str(e.business_id),
+        "expense_id":      str(e.expense_id),
+        "business_id":     str(e.business_id),
         "expense_category": e.expense_category,
-        "expense_amount": float(e.expense_amount),
-        "expense_date": fmt_date(e.expense_date),
-        "expense_notes": e.expense_notes,
-        "is_deleted": e.is_deleted,
-        "created_at": fmt_ts(e.created_at),
-        "created_by": str(e.created_by) if e.created_by else None
+        "expense_amount":  float(e.expense_amount),
+        "expense_date":    fmt_date(e.expense_date),
+        "expense_notes":   e.expense_notes,
+        "is_deleted":      e.is_deleted,
+        "created_at":      fmt_ts(e.created_at),
+        "created_by":      str(e.created_by) if e.created_by else None,
+        "updated_at":      fmt_ts(e.updated_at),
+        "updated_by":      str(e.updated_by) if e.updated_by else None,
+        "last_updated_by": last_updated_by,
     }
 
 
 def expense_to_dict_list(row):
     return {
-        "expense_id": str(row.expense_id),
-        "business_id": str(row.business_id),
+        "expense_id":      str(row.expense_id),
+        "business_id":     str(row.business_id),
         "expense_category": row.expense_category,
-        "expense_amount": float(row.expense_amount),
-        "expense_date": fmt_date(row.expense_date),
-        "expense_notes": row.expense_notes,
-        "created_at": fmt_ts(row.created_at),
+        "expense_amount":  float(row.expense_amount),
+        "expense_date":    fmt_date(row.expense_date),
+        "expense_notes":   row.expense_notes,
+        "created_at":      fmt_ts(row.created_at),
+        "updated_at":      fmt_ts(row.updated_at),
+        "updated_by":      str(row.updated_by)  if row.updated_by  else None,
+        "last_updated_by": row.last_updated_by,
     }
 
 
@@ -60,21 +67,27 @@ def create_expense(
         expense_amount=data.expense_amount,
         expense_date=data.expense_date,
         expense_notes=data.expense_notes,
-        created_by=user_id
+        created_by=user_id,
+        updated_by=user_id,
     )
 
     db.add(new_expense)
     db.commit()
     db.refresh(new_expense)
 
+    creator_name = db.execute(
+        text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
+        {"uid": str(user_id)}
+    ).scalar()
+
     return success_response({
         "message": "Expense created successfully",
-        "expense": expense_to_dict(new_expense)
+        "expense": expense_to_dict(new_expense, last_updated_by=creator_name)
     }, status_code=201)
 
 
 # ─────────────────────────────────────────
-# GET /expenses → Get all expenses
+# GET /expenses → Get all expenses (paginated)
 # ─────────────────────────────────────────
 @router.get("/")
 def get_all_expenses(
@@ -95,6 +108,7 @@ def get_all_expenses(
         "expense_amount": "e.expense_amount",
         "expense_category": "e.expense_category",
         "created_at":     "e.created_at",
+        "updated_at":     "e.updated_at",
     }
     order_col = SORTABLE.get(sort_by, "e.expense_date")
     order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
@@ -124,9 +138,11 @@ def get_all_expenses(
     list_sql = f"""
         SELECT e.expense_id, e.business_id, e.expense_category,
                e.expense_amount, e.expense_date, e.expense_notes,
-               e.created_at,
+               e.created_at, e.updated_at, e.updated_by,
+               prof.full_name AS last_updated_by,
                COUNT(*) OVER() AS total_count
         FROM expenses e
+        LEFT JOIN profiles prof ON prof.id = e.updated_by
         WHERE e.business_id = CAST(:bid AS uuid)
           AND e.is_deleted = false
         {extra_where}
@@ -167,7 +183,14 @@ def get_expense(
     if not expense:
         return error_response("Expense not found", status_code=404)
 
-    return success_response(expense_to_dict(expense))
+    updated_by_name = None
+    if expense.updated_by:
+        updated_by_name = db.execute(
+            text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
+            {"uid": str(expense.updated_by)}
+        ).scalar()
+
+    return success_response(expense_to_dict(expense, last_updated_by=updated_by_name))
 
 
 # ─────────────────────────────────────────
@@ -191,7 +214,6 @@ def update_expense(
     if not expense:
         return error_response("Expense not found", status_code=404)
 
-    # Update only fields that were sent
     if data.expense_category is not None:
         expense.expense_category = data.expense_category
     if data.expense_amount is not None:
@@ -201,12 +223,19 @@ def update_expense(
     if data.expense_notes is not None:
         expense.expense_notes = data.expense_notes
 
+    expense.updated_by = current_user["user_id"]
+
     db.commit()
     db.refresh(expense)
 
+    updated_by_name = db.execute(
+        text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
+        {"uid": str(expense.updated_by)}
+    ).scalar()
+
     return success_response({
         "message": "Expense updated successfully",
-        "expense": expense_to_dict(expense)
+        "expense": expense_to_dict(expense, last_updated_by=updated_by_name)
     })
 
 

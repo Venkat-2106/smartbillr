@@ -17,5 +17,6 @@ class Expense(Base):
     is_deleted = Column(Boolean, default=False)
     # FIX: DB type is timestamp without time zone — was incorrectly String
     created_at = Column(DateTime, nullable=True)
-    # FIX: Added ForeignKey — DB has FK constraint to profiles.id
     created_by = Column(UUID(as_uuid=True), nullable=True)
+    updated_at = Column(DateTime, nullable=True)
+    updated_by = Column(UUID(as_uuid=True), ForeignKey("profiles.id"), nullable=True)

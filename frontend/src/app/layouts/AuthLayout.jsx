@@ -47,24 +47,24 @@ export default function AuthLayout({ children }) {
         {/* Logo */}
         <div style={{ position: 'relative', zIndex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 13, marginBottom: 12 }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: 11,
-              background: 'linear-gradient(135deg, #4F46E5, #818CF8)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 16px rgba(79,70,229,0.5)',
-            }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: 11,
+                background: 'linear-gradient(135deg, var(--accent-600, #4F46E5), var(--accent-400, #818CF8))',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 4px 16px rgba(79,70,229,0.5)',
+              }}>
               <svg width="19" height="19" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2.2}>
                 <path strokeLinecap="round" strokeLinejoin="round"
                   d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
             <span style={{ fontSize: '1.65rem', fontWeight: 800, letterSpacing: '-1px' }}>
-              <span style={{ color: '#F8FAFC' }}>Smart</span>
-              <span style={{ color: '#818CF8' }}>Billr</span>
+              <span style={{ color: 'var(--sb-text-primary, #F8FAFC)' }}>Smart</span>
+              <span style={{ color: 'var(--accent-400, #818CF8)' }}>Billr</span>
             </span>
           </div>
           <p style={{
-            fontSize: '11px', color: '#94A3B8',
+            fontSize: '11px', color: 'var(--text-muted, #94A3B8)',
             letterSpacing: '0.25em', fontWeight: '600',
             textTransform: 'uppercase', marginTop: '6px',
           }}>
@@ -76,19 +76,19 @@ export default function AuthLayout({ children }) {
         <div style={{ position: 'relative', zIndex: 1 }}>
           <h2 style={{
             fontSize: '2.3rem', fontWeight: 800,
-            color: '#F8FAFC', lineHeight: 1,
+            color: 'var(--sb-text-primary, #F8FAFC)', lineHeight: 1,
             letterSpacing: '-0.8px', margin: 0,
           }}>
             Run your business<br />
             <span style={{
-              background: 'linear-gradient(135deg, #818CF8, #A5B4FC)',
+              background: 'linear-gradient(135deg, var(--accent-400, #818CF8), var(--accent-sidebar-text, #A5B4FC))',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',
             }}>smarter.</span>
           </h2>
           <p style={{
-            fontSize: '1rem', color: '#CBD5E1',fontWeight: 800,
+            fontSize: '1rem', color: 'var(--text-secondary, #CBD5E1)',fontWeight: 800,
             lineHeight: 1.65, marginTop: 14, margin: 0, marginTop: 14,
           }}>
             Billing, inventory &amp; analytics —<br />all in one place.
@@ -114,7 +114,7 @@ export default function AuthLayout({ children }) {
               }}>
                 {item.icon}
               </div>
-              <span style={{ fontSize: '0.8rem', color: '#94A3B8', fontWeight: '500' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted, #94A3B8)', fontWeight: '500' }}>
                 {item.text}
               </span>
             </div>
@@ -123,8 +123,8 @@ export default function AuthLayout({ children }) {
 
         {/* Trust badge */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', zIndex: 1 }}>
-          <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#22C55E', flexShrink: 0 }} />
-          <span style={{ fontSize: '0.7rem', color: '#22C55E', fontWeight: 800 }}>
+          <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--success, #22C55E)', flexShrink: 0 }} />
+          <span style={{ fontSize: '0.7rem', color: 'var(--success, #22C55E)', fontWeight: 800 }}>
             SmartBillr v1.0 · Available Worldwide
           </span>
         </div>

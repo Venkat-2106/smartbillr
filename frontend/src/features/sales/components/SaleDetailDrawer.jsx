@@ -32,9 +32,6 @@ import {
 } from '../../../shared/utils/printUtils';
 import useAuthStore from '../../../store/authStore';
 
-const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' };
-const STATUS_LABEL   = { paid: 'Paid',    partial: 'Partial', pending: 'Unpaid' };
-
 // ── Payment status badge helper (for print — literal hex, no CSS vars) ────────
 function paymentStatusBadge(status) {
   const map = {
@@ -419,11 +416,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                   label="Status"
                   isLast={!editingStatus || newStatus !== 'partial'}
                   value={
-                    <Badge
-                      variant={STATUS_VARIANT[displayStatus] || 'default'}
-                      label={STATUS_LABEL[displayStatus]    || displayStatus}
-                      dot
-                    />
+                    <Badge status={displayStatus} dot />
                   }
                 />
                 {editingStatus && (

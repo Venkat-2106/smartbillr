@@ -450,39 +450,40 @@ def get_sale_detail(db: Session, business_id: str, sales_id: str):
     }
 
 
-def get_sale_final_amount(db: Session, sales_id: str) -> float:
+def get_sale_final_amount(db: Session, sales_id: str, business_id: str) -> float:
     sale_row = db.execute(
-        text("SELECT sales_final_amount FROM sales WHERE sales_id = CAST(:sid AS uuid)"),
-        {"sid": sales_id}
+        text("SELECT sales_final_amount FROM sales WHERE sales_id = CAST(:sid AS uuid) AND business_id = CAST(:bid AS uuid)"),
+        {"sid": sales_id, "bid": business_id}
     ).fetchone()
     return float(sale_row.sales_final_amount) if sale_row and sale_row.sales_final_amount else 0.0
 
 
-def get_sale_active_payment(db: Session, sales_id: str):
+def get_sale_active_payment(db: Session, sales_id: str, business_id: str):
     row = db.execute(
         text("""
             SELECT COALESCE(cumulative_paid, 0) AS already_paid
             FROM payments
             WHERE sale_id  = CAST(:sid AS uuid)
+              AND business_id = CAST(:bid AS uuid)
               AND is_active = true
         """),
-        {"sid": sales_id}
+        {"sid": sales_id, "bid": business_id}
     ).fetchone()
     return float(row.already_paid) if row else 0.0
 
 
-def update_sale_status(db: Session, sales_id: str, status: str):
+def update_sale_status(db: Session, sales_id: str, status: str, business_id: str):
     db.execute(
-        text("UPDATE sales SET sales_payment_status = :status WHERE sales_id = CAST(:sid AS uuid)"),
-        {"status": status, "sid": sales_id}
+        text("UPDATE sales SET sales_payment_status = :status WHERE sales_id = CAST(:sid AS uuid) AND business_id = CAST(:bid AS uuid)"),
+        {"status": status, "sid": sales_id, "bid": business_id}
     )
 
 
-def update_payment_status(db: Session, sales_id: str, status: str):
+def update_payment_status(db: Session, sales_id: str, status: str, business_id: str):
     db.execute(
         text("""
             UPDATE payments SET payment_status = :status
-            WHERE sale_id = CAST(:sid AS uuid) AND is_active = true
+            WHERE sale_id = CAST(:sid AS uuid) AND business_id = CAST(:bid AS uuid) AND is_active = true
         """),
-        {"status": status, "sid": sales_id}
+        {"status": status, "sid": sales_id, "bid": business_id}
     )

@@ -84,7 +84,7 @@ PROFIT_PERMISSION = "view_product_profit"
 
 
 # ── Helper: fetch one product row — all fields + both JOIN names ───────────
-def get_product_with_profit(db: Session, prod_id):
+def get_product_with_profit(db: Session, prod_id, business_id: str):
     row = db.execute(
         text("""
             SELECT
@@ -103,8 +103,9 @@ def get_product_with_profit(db: Session, prod_id):
             LEFT JOIN profiles   pr1 ON pr1.id = p.updated_by
             LEFT JOIN profiles   pr2 ON pr2.id = p.created_by
             WHERE p.prod_id = :prod_id
+              AND p.business_id = CAST(:bid AS uuid)
         """),
-        {"prod_id": str(prod_id)}
+        {"prod_id": str(prod_id), "bid": business_id}
     ).fetchone()
     return row
 
@@ -305,7 +306,7 @@ def create_product(
         # Default → barcode uniqueness violation
         return error_response("A product with this barcode already exists.", 400)
 
-    row = get_product_with_profit(db, new_product.prod_id)
+    row = get_product_with_profit(db, new_product.prod_id, business_id)
 
     return success_response({
         "message": "Product created successfully",
@@ -848,7 +849,7 @@ def update_product(
 
     db.refresh(product)
 
-    row = get_product_with_profit(db, product.prod_id)
+    row = get_product_with_profit(db, product.prod_id, business_id)
 
     return success_response({
         "message": "Product updated successfully",

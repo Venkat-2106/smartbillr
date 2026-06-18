@@ -148,9 +148,11 @@ def handle_sale_status_patch(
     if body.status not in allowed:
         return error_response(f"Status must be one of: {allowed}", 400)
 
+    business_id = current_user["business_id"]
+
     sale = db.query(Sale).filter(
         Sale.sales_id == sales_id,
-        Sale.business_id == current_user["business_id"],
+        Sale.business_id == business_id,
         Sale.is_deleted == False
     ).first()
 
@@ -158,8 +160,8 @@ def handle_sale_status_patch(
         return error_response("Sale not found", 404)
 
     old_status = sale.sales_payment_status
-    sale_final = get_sale_final_amount(db, sales_id)
-    already_paid = get_sale_active_payment(db, sales_id)
+    sale_final = get_sale_final_amount(db, sales_id, business_id)
+    already_paid = get_sale_active_payment(db, sales_id, business_id)
     remaining = round(sale_final - already_paid, 2)
 
     if old_status == body.status and body.paid_amount is None:
@@ -221,8 +223,8 @@ def handle_sale_status_patch(
                 "in the payments table to record the remaining balance as an adjustment."
             )
         else:
-            update_payment_status(db, sales_id, "paid")
-            update_sale_status(db, sales_id, "paid")
+            update_payment_status(db, sales_id, "paid", business_id)
+            update_sale_status(db, sales_id, "paid", business_id)
             new_total_paid = already_paid
             new_remaining = 0
 
@@ -234,8 +236,8 @@ def handle_sale_status_patch(
         )
 
     else:
-        update_sale_status(db, sales_id, body.status)
-        update_payment_status(db, sales_id, body.status)
+        update_sale_status(db, sales_id, body.status, business_id)
+        update_payment_status(db, sales_id, body.status, business_id)
 
     db.commit()
 

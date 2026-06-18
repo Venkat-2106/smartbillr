@@ -30,7 +30,7 @@ router = APIRouter(prefix="/purchases", tags=["Purchases"])
 # ─────────────────────────────────────────
 # HELPER: Fetch full purchase via raw SQL
 # ─────────────────────────────────────────
-def fetch_full_purchase(db: Session, pur_id: str):
+def fetch_full_purchase(db: Session, pur_id: str, business_id: str):
     return db.execute(
         text("""
             SELECT p.pur_id, p.business_id, p.supp_id,
@@ -45,15 +45,16 @@ def fetch_full_purchase(db: Session, pur_id: str):
             LEFT JOIN suppliers s  ON s.supp_id   = p.supp_id
             LEFT JOIN profiles  pr ON pr.id        = p.updated_by
             WHERE p.pur_id = :pid
+              AND p.business_id = CAST(:bid AS uuid)
         """),
-        {"pid": pur_id}
+        {"pid": pur_id, "bid": business_id}
     ).fetchone()
 
 
 # ─────────────────────────────────────────
 # HELPER: Fetch purchase items via raw SQL
 # ─────────────────────────────────────────
-def fetch_purchase_items(db: Session, pur_id: str):
+def fetch_purchase_items(db: Session, pur_id: str, business_id: str):
     return db.execute(
         text("""
             SELECT pi.item_id, pi.product_id,
@@ -66,8 +67,9 @@ def fetch_purchase_items(db: Session, pur_id: str):
             FROM purchase_items pi
             LEFT JOIN products p ON p.prod_id = pi.product_id
             WHERE pi.pur_id = :pid
+              AND pi.business_id = CAST(:bid AS uuid)
         """),
-        {"pid": pur_id}
+        {"pid": pur_id, "bid": business_id}
     ).fetchall()
 
 
@@ -321,7 +323,7 @@ def create_purchase(
         # Without this, the accountant must manually add an expense for every
         # cash purchase — that is error-prone.
         if data.pur_payment_status == "paid":
-            pur_row      = fetch_full_purchase(db, new_pur_id)
+            pur_row      = fetch_full_purchase(db, new_pur_id, business_id)
             final_amount = float(pur_row.pur_final_amount) if pur_row and pur_row.pur_final_amount else float(total_amount)
 
             db.execute(
@@ -368,8 +370,8 @@ def create_purchase(
 
         db.commit()
 
-        pur_row   = fetch_full_purchase(db, new_pur_id)
-        item_rows = fetch_purchase_items(db, new_pur_id)
+        pur_row   = fetch_full_purchase(db, new_pur_id, business_id)
+        item_rows = fetch_purchase_items(db, new_pur_id, business_id)
 
         return success_response({
             "message":  "Purchase created successfully",
@@ -495,7 +497,7 @@ def get_purchase(
     if not row:
         return error_response("Purchase not found", status_code=404)
 
-    items = fetch_purchase_items(db, pur_id)
+    items = fetch_purchase_items(db, pur_id, business_id)
 
     # Fetch all purchase returns for this purchase
     return_rows = db.execute(text("""

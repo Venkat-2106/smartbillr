@@ -126,8 +126,9 @@ def record_payment_and_sync(
             UPDATE sales
             SET sales_payment_status = :status
             WHERE sales_id = CAST(:sid AS uuid)
+              AND business_id = CAST(:bid AS uuid)
         """),
-        {"status": new_status, "sid": sale_id}
+        {"status": new_status, "sid": sale_id, "bid": business_id}
     )
 
     return new_payment_id

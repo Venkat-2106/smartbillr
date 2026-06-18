@@ -11,6 +11,7 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts
 import uuid
+import logging
 
 router = APIRouter(prefix="/stock", tags=["Stock"])
 
@@ -498,7 +499,8 @@ def adjust_stock(
 
     except Exception as e:
         db.rollback()
-        return error_response(str(e), status_code=500)
+        logging.exception(e)
+        return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
 
 # ─────────────────────────────────────────

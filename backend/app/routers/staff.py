@@ -25,6 +25,7 @@ from app.middleware.rbac import require_permission
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts
+import logging
 
 router = APIRouter(prefix="/staff", tags=["Staff"])
 
@@ -145,7 +146,8 @@ def create_staff(
     try:
         auth_user = create_supabase_auth_user(body.email, body.password, body.full_name)
     except ValueError as e:
-        return error_response(str(e), 400)
+        logging.exception(e)
+        return error_response("An unexpected error occurred. Please try again.", status_code=400)
 
     auth_user_id = auth_user["id"]
 
@@ -180,7 +182,8 @@ def create_staff(
         db.rollback()
         # Rollback: delete the Supabase auth user we just created
         delete_supabase_auth_user(auth_user_id)
-        return error_response(f"Could not create profile: {str(e)}", 500)
+        logging.exception(e)
+        return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
     return success_response({
         "id":          auth_user_id,
@@ -319,7 +322,8 @@ def update_staff(
         db.commit()
     except Exception as e:
         db.rollback()
-        return error_response(f"Could not update staff: {str(e)}", 500)
+        logging.exception(e)
+        return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
     return success_response({"message": "Staff updated successfully"})
 
@@ -356,6 +360,7 @@ def deactivate_staff(
         db.commit()
     except Exception as e:
         db.rollback()
-        return error_response(f"Could not deactivate staff: {str(e)}", 500)
+        logging.exception(e)
+        return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
     return success_response({"message": "Staff account deactivated successfully"})

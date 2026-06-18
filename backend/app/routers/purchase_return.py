@@ -10,6 +10,7 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts
 import uuid
+import logging
 
 router = APIRouter(prefix="/purchase-returns", tags=["Purchase Returns"])
 
@@ -351,7 +352,8 @@ def create_purchase_return(
 
     except Exception as e:
         db.rollback()
-        return error_response(str(e), status_code=500)
+        logging.exception(e)
+        return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
 
 # ─────────────────────────────────────────────
@@ -654,7 +656,8 @@ def update_purchase_return(
 
     except Exception as e:
         db.rollback()
-        return error_response(str(e), status_code=500)
+        logging.exception(e)
+        return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
 
 # ─────────────────────────────────────────────
@@ -709,4 +712,5 @@ def delete_purchase_return(
 
     except Exception as e:
         db.rollback()
-        return error_response(str(e), status_code=500)
+        logging.exception(e)
+        return error_response("An unexpected error occurred. Please try again.", status_code=500)

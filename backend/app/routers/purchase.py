@@ -14,6 +14,7 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.tax_engine import calculate_item_tax
+import logging
 from decimal import Decimal
 import uuid
 from pydantic import BaseModel
@@ -377,7 +378,8 @@ def create_purchase(
 
     except Exception as e:
         db.rollback()
-        return error_response(str(e), status_code=500)
+        logging.exception(e)
+        return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
 
 # ─────────────────────────────────────────

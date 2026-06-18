@@ -10,6 +10,7 @@ from app.schemas.sales_return import SalesReturnCreate, SalesReturnUpdate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts
+import logging
 from decimal import Decimal
 import uuid
 
@@ -286,7 +287,8 @@ def create_sales_return(
 
     except Exception as e:
         db.rollback()
-        return error_response(str(e), status_code=500)
+        logging.exception(e)
+        return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
 
 # ─────────────────────────────────────────
@@ -488,7 +490,8 @@ def update_sales_return(
 
     except Exception as e:
         db.rollback()
-        return error_response(str(e), status_code=500)
+        logging.exception(e)
+        return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
 # ─────────────────────────────────────────
 # DELETE /sales-returns/{return_id} → Delete pending return only
@@ -546,4 +549,5 @@ def delete_sales_return(
 
     except Exception as e:
         db.rollback()
-        return error_response(str(e), status_code=500)
+        logging.exception(e)
+        return error_response("An unexpected error occurred. Please try again.", status_code=500)

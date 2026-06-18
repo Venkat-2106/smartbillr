@@ -15,6 +15,7 @@ from sqlalchemy import text
 from app.database import get_db
 from app.middleware.auth import verify_token
 from app.utils.response import success_response, error_response
+import logging
 
 router = APIRouter(prefix="/profiles", tags=["Profiles"])
 
@@ -80,7 +81,8 @@ def get_my_profile(
         })
 
     except Exception as e:
-        return error_response(f"Could not fetch profile: {str(e)}", 500)
+        logging.exception(e)
+        return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
 
 # ─── GET /profiles/check-email ────────────────────────────────────────────────
@@ -108,4 +110,5 @@ def check_email_exists(
         return success_response({"exists": True})
 
     except Exception as e:
-        return error_response(f"Could not check email: {str(e)}", 500)
+        logging.exception(e)
+        return error_response("An unexpected error occurred. Please try again.", status_code=500)

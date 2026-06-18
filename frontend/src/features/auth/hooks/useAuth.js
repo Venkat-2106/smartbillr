@@ -100,16 +100,7 @@ export function useForgotPassword() {
 
     setIsLoading(true)
     try {
-      try {
-        await api.get('/profiles/check-email', { params: { email } })
-      } catch (checkErr) {
-        if (checkErr.response?.status === 404) {
-          toast.error('This email is not registered with SmartBillr')
-          return
-        }
-        toast.error('Could not verify email. Make sure the backend is running.')
-        return
-      }
+      await api.get('/profiles/check-email', { params: { email } })
 
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,

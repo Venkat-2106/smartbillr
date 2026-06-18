@@ -87,14 +87,16 @@ def get_my_profile(
 
 # ─── GET /profiles/check-email ────────────────────────────────────────────────
 # Public endpoint — NO auth required.
-# Used by the password reset flow to verify email exists before sending reset.
+# Always returns 200 with a generic message regardless of whether the email
+# exists. Prevents email enumeration attacks. The frontend calls this before
+# Supabase's resetPasswordForEmail() as a mild timing obfuscation layer.
 @router.get("/check-email")
 def check_email_exists(
     email: str = Query(..., description="Email address to check"),
     db: Session = Depends(get_db),
 ):
     try:
-        result = db.execute(
+        db.execute(
             text("""
                 SELECT id FROM profiles
                 WHERE LOWER(email) = LOWER(:email)
@@ -104,10 +106,9 @@ def check_email_exists(
             {"email": email.strip()}
         ).fetchone()
 
-        if not result:
-            return error_response("This email is not registered with SmartBillr", 404)
-
-        return success_response({"exists": True})
+        return success_response({
+            "message": "If this email is registered, you'll receive reset instructions."
+        })
 
     except Exception as e:
         logging.exception(e)

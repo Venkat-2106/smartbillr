@@ -71,7 +71,7 @@ export default function AppRouter() {
           <Route
             path="/sales/new"
             element={
-              <ProtectedRoute permission="sales.view">
+              <ProtectedRoute permission="sales.create">
                 <CreateSalePage />
               </ProtectedRoute>
             }
@@ -124,7 +124,7 @@ export default function AppRouter() {
           <Route
             path="/purchases/new"
             element={
-              <ProtectedRoute permission="purchases.view">
+              <ProtectedRoute permission="purchases.create">
                 <CreatePurchasePage />
               </ProtectedRoute>
             }

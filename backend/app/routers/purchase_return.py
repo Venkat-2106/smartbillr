@@ -265,43 +265,28 @@ def create_purchase_return(
                 product_id = str(item.product_id)
                 return_qty = item.return_qty
 
-                product = db.execute(text("""
-                    SELECT prod_stock_qty
-                    FROM products
-                    WHERE prod_id     = CAST(:product_id AS uuid)
-                      AND business_id = CAST(:business_id AS uuid)
+                result = db.execute(text("""
+                    UPDATE products
+                    SET prod_stock_qty = prod_stock_qty - :qty
+                    WHERE prod_id      = CAST(:pid AS uuid)
+                      AND business_id  = CAST(:bid AS uuid)
+                      AND prod_stock_qty >= :qty
+                    RETURNING prod_stock_qty
                 """), {
-                    "product_id":  product_id,
-                    "business_id": str(business_id)
+                    "pid": product_id,
+                    "bid": str(business_id),
+                    "qty": return_qty,
                 }).fetchone()
 
-                if not product:
-                    db.rollback()
-                    return error_response(
-                        f"Product {product_id} not found", status_code=404
-                    )
-
-                prev_stock = product.prod_stock_qty
-                new_stock  = prev_stock - return_qty
-
-                if new_stock < 0:
+                if not result:
                     db.rollback()
                     return error_response(
                         f"Product {product_id}: insufficient stock to return "
-                        f"{return_qty} units (current stock: {prev_stock})",
+                        f"{return_qty} units",
                         status_code=400
                     )
 
-                db.execute(text("""
-                    UPDATE products
-                    SET prod_stock_qty = :new_stock
-                    WHERE prod_id      = CAST(:product_id AS uuid)
-                      AND business_id  = CAST(:business_id AS uuid)
-                """), {
-                    "new_stock":   new_stock,
-                    "product_id":  product_id,
-                    "business_id": str(business_id)
-                })
+                prev_stock = result.prod_stock_qty + return_qty
 
                 db.execute(text("""
                     INSERT INTO stock_movements
@@ -551,47 +536,28 @@ def update_purchase_return(
                     product_id = str(row.product_id)
                     return_qty = row.return_qty
 
-                    # Get current stock
-                    product = db.execute(text("""
-                        SELECT prod_stock_qty
-                        FROM products
-                        WHERE prod_id      = CAST(:product_id AS uuid)
-                          AND business_id  = CAST(:business_id AS uuid)
+                    result = db.execute(text("""
+                        UPDATE products
+                        SET prod_stock_qty = prod_stock_qty - :qty
+                        WHERE prod_id      = CAST(:pid AS uuid)
+                          AND business_id  = CAST(:bid AS uuid)
+                          AND prod_stock_qty >= :qty
+                        RETURNING prod_stock_qty
                     """), {
-                        "product_id":  product_id,
-                        "business_id": str(business_id)
+                        "pid": product_id,
+                        "bid": str(business_id),
+                        "qty": return_qty,
                     }).fetchone()
 
-                    if not product:
-                        db.rollback()
-                        return error_response(
-                            f"Product {product_id} not found",
-                            status_code=404
-                        )
-
-                    prev_stock = product.prod_stock_qty
-                    new_stock  = prev_stock - return_qty
-
-                    # Block if not enough stock
-                    if new_stock < 0:
+                    if not result:
                         db.rollback()
                         return error_response(
                             f"Product {product_id}: insufficient stock to return "
-                            f"{return_qty} units (current stock: {prev_stock})",
+                            f"{return_qty} units",
                             status_code=400
                         )
 
-                    # Reduce stock
-                    db.execute(text("""
-                        UPDATE products
-                        SET prod_stock_qty = :new_stock
-                        WHERE prod_id      = CAST(:product_id AS uuid)
-                          AND business_id  = CAST(:business_id AS uuid)
-                    """), {
-                        "new_stock":   new_stock,
-                        "product_id":  product_id,
-                        "business_id": str(business_id)
-                    })
+                    prev_stock = result.prod_stock_qty + return_qty
 
                     # Record stock movement
                     # move_qty is negative → stock going OUT to supplier

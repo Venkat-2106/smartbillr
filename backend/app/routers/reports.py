@@ -2368,7 +2368,7 @@ def get_user_activities(
             al.audit_id, al.user_id, al.action_type,
             al.table_name, al.record_id,
             al.old_data, al.new_data, al.created_at,
-            p.full_name AS user_name
+            COALESCE(p.full_name, 'System') AS user_name
         FROM audit_logs al
         LEFT JOIN profiles p ON p.id = al.user_id
         WHERE al.business_id = CAST(:bid AS uuid)
@@ -2411,7 +2411,7 @@ def get_login_activities(
     rows = db.execute(text(f"""
         SELECT
             al.audit_id, al.user_id, al.created_at,
-            p.full_name AS user_name
+            COALESCE(p.full_name, 'System') AS user_name
         FROM audit_logs al
         LEFT JOIN profiles p ON p.id = al.user_id
         WHERE al.business_id = CAST(:bid AS uuid)
@@ -2457,7 +2457,7 @@ def get_data_changes(
         SELECT
             al.audit_id, al.user_id, al.action_type,
             al.table_name, al.record_id, al.old_data, al.new_data,
-            al.created_at, p.full_name AS user_name
+            al.created_at, COALESCE(p.full_name, 'System') AS user_name
         FROM audit_logs al
         LEFT JOIN profiles p ON p.id = al.user_id
         WHERE al.business_id = CAST(:bid AS uuid)
@@ -2502,7 +2502,7 @@ def get_export_activities(
         SELECT
             al.audit_id, al.user_id, al.table_name,
             al.old_data, al.new_data, al.created_at,
-            p.full_name AS user_name
+            COALESCE(p.full_name, 'System') AS user_name
         FROM audit_logs al
         LEFT JOIN profiles p ON p.id = al.user_id
         WHERE al.business_id = CAST(:bid AS uuid)

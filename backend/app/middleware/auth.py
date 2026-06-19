@@ -41,7 +41,7 @@
 #     Dashboard load (5-6 parallel calls) saves 5-6 DB round trips.
 #     Over the course of a session this is a significant speedup.
 #
-#   FIX — In-memory permissions cache (TTL = 60s).
+#   FIX — In-memory permissions cache (TTL = 10s).
 #     After the first request, subsequent requests from the same user within
 #     the TTL window skip the DB query entirely.
 #     Permissions change rarely (only when admin edits roles), so a 60s lag
@@ -64,12 +64,20 @@ security = HTTPBearer()
 # ── In-memory permissions cache ─────────────────────────────────────────
 # Key:   user_id (str)
 # Value: {"data": {...}, "expires_at": float(epoch)}
-# TTL:   60 seconds
+# TTL:   10 seconds
 # Purge strategy: lazy — expired entries are skipped on lookup and overwritten
 #                 on next fetch. No background sweep needed.
 # Size limit: 1000 entries — beyond that, oldest entries are evicted.
+#
+# MULTI-INSTANCE LIMITATION:
+#   The cache is in-process memory only. In a multi-instance Render deployment,
+#   Instance A has no awareness of cache entries on Instance B. When an admin
+#   changes a user's role or deactivates them via Instance A, only Instance A's
+#   cache is invalidated. Instance B continues serving stale data until TTL
+#   expiry (10s). A shared Redis cache would solve this properly, but for the
+#   current scale the 10s window is acceptable.
 _permissions_cache: dict[str, dict] = {}
-_PERM_CACHE_TTL = 60
+_PERM_CACHE_TTL = 10
 _PERM_CACHE_MAX = 1000
 
 # ── JWKS client ─────────────────────────────────────────────────────────
@@ -117,6 +125,21 @@ def _set_cached_user(user_id: str, data: dict) -> None:
         "data": data,
         "expires_at": time.time() + _PERM_CACHE_TTL,
     }
+
+
+def clear_user_cache(user_id: str) -> None:
+    """
+    Invalidate the in-memory permissions cache entry for this user.
+
+    Call this from admin mutation endpoints (e.g. staff.py) whenever
+    a user's role or is_active status is changed, so the update takes
+    effect immediately on the current instance without waiting for TTL.
+
+    NOTE: In a multi-instance deployment this only invalidates the cache
+    on the instance running this code. Other instances still serve stale
+    data for up to _PERM_CACHE_TTL seconds.
+    """
+    _permissions_cache.pop(user_id, None)
 
 
 def decode_token_payload(token: str) -> dict:
@@ -286,7 +309,7 @@ def verify_token(
         "permissions": permissions,
     }
 
-    # Cache for 60s so subsequent requests skip the DB query.
+    # Cache for 10s so subsequent requests skip the DB query.
     _set_cached_user(user_id, user_data)
 
     return user_data

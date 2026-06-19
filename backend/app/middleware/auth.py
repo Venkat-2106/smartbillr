@@ -7,6 +7,19 @@
 #   Expired tokens are rejected immediately with 401.
 #   See full security model explanation in verify_token() below.
 #
+# SECURITY FIX 3 (2026-06-19):
+#   RS256 JWT signature is now verified via Supabase JWKS endpoint.
+#   Previously the token payload was base64-decoded without verifying the
+#   signature, which allowed token forgery by anyone who knew a valid user_id.
+#
+    #   The verification uses PyJWT with the cryptography backend:
+    #     1. On first request, fetch JWKS from {SUPABASE_URL}/auth/v1/.well-known/jwks.json
+#     2. Cache the public keys in-memory for 1 hour
+#     3. Decode + verify every token using the matching key
+#
+#   This adds ~1 network call on the first request (JWKS fetch), then zero
+#   overhead for subsequent requests (cached keys + local verification).
+#
 # PERFORMANCE:
 #   FIX — Merged 2 separate DB queries into 1 single query.
 #
@@ -39,9 +52,12 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import get_db
-import base64
-import json
+import jwt
+from jwt import PyJWKClient
+import os
 import time
+import base64
+import logging
 
 security = HTTPBearer()
 
@@ -55,6 +71,34 @@ security = HTTPBearer()
 _permissions_cache: dict[str, dict] = {}
 _PERM_CACHE_TTL = 60
 _PERM_CACHE_MAX = 1000
+
+# ── JWKS client ─────────────────────────────────────────────────────────
+# Uses PyJWT's built-in PyJWKClient which handles key fetching, caching,
+# and automatic key selection based on the token's kid header.
+_jwks_client: PyJWKClient | None = None
+
+
+def _get_jwks_client() -> PyJWKClient:
+    """Lazily initialise and return the PyJWKClient singleton."""
+    global _jwks_client
+
+    if _jwks_client is not None:
+        return _jwks_client
+
+    supabase_url = os.getenv("SUPABASE_URL")
+    if not supabase_url:
+        raise HTTPException(status_code=500, detail="SUPABASE_URL not configured")
+
+    try:
+        _jwks_client = PyJWKClient(
+            f"{supabase_url}/auth/v1/.well-known/jwks.json",
+            cache_keys=True,
+            lifespan=300,
+        )
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to initialise JWKS client")
+
+    return _jwks_client
 
 
 def _get_cached_user(user_id: str) -> dict | None:
@@ -77,57 +121,79 @@ def _set_cached_user(user_id: str, data: dict) -> None:
 
 def decode_token_payload(token: str) -> dict:
     """
-    Decode JWT payload and enforce expiry.
+    Decode and VERIFY the JWT using Supabase JWKS keys.
 
-    A JWT has 3 parts separated by dots:
-        header.payload.signature
+    Supports:
+      - RS256 (RSA) via JWKS
+      - ES256 (ECDSA) via JWKS
+      - HS256 fallback using SUPABASE_JWT_SECRET
 
-    We decode the payload (middle part) to extract:
-      - sub  → user_id (UUID)
-      - exp  → expiry timestamp (Unix seconds)
-
-    Expiry check: if current time > exp → reject with 401.
-    Supabase tokens expire after 1 hour by default.
-    The frontend Supabase client auto-refreshes before expiry,
-    so this only triggers for genuinely stale/stolen tokens.
-
-    Security model — why we don't verify the RS256 signature:
-      Supabase migrated this project to new JWT Signing Keys (RS256).
-      Verifying RS256 requires fetching a public key from Supabase's
-      JWKS endpoint — a network call on every request, which is slow.
-      Instead we use two layers that are equally safe in practice:
-        Layer 1 → Expiry check (below)
-        Layer 2 → DB existence check in verify_token()
-                  A forged user_id won't exist in profiles → 403.
+    Raises 401 if:
+      - Token is malformed
+      - Signature is invalid (forged/altered token)
+      - Token is expired
+      - No matching JWK key found
     """
     try:
-        parts = token.split(".")
-        if len(parts) != 3:
-            raise HTTPException(status_code=401, detail="Token is malformed.")
+        unverified_header = jwt.get_unverified_header(token)
 
-        payload_b64 = parts[1]
-        # base64url padding fix — JWT drops '=' padding chars
-        padding = 4 - len(payload_b64) % 4
-        if padding != 4:
-            payload_b64 += "=" * padding
+        # ── Asymmetric verification (RS256 / ES256) via JWKS ──────────────
+        if unverified_header.get("kid"):
+            jwks_client = _get_jwks_client()
+            signing_key = jwks_client.get_signing_key_from_jwt(token)
+            algorithm = unverified_header.get("alg", "RS256")
 
-        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
-
-        # Expiry check — reject tokens older than their exp claim
-        exp = payload.get("exp")
-        if exp is not None and int(time.time()) > exp:
-            raise HTTPException(
-                status_code=401,
-                detail="Token has expired. Please log in again."
+            payload = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=[algorithm],
+                options={
+                    "verify_exp": True,
+                    "verify_aud": False,
+                    "verify_iss": False,
+                    "require": ["exp", "sub"],
+                },
             )
+            return payload
 
-        return payload
+        # ── Symmetric fallback (HS256) using SUPABASE_JWT_SECRET ──────────
+        jwt_secret_b64 = os.getenv("SUPABASE_JWT_SECRET")
+        if jwt_secret_b64:
+            jwt_secret = base64.b64decode(jwt_secret_b64)
+            payload = jwt.decode(
+                token,
+                jwt_secret,
+                algorithms=["HS256"],
+                options={
+                    "verify_exp": True,
+                    "verify_aud": False,
+                    "verify_iss": False,
+                    "require": ["exp", "sub"],
+                },
+            )
+            return payload
 
+        raise HTTPException(
+            status_code=401,
+            detail="Token has no kid header and SUPABASE_JWT_SECRET is not configured."
+        )
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="Token has expired. Please log in again."
+        )
+    except jwt.InvalidTokenError as e:
+        logging.warning("JWT invalid token error: %s", e)
+        raise HTTPException(
+            status_code=401,
+            detail="Token is invalid or expired."
+        )
     except HTTPException:
-        raise  # re-raise our own 401s unchanged
-
-    except Exception:
-        raise HTTPException(status_code=401, detail="Token is invalid or expired.")
+        raise
+    except Exception as e:
+        logging.exception("JWT verification failed with unexpected error")
+        raise HTTPException(status_code=401, detail=f"Token verification failed: {e}")
 
 
 def verify_token(
@@ -159,6 +225,8 @@ def verify_token(
     # ── Check in-memory cache first — eliminates DB query for ~99% of requests ──
     cached = _get_cached_user(user_id)
     if cached is not None:
+        # Still need to set the audit session variable for cached requests
+        db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
         return cached
 
     # ── Cache miss — single DB query fetches profile + role + all permissions ──
@@ -203,6 +271,11 @@ def verify_token(
     # If permissions_csv is NULL (user has no permissions), use empty set.
     permissions_csv = result.permissions_csv or ""
     permissions = set(permissions_csv.split(",")) if permissions_csv else set()
+
+    # Set the audit session variable so DB triggers (fn_audit_log) know who
+    # performed the action. This applies to all subsequent statements in the
+    # same DB session until the connection is returned to the pool.
+    db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
 
     user_data = {
         "user_id":     user_id,

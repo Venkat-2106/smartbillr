@@ -26,14 +26,8 @@ const api = axios.create({
 })
 
 // ── Request interceptor ───────────────────────────────────────────────────────
-// Single interceptor: adds trailing slash + attaches JWT token.
+// Attaches JWT Bearer token from Zustand store to every outgoing request.
 api.interceptors.request.use((config) => {
-  // 1. Trailing slash — FastAPI redirects without it
-  if (config.url && !config.url.endsWith('/') && !config.url.includes('?')) {
-    config.url = config.url + '/'
-  }
-
-  // 2. Attach JWT token from Zustand store
   const token = useAuthStore.getState().token
   if (token) {
     config.headers['Authorization'] = `Bearer ${token}`

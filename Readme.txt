@@ -28,7 +28,9 @@ backend/app/
 │   └── rbac.py       ← require_permission(code), require_any_permission(*codes), require_all_permissions(*codes), get_current_user_with_permissions
 ├── models/           ← SQLAlchemy ORM per table. updated_by has NO ForeignKey() in ORM (FK exists in DB only)
 ├── schemas/          ← Pydantic: XxxCreate, XxxUpdate, XxxOut
-├── routers/          ← One file per domain
+├── routers/          ← One file per domain (business, category, customer, supplier, product, sale, payment, purchase, stock, expense, sales_return, purchase_return, profiles, staff, dashboard, reports)
+├── services/
+│   └── sale_service.py       ← generate_invoice_number, validate_and_cache_products, calculate_total_amount, create_sale_header, handle_stock_overrides, insert_sale_items, update_sale_tax_totals, auto_record_payment, parse_sale_error, get_sales_list, get_sale_detail
 └── utils/
     ├── response.py         ← success_response(data, status_code=200), error_response(msg, status_code=400)
     ├── pagination.py       ← paginate() dep → {page, limit, offset} | pagination_response(data, total, page, limit) → {items, pagination:{total,page,limit,total_pages,has_next,has_prev,truncated}}
@@ -257,12 +259,15 @@ API FILE PATTERN (xxxApi.js):
 ═══════════════════════════════════════════════
 API FIELD NAMES (EXACT)
 ═══════════════════════════════════════════════
-Customers:  cust_id, cust_name, cust_phone, cust_email, cust_address, cust_state, cust_country_code, cust_tax_number, is_deleted, cust_created_at, updated_at, updated_by, last_updated_by
-Suppliers:  supp_id, supp_name, supp_phone, supp_email, supp_address, supp_state, supp_country_code, supp_tax_number, is_deleted, supp_created_at, updated_at, updated_by, last_updated_by
-Products:   prod_id, category_id, category_name, prod_name, prod_sell_price, prod_mrp, prod_cost_price, prod_profit(generated), prod_stock_qty, prod_low_stock_alert, tax_rate, tax_code, barcode, unit, is_deleted, prod_created_at, updated_at, updated_by, last_updated_by, created_by, created_by_name
+Customers:  cust_id, business_id, cust_name, cust_phone, cust_email, cust_address, cust_state, cust_country_code, cust_tax_number, is_deleted, cust_created_at, updated_at, updated_by, last_updated_by
+Suppliers:  supp_id, business_id, supp_name, supp_phone, supp_email, supp_address, supp_state, supp_country_code, supp_tax_number, is_deleted, supp_created_at, updated_at, updated_by, last_updated_by
+Products:   prod_id, business_id, category_id, category_name, prod_name, prod_sell_price, prod_mrp, prod_cost_price, prod_profit(generated), prod_stock_qty, prod_low_stock_alert, tax_rate, tax_code, barcode, unit, is_deleted, prod_created_at, updated_at, created_by, created_by_name, updated_by, last_updated_by
 Categories: category_id, category_name, is_deleted, created_at, updated_at, updated_by, last_updated_by, created_by
-Sales:      sales_id, customer_id, customer_name, invoice_no, sales_total_amount, sales_discount, tax_total, cgst_total, sgst_total, igst_total, sales_final_amount(generated), sales_payment_status, sales_payment_method, sales_created_at
-Payments:   payment_id, sale_id, payment_amount, payment_method, payment_paid_at, payment_status, is_active, cumulative_paid
+Sales:      sales_id, business_id, customer_id, customer_name, invoice_no, sales_total_amount, sales_discount, cgst_total, sgst_total, igst_total, tax_total, sales_final_amount(generated), sales_payment_status, sales_payment_method, sales_created_at, total_paid, remaining_balance, items[]
+Payments:   payment_id, business_id, sale_id, payment_amount, payment_method, payment_paid_at, payment_status, is_active, cumulative_paid
+Expenses:   expense_id, business_id, expense_category, expense_amount, expense_date, expense_notes, is_deleted, created_at, created_by
+Stock:      move_id, business_id, product_id, move_type, move_qty, move_prev_stock, move_new_stock(generated), sale_reference_id, purchase_reference_id, reference_type, reference_id, move_notes, created_at
+Purchases:  purchase_id, business_id, supplier_id, supplier_name, invoice_no, pur_total_amount, pur_discount, pur_final_amount(generated), pur_payment_status, pur_created_at, items[]
 
 PERMISSION CODES:
 dashboard.view | dashboard.financial (gates revenue/expenses)
@@ -285,17 +290,17 @@ PAGES STATUS
 ✅ Customers /customers | permission: customers.manage
 ✅ Suppliers /suppliers | permission: suppliers.manage
 ✅ Sales /sales + /sales/new | permission: sales.view / sales.create
-⏳ Payments /payments | permission: payments.manage
-⏳ Purchases /purchases | permission: purchases.view
-⏳ Stock /stock | permission: stock.view
-⏳ Expenses /expenses | permission: expenses.manage
-⏳ Sales Returns /sales-returns | permission: sales_returns.manage
-⏳ Purchase Returns /purchase-returns | permission: purchase_returns.manage
-⏳ Settings /settings | permission: settings.manage
-⏳ Staff /staff | permission: staff.manage
-⏳ Reports /reports | permission: reports.view
+✅ Payments /payments | permission: payments.manage
+✅ Purchases /purchases + /purchases/new | permission: purchases.view / purchases.create
+✅ Stock /stock | permission: stock.view
+✅ Expenses /expenses | permission: expenses.manage
+✅ Sales Returns /sales-returns | permission: sales_returns.manage
+✅ Purchase Returns /purchase-returns | permission: purchase_returns.manage
+✅ Settings /settings | permission: settings.manage
+✅ Staff /staff | permission: staff.manage
+✅ Reports /reports | permission: reports.view
 
-NEXT STEP: Step 5.16 → Payments page
+ALL PAGES IMPLEMENTED
 
 ═══════════════════════════════════════════════
 SHARED COMPONENTS QUICK REFERENCE

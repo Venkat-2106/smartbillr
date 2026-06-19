@@ -22,6 +22,7 @@ import os
 
 from app.database import get_db
 from app.middleware.rbac import require_permission
+from app.middleware.auth import _permissions_cache
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts
@@ -320,6 +321,10 @@ def update_staff(
             updates
         )
         db.commit()
+
+        # If deactivating, purge cache immediately instead of waiting for TTL
+        if body.is_active is False:
+            _permissions_cache.pop(staff_id, None)
     except Exception as e:
         db.rollback()
         logging.exception(e)
@@ -358,6 +363,10 @@ def deactivate_staff(
             {"id": staff_id}
         )
         db.commit()
+
+        # Invalidate in-memory cache so the deactivated user cannot make API
+        # calls for the remaining TTL window (up to 60s).
+        _permissions_cache.pop(staff_id, None)
     except Exception as e:
         db.rollback()
         logging.exception(e)

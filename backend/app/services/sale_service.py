@@ -376,9 +376,10 @@ def get_sale_detail(db: Session, business_id: str, sales_id: str):
                    si.igst_amount, si.tax_amount, si.item_tax_total, si.item_total_with_tax
             FROM sale_items si
             LEFT JOIN products p ON p.prod_id = si.product_id
-            WHERE si.sale_id = CAST(:sid AS uuid)
+            WHERE si.sale_id     = CAST(:sid AS uuid)
+              AND si.business_id = CAST(:bid AS uuid)
         """),
-        {"sid": sales_id}
+        {"sid": sales_id, "bid": business_id}
     ).fetchall()
 
     active_payment = db.execute(
@@ -386,10 +387,11 @@ def get_sale_detail(db: Session, business_id: str, sales_id: str):
             SELECT COALESCE(cumulative_paid, 0) AS total_paid,
                    payment_status
             FROM payments
-            WHERE sale_id  = CAST(:sid AS uuid)
-              AND is_active = true
+            WHERE sale_id      = CAST(:sid AS uuid)
+              AND business_id  = CAST(:bid AS uuid)
+              AND is_active    = true
         """),
-        {"sid": sales_id}
+        {"sid": sales_id, "bid": business_id}
     ).fetchone()
 
     sale_final = float(sale.sales_final_amount) if sale.sales_final_amount else 0.0

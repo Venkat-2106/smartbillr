@@ -9,3 +9,4 @@ PyJWT==2.12.1
 cryptography==47.0.0
 python-multipart==0.0.32
 pytest==9.1.0
+alembic==1.15.2

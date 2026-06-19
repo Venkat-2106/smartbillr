@@ -345,6 +345,20 @@ WHAT MUST NEVER BE DONE
 ✗ Hide Pagination when filter is active on server-paginated pages
 
 ═══════════════════════════════════════════════
+DATABASE MIGRATIONS (Alembic)
+═══════════════════════════════════════════════
+Schema changes must be made via Alembic revisions, not directly in Supabase.
+
+  alembic revision --autogenerate -m "description_of_change"
+  alembic upgrade head           # apply pending migrations
+
+The initial baseline (da22e1256e21) is an empty revision; the DB was stamped
+at that revision. All future schema changes go through new Alembic revisions.
+
+SQL files in backend/sql/ are for one-off database-side fixes (triggers,
+functions, etc.) that cannot be expressed as model changes.
+
+═══════════════════════════════════════════════
 HOW TO START EVERY SESSION
 ═══════════════════════════════════════════════
 1. Always read the actual files before writing any code

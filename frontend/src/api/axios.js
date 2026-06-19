@@ -26,11 +26,20 @@ const api = axios.create({
 })
 
 // ── Request interceptor ───────────────────────────────────────────────────────
-// Attaches JWT Bearer token from Zustand store to every outgoing request.
+// 1. Attaches JWT Bearer token from Zustand store to every outgoing request.
+// 2. Ensures every URL path ends with '/' to avoid FastAPI 307 redirects.
+//    Splits on '?' so query parameters never interfere with the path check.
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token
   if (token) {
     config.headers['Authorization'] = `Bearer ${token}`
+  }
+
+  if (config.url && !config.url.endsWith('/')) {
+    const [path, query] = config.url.split('?')
+    if (!path.endsWith('/')) {
+      config.url = query ? `${path}/?${query}` : `${path}/`
+    }
   }
 
   return config

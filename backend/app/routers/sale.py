@@ -3,6 +3,7 @@ from fastapi import Body
 from pydantic import BaseModel, field_validator
 from typing import Optional
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from decimal import Decimal
 from app.database import get_db
 from app.middleware.rbac import require_permission
@@ -28,6 +29,7 @@ from app.services.sale_service import (
     update_payment_status,
 )
 from app.utils.payment_helpers import record_payment_and_sync, calculate_payment_status
+from app.utils.currency import get_currency_symbol
 import uuid
 
 router = APIRouter(prefix="/sales", tags=["Sales"])
@@ -159,6 +161,13 @@ def handle_sale_status_patch(
     if not sale:
         return error_response("Sale not found", 404)
 
+    # Resolve currency symbol from the business's country code
+    biz = db.execute(
+        text("SELECT business_country_code FROM businesses WHERE business_id = CAST(:bid AS uuid)"),
+        {"bid": business_id}
+    ).fetchone()
+    currency_sym = get_currency_symbol(biz.business_country_code if biz else None)
+
     old_status = sale.sales_payment_status
     sale_final = get_sale_final_amount(db, sales_id, business_id)
     already_paid = get_sale_active_payment(db, sales_id, business_id)
@@ -201,7 +210,7 @@ def handle_sale_status_patch(
         new_remaining = round(sale_final - total_paid, 2)
         if new_remaining < 0:
             new_remaining = 0
-        response_note = f"Payment recorded: ₹{paid_input}. Total paid: ₹{total_paid}."
+        response_note = f"Payment recorded: {currency_sym}{paid_input}. Total paid: {currency_sym}{total_paid}."
 
     elif body.status == "paid" and old_status != "paid":
         if remaining > 0:

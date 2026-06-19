@@ -143,7 +143,7 @@ def get_dashboard_summary(
 @router.get("/trend")
 def get_dashboard_trend(
     period: str = "weekly",
-    tz_offset_minutes: int = Query(default=0, description="Client timezone offset from Date.getTimezoneOffset()"),
+    tz_offset_minutes: int = Query(default=0, ge=-840, le=840, description="Client timezone offset in minutes. Valid range: -840 to +840 (UTC-14 to UTC+14)"),
     current_user: dict = Depends(require_permission("dashboard.view")),
     db: Session = Depends(get_db)
 ):

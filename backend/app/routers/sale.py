@@ -279,6 +279,18 @@ def delete_sale(
 
     sale.is_deleted = True
     sale.updated_by = current_user["user_id"]
+
+    # Deactivate all payment rows so they no longer appear in active payments
+    db.execute(
+        text("""
+            UPDATE payments
+            SET is_active = false
+            WHERE sale_id = CAST(:sid AS uuid)
+              AND business_id = CAST(:bid AS uuid)
+        """),
+        {"sid": sales_id, "bid": current_user["business_id"]}
+    )
+
     db.commit()
 
     return success_response({"message": "Sale deleted successfully"})

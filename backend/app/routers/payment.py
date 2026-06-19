@@ -249,7 +249,7 @@ def get_all_payments(
 
     base_sql = f"""
         FROM payments p
-        JOIN sales     s ON s.sales_id     = p.sale_id
+        JOIN sales     s ON s.sales_id     = p.sale_id AND s.is_deleted = false
         LEFT JOIN customers c ON c.cust_id = s.customer_id
         WHERE {where_sql}
     """

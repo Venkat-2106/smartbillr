@@ -103,6 +103,9 @@ def create_payment(
     sale_final = float(sale_row.sales_final_amount) if sale_row and sale_row.sales_final_amount else 0
 
     # ── Get total already paid by reading cumulative_paid from active row ─────
+    # FOR UPDATE locks the active payment row so a concurrent request cannot
+    # read the same cumulative_paid and double-record. Lock is released when
+    # db.commit() is called at the end of this route.
     active_row = db.execute(
         text("""
             SELECT COALESCE(cumulative_paid, 0) AS already_paid
@@ -110,6 +113,7 @@ def create_payment(
             WHERE sale_id     = CAST(:sid AS uuid)
               AND business_id  = CAST(:bid AS uuid)
               AND is_active    = true
+            FOR UPDATE
         """),
         {"sid": str(data.sale_id), "bid": business_id}
     ).fetchone()

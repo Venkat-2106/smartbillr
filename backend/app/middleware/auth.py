@@ -227,6 +227,7 @@ def verify_token(
     if cached is not None:
         # Still need to set the audit session variable for cached requests
         db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
+        db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": cached["business_id"]})
         return cached
 
     # ── Cache miss — single DB query fetches profile + role + all permissions ──
@@ -276,6 +277,7 @@ def verify_token(
     # performed the action. This applies to all subsequent statements in the
     # same DB session until the connection is returned to the pool.
     db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
+    db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": str(result.business_id)})
 
     user_data = {
         "user_id":     user_id,

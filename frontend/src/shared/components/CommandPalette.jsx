@@ -90,6 +90,8 @@ export default function CommandPalette({ open, onClose }) {
     <>
       <div
         onClick={onClose}
+        role="presentation"
+        aria-hidden={true}
         style={{
           position: 'fixed', inset: 0, zIndex: 9999,
           background: 'rgba(0,0,0,0.5)',
@@ -98,6 +100,9 @@ export default function CommandPalette({ open, onClose }) {
         }}
       />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
         style={{
           position: 'fixed', inset: 0, zIndex: 10000,
           display: 'flex',
@@ -130,6 +135,12 @@ export default function CommandPalette({ open, onClose }) {
             value={query}
             onChange={e => { setQuery(e.target.value); setActiveIdx(0) }}
             placeholder="Search pages and actions…"
+            aria-label="Search pages"
+            role="combobox"
+            aria-expanded={true}
+            aria-autocomplete="list"
+            aria-activedescendant={filtered[activeIdx] ? `cmd-item-${activeIdx}` : undefined}
+            aria-controls="cmd-results-list"
             style={{
               flex: 1, border: 'none', outline: 'none',
               fontSize: 14.5, color: 'var(--text-primary)',
@@ -139,7 +150,7 @@ export default function CommandPalette({ open, onClose }) {
           <span style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace' }}>Esc</span>
         </div>
 
-        <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: '4px 6px' }}>
+        <div ref={listRef} id="cmd-results-list" role="listbox" aria-label="Search results" style={{ flex: 1, overflowY: 'auto', padding: '4px 6px' }}>
           {filtered.length === 0 ? (
             <div style={{ padding: '24px 14px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
               No results for "{query}"
@@ -150,6 +161,9 @@ export default function CommandPalette({ open, onClose }) {
               return (
                 <button
                   key={page.path}
+                  id={`cmd-item-${i}`}
+                  role="option"
+                  aria-selected={isActive}
                   onClick={() => handleSelect(page)}
                   onMouseEnter={() => setActiveIdx(i)}
                   style={{

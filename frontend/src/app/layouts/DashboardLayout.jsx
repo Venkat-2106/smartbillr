@@ -112,7 +112,7 @@ function ThemePanel({ theme, setTheme, accent, setAccent, onClose }) {
       <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>Appearance</p>
       <div style={{ display: 'flex', gap: 6, marginBottom: 18 }}>
         {['light','dark'].map(t => (
-          <button key={t} onClick={() => setTheme(t)} style={{ flex: 1, height: 34, background: theme===t?'var(--accent-600)':'var(--bg-subtle)', color: theme===t?'#fff':'var(--text-secondary)', border: `1px solid ${theme===t?'var(--accent-600)':'var(--border)'}`, borderRadius: 'var(--r-md)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.14s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+          <button key={t} onClick={() => setTheme(t)} aria-label={`${t.charAt(0).toUpperCase()+t.slice(1)} theme`} aria-pressed={theme===t} style={{ flex: 1, height: 34, background: theme===t?'var(--accent-600)':'var(--bg-subtle)', color: theme===t?'#fff':'var(--text-secondary)', border: `1px solid ${theme===t?'var(--accent-600)':'var(--border)'}`, borderRadius: 'var(--r-md)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.14s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
             {t==='light'?'☀':'🌙'} {t.charAt(0).toUpperCase()+t.slice(1)}
           </button>
         ))}
@@ -120,7 +120,7 @@ function ThemePanel({ theme, setTheme, accent, setAccent, onClose }) {
       <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>Accent Color</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         {ACCENT_OPTIONS.map(a => (
-          <button key={a.id} onClick={() => setAccent(a.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: accent===a.id?'var(--bg-hover)':'transparent', border: `1px solid ${accent===a.id?'var(--border-hover)':'transparent'}`, borderRadius: 'var(--r-md)', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s' }}>
+          <button key={a.id} onClick={() => setAccent(a.id)} aria-label={`${a.label} accent`} aria-pressed={accent===a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: accent===a.id?'var(--bg-hover)':'transparent', border: `1px solid ${accent===a.id?'var(--border-hover)':'transparent'}`, borderRadius: 'var(--r-md)', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s' }}>
             <div style={{ width: 16, height: 16, borderRadius: '50%', background: a.hex, flexShrink: 0 }} />
             <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: accent===a.id?600:400 }}>{a.label}</span>
             {accent===a.id && <svg style={{ marginLeft: 'auto', color: a.hex }} width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
@@ -133,7 +133,7 @@ function ThemePanel({ theme, setTheme, accent, setAccent, onClose }) {
 
 function LogoutDialog({ onConfirm, onCancel }) {
   return (
-    <div onClick={onCancel} style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.15s var(--ease-out)' }}>
+    <div onClick={onCancel} role="dialog" aria-modal="true" aria-label="Sign out confirmation" style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.15s var(--ease-out)' }}>
       <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--r-2xl)', padding: '28px', width: '100%', maxWidth: 360, boxShadow: 'var(--shadow-elevated)', animation: 'scaleIn 0.2s var(--ease-spring)' }}>
         <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
           <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="var(--danger)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
@@ -142,19 +142,20 @@ function LogoutDialog({ onConfirm, onCancel }) {
         <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>You'll be returned to the login screen. Any unsaved changes will be lost.</p>
         <div style={{ height: 1, background: 'var(--border)', margin: '20px 0' }} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onCancel} className="btn btn-secondary" style={{ flex: 1, height: 38 }}>Cancel</button>
-          <button onClick={onConfirm} className="btn btn-danger" style={{ flex: 1, height: 38 }}>Sign out</button>
+          <button onClick={onCancel} aria-label="Cancel sign out" className="btn btn-secondary" style={{ flex: 1, height: 38 }}>Cancel</button>
+          <button onClick={onConfirm} aria-label="Confirm sign out" className="btn btn-danger" style={{ flex: 1, height: 38 }}>Sign out</button>
         </div>
       </div>
     </div>
   )
 }
 
-function IconButton({ onClick, children, style = {} }) {
+function IconButton({ onClick, children, style = {}, 'aria-label': ariaLabel }) {
   const [hovered, setHovered] = useState(false)
   return (
     <button
       onClick={onClick}
+      aria-label={ariaLabel}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -217,6 +218,7 @@ function LogoutButton({ onClick }) {
   return (
     <button
       onClick={onClick}
+      aria-label="Sign out"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -282,7 +284,7 @@ function NavItem({ item, collapsed, onNavClick }) {
 function BottomNav({ items, isMobile, onMoreClick }) {
   if (!isMobile) return null
   return (
-    <nav className="bottom-nav">
+    <nav className="bottom-nav" aria-label="Mobile navigation">
       {items.map(item => {
         if (item.path) {
           return (
@@ -290,6 +292,7 @@ function BottomNav({ items, isMobile, onMoreClick }) {
               key={item.label}
               to={item.path}
               className="bottom-nav-item"
+              aria-label={item.label}
               style={({ isActive }) => ({
                 color: isActive ? 'var(--accent-500)' : 'var(--text-muted)',
               })}
@@ -302,7 +305,7 @@ function BottomNav({ items, isMobile, onMoreClick }) {
           )
         }
         return (
-          <button key={item.label} className="bottom-nav-item" onClick={onMoreClick} style={{ color: 'var(--text-muted)' }}>
+          <button key={item.label} className="bottom-nav-item" aria-label="More navigation" onClick={onMoreClick} style={{ color: 'var(--text-muted)' }}>
             <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
               <path d={item.icon} />
             </svg>
@@ -426,6 +429,8 @@ export default function DashboardLayout() {
       {isMobile && mobileOpen && (
         <div
           onClick={() => setMobileOpen(false)}
+          role="presentation"
+          aria-hidden={true}
           style={{
             position: 'fixed', inset: 0, zIndex: 99,
             background: 'rgba(0,0,0,0.5)',
@@ -436,7 +441,7 @@ export default function DashboardLayout() {
       )}
 
       {/* ── SIDEBAR ── */}
-      <aside style={{
+      <aside role="navigation" aria-label="Main navigation" style={{
         width: isMobile ? FULL : W,
         minHeight: '100vh',
         background: 'var(--sb-bg)',
@@ -459,16 +464,16 @@ export default function DashboardLayout() {
           {isMobile ? (
             <>
               <Logo collapsed={false} />
-              <button onClick={() => setMobileOpen(false)} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 7, width: 26, height: 26, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--sb-text-muted)', flexShrink: 0 }}>
+              <button onClick={() => setMobileOpen(false)} aria-label="Close sidebar" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 7, width: 26, height: 26, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--sb-text-muted)', flexShrink: 0 }}>
                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </>
           ) : collapsed ? (
-            <button onClick={() => setCollapsed(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}><Logo collapsed /></button>
+            <button onClick={() => setCollapsed(false)} aria-label="Expand sidebar" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}><Logo collapsed /></button>
           ) : (
             <>
               <Logo collapsed={false} />
-              <button onClick={() => setCollapsed(true)} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 7, width: 26, height: 26, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--sb-text-muted)', flexShrink: 0, transition: 'background 0.13s' }}>
+              <button onClick={() => setCollapsed(true)} aria-label="Collapse sidebar" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 7, width: 26, height: 26, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--sb-text-muted)', flexShrink: 0, transition: 'background 0.13s' }}>
                 <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
               </button>
             </>
@@ -488,7 +493,7 @@ export default function DashboardLayout() {
         )}
 
         {/* Nav */}
-        <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: collapsed && !isMobile?'10px 8px':'6px 8px', scrollbarWidth: 'none' }}>
+        <nav aria-label="Page sections" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: collapsed && !isMobile?'10px 8px':'6px 8px', scrollbarWidth: 'none' }}>
           {visibleNav.map(section => (
             <div key={section.label} style={{ marginBottom: 2 }}>
               {!collapsed && <p style={{ fontSize: '0.58rem', fontWeight: 700, color: 'var(--sb-text-section)', textTransform: 'uppercase', letterSpacing: '0.1em', padding: '12px 10px 4px', margin: 0 }}>{section.label}</p>}
@@ -511,7 +516,14 @@ export default function DashboardLayout() {
             </div>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--accent-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem', fontWeight: 700, color: '#fff', cursor: 'pointer' }} title={userName}>{initials}</div>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--accent-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem', fontWeight: 700, color: '#fff', cursor: 'pointer' }} title={userName} role="button" tabIndex={0}>{initials}</div>
+            </div>
+          )}
+          {!collapsed && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--sb-border)' }}>
+              <span style={{ fontSize: '0.6rem', color: 'var(--sb-text-muted)' }}>
+                Press <kbd style={{ fontFamily: 'monospace', fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: 'var(--sb-text-muted)' }}>?</kbd> for shortcuts
+              </span>
             </div>
           )}
         </div>
@@ -542,6 +554,7 @@ export default function DashboardLayout() {
             {isMobile && (
               <button
                 onClick={() => setMobileOpen(true)}
+                aria-label="Open sidebar"
                 style={{
                   background: 'var(--bg-subtle)',
                   border: '1px solid var(--border)',
@@ -573,7 +586,7 @@ export default function DashboardLayout() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 8 }}>
 
-            <IconButton style={{ position: 'relative' }}>
+            <IconButton aria-label="Notifications" style={{ position: 'relative' }}>
               <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.9}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
               </svg>
@@ -583,7 +596,7 @@ export default function DashboardLayout() {
             <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
 
             <div style={{ position: 'relative' }}>
-              <IconButton onClick={() => setShowTheme(v => !v)}>
+              <IconButton onClick={() => setShowTheme(v => !v)} aria-label="Toggle theme">
                 <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.9}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>
                 </svg>

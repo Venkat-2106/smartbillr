@@ -102,13 +102,13 @@ export default function ShortcutHelp({ open, onClose }) {
 
   return createPortal(
     <>
-      <div onClick={onClose} style={{
+      <div onClick={onClose} role="presentation" aria-hidden={true} style={{
         position: 'fixed', inset: 0, zIndex: 9999,
         background: 'rgba(0,0,0,0.45)',
         backdropFilter: 'blur(4px)',
         animation: 'fadeIn 0.12s ease',
       }} />
-      <div style={{
+      <div role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" style={{
         position: 'fixed', inset: 0, zIndex: 10000,
         display: 'flex',
         alignItems: 'center',
@@ -128,15 +128,12 @@ export default function ShortcutHelp({ open, onClose }) {
         overflow: 'hidden',
         pointerEvents: 'auto',
       }}>
-        <div style={{
-          padding: '18px 22px', borderBottom: '1px solid var(--border)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        }}>
+        <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Keyboard Shortcuts</h2>
             <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '2px 0 0' }}>Press <Kbd>?</Kbd> anywhere to open this dialog</p>
           </div>
-          <button onClick={onClose} style={{
+          <button onClick={onClose} aria-label="Close shortcuts help" style={{
             background: 'none', border: 'none', cursor: 'pointer',
             color: 'var(--text-muted)', fontSize: 18, padding: '4px 8px',
             borderRadius: 6, lineHeight: 1,

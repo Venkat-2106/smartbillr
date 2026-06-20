@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSales } from '../hooks/useSales';
 import SaleDetailDrawer from '../components/SaleDetailDrawer';
 import {
   Button, Table, Badge, SearchBar,
   Pagination, PageHeader, DateRangeFilter, ExportButton, SkeletonTable,
+  ConfirmDialog,
 } from '../../../shared/components';
 import { selectStyle }       from '../../../shared/components/FormField';
 import { SALES_CSV_COLUMNS } from '../../../shared/utils/csvExport';
@@ -31,8 +32,30 @@ export default function SalesPage() {
     page, setPage,
     drawerSale, setDrawerSale,
     statusMutation,
+    deleteSale, isDeleting,
     isExporting, handleExport,
   } = useSales();
+
+  // ── Delete dialog state ──────────────────────────────────────────────────
+  const [showDelete,       setShowDelete]       = useState(false);
+  const [deletingSale,     setDeletingSale]     = useState(null);
+  const [restoreStock,     setRestoreStock]     = useState(false);
+
+  function handleDeleteClick(sale) {
+    setDeletingSale(sale);
+    setRestoreStock(false);
+    setShowDelete(true);
+  }
+
+  function handleCloseDelete() {
+    setShowDelete(false);
+    setDeletingSale(null);
+    setRestoreStock(false);
+  }
+
+  function onConfirmDelete() {
+    deleteSale(deletingSale.sales_id, restoreStock, { onSuccess: handleCloseDelete });
+  }
 
   // ── Auto-open drawer after invoice creation ──────────────────────────────
   // CreateSalePage navigates here with:
@@ -143,6 +166,25 @@ export default function SalesPage() {
         <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
           {row.sales_created_at ? formatDate(row.sales_created_at) : '—'}
         </span>
+      ),
+    },
+    {
+      key: 'actions',
+      label: '',
+      sortable: false,
+      width: 60,
+      render: (row) => (
+        <button
+          onClick={(e) => { e.stopPropagation(); handleDeleteClick(row); }}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--danger)', fontSize: 16, padding: '4px 8px',
+            fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
+          }}
+          title="Delete invoice"
+        >
+          🗑️
+        </button>
       ),
     },
   ], []); // no component-scope deps — STATUS_VARIANT/STATUS_LABEL are module-level constants
@@ -280,6 +322,37 @@ export default function SalesPage() {
           statusMutation={statusMutation}
         />
       )}
+
+      {/* Delete confirmation */}
+      <ConfirmDialog
+        open={showDelete}
+        onClose={handleCloseDelete}
+        onConfirm={onConfirmDelete}
+        title={`Delete "${deletingSale?.invoice_no}"?`}
+        message={
+          'This action cannot be undone. The invoice will be soft-deleted ' +
+          'and will no longer appear in reports.'
+        }
+        confirmText={isDeleting ? 'Deleting...' : 'Yes, Delete Invoice'}
+        loading={isDeleting}
+      >
+        <label
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            fontSize: 13, color: 'var(--text-secondary)',
+            cursor: 'pointer', userSelect: 'none',
+            padding: '4px 0',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={restoreStock}
+            onChange={(e) => setRestoreStock(e.target.checked)}
+            style={{ accentColor: 'var(--accent-600)', cursor: 'pointer' }}
+          />
+          Restore product stock
+        </label>
+      </ConfirmDialog>
     </>
   );
 }

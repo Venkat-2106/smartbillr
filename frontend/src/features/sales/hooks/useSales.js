@@ -13,7 +13,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { toast } from 'react-hot-toast';
-import { fetchSales, updateSaleStatus, fetchAllSalesForExport } from '../api/salesApi';
+import { fetchSales, updateSaleStatus, fetchAllSalesForExport, deleteSale as deleteSaleApi } from '../api/salesApi';
 import { localDayStartUTC, localDayEndUTC } from '../../../shared/utils/dateUtils';
 import { useDebounce } from '../../../shared/hooks/useDebounce';
 import useAuthStore from '../../../store/authStore';   // FIX: added import
@@ -140,6 +140,20 @@ export function useSales() {
       toast.error(err?.response?.data?.message || 'Failed to update status'),
   });
 
+  // ── Delete mutation ────────────────────────────────────────────────────────
+  const deleteMutation = useMutation({
+    mutationFn: ({ id, restoreStock }) => deleteSaleApi(id, restoreStock),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-trend'] });
+      toast.success('Sale deleted successfully');
+      if (variables.callbacks?.onSuccess) variables.callbacks.onSuccess();
+    },
+    onError: (err) =>
+      toast.error(err?.response?.data?.message || 'Failed to delete sale'),
+  });
+
   return {
     sales,
     isExporting,
@@ -165,5 +179,7 @@ export function useSales() {
     drawerSale, setDrawerSale,
 
     statusMutation,
+    deleteSale: (id, restoreStock, callbacks) => deleteMutation.mutate({ id, restoreStock, callbacks }),
+    isDeleting: deleteMutation.isPending,
   };
 }

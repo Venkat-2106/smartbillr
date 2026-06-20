@@ -35,6 +35,7 @@ export default function ConfirmDialog({
   cancelText = 'Cancel',
   variant = 'danger',
   loading = false,
+  children,
 }) {
   if (!open) return null
 
@@ -113,11 +114,14 @@ export default function ConfirmDialog({
           </p>
         )}
 
+        {/* Children (e.g. checkbox) */}
+        {children}
+
         {/* Buttons */}
         <div style={{
           display: 'flex',
           gap: 10,
-          marginTop: 8,
+          marginTop: children ? 8 : 8,
           width: '100%',
           boxSizing: 'border-box',
         }}>

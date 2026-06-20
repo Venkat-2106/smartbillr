@@ -8,7 +8,10 @@ from decimal import Decimal
 from app.database import get_db
 from app.middleware.rbac import require_permission
 from app.models.sale import Sale
+from app.models.sale_item import SaleItem
+from app.models.product import Product
 from app.schemas.sale import SaleCreate
+from app.routers.stock import cleanup_product_alerts
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.services.sale_service import (
@@ -265,12 +268,16 @@ def handle_sale_status_patch(
 @router.delete("/{sales_id}")
 def delete_sale(
     sales_id: str,
+    restore_stock: bool = Query(False),
     current_user: dict = Depends(require_permission("sales.delete")),
     db: Session = Depends(get_db)
 ):
+    business_id = current_user["business_id"]
+    user_id = current_user["user_id"]
+
     sale = db.query(Sale).filter(
         Sale.sales_id == sales_id,
-        Sale.business_id == current_user["business_id"],
+        Sale.business_id == business_id,
         Sale.is_deleted == False
     ).first()
 
@@ -278,7 +285,7 @@ def delete_sale(
         return error_response("Sale not found", 404)
 
     sale.is_deleted = True
-    sale.updated_by = current_user["user_id"]
+    sale.updated_by = user_id
 
     # Deactivate all payment rows so they no longer appear in active payments
     db.execute(
@@ -288,8 +295,75 @@ def delete_sale(
             WHERE sale_id = CAST(:sid AS uuid)
               AND business_id = CAST(:bid AS uuid)
         """),
-        {"sid": sales_id, "bid": current_user["business_id"]}
+        {"sid": sales_id, "bid": business_id}
     )
+
+    if restore_stock:
+        sale_items = db.query(SaleItem).filter(
+            SaleItem.sale_id == sales_id,
+            SaleItem.business_id == business_id
+        ).all()
+
+        for item in sale_items:
+            product = db.query(Product).filter(
+                Product.prod_id == item.product_id,
+                Product.business_id == business_id
+            ).first()
+
+            if not product:
+                continue
+
+            prev_stock = product.prod_stock_qty
+            restore_qty = item.sale_item_quantity
+
+            db.execute(
+                text("""
+                    UPDATE products
+                    SET prod_stock_qty = prod_stock_qty + :restore_qty,
+                        updated_by = CAST(:user_id AS uuid)
+                    WHERE prod_id = CAST(:prod_id AS uuid)
+                      AND business_id = CAST(:business_id AS uuid)
+                """),
+                {
+                    "restore_qty": restore_qty,
+                    "user_id": user_id,
+                    "prod_id": str(item.product_id),
+                    "business_id": business_id,
+                }
+            )
+
+            new_move_id = str(uuid.uuid4())
+            db.execute(
+                text("""
+                    INSERT INTO stock_movements (
+                        move_id, business_id, product_id,
+                        move_type, move_qty, move_prev_stock,
+                        sale_reference_id, move_notes, move_created_by
+                    ) VALUES (
+                        CAST(:move_id AS uuid),
+                        CAST(:business_id AS uuid),
+                        CAST(:product_id AS uuid),
+                        :move_type, :move_qty,
+                        :move_prev_stock,
+                        CAST(:sale_ref AS uuid),
+                        :move_notes,
+                        CAST(:created_by AS uuid)
+                    )
+                """),
+                {
+                    "move_id": new_move_id,
+                    "business_id": business_id,
+                    "product_id": str(item.product_id),
+                    "move_type": "return",
+                    "move_qty": restore_qty,
+                    "move_prev_stock": prev_stock,
+                    "sale_ref": sales_id,
+                    "move_notes": f"Stock restored from deleted sale {sale.invoice_no}",
+                    "created_by": user_id,
+                }
+            )
+
+            cleanup_product_alerts(db, business_id, str(item.product_id))
 
     db.commit()
 

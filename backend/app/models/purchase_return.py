@@ -32,6 +32,7 @@ class PurchaseReturnItem(Base):
     __tablename__ = "purchase_return_items"
 
     return_item_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    business_id    = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=True)
     return_id      = Column(UUID(as_uuid=True), ForeignKey("purchase_returns.return_id"), nullable=True)
     product_id     = Column(UUID(as_uuid=True), ForeignKey("products.prod_id"),           nullable=True)
     return_qty     = Column(Integer,      nullable=False)

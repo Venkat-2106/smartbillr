@@ -278,7 +278,7 @@ export default function DashboardLayout() {
   const [showTheme,       setShowTheme]       = useState(false)
 
   const { theme, setTheme, accent, setAccent } = useTheme()
-  const { user, business, profile, clearAuth, hasPermission } = useAuthStore()
+  const { user, business, profile, hasPermission } = useAuthStore()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -357,7 +357,17 @@ export default function DashboardLayout() {
     return () => window.removeEventListener('sb:refresh', handler)
   }, [])
 
-  function handleLogout() { clearAuth(); toast.success('Signed out successfully'); navigate('/login') }
+  async function handleLogout() {
+    try {
+      const { default: api } = await import('../../api/axios')
+      await api.post('/auth/logout')
+    } catch {
+      // Network error or token already expired — still clear local state
+    }
+    useAuthStore.getState().clearAuth()
+    toast.success('Signed out successfully')
+    navigate('/login')
+  }
 
   const visibleNav = useMemo(() =>NAV
     .map(section => ({ ...section, items: section.items.filter(item => hasPermission(item.permission)) }))

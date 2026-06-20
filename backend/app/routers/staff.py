@@ -15,10 +15,11 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 import httpx
 import os
+import re
 
 from app.database import get_db
 from app.middleware.rbac import require_permission
@@ -35,6 +36,8 @@ SUPABASE_SERVICE_KEY     = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 VALID_ROLES = {"admin", "manager", "staff"}
 
+MIN_PASSWORD_LENGTH = 8
+
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -42,7 +45,20 @@ class CreateStaffRequest(BaseModel):
     full_name: str
     email:     EmailStr
     password:  str
-    role:      str          # "manager" or "staff"
+    role:      str
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v):
+        if len(v) < MIN_PASSWORD_LENGTH:
+            raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain an uppercase letter")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Password must contain a lowercase letter")
+        if not re.search(r"\d", v):
+            raise ValueError("Password must contain a digit")
+        return v
 
 
 class UpdateStaffRequest(BaseModel):

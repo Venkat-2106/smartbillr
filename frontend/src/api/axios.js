@@ -20,15 +20,29 @@
 import axios from 'axios'
 import useAuthStore from '../store/authStore'
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   headers: { 'Content-Type': 'application/json' },
 })
 
+let isRefreshing = false
+let failedQueue = []
+
+function processQueue(error, token = null) {
+  failedQueue.forEach(({ resolve, reject }) => {
+    if (error) {
+      reject(error)
+    } else {
+      resolve(token)
+    }
+  })
+  failedQueue = []
+}
+
 // ── Request interceptor ───────────────────────────────────────────────────────
-// 1. Attaches JWT Bearer token from Zustand store to every outgoing request.
-// 2. Ensures every URL path ends with '/' to avoid FastAPI 307 redirects.
-//    Splits on '?' so query parameters never interfere with the path check.
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token
   if (token) {
@@ -46,27 +60,66 @@ api.interceptors.request.use((config) => {
 })
 
 // ── Response interceptor ──────────────────────────────────────────────────────
-// Catches 401 (token expired / invalid) and redirects to login.
-// All other errors are passed through to the calling code unchanged.
 api.interceptors.response.use(
-  // Success — pass response through untouched
   (response) => response,
 
-  // Error — handle 401, re-throw everything else
-  (error) => {
-    if (error.response?.status === 401) {
-      // Clear Zustand store + localStorage (Zustand persist)
-      useAuthStore.getState().clearAuth()
+  async (error) => {
+    const originalRequest = error.config
 
-      // Hard redirect — clears all React state, gives user a clean login page
-      // Avoid redirect loop: only redirect if not already on /login
+    if (error.response?.status !== 401 || originalRequest._retry) {
+      return Promise.reject(error)
+    }
+
+    const { refreshToken } = useAuthStore.getState()
+    if (!refreshToken) {
+      useAuthStore.getState().clearAuth()
       if (!window.location.pathname.includes('/login')) {
         window.location.href = '/login'
       }
+      return Promise.reject(error)
     }
 
-    // Re-throw so React Query / individual catch blocks still get the error
-    return Promise.reject(error)
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject })
+      }).then((token) => {
+        originalRequest.headers['Authorization'] = `Bearer ${token}`
+        return api(originalRequest)
+      })
+    }
+
+    originalRequest._retry = true
+    isRefreshing = true
+
+    try {
+      const response = await axios.post(
+        `${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,
+        { refresh_token: refreshToken },
+        {
+          headers: {
+            'apikey': SUPABASE_ANON_KEY,
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+
+      const { access_token, refresh_token } = response.data
+      useAuthStore.getState().setAuth(access_token, useAuthStore.getState().user, refresh_token)
+
+      processQueue(null, access_token)
+
+      originalRequest.headers['Authorization'] = `Bearer ${access_token}`
+      return api(originalRequest)
+    } catch (refreshError) {
+      processQueue(refreshError, null)
+      useAuthStore.getState().clearAuth()
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login'
+      }
+      return Promise.reject(refreshError)
+    } finally {
+      isRefreshing = false
+    }
   }
 )
 

@@ -3,12 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from app.middleware.auth import verify_token
+from app.middleware.security import SecurityHeadersMiddleware
+from app.middleware.ratelimit import RateLimitMiddleware
 from app.utils.response import success_response, error_response
 from app.routers import (
     business, category, customer, supplier,
     product, sale, payment, purchase, staff,
     stock, expense, sales_return, purchase_return, profiles,
-    dashboard, reports
+    dashboard, reports, auth
 )
 import logging
 import os
@@ -24,15 +26,19 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# ── Rate Limiting ─────────────────────────────────────────────────────────────
+# Auth paths (/auth/*, /profiles/check-email): 5 req/min per IP
+# All other API endpoints: 100 req/min per user (IP fallback for unauthenticated)
+# Uses in-process cachetools.TTLCache — no external dependencies.
+app.add_middleware(RateLimitMiddleware)
+
+# ── Security Headers ──────────────────────────────────────────────────────────
+app.add_middleware(SecurityHeadersMiddleware)
+
 # ── GZip compression ──────────────────────────────────────────────────────────
-# Compresses all responses larger than 1000 bytes (JSON, text).
-# Reduces large list/export payloads by 60–80% over the wire.
-# minimum_size=1000 skips tiny responses (health checks etc.) — no overhead.
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
-# Origins from environment variable (comma-separated list).
-# Methods and headers restricted to exactly what SmartBillr uses.
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
 ALLOWED_ORIGINS = [origin.strip() for origin in _raw_origins.split(",")]
 
@@ -45,9 +51,6 @@ app.add_middleware(
 )
 
 # ── Global exception handler ──────────────────────────────────────────────
-# All unhandled exceptions return {"success": false, "error": "Internal Server Error"}
-# instead of FastAPI's default {"detail": "Internal Server Error"}.
-# The frontend reads error.response?.data?.message — which maps to "error" here.
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logging.exception(exc)
@@ -72,6 +75,7 @@ app.include_router(profiles.router)
 app.include_router(staff.router)
 app.include_router(dashboard.router)
 app.include_router(reports.router)
+app.include_router(auth.router)
 
 
 @app.get("/")

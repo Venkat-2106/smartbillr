@@ -14,3 +14,4 @@ class Profile(Base):
     role_id = Column(UUID(as_uuid=True), nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, nullable=True)
+    last_logout_at = Column(DateTime, nullable=True)

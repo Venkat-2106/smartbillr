@@ -1,17 +1,42 @@
 # Virtual Environment
 venv/
+backend/venv/
 
-# Environment files (contain secrets!)
+# Environment files (contain secrets — NEVER commit these!)
 .env
 backend/.env
 frontend/.env
+*.local
+*.local.*
+secrets/
 
 # Python cache
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
 
 # VS Code settings
 .vscode/
+*.code-workspace
 
-# Node modules (React - later)
+# Node modules
 node_modules/
+frontend/node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Build output
+dist/
+frontend/dist/
+backend/dist/
+*.egg-info/
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~

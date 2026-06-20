@@ -26,8 +26,9 @@ export function useLogin() {
       const supabaseData = await loginWithEmail(email, password)
       const token = supabaseData.access_token
       const user  = supabaseData.user
+      const refreshToken = supabaseData.refresh_token
 
-      setAuth(token, user)
+      setAuth(token, user, refreshToken)
 
       // FIX 3: fetch business + profile in parallel — saves ~200ms on every login
       const [bizResult, profileResult] = await Promise.allSettled([
@@ -73,18 +74,29 @@ export function useLogin() {
 }
 
 // ─── useLogout ────────────────────────────────────────────────────────────────
-// Unchanged from existing — clearAuth() already clears permissions
+// Calls backend /auth/logout to blacklist the JWT, then clears local state.
+// If the backend call fails (e.g. network error), local state is still cleared
+// so the user is never stuck logged in.
 export function useLogout() {
   const clearAuth = useAuthStore((state) => state.clearAuth)
   const navigate  = useNavigate()
+  const [isLoading, setIsLoading] = useState(false)
 
-  function logout() {
-    clearAuth()
-    toast.success('Logged out successfully')
-    navigate('/login')
+  async function logout() {
+    setIsLoading(true)
+    try {
+      await api.post('/auth/logout')
+    } catch {
+      // Backend unreachable or token already invalid — still clear local state
+    } finally {
+      clearAuth()
+      toast.success('Logged out successfully')
+      navigate('/login')
+      setIsLoading(false)
+    }
   }
 
-  return { logout }
+  return { logout, isLoading }
 }
 
 // ─── useForgotPassword ────────────────────────────────────────────────────────

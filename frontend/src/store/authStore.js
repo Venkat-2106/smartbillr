@@ -13,14 +13,15 @@ import { persist } from 'zustand/middleware'
 const useAuthStore = create(
   persist(
     (set, get) => ({
-      token:       null,
-      user:        null,
-      business:    null,
-      profile:     null,
-      permissions: [],
+      token:        null,
+      refreshToken: null,
+      user:         null,
+      business:     null,
+      profile:      null,
+      permissions:  [],
 
-      setAuth: (token, user) =>
-        set({ token, user }),
+      setAuth: (token, user, refreshToken) =>
+        set({ token, user, refreshToken }),
 
       setBusiness: (business) =>
         set({ business }),
@@ -57,21 +58,23 @@ const useAuthStore = create(
 
       clearAuth: () =>
         set({
-          token:       null,
-          user:        null,
-          business:    null,
-          profile:     null,
-          permissions: [],
+          token:        null,
+          refreshToken: null,
+          user:         null,
+          business:     null,
+          profile:      null,
+          permissions:  [],
         }),
     }),
     {
       name: 'sb-auth',
       partialize: (state) => ({
-        token:       state.token,
-        user:        state.user,
-        business:    state.business,
-        profile:     state.profile,
-        permissions: state.permissions,
+        token:        state.token,
+        refreshToken: state.refreshToken,
+        user:         state.user,
+        business:     state.business,
+        profile:      state.profile,
+        permissions:  state.permissions,
       }),
     }
   )

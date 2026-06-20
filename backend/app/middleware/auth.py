@@ -55,9 +55,10 @@ from app.database import get_db
 import jwt
 from jwt import PyJWKClient
 import os
-from cachetools import TTLCache, cached
+from cachetools import TTLCache
 import base64
 import logging
+from datetime import datetime, timezone
 
 security = HTTPBearer()
 
@@ -72,7 +73,68 @@ security = HTTPBearer()
 #   cache is invalidated. Instance B continues serving stale data until TTL
 #   expiry (10s). A shared Redis cache would solve this properly, but for the
 #   current scale the 10s window is acceptable.
-_permissions_cache = TTLCache(maxsize=1000, ttl=10)
+#
+# REDIS BACKED CACHE (optional):
+#   Set REDIS_URL env var to enable a shared Redis cache instead of TTLCache.
+#   This eliminates the multi-instance stale cache window entirely.
+#   Falls back to TTLCache if REDIS_URL is not set.
+_permissions_cache: TTLCache | None = TTLCache(maxsize=1000, ttl=10)
+_redis = None
+
+def _get_redis():
+    global _redis
+    if _redis is not None:
+        return _redis
+    redis_url = os.getenv("REDIS_URL")
+    if not redis_url:
+        return None
+    try:
+        import redis as _redis_module
+        _redis = _redis_module.from_url(redis_url, decode_responses=True)
+        return _redis
+    except Exception:
+        logging.warning("Failed to connect to Redis, falling back to in-memory cache")
+        return None
+
+
+# ── Cache helpers ──────────────────────────────────────────────────────
+
+def _cache_get(key: str) -> dict | None:
+    r = _get_redis()
+    if r:
+        import json
+        try:
+            data = r.get(f"perm:{key}")
+            return json.loads(data) if data else None
+        except Exception:
+            pass
+    if _permissions_cache is not None:
+        return _permissions_cache.get(key)
+    return None
+
+
+def _cache_set(key: str, value: dict, ttl: int = 10):
+    r = _get_redis()
+    if r:
+        import json
+        try:
+            r.setex(f"perm:{key}", ttl, json.dumps(value, default=str))
+            return
+        except Exception:
+            pass
+    if _permissions_cache is not None:
+        _permissions_cache[key] = value
+
+
+def _cache_pop(key: str):
+    r = _get_redis()
+    if r:
+        try:
+            r.delete(f"perm:{key}")
+        except Exception:
+            pass
+    if _permissions_cache is not None:
+        _permissions_cache.pop(key, None)
 
 # ── JWKS client ─────────────────────────────────────────────────────────
 # Uses PyJWT's built-in PyJWKClient which handles key fetching, caching,
@@ -105,17 +167,17 @@ def _get_jwks_client() -> PyJWKClient:
 
 def clear_user_cache(user_id: str) -> None:
     """
-    Invalidate the in-memory permissions cache entry for this user.
+    Invalidate the permissions cache entry for this user.
 
-    Call this from admin mutation endpoints (e.g. staff.py) whenever
-    a user's role or is_active status is changed, so the update takes
-    effect immediately on the current instance without waiting for TTL.
+    Call this from admin mutation endpoints (e.g. staff.py) and logout
+    endpoint whenever a user's role, is_active status, or last_logout_at
+    is changed.
 
-    NOTE: In a multi-instance deployment this only invalidates the cache
-    on the instance running this code. Other instances still serve stale
-    data for up to _PERM_CACHE_TTL seconds.
+    Uses Redis if available, otherwise in-memory cache.
+    In a multi-instance deployment with Redis, this clears the cache
+    across all instances immediately.
     """
-    _permissions_cache.pop(user_id, None)
+    _cache_pop(user_id)
 
 
 def decode_token_payload(token: str) -> dict:
@@ -221,34 +283,34 @@ def verify_token(
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token: no user found")
 
-    # ── Check in-memory cache first — eliminates DB query for ~99% of requests ──
-    cached_val = _permissions_cache.get(user_id)
+    token_iat = payload.get("iat")
+
+    # ── Check cache first — eliminates DB query for ~99% of requests ──
+    cached_val = _cache_get(user_id)
     if cached_val is not None:
-        # Still need to set the audit session variable for cached requests
+        # SECURITY: Check if token was issued before last logout.
+        # cached_val includes last_logout_at as epoch timestamp.
+        # This is safe because logout clears the cache entry for this user_id.
+        # On a multi-instance deployment without Redis, there is a small window
+        # (up to TTL seconds) where other instances still serve stale cache.
+        last_logout = cached_val.get("last_logout_at")
+        if last_logout and token_iat and token_iat < last_logout:
+            raise HTTPException(
+                status_code=401,
+                detail="Session expired. Please log in again."
+            )
         db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
         db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": cached_val["business_id"]})
         return cached_val
 
-    # ── Cache miss — single DB query fetches profile + role + all permissions ──
-    #
-    # HOW IT WORKS:
-    #   LEFT JOIN roles        → gets the role name (admin/manager/staff)
-    #   LEFT JOIN role_permissions + permissions → gets all permission codes
-    #   STRING_AGG             → collapses N permission rows into one CSV string
-    #                            e.g. "sales.view,sales.create,dashboard.view"
-    #   GROUP BY               → required because STRING_AGG is an aggregate fn
-    #
-    # WHY LEFT JOINs (not INNER JOINs):
-    #   If a user has no role_id or no permissions yet, INNER JOIN would return
-    #   zero rows and we'd incorrectly get a 403. LEFT JOIN always returns the
-    #   profile row — permissions just come back as NULL (→ empty set).
-    #
+    # ── Cache miss — single DB query fetches profile + role + permissions + last_logout_at ──
     result = db.execute(
         text("""
             SELECT
                 p.business_id,
                 r.name                                      AS role,
-                STRING_AGG(perm.code, ',')                  AS permissions_csv
+                STRING_AGG(perm.code, ',')                  AS permissions_csv,
+                p.last_logout_at
             FROM profiles p
             LEFT JOIN roles r
                 ON r.id = p.role_id
@@ -258,7 +320,7 @@ def verify_token(
                 ON perm.id = rp.permission_id
             WHERE p.id        = :user_id
               AND p.is_active = true
-            GROUP BY p.business_id, r.name
+            GROUP BY p.business_id, r.name, p.last_logout_at
             LIMIT 1
         """),
         {"user_id": user_id}
@@ -267,25 +329,33 @@ def verify_token(
     if result is None:
         raise HTTPException(status_code=403, detail="User not found or inactive")
 
-    # Split the CSV string back into a set of permission codes.
-    # If permissions_csv is NULL (user has no permissions), use empty set.
+    # ── Token revocation check ────────────────────────────────────────────
+    # If the user has logged out since this token was issued, reject it.
+    if result.last_logout_at and token_iat:
+        last_logout_ts = int(result.last_logout_at.timestamp())
+        if token_iat < last_logout_ts:
+            raise HTTPException(
+                status_code=401,
+                detail="Session expired. Please log in again."
+            )
+
     permissions_csv = result.permissions_csv or ""
     permissions = set(permissions_csv.split(",")) if permissions_csv else set()
 
-    # Set the audit session variable so DB triggers (fn_audit_log) know who
-    # performed the action. This applies to all subsequent statements in the
-    # same DB session until the connection is returned to the pool.
     db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
     db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": str(result.business_id)})
 
+    last_logout_epoch = int(result.last_logout_at.timestamp()) if result.last_logout_at else None
+
     user_data = {
-        "user_id":     user_id,
-        "business_id": str(result.business_id),
-        "role":        result.role or "staff",
-        "permissions": permissions,
+        "user_id":       user_id,
+        "business_id":   str(result.business_id),
+        "role":          result.role or "staff",
+        "permissions":   permissions,
+        "last_logout_at": last_logout_epoch,
     }
 
     # Cache for 10s so subsequent requests skip the DB query.
-    _permissions_cache[user_id] = user_data
+    _cache_set(user_id, user_data)
 
     return user_data

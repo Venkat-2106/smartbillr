@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Button, Input, Modal, Table, Badge, SearchBar,
   Pagination, PageHeader, FormField, ExportButton,
-  ConfirmDialog,
+  ConfirmDialog, EmptyState,
 } from '../../../shared/components'
 import { selectStyle } from '../../../shared/components/FormField'
 import { usePermissions } from '../../../shared/hooks/usePermissions'
@@ -244,17 +244,27 @@ export default function StaffPage() {
         </div>
       )}
 
+      {!isLoading && staffList.length === 0 ? (
+        <EmptyState
+          icon="👤"
+          title="Nothing here yet"
+          description="Add team members to collaborate."
+          action={
+            <Button variant="primary" size="sm" onClick={handleOpenAdd}>
+              Add Staff
+            </Button>
+          }
+        />
+      ) : (
       <div style={{ overflowX: 'auto', width: '100%' }}>
         <Table
           columns={columns}
           rows={staffList}
           rowKey="id"
           loading={isLoading}
-          emptyText={
-            'No staff members yet. Add team members to collaborate.'
-          }
         />
       </div>
+      )}
 
       <Pagination
         pagination={{

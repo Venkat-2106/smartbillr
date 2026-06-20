@@ -26,7 +26,7 @@ import {
   Button, Input, Modal, Table, SearchBar,
   Pagination, ConfirmDialog, PageHeader,
   FormField, StateDropdown, ExportButton,
-  DateRangeFilter,
+  DateRangeFilter, EmptyState,
 } from '../../../shared/components'
 
 import { selectStyle, textareaStyle } from '../../../shared/components/FormField'
@@ -420,6 +420,18 @@ export default function CustomersPage() {
       )}
 
       {/* TABLE */}
+      {!isLoading && customers.length === 0 ? (
+        <EmptyState
+          icon={activeFilters > 0 ? '🔍' : '👥'}
+          title={activeFilters > 0 ? 'No results matching your filters' : 'Nothing here yet'}
+          description={activeFilters > 0 ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'Add your first customer to get started.'}
+          action={activeFilters > 0 ? (
+            <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setDateFrom(''); setDateTo('') }}>
+              Clear filters
+            </Button>
+          ) : undefined}
+        />
+      ) : (
       <div style={{ overflowX: 'auto', width: '100%' }}>
           <Table
             columns={columns}
@@ -432,13 +444,9 @@ export default function CustomersPage() {
             selectedIndex={selectedIndex}
             onSelectedIndexChange={setSelectedIndex}
             onRowClick={(row) => setSelectedCustomer(row)}
-            emptyText={
-            activeFilters > 0
-              ? 'No customers match your current filters.'
-              : 'No customers yet. Add your first customer to get started.'
-          }
         />
       </div>
+      )}
 
       {/* PAGINATION — always shown (server handles filtering) */}
       <Pagination

@@ -23,6 +23,7 @@ import {
   Badge,
   Modal,
   ConfirmDialog,
+  EmptyState,
   PageHeader,
   Pagination,
   FormField,
@@ -305,6 +306,18 @@ export default function CategoriesPage() {
         </div>
       )}
 
+      {!isLoading && categories.length === 0 ? (
+        <EmptyState
+          icon={activeFilters > 0 ? '🔍' : '📂'}
+          title={activeFilters > 0 ? 'No results matching your filters' : 'Nothing here yet'}
+          description={activeFilters > 0 ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'Add your first category to start organising products.'}
+          action={activeFilters > 0 ? (
+            <Button variant="secondary" size="sm" onClick={() => { setSearch(''); handleDateChange('from', ''); handleDateChange('to', '') }}>
+              Clear filters
+            </Button>
+          ) : undefined}
+        />
+      ) : (
       <Table
         columns={columns}
         rows={categories}
@@ -314,12 +327,8 @@ export default function CategoriesPage() {
         sortDir={sortDir}
         onSort={handleSort}
         onRowClick={(row) => setDetailCategory(row)}
-        emptyText={
-          activeFilters > 0
-            ? 'No categories match your current filters.'
-            : 'No categories yet. Add your first one to start organising products.'
-        }
       />
+      )}
 
       {activeFilters === 0 && (
         <Pagination pagination={pagination} onPageChange={setPage} />

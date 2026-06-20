@@ -48,6 +48,7 @@ import {
   Table,
   Badge,
   ConfirmDialog,
+  EmptyState,
   PageHeader,
   Pagination,
   SearchBar,
@@ -742,6 +743,18 @@ export default function ProductsPage() {
         </div>
       )}
 
+      {!isLoading && products.length === 0 ? (
+        <EmptyState
+          icon={activeFilters ? '🔍' : '📦'}
+          title={activeFilters ? 'No results matching your filters' : 'Nothing here yet'}
+          description={activeFilters ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'Add your first product to get started.'}
+          action={activeFilters ? (
+            <Button variant="secondary" size="sm" onClick={() => { setSearch(''); handleDateChange('from', ''); handleDateChange('to', '') }}>
+              Clear filters
+            </Button>
+          ) : undefined}
+        />
+      ) : (
       <div style={{ overflowX: 'auto', width: '100%' }}>
         <Table
           columns={columns}
@@ -752,13 +765,9 @@ export default function ProductsPage() {
           sortKey={sortKey}
           sortDir={sortDir}
           onSort={handleSort}
-          emptyText={
-            activeFilters
-              ? 'No products match your current filters.'
-              : 'No products yet. Add your first product to get started.'
-          }
         />
       </div>
+      )}
 
       <Pagination pagination={pagination} onPageChange={setPage} />
 

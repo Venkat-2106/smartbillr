@@ -23,6 +23,7 @@ import PaymentHistoryDrawer, { DrawerOverlay }
 import {
   Button, Table, Badge, SearchBar,
   Pagination, PageHeader, DateRangeFilter, ExportButton,
+  EmptyState,
 } from '../../../shared/components'
 import { selectStyle }           from '../../../shared/components/FormField'
 import { formatCurrency }        from '../../../shared/utils/formatCurrency'
@@ -256,6 +257,18 @@ export default function PaymentsPage() {
       )}
 
       {/* TABLE — click row to open history drawer */}
+      {!isLoading && payments.length === 0 ? (
+        <EmptyState
+          icon={activeFilters > 0 ? '🔍' : '💳'}
+          title={activeFilters > 0 ? 'No results matching your filters' : 'Nothing here yet'}
+          description={activeFilters > 0 ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'Payments are recorded when sales are created or updated.'}
+          action={activeFilters > 0 ? (
+            <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setStatus(''); setDateFrom(''); setDateTo('') }}>
+              Clear filters
+            </Button>
+          ) : undefined}
+        />
+      ) : (
       <div style={{ overflowX: 'auto', width: '100%' }}>
         <Table
           columns={columns}
@@ -266,13 +279,9 @@ export default function PaymentsPage() {
           sortDir={sortDir}
           onSort={handleSort}
           onRowClick={(row) => setSelectedSaleId(row.sale_id)}
-          emptyText={
-            activeFilters > 0
-              ? 'No payments match your current filters.'
-              : 'No payments yet. Payments are recorded when sales are created or updated.'
-          }
         />
       </div>
+      )}
 
       {/* PAGINATION — always shown */}
       <Pagination

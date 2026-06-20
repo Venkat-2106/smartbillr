@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Button, Table, Badge, SearchBar,
   Pagination, PageHeader, DateRangeFilter, ExportButton,
-  ConfirmDialog,
+  ConfirmDialog, EmptyState,
 } from '../../../shared/components'
 import { usePermissions } from '../../../shared/hooks/usePermissions'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
@@ -228,6 +228,18 @@ export default function PurchaseReturnsPage() {
         </div>
       )}
 
+      {!isLoading && returns.length === 0 ? (
+        <EmptyState
+          icon={activeFilters > 0 ? '🔍' : '↩️'}
+          title={activeFilters > 0 ? 'No results matching your filters' : 'Nothing here yet'}
+          description={activeFilters > 0 ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'No purchase returns yet. Create one from a purchase record.'}
+          action={activeFilters > 0 ? (
+            <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setDateFrom(''); setDateTo('') }}>
+              Clear filters
+            </Button>
+          ) : undefined}
+        />
+      ) : (
       <div style={{ overflowX: 'auto', width: '100%' }}>
         <Table
           columns={columns}
@@ -238,13 +250,9 @@ export default function PurchaseReturnsPage() {
           sortDir={sortDir}
           onSort={handleSort}
           onRowClick={(row) => setSelectedReturnId(row.return_id)}
-          emptyText={
-            activeFilters > 0
-              ? 'No returns match your current filters.'
-              : 'No purchase returns yet. Create one from a purchase record.'
-          }
         />
       </div>
+      )}
 
       <Pagination
         pagination={{

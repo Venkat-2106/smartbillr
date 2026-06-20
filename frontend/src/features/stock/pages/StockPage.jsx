@@ -17,6 +17,7 @@ import {
   Table,
   Badge,
   Button,
+  EmptyState,
   PageHeader,
   Pagination,
   SearchBar,
@@ -391,6 +392,18 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
         </div>
       )}
 
+      {!isLoading && stock.length === 0 ? (
+        <EmptyState
+          icon={activeFilters ? '🔍' : '📦'}
+          title={activeFilters ? 'No results matching your filters' : 'Nothing here yet'}
+          description={activeFilters ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'Add products to start tracking stock.'}
+          action={activeFilters ? (
+            <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setCategoryId(''); setStatus(''); setIsActive('') }}>
+              Clear filters
+            </Button>
+          ) : undefined}
+        />
+      ) : (
       <div style={{ overflowX: 'auto', width: '100%' }}>
         <Table
           columns={columns}
@@ -400,13 +413,9 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
           sortKey={sortKey}
           sortDir={sortDir}
           onSort={handleSort}
-          emptyText={
-            activeFilters
-              ? 'No products match your filters.'
-              : 'No products yet. Add products to start tracking stock.'
-          }
         />
       </div>
+      )}
 
       <Pagination pagination={pagination} onPageChange={setPage} />
 
@@ -596,6 +605,18 @@ function StockMovementsTab({ active }) {
         </div>
       )}
 
+      {!isLoading && movements.length === 0 ? (
+        <EmptyState
+          icon={activeFilters ? '🔍' : '📋'}
+          title={activeFilters ? 'No results matching your filters' : 'Nothing here yet'}
+          description={activeFilters ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'No stock movements recorded yet.'}
+          action={activeFilters ? (
+            <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setMoveType(''); setDateFrom(''); setDateTo('') }}>
+              Clear filters
+            </Button>
+          ) : undefined}
+        />
+      ) : (
       <div style={{ overflowX: 'auto', width: '100%' }}>
         <Table
           columns={columns}
@@ -605,13 +626,9 @@ function StockMovementsTab({ active }) {
           sortKey={sortKey}
           sortDir={sortDir}
           onSort={handleSort}
-          emptyText={
-            activeFilters
-              ? 'No movements match your filters.'
-              : 'No stock movements recorded yet.'
-          }
         />
       </div>
+      )}
 
       <Pagination pagination={pagination} onPageChange={setPage} />
     </>
@@ -782,6 +799,13 @@ function LowStockAlertsTab({ active }) {
         </div>
       )}
 
+      {!isLoading && alerts.length === 0 ? (
+        <EmptyState
+          icon="🎉"
+          title="All stocked up!"
+          description="No low stock alerts — all products are well stocked!"
+        />
+      ) : (
       <div style={{ overflowX: 'auto', width: '100%' }}>
         <Table
           columns={columns}
@@ -792,9 +816,9 @@ function LowStockAlertsTab({ active }) {
           sortDir={null}
           onSort={null}
           onRowClick={handleAlertClick}
-          emptyText="🎉 No low stock alerts — all products are well stocked!"
         />
       </div>
+      )}
 
       <Pagination pagination={pagination} onPageChange={setPage} />
     </>

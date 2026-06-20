@@ -292,6 +292,18 @@ export default function SuppliersPage() {
           />
         </div>
 
+      {!isLoading && suppliers.length === 0 ? (
+        <EmptyState
+          icon={activeSearch || activeDateFilter ? '🔍' : '🏭'}
+          title={activeSearch || activeDateFilter ? 'No results matching your filters' : 'Nothing here yet'}
+          description={activeSearch || activeDateFilter ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'Add your first supplier to get started.'}
+          action={activeSearch || activeDateFilter ? (
+            <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setDateFrom(''); setDateTo('') }}>
+              Clear filters
+            </Button>
+          ) : undefined}
+        />
+      ) : (
       <div style={{ overflowX: 'auto', width: '100%' }}>
         <Table
           columns={columns}
@@ -302,13 +314,9 @@ export default function SuppliersPage() {
           sortDir={sortDir}
           onSort={handleSort}
           onRowClick={(row) => setDrawerSupplier(row)}
-          emptyText={
-            activeSearch || activeDateFilter
-              ? 'No suppliers match your current filters.'
-              : 'No suppliers yet. Add your first one to get started.'
-          }
         />
       </div>
+      )}
 
       {/* Pagination */}
       {/* Server-paginated: filters do NOT hide pagination. When you search     */}

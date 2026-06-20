@@ -5,7 +5,7 @@ import SaleDetailDrawer from '../components/SaleDetailDrawer';
 import {
   Button, Table, Badge, SearchBar,
   Pagination, PageHeader, DateRangeFilter, ExportButton, SkeletonTable,
-  ConfirmDialog,
+  ConfirmDialog, EmptyState,
 } from '../../../shared/components';
 import { selectStyle }       from '../../../shared/components/FormField';
 import { SALES_CSV_COLUMNS } from '../../../shared/utils/csvExport';
@@ -280,21 +280,27 @@ export default function SalesPage() {
       <div style={{ overflowX: 'auto', width: '100%' }}>
         {isLoading && !hasData
           ? <SkeletonTable rows={10} columns={7} />
-          : <Table
-              columns={columns}
-              rows={sales}
-              loading={false}
-              rowKey="sales_id"
-              sortKey={sortKey}
-              sortDir={sortDir}
-              onSort={handleSort}
-              onRowClick={(row) => setDrawerSale(row)}
-              emptyText={
-                anyFilterActive
-                  ? 'No invoices match your current filters.'
-                  : 'No sales yet. Click "+ New Invoice" to create your first one.'
-              }
-            />
+          : !isLoading && sales.length === 0
+            ? <EmptyState
+                icon={anyFilterActive ? '🔍' : '📄'}
+                title={anyFilterActive ? 'No results matching your filters' : 'Nothing here yet'}
+                description={anyFilterActive ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'No sales yet. Click "+ New Invoice" to create your first one.'}
+                action={anyFilterActive ? (
+                  <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setStatusFilter(''); handleDateChange('from', ''); handleDateChange('to', '') }}>
+                    Clear filters
+                  </Button>
+                ) : undefined}
+              />
+            : <Table
+                columns={columns}
+                rows={sales}
+                loading={false}
+                rowKey="sales_id"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={handleSort}
+                onRowClick={(row) => setDrawerSale(row)}
+              />
         }
       </div>
 

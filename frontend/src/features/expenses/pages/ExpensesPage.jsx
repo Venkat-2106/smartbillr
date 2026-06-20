@@ -8,6 +8,7 @@ import {
   Button, Input, Modal, Table, SearchBar,
   Pagination, ConfirmDialog, PageHeader,
   FormField, ExportButton, DateRangeFilter,
+  EmptyState,
 } from '../../../shared/components'
 import { selectStyle } from '../../../shared/components/FormField'
 import { EXPENSE_CSV_COLUMNS } from '../../../shared/utils/csvExport'
@@ -319,6 +320,18 @@ export default function ExpensesPage() {
         </div>
       )}
 
+      {!isLoading && expenses.length === 0 ? (
+        <EmptyState
+          icon={activeFilters > 0 ? '🔍' : '💰'}
+          title={activeFilters > 0 ? 'No results matching your filters' : 'Nothing here yet'}
+          description={activeFilters > 0 ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'Add your first expense to get started.'}
+          action={activeFilters > 0 ? (
+            <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setDateFrom(''); setDateTo('') }}>
+              Clear filters
+            </Button>
+          ) : undefined}
+        />
+      ) : (
       <div style={{ overflowX: 'auto', width: '100%' }}>
         <Table
           columns={columns}
@@ -329,13 +342,9 @@ export default function ExpensesPage() {
           sortDir={sortDir}
           onSort={handleSort}
           onRowClick={(row) => setSelectedExpenseId(row.expense_id)}
-          emptyText={
-            activeFilters > 0
-              ? 'No expenses match your current filters.'
-              : 'No expenses yet. Add your first expense to get started.'
-          }
         />
       </div>
+      )}
 
       <Pagination
         pagination={{

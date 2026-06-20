@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from app.middleware.auth import verify_token
 from app.middleware.security import SecurityHeadersMiddleware
 from app.middleware.ratelimit import RateLimitMiddleware
+from app.middleware.request_size_limit import RequestSizeLimitMiddleware
 from app.utils.response import success_response, error_response
 from app.routers import (
     business, category, customer, supplier,
@@ -49,6 +50,11 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+# ── Request Body Size Limit ────────────────────────────────────────────────────
+# JSON endpoints: 10 MB max.  Multipart uploads: 50 MB max.
+# Returns 413 Payload Too Large with consistent error format.
+app.add_middleware(RequestSizeLimitMiddleware)
 
 # ── Global exception handler ──────────────────────────────────────────────
 @app.exception_handler(Exception)

@@ -128,6 +128,47 @@ TEST_TABLES = [
     "profiles", "customers", "sales", "payments",
 ]
 
+# Materialized view table definitions (created as regular tables in SQLite)
+MV_TABLES = {
+    "mv_dashboard_summary": """
+        CREATE TABLE IF NOT EXISTS mv_dashboard_summary (
+            business_id           TEXT PRIMARY KEY,
+            total_invoices        INTEGER DEFAULT 0,
+            pending_payments      INTEGER DEFAULT 0,
+            partial_count         INTEGER DEFAULT 0,
+            pending_count         INTEGER DEFAULT 0,
+            paid_count            INTEGER DEFAULT 0,
+            total_revenue         REAL    DEFAULT 0,
+            total_tax_collected   REAL    DEFAULT 0,
+            total_cgst            REAL    DEFAULT 0,
+            total_sgst            REAL    DEFAULT 0,
+            total_igst            REAL    DEFAULT 0,
+            outstanding_receivables REAL  DEFAULT 0,
+            total_purchases       INTEGER DEFAULT 0,
+            total_purchase_amount REAL    DEFAULT 0,
+            total_purchase_discount REAL  DEFAULT 0,
+            total_purchase_tax    REAL    DEFAULT 0,
+            gross_profit          REAL    DEFAULT 0,
+            total_collected       REAL    DEFAULT 0,
+            total_expenses        REAL    DEFAULT 0,
+            total_customers       INTEGER DEFAULT 0,
+            total_products        INTEGER DEFAULT 0,
+            total_suppliers       INTEGER DEFAULT 0,
+            low_stock_alerts      INTEGER DEFAULT 0,
+            inventory_value       REAL    DEFAULT 0
+        )
+    """,
+    "mv_sales_trend_monthly": """
+        CREATE TABLE IF NOT EXISTS mv_sales_trend_monthly (
+            business_id   TEXT,
+            year_month    TEXT,
+            invoice_count INTEGER DEFAULT 0,
+            revenue       REAL    DEFAULT 0,
+            PRIMARY KEY (business_id, year_month)
+        )
+    """,
+}
+
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_database():
@@ -136,7 +177,16 @@ def setup_database():
     for name in TEST_TABLES:
         if name in Base.metadata.tables:
             Base.metadata.tables[name].create(bind=engine, checkfirst=True)
+    # Create materialized view tables as regular tables for test compatibility
+    with engine.connect() as conn:
+        for ddl in MV_TABLES.values():
+            conn.execute(sa_text(ddl))
+        conn.commit()
     yield
+    with engine.connect() as conn:
+        for name in reversed(list(MV_TABLES.keys())):
+            conn.execute(sa_text(f"DROP TABLE IF EXISTS {name}"))
+        conn.commit()
     for name in reversed(TEST_TABLES):
         if name in Base.metadata.tables:
             Base.metadata.tables[name].drop(bind=engine, checkfirst=True)
@@ -236,6 +286,20 @@ def seed_data(db):
             VALUES (:uid, :bid, 'Inactive User', 'inactive@example.com', 'staff', 0)
         """),
         {"uid": uid_inactive, "bid": bid},
+    )
+
+    # Seed materialized view data (mirrors the live data state above)
+    for mv_name in list(MV_TABLES.keys()):
+        db.execute(sa_text(f"DELETE FROM {mv_name}"))
+    db.execute(
+        sa_text("""
+            INSERT OR REPLACE INTO mv_dashboard_summary
+                (business_id, total_invoices, total_revenue, total_expenses,
+                 total_customers, total_products, total_suppliers,
+                 low_stock_alerts, inventory_value)
+            VALUES (:bid, 0, 0, 0, 0, 0, 0, 0, 0)
+        """),
+        {"bid": bid},
     )
 
     db.commit()

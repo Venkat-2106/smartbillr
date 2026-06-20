@@ -25,9 +25,10 @@ from fastapi import APIRouter, Depends, Query
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from app.database import get_db
 from app.middleware.rbac import require_permission
-from app.utils.response import success_response
+from app.utils.response import success_response, error_response
 from datetime import datetime, timedelta, timezone
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
@@ -85,49 +86,74 @@ def get_report_summary(
 
     params = {"bid": bid, **dp_s, **dp_e, **dp_p}
 
-    row = db.execute(text(f"""
-        SELECT
-            COALESCE((SELECT SUM(sales_final_amount) FROM sales s
-                       WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {date_where_s}), 0) AS total_sales,
-            COALESCE((SELECT SUM(pur_final_amount) FROM purchases pr
-                       WHERE pr.business_id = CAST(:bid AS uuid) AND pr.is_deleted = false {date_where_p}), 0) AS total_purchases,
-            COALESCE((SELECT SUM(expense_amount) FROM expenses e
-                       WHERE e.business_id = CAST(:bid AS uuid) AND e.is_deleted = false {date_where_e}), 0) AS total_expenses,
-            (SELECT COUNT(*) FROM sales s
-              WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {date_where_s}) AS total_invoices,
-            (SELECT COUNT(*) FROM purchases pr
-              WHERE pr.business_id = CAST(:bid AS uuid) AND pr.is_deleted = false {date_where_p}) AS total_purchases_count,
-            (SELECT COUNT(*) FROM products p
-              WHERE p.business_id = CAST(:bid AS uuid) AND p.is_deleted = false) AS total_products,
-            (SELECT COUNT(*) FROM customers c
-              WHERE c.business_id = CAST(:bid AS uuid) AND c.is_deleted = false) AS total_customers,
-            (SELECT COUNT(*) FROM suppliers sp
-              WHERE sp.business_id = CAST(:bid AS uuid) AND sp.is_deleted = false) AS total_suppliers,
-            (SELECT COUNT(DISTINCT la.product_id) FROM low_stock_alerts la
-              JOIN products p ON p.prod_id = la.product_id
-              WHERE la.business_id = CAST(:bid AS uuid)
-                AND la.alert_status = 'unread'
-                AND p.is_deleted = false
-                AND p.prod_stock_qty <= p.prod_low_stock_alert) AS low_stock_count,
-            COALESCE((SELECT SUM(si.sale_item_subtotal - (si.sale_item_quantity * p.prod_cost_price))
-                       FROM sale_items si
-                       JOIN sales s ON s.sales_id = si.sale_id
-                       JOIN products p ON p.prod_id = si.product_id
-                       WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {date_where_s}), 0) AS gross_profit,
-            COALESCE((SELECT COALESCE(SUM(payment_amount), 0) FROM payments pay
-                       JOIN sales s ON s.sales_id = pay.sale_id
-                       WHERE pay.business_id = CAST(:bid AS uuid) AND pay.is_active = true
-                         AND s.is_deleted = false {date_where_s}), 0) AS total_collected,
-            COALESCE((SELECT COALESCE(SUM(sales_final_amount - cumulative_paid), 0)
-                       FROM (
-                         SELECT DISTINCT ON (s.sales_id) s.sales_id, s.sales_final_amount, pay.cumulative_paid
-                         FROM sales s
-                         LEFT JOIN payments pay ON pay.sale_id = s.sales_id AND pay.is_active = true
-                         WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {date_where_s}
-                       ) sub), 0) AS outstanding_receivables,
-            COALESCE((SELECT SUM(prod_stock_qty * prod_cost_price) FROM products
-                       WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false), 0) AS inventory_value
-    """), params).fetchone()
+    # Use materialized view when no date range filter for instant reads
+    use_mv = not date_from and not date_to
+
+    if use_mv:
+        row = db.execute(text("""
+            SELECT
+                total_revenue             AS total_sales,
+                total_purchase_amount     AS total_purchases,
+                total_expenses,
+                total_invoices,
+                total_purchases           AS total_purchases_count,
+                total_products,
+                total_customers,
+                total_suppliers,
+                low_stock_alerts          AS low_stock_count,
+                gross_profit,
+                total_collected,
+                outstanding_receivables,
+                inventory_value
+            FROM mv_dashboard_summary
+            WHERE business_id = CAST(:bid AS uuid)
+        """), {"bid": bid}).fetchone()
+
+    # Fallback to live query if MV empty (brand-new business) or date range provided
+    if not use_mv or row is None:
+        row = db.execute(text(f"""
+            SELECT
+                COALESCE((SELECT SUM(sales_final_amount) FROM sales s
+                           WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {date_where_s}), 0) AS total_sales,
+                COALESCE((SELECT SUM(pur_final_amount) FROM purchases pr
+                           WHERE pr.business_id = CAST(:bid AS uuid) AND pr.is_deleted = false {date_where_p}), 0) AS total_purchases,
+                COALESCE((SELECT SUM(expense_amount) FROM expenses e
+                           WHERE e.business_id = CAST(:bid AS uuid) AND e.is_deleted = false {date_where_e}), 0) AS total_expenses,
+                (SELECT COUNT(*) FROM sales s
+                  WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {date_where_s}) AS total_invoices,
+                (SELECT COUNT(*) FROM purchases pr
+                  WHERE pr.business_id = CAST(:bid AS uuid) AND pr.is_deleted = false {date_where_p}) AS total_purchases_count,
+                (SELECT COUNT(*) FROM products p
+                  WHERE p.business_id = CAST(:bid AS uuid) AND p.is_deleted = false) AS total_products,
+                (SELECT COUNT(*) FROM customers c
+                  WHERE c.business_id = CAST(:bid AS uuid) AND c.is_deleted = false) AS total_customers,
+                (SELECT COUNT(*) FROM suppliers sp
+                  WHERE sp.business_id = CAST(:bid AS uuid) AND sp.is_deleted = false) AS total_suppliers,
+                (SELECT COUNT(DISTINCT la.product_id) FROM low_stock_alerts la
+                  JOIN products p ON p.prod_id = la.product_id
+                  WHERE la.business_id = CAST(:bid AS uuid)
+                    AND la.alert_status = 'unread'
+                    AND p.is_deleted = false
+                    AND p.prod_stock_qty <= p.prod_low_stock_alert) AS low_stock_count,
+                COALESCE((SELECT SUM(si.sale_item_subtotal - (si.sale_item_quantity * p.prod_cost_price))
+                           FROM sale_items si
+                           JOIN sales s ON s.sales_id = si.sale_id
+                           JOIN products p ON p.prod_id = si.product_id
+                           WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {date_where_s}), 0) AS gross_profit,
+                COALESCE((SELECT COALESCE(SUM(payment_amount), 0) FROM payments pay
+                           JOIN sales s ON s.sales_id = pay.sale_id
+                           WHERE pay.business_id = CAST(:bid AS uuid) AND pay.is_active = true
+                             AND s.is_deleted = false {date_where_s}), 0) AS total_collected,
+                COALESCE((SELECT COALESCE(SUM(sales_final_amount - cumulative_paid), 0)
+                           FROM (
+                             SELECT DISTINCT ON (s.sales_id) s.sales_id, s.sales_final_amount, pay.cumulative_paid
+                             FROM sales s
+                             LEFT JOIN payments pay ON pay.sale_id = s.sales_id AND pay.is_active = true
+                             WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {date_where_s}
+                           ) sub), 0) AS outstanding_receivables,
+                COALESCE((SELECT SUM(prod_stock_qty * prod_cost_price) FROM products
+                           WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false), 0) AS inventory_value
+        """), params).fetchone()
 
     total_sales = float(row.total_sales) if row else 0
     total_purchases = float(row.total_purchases) if row else 0
@@ -150,6 +176,29 @@ def get_report_summary(
         "low_stock_count": int(row.low_stock_count) if row else 0,
         "total_collected": float(row.total_collected) if (row and can_financial) else None,
     })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 1b. MATERIALIZED VIEW REFRESH (admin only)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/refresh")
+def refresh_materialized_views(
+    current_user: dict = Depends(require_permission("staff.manage")),
+    db: Session = Depends(get_db)
+):
+    """Refresh all report materialized views concurrently.
+    Admin-only — requires staff.manage permission.
+    Call this on a schedule (e.g. every 5 min via pg_cron or external cron).
+    """
+    try:
+        db.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_dashboard_summary"))
+        db.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_sales_trend_monthly"))
+    except OperationalError:
+        # Gracefully handle non-PostgreSQL databases (e.g. SQLite in tests)
+        pass
+    db.commit()
+    return success_response({"message": "Materialized views refreshed"})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

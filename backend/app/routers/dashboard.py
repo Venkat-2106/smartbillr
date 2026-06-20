@@ -74,35 +74,51 @@ def get_dashboard_summary(
     permissions = current_user.get("permissions", set())
     can_see_financials = "dashboard.financial" in permissions
 
-    # Single merged query — sales aggregates + customer/product counts
-    # + alert count + expenses total — all in one DB round-trip.
+    # Read from materialized view for instant reads.
+    # The MV is refreshed every 5 min via POST /reports/refresh.
     main_row = db.execute(
         text("""
             SELECT
-                COUNT(*)                                                              AS total_invoices,
-                COALESCE(SUM(sales_final_amount), 0)                                  AS total_revenue,
-                COUNT(*) FILTER (WHERE sales_payment_status IN ('pending','partial')) AS pending_payments,
-                COUNT(*) FILTER (WHERE sales_payment_status = 'partial')              AS partial_count,
-                COUNT(*) FILTER (WHERE sales_payment_status = 'pending')              AS pending_count,
-                COUNT(*) FILTER (WHERE sales_payment_status = 'paid')                 AS paid_count,
-                (SELECT COUNT(*) FROM customers
-                  WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false)      AS total_customers,
-                (SELECT COUNT(*) FROM products
-                  WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false)      AS total_products,
-                (SELECT COUNT(DISTINCT la.product_id) FROM low_stock_alerts la
-                  JOIN products p ON p.prod_id = la.product_id
-                  WHERE la.business_id = CAST(:bid AS uuid)
-                    AND la.alert_status = 'unread'
-                    AND p.is_deleted   = false
-                    AND p.prod_stock_qty <= p.prod_low_stock_alert)                   AS low_stock_alerts,
-                (SELECT COALESCE(SUM(expense_amount), 0) FROM expenses
-                  WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false)      AS total_expenses
-            FROM sales
+                total_invoices, total_revenue,
+                pending_payments, partial_count, pending_count, paid_count,
+                total_customers, total_products,
+                low_stock_alerts, total_expenses
+            FROM mv_dashboard_summary
             WHERE business_id = CAST(:bid AS uuid)
-              AND is_deleted   = false
         """),
         {"bid": business_id}
     ).fetchone()
+
+    # Fallback to live query if MV hasn't been populated yet
+    # (e.g. brand-new business before first refresh cycle).
+    if main_row is None:
+        main_row = db.execute(
+            text("""
+                SELECT
+                    COUNT(*)                                                              AS total_invoices,
+                    COALESCE(SUM(sales_final_amount), 0)                                  AS total_revenue,
+                    COUNT(*) FILTER (WHERE sales_payment_status IN ('pending','partial')) AS pending_payments,
+                    COUNT(*) FILTER (WHERE sales_payment_status = 'partial')              AS partial_count,
+                    COUNT(*) FILTER (WHERE sales_payment_status = 'pending')              AS pending_count,
+                    COUNT(*) FILTER (WHERE sales_payment_status = 'paid')                 AS paid_count,
+                    (SELECT COUNT(*) FROM customers
+                      WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false)      AS total_customers,
+                    (SELECT COUNT(*) FROM products
+                      WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false)      AS total_products,
+                    (SELECT COUNT(DISTINCT la.product_id) FROM low_stock_alerts la
+                      JOIN products p ON p.prod_id = la.product_id
+                      WHERE la.business_id = CAST(:bid AS uuid)
+                        AND la.alert_status = 'unread'
+                        AND p.is_deleted   = false
+                        AND p.prod_stock_qty <= p.prod_low_stock_alert)                   AS low_stock_alerts,
+                    (SELECT COALESCE(SUM(expense_amount), 0) FROM expenses
+                      WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false)      AS total_expenses
+                FROM sales
+                WHERE business_id = CAST(:bid AS uuid)
+                  AND is_deleted   = false
+            """),
+            {"bid": business_id}
+        ).fetchone()
 
     return success_response({
         "total_invoices":   int(main_row.total_invoices)   if main_row else 0,

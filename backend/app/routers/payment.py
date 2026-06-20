@@ -243,13 +243,7 @@ def get_all_payments(
         WHERE {where_sql}
     """
 
-    # COUNT
-    count_row = db.execute(
-        text(f"SELECT COUNT(*) AS total {base_sql}"), params
-    ).fetchone()
-    total = count_row.total if count_row else 0
-
-    # DATA
+    # DATA (with total count via window function)
     rows = db.execute(
         text(f"""
             SELECT
@@ -264,13 +258,16 @@ def get_all_payments(
                 p.payment_paid_at,
                 s.invoice_no,
                 s.sales_final_amount,
-                COALESCE(c.cust_name, 'Walk-in') AS customer_name
+                COALESCE(c.cust_name, 'Walk-in') AS customer_name,
+                COUNT(*) OVER() AS total_count
             {base_sql}
             ORDER BY {order_col} {order_dir}
             LIMIT :limit OFFSET :offset
         """),
         {**params, "limit": pagination["limit"], "offset": pagination["offset"]}
     ).fetchall()
+
+    total = rows[0].total_count if rows else 0
 
     items = []
     for r in rows:

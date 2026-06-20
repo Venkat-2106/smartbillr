@@ -55,19 +55,15 @@ from app.database import get_db
 import jwt
 from jwt import PyJWKClient
 import os
-import time
+from cachetools import TTLCache, cached
 import base64
 import logging
 
 security = HTTPBearer()
 
-# ── In-memory permissions cache ─────────────────────────────────────────
-# Key:   user_id (str)
-# Value: {"data": {...}, "expires_at": float(epoch)}
-# TTL:   10 seconds
-# Purge strategy: lazy — expired entries are skipped on lookup and overwritten
-#                 on next fetch. No background sweep needed.
-# Size limit: 1000 entries — beyond that, oldest entries are evicted.
+# ── In-memory permissions cache (TTLCache) ─────────────────────────────
+# Uses cachetools.TTLCache — O(1) get/set, automatic TTL expiry,
+# and LRU eviction when maxsize (1000) is exceeded.
 #
 # MULTI-INSTANCE LIMITATION:
 #   The cache is in-process memory only. In a multi-instance Render deployment,
@@ -76,9 +72,7 @@ security = HTTPBearer()
 #   cache is invalidated. Instance B continues serving stale data until TTL
 #   expiry (10s). A shared Redis cache would solve this properly, but for the
 #   current scale the 10s window is acceptable.
-_permissions_cache: dict[str, dict] = {}
-_PERM_CACHE_TTL = 10
-_PERM_CACHE_MAX = 1000
+_permissions_cache = TTLCache(maxsize=1000, ttl=10)
 
 # ── JWKS client ─────────────────────────────────────────────────────────
 # Uses PyJWT's built-in PyJWKClient which handles key fetching, caching,
@@ -107,24 +101,6 @@ def _get_jwks_client() -> PyJWKClient:
         raise HTTPException(status_code=500, detail="Failed to initialise JWKS client")
 
     return _jwks_client
-
-
-def _get_cached_user(user_id: str) -> dict | None:
-    entry = _permissions_cache.get(user_id)
-    if entry and entry["expires_at"] > time.time():
-        return entry["data"]
-    return None
-
-
-def _set_cached_user(user_id: str, data: dict) -> None:
-    if len(_permissions_cache) >= _PERM_CACHE_MAX:
-        oldest = min(_permissions_cache.keys(),
-                     key=lambda k: _permissions_cache[k]["expires_at"])
-        del _permissions_cache[oldest]
-    _permissions_cache[user_id] = {
-        "data": data,
-        "expires_at": time.time() + _PERM_CACHE_TTL,
-    }
 
 
 def clear_user_cache(user_id: str) -> None:
@@ -246,12 +222,12 @@ def verify_token(
         raise HTTPException(status_code=401, detail="Invalid token: no user found")
 
     # ── Check in-memory cache first — eliminates DB query for ~99% of requests ──
-    cached = _get_cached_user(user_id)
-    if cached is not None:
+    cached_val = _permissions_cache.get(user_id)
+    if cached_val is not None:
         # Still need to set the audit session variable for cached requests
         db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
-        db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": cached["business_id"]})
-        return cached
+        db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": cached_val["business_id"]})
+        return cached_val
 
     # ── Cache miss — single DB query fetches profile + role + all permissions ──
     #
@@ -310,6 +286,6 @@ def verify_token(
     }
 
     # Cache for 10s so subsequent requests skip the DB query.
-    _set_cached_user(user_id, user_data)
+    _permissions_cache[user_id] = user_data
 
     return user_data

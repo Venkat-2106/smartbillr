@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { loginWithEmail } from '../api/authApi'
+import { loginWithEmail, refreshAccessToken } from '../api/authApi'
 import useAuthStore from '../../../store/authStore'
 import api from '../../../api/axios'
 import supabase from '../../../lib/supabaseClient'
@@ -159,4 +159,23 @@ export function useResetPassword() {
   }
 
   return { resetPassword, isLoading }
+}
+
+// ─── refreshAuthToken ──────────────────────────────────────────────────────────
+// Refreshes the JWT using the stored refresh token from Zustand.
+// Returns the new access_token on success, or null on failure.
+// Used by the axios response interceptor and for manual refresh needs.
+export async function refreshAuthToken() {
+  const { refreshToken, setAuth, user } = useAuthStore.getState()
+  if (!refreshToken) return null
+
+  try {
+    const data = await refreshAccessToken(refreshToken)
+    const newToken = data.access_token
+    const newRefreshToken = data.refresh_token
+    setAuth(newToken, user, newRefreshToken)
+    return newToken
+  } catch {
+    return null
+  }
 }

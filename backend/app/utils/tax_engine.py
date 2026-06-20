@@ -30,7 +30,7 @@
 #   Nothing in the existing India path changes.
 # ─────────────────────────────────────────────────────────────────────────────
 
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 from typing import Optional
 
 
@@ -76,9 +76,9 @@ def calculate_item_tax(
     generic_tax  = Decimal("0")
 
     if tax_type == "cgst_sgst":
-        # Split evenly — round each to 2 dp independently
-        cgst = (total_tax / Decimal("2")).quantize(Decimal("0.01"))
-        sgst = (total_tax / Decimal("2")).quantize(Decimal("0.01"))
+        # Split evenly — round down CGST, derive SGST so sum matches total_tax
+        cgst = (total_tax / Decimal("2")).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+        sgst = (total_tax - cgst).quantize(Decimal("0.01"))
     elif tax_type == "igst":
         igst = total_tax.quantize(Decimal("0.01"))
     else:

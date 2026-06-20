@@ -57,9 +57,11 @@ export async function fetchAllCustomersForExport({
   return res.data?.items ?? []
 }
 
-// ── GET SINGLE CUSTOMER ───────────────────────────────────────────────────────
-export async function fetchCustomer(custId) {
-  const res = await api.get(`/customers/${custId}`)
+// ── GET SINGLE CUSTOMER (with paginated sales history) ────────────────────────
+export async function fetchCustomer(custId, { page = 1, limit = 10 } = {}) {
+  const res = await api.get(`/customers/${custId}`, {
+    params: { page, limit },
+  })
   return res.data
 }
 

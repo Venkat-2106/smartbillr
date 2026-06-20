@@ -52,11 +52,12 @@ const PAGE_SIZE = 20
 
 
 // ── useCustomer (singular) ───────────────────────────────────────────────────
-// Fetches one customer's full detail (summary + sales history) for the drawer.
-export function useCustomer(custId) {
+// Fetches one customer's full detail (summary + paginated sales history).
+// page/limit control which page of sales_history is returned.
+export function useCustomer(custId, page = 1, limit = 10) {
   return useQuery({
-    queryKey: ['customer', custId],
-    queryFn:  () => fetchCustomer(custId),
+    queryKey: ['customer', custId, page],
+    queryFn:  () => fetchCustomer(custId, { page, limit }),
     enabled:  !!custId,
     staleTime: 60 * 1000,
   })

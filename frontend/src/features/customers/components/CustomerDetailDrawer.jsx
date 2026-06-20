@@ -24,7 +24,7 @@
 //     into the print node guarantees the output looks correct.
 
 import { memo, useState } from 'react'
-import { Button, Spinner, EmptyState } from '../../../shared/components'
+import { Button, Spinner, EmptyState, Pagination } from '../../../shared/components'
 import { useCustomer } from '../hooks/useCustomers'
 import { formatDate }     from '../../../shared/utils/formatDate'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
@@ -240,12 +240,22 @@ function buildCustomerPrintHTML(business, customer, summary, salesHistory) {
 
 // ── Main Drawer ───────────────────────────────────────────────────────────────
 export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManage }) {
-  const { data, isLoading, isError } = useCustomer(custId)
+  const [page, setPage] = useState(1)
+  const { data, isLoading, isError } = useCustomer(custId, page)
+
+  // Reset to page 1 when viewing a different customer
+  const [prevCustId, setPrevCustId] = useState(custId)
+  if (custId !== prevCustId) {
+    setPrevCustId(custId)
+    setPage(1)
+  }
+
   const [printHovered, setPrintHovered] = useState(false)
 
   const customer     = data
   const summary      = data?.summary
   const salesHistory = data?.sales_history ?? []
+  const pagination   = data?.pagination
 
   function handlePrint() {
     if (!customer) return
@@ -394,10 +404,27 @@ export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManag
                   <SaleCard key={sale.sales_id} sale={sale} />
                 ))}
               </div>
+              {pagination && pagination.total_pages > 1 && (
+                <Pagination
+                  pagination={{
+                    page:        pagination.page,
+                    total_pages: pagination.total_pages,
+                    total:       pagination.total,
+                    has_next:    pagination.has_next,
+                    has_prev:    pagination.has_prev,
+                  }}
+                  onPageChange={setPage}
+                />
+              )}
+              {pagination && (
+                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', textAlign: 'center' }}>
+                  Page {pagination.page} of {pagination.total_pages} · {pagination.total} records
+                </div>
+              )}
             </>
           )}
 
-          {salesHistory.length === 0 && (
+          {salesHistory.length === 0 && !isLoading && (
             <EmptyState title="No sales yet" description="This customer has no sales history." />
           )}
         </div>

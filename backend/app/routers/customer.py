@@ -309,22 +309,26 @@ def search_customer_by_phone(
 
 
 # ══════════════════════════════════════════════════════════════════
-# GET /customers/{cust_id} → Detail + summary + sales history
+# GET /customers/{cust_id} → Detail + summary + paginated sales history
 #
-# FIX: Replaced N+1 per-sale loop with 3 batch queries:
-#   Query 1 — all sales for this customer (unchanged)
-#   Query 2 — all sale_items for those sales (JOIN batch, not per-sale loop)
-#   Query 3 — all payment summaries (GROUP BY sale_id, one row per sale)
-#   Query 4 — all returns (for those sales, batch)
+# Architecture:
+#   Summary aggregates (total_sales, total_spent, total_paid,
+#   total_returns) are computed across ALL of the customer's sales
+#   via aggregate SQL queries — no N+1, no client-side summing.
 #
-# Before: 1 + 3*N DB round-trips where N = number of sales
-# After:  4 DB round-trips regardless of N
+#   Sales history is paginated server-side. The items, payments,
+#   and returns queries only cover the current page, keeping
+#   batch size small regardless of total sales volume.
+#
+#   For full transaction export, use a dedicated export endpoint
+#   (see recommendations below) rather than page=1&limit=10000.
 # ══════════════════════════════════════════════════════════════════
 @router.get("/{cust_id}")
 def get_customer(
     cust_id:      str,
     current_user: dict = Depends(require_permission("customers.manage")),
-    db:           Session = Depends(get_db)
+    db:           Session = Depends(get_db),
+    pagination:   dict = Depends(paginate)
 ):
     business_id = current_user["business_id"]
 
@@ -337,7 +341,58 @@ def get_customer(
     if not customer:
         return error_response("Customer not found", 404)
 
-    # ── Query 1: all sales ─────────────────────────────────────────
+    # ── Summary aggregates (over ALL sales, not just current page) ──
+    agg = db.execute(
+        text("""
+            SELECT
+                COUNT(*)                                  AS total_sales,
+                COALESCE(SUM(sales_final_amount), 0)      AS total_spent
+            FROM sales
+            WHERE customer_id = CAST(:cid AS uuid)
+              AND business_id = CAST(:bid AS uuid)
+              AND is_deleted  = false
+        """),
+        {"cid": cust_id, "bid": business_id}
+    ).fetchone()
+
+    total_sales = agg.total_sales if agg and agg.total_sales else 0
+    total_spent = float(agg.total_spent) if agg and agg.total_spent else 0.0
+
+    total_paid = 0.0
+    total_returns = 0.0
+
+    if total_sales > 0:
+        paid_row = db.execute(
+            text("""
+                SELECT COALESCE(SUM(p.cumulative_paid), 0) AS total_paid
+                FROM payments p
+                JOIN sales s ON s.sales_id = p.sale_id
+                WHERE s.customer_id = CAST(:cid AS uuid)
+                  AND s.business_id = CAST(:bid AS uuid)
+                  AND s.is_deleted  = false
+                  AND p.is_active   = true
+            """),
+            {"cid": cust_id, "bid": business_id}
+        ).fetchone()
+        total_paid = float(paid_row.total_paid) if paid_row else 0.0
+
+        ret_row = db.execute(
+            text("""
+                SELECT COALESCE(SUM(sr.return_amount), 0) AS total_returns
+                FROM sales_returns sr
+                JOIN sales s ON s.sales_id = sr.sale_id
+                WHERE s.customer_id    = CAST(:cid AS uuid)
+                  AND s.business_id    = CAST(:bid AS uuid)
+                  AND s.is_deleted     = false
+                  AND sr.return_status = 'approved'
+            """),
+            {"cid": cust_id, "bid": business_id}
+        ).fetchone()
+        total_returns = float(ret_row.total_returns) if ret_row else 0.0
+
+    outstanding = round(total_spent - total_paid, 2)
+
+    # ── Paginated sales query ──────────────────────────────────────
     sale_rows = db.execute(
         text("""
             SELECT
@@ -345,163 +400,156 @@ def get_customer(
                 sales_total_amount, sales_discount,
                 cgst_total, sgst_total, igst_total, tax_total,
                 sales_final_amount, sales_payment_method,
-                sales_payment_status, sales_created_at
+                sales_payment_status, sales_created_at,
+                COUNT(*) OVER() AS total_count
             FROM sales
             WHERE customer_id = CAST(:cid AS uuid)
               AND business_id = CAST(:bid AS uuid)
               AND is_deleted  = false
             ORDER BY sales_created_at DESC
+            OFFSET :offset LIMIT :limit
         """),
-        {"cid": cust_id, "bid": business_id}
-    ).fetchall()
-
-    if not sale_rows:
-        return success_response({
-            **customer_to_dict(customer),
-            "summary": {
-                "total_sales": 0,
-                "total_spent": 0,
-                "total_paid": 0,
-                "outstanding_balance": 0,
-                "total_returns": 0
-            },
-            "sales_history": []
-        })
-
-    sale_ids = [str(r.sales_id) for r in sale_rows]
-
-    # ── Query 2: all items for all sales (batch) ──────────────────
-    items_rows = db.execute(
-        text("""
-            SELECT
-                si.sale_id,
-                si.sale_item_id, si.product_id, p.prod_name,
-                si.sale_item_quantity, si.sale_item_unit_price,
-                si.sale_item_subtotal, si.item_tax_total, si.item_total_with_tax
-            FROM sale_items si
-            LEFT JOIN products p ON p.prod_id = si.product_id
-            WHERE si.sale_id = ANY(CAST(:ids AS uuid[]))
-              AND si.business_id = CAST(:bid AS uuid)
-        """),
-        {"ids": "{" + ",".join(sale_ids) + "}", "bid": business_id}
-    ).fetchall()
-
-    # Group items by sale_id
-    items_by_sale: dict = {}
-    for i in items_rows:
-        key = str(i.sale_id)
-        items_by_sale.setdefault(key, []).append({
-            "sale_item_id":        str(i.sale_item_id),
-            "product_id":          str(i.product_id),
-            "prod_name":           i.prod_name,
-            "qty":                 i.sale_item_quantity,
-            "unit_price":          float(i.sale_item_unit_price),
-            "subtotal":            float(i.sale_item_subtotal)       if i.sale_item_subtotal      else None,
-            "item_tax_total":      float(i.item_tax_total)           if i.item_tax_total          else 0,
-            "item_total_with_tax": float(i.item_total_with_tax)      if i.item_total_with_tax     else None,
-        })
-
-    # ── Query 3: payment summary per sale (batch GROUP BY) ────────
-    pay_rows = db.execute(
-        text("""
-            SELECT
-                sale_id,
-                COALESCE(MAX(cumulative_paid), 0)                    AS total_paid_amount,
-                MAX(CASE WHEN is_active = true THEN payment_status END) AS current_status,
-                COUNT(*)                                              AS payment_count
-            FROM payments
-            WHERE sale_id = ANY(CAST(:ids AS uuid[]))
-              AND business_id = CAST(:bid AS uuid)
-            GROUP BY sale_id
-        """),
-        {"ids": "{" + ",".join(sale_ids) + "}", "bid": business_id}
-    ).fetchall()
-
-    pay_by_sale = {str(r.sale_id): r for r in pay_rows}
-
-    # ── Query 4: all returns for all sales (batch) ────────────────
-    return_rows = db.execute(
-        text("""
-            SELECT
-                sale_id, return_id, return_amount, return_reason,
-                return_status, refund_method, restock, return_created_at
-            FROM sales_returns
-            WHERE sale_id = ANY(CAST(:ids AS uuid[]))
-              AND business_id = CAST(:bid AS uuid)
-            ORDER BY return_created_at DESC
-        """),
-        {"ids": "{" + ",".join(sale_ids) + "}", "bid": business_id}
-    ).fetchall()
-
-    returns_by_sale: dict = {}
-    for r in return_rows:
-        key = str(r.sale_id)
-        returns_by_sale.setdefault(key, []).append({
-            "return_id":         str(r.return_id),
-            "return_amount":     float(r.return_amount),
-            "return_reason":     r.return_reason,
-            "return_status":     r.return_status,
-            "refund_method":     r.refund_method,
-            "restock":           r.restock,
-            "return_created_at": fmt_ts(r.return_created_at)
-        })
-
-    # ── Assemble response ─────────────────────────────────────────
-    sales_history = []
-    total_spent   = 0.0
-    total_paid    = 0.0
-    total_returns = 0.0
-
-    for sale in sale_rows:
-        sale_id    = str(sale.sales_id)
-        sale_final = float(sale.sales_final_amount) if sale.sales_final_amount else 0.0
-        total_spent += sale_final
-
-        pay = pay_by_sale.get(sale_id)
-        paid_for_sale = float(pay.total_paid_amount) if pay else 0.0
-        total_paid   += paid_for_sale
-        remaining     = round(sale_final - paid_for_sale, 2)
-
-        # Count approved returns for total_returns summary
-        for ret in returns_by_sale.get(sale_id, []):
-            if ret["return_status"] == "approved":
-                total_returns += ret["return_amount"]
-
-        payment_summary = {
-            "total_paid":        round(paid_for_sale, 2),
-            "remaining_balance": remaining if remaining > 0 else 0,
-            "payment_count":     pay.payment_count if pay else 0,
-            "current_status":    (pay.current_status if pay and pay.current_status
-                                  else sale.sales_payment_status),
+        {
+            "cid":    cust_id,
+            "bid":    business_id,
+            "offset": pagination["offset"],
+            "limit":  pagination["limit"],
         }
+    ).fetchall()
 
-        sales_history.append({
-            "sales_id":             sale_id,
-            "invoice_no":           sale.invoice_no,
-            "sales_total_amount":   float(sale.sales_total_amount),
-            "sales_discount":       float(sale.sales_discount) if sale.sales_discount else 0,
-            "tax_total":            float(sale.tax_total) if sale.tax_total else 0,
-            "sales_final_amount":   sale_final,
-            "sales_payment_method": sale.sales_payment_method,
-            "sales_payment_status": sale.sales_payment_status,
-            "sales_created_at":     fmt_ts(sale.sales_created_at),
-            "payment_summary":      payment_summary,
-            "items":                items_by_sale.get(sale_id, []),
-            "returns":              returns_by_sale.get(sale_id, []),
-        })
+    total_count = sale_rows[0].total_count if sale_rows else 0
 
-    outstanding = round(total_spent - total_paid, 2)
+    sales_history = []
+    if sale_rows:
+        sale_ids = [str(r.sales_id) for r in sale_rows]
+
+        # ── Items for paginated sales (batch) ────────────────────
+        items_rows = db.execute(
+            text("""
+                SELECT
+                    si.sale_id,
+                    si.sale_item_id, si.product_id, p.prod_name,
+                    si.sale_item_quantity, si.sale_item_unit_price,
+                    si.sale_item_subtotal, si.item_tax_total, si.item_total_with_tax
+                FROM sale_items si
+                LEFT JOIN products p ON p.prod_id = si.product_id
+                WHERE si.sale_id = ANY(CAST(:ids AS uuid[]))
+                  AND si.business_id = CAST(:bid AS uuid)
+            """),
+            {"ids": "{" + ",".join(sale_ids) + "}", "bid": business_id}
+        ).fetchall()
+
+        items_by_sale: dict = {}
+        for i in items_rows:
+            key = str(i.sale_id)
+            items_by_sale.setdefault(key, []).append({
+                "sale_item_id":        str(i.sale_item_id),
+                "product_id":          str(i.product_id),
+                "prod_name":           i.prod_name,
+                "qty":                 i.sale_item_quantity,
+                "unit_price":          float(i.sale_item_unit_price),
+                "subtotal":            float(i.sale_item_subtotal)       if i.sale_item_subtotal      else None,
+                "item_tax_total":      float(i.item_tax_total)           if i.item_tax_total          else 0,
+                "item_total_with_tax": float(i.item_total_with_tax)      if i.item_total_with_tax     else None,
+            })
+
+        # ── Payment summary for paginated sales (batch GROUP BY) ──
+        pay_rows = db.execute(
+            text("""
+                SELECT
+                    sale_id,
+                    COALESCE(MAX(cumulative_paid), 0)                      AS total_paid_amount,
+                    MAX(CASE WHEN is_active = true THEN payment_status END) AS current_status,
+                    COUNT(*)                                                AS payment_count
+                FROM payments
+                WHERE sale_id = ANY(CAST(:ids AS uuid[]))
+                  AND business_id = CAST(:bid AS uuid)
+                GROUP BY sale_id
+            """),
+            {"ids": "{" + ",".join(sale_ids) + "}", "bid": business_id}
+        ).fetchall()
+
+        pay_by_sale = {str(r.sale_id): r for r in pay_rows}
+
+        # ── Returns for paginated sales (batch) ──────────────────
+        return_rows = db.execute(
+            text("""
+                SELECT
+                    sale_id, return_id, return_amount, return_reason,
+                    return_status, refund_method, restock, return_created_at
+                FROM sales_returns
+                WHERE sale_id = ANY(CAST(:ids AS uuid[]))
+                  AND business_id = CAST(:bid AS uuid)
+                ORDER BY return_created_at DESC
+            """),
+            {"ids": "{" + ",".join(sale_ids) + "}", "bid": business_id}
+        ).fetchall()
+
+        returns_by_sale: dict = {}
+        for r in return_rows:
+            key = str(r.sale_id)
+            returns_by_sale.setdefault(key, []).append({
+                "return_id":         str(r.return_id),
+                "return_amount":     float(r.return_amount),
+                "return_reason":     r.return_reason,
+                "return_status":     r.return_status,
+                "refund_method":     r.refund_method,
+                "restock":           r.restock,
+                "return_created_at": fmt_ts(r.return_created_at)
+            })
+
+        # ── Build sales_history for current page ─────────────────
+        for sale in sale_rows:
+            sale_id    = str(sale.sales_id)
+            sale_final = float(sale.sales_final_amount) if sale.sales_final_amount else 0.0
+
+            pay = pay_by_sale.get(sale_id)
+            paid_for_sale = float(pay.total_paid_amount) if pay else 0.0
+            remaining     = round(sale_final - paid_for_sale, 2)
+
+            payment_summary = {
+                "total_paid":        round(paid_for_sale, 2),
+                "remaining_balance": remaining if remaining > 0 else 0,
+                "payment_count":     pay.payment_count if pay else 0,
+                "current_status":    (pay.current_status if pay and pay.current_status
+                                      else sale.sales_payment_status),
+            }
+
+            sales_history.append({
+                "sales_id":             sale_id,
+                "invoice_no":           sale.invoice_no,
+                "sales_total_amount":   float(sale.sales_total_amount),
+                "sales_discount":       float(sale.sales_discount) if sale.sales_discount else 0,
+                "tax_total":            float(sale.tax_total) if sale.tax_total else 0,
+                "sales_final_amount":   sale_final,
+                "sales_payment_method": sale.sales_payment_method,
+                "sales_payment_status": sale.sales_payment_status,
+                "sales_created_at":     fmt_ts(sale.sales_created_at),
+                "payment_summary":      payment_summary,
+                "items":                items_by_sale.get(sale_id, []),
+                "returns":              returns_by_sale.get(sale_id, []),
+            })
+
+    total_pages = (total_count + pagination["limit"] - 1) // pagination["limit"]
 
     return success_response({
         **customer_to_dict(customer),
         "summary": {
-            "total_sales":         len(sale_rows),
+            "total_sales":         total_sales,
             "total_spent":         round(total_spent, 2),
             "total_paid":          round(total_paid, 2),
             "outstanding_balance": outstanding if outstanding > 0 else 0,
             "total_returns":       round(total_returns, 2)
         },
-        "sales_history": sales_history
+        "sales_history": sales_history,
+        "pagination": {
+            "total":       total_count,
+            "page":        pagination["page"],
+            "limit":       pagination["limit"],
+            "total_pages": total_pages,
+            "has_next":    pagination["page"] < total_pages,
+            "has_prev":    pagination["page"] > 1,
+        }
     })
 
 

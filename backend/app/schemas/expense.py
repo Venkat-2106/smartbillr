@@ -53,5 +53,7 @@ class ExpenseOut(BaseModel):
     is_deleted: bool
     created_at: Optional[datetime] = None
     created_by: Optional[UUID] = None
+    source_type: Optional[str] = None
+    source_id: Optional[UUID] = None
 
     model_config = ConfigDict(from_attributes=True)

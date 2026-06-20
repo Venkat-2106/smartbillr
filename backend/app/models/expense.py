@@ -20,3 +20,5 @@ class Expense(Base):
     created_by = Column(UUID(as_uuid=True), nullable=True)
     updated_at = Column(DateTime, nullable=True)
     updated_by = Column(UUID(as_uuid=True), ForeignKey("profiles.id"), nullable=True)
+    source_type = Column(String(50), nullable=True)
+    source_id = Column(UUID(as_uuid=True), nullable=True)

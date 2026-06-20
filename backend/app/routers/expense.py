@@ -31,6 +31,8 @@ def expense_to_dict(e, last_updated_by=None):
         "updated_at":      fmt_ts(e.updated_at),
         "updated_by":      str(e.updated_by) if e.updated_by else None,
         "last_updated_by": last_updated_by,
+        "source_type":     e.source_type,
+        "source_id":       str(e.source_id) if e.source_id else None,
     }
 
 
@@ -46,6 +48,8 @@ def expense_to_dict_list(row):
         "updated_at":      fmt_ts(row.updated_at),
         "updated_by":      str(row.updated_by)  if row.updated_by  else None,
         "last_updated_by": row.last_updated_by,
+        "source_type":     row.source_type,
+        "source_id":       str(row.source_id) if row.source_id else None,
     }
 
 
@@ -139,6 +143,7 @@ def get_all_expenses(
         SELECT e.expense_id, e.business_id, e.expense_category,
                e.expense_amount, e.expense_date, e.expense_notes,
                e.created_at, e.updated_at, e.updated_by,
+               e.source_type, e.source_id,
                prof.full_name AS last_updated_by,
                COUNT(*) OVER() AS total_count
         FROM expenses e

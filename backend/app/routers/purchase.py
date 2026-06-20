@@ -330,14 +330,17 @@ def create_purchase(
                 text("""
                     INSERT INTO expenses (
                         expense_id, business_id, expense_category,
-                        expense_amount, expense_notes, created_by
+                        expense_amount, expense_notes, created_by,
+                        source_type, source_id
                     ) VALUES (
                         CAST(:expense_id AS uuid),
                         CAST(:business_id AS uuid),
                         :expense_category,
                         :expense_amount,
                         :expense_notes,
-                        CAST(:created_by AS uuid)
+                        CAST(:created_by AS uuid),
+                        :source_type,
+                        CAST(:source_id AS uuid)
                     )
                 """),
                 {
@@ -346,7 +349,9 @@ def create_purchase(
                     "expense_category": "purchase",
                     "expense_amount":   final_amount,
                     "expense_notes":    f"Auto-recorded from purchase {new_pur_id}",
-                    "created_by":       user_id
+                    "created_by":       user_id,
+                    "source_type":      "purchase",
+                    "source_id":        new_pur_id
                 }
             )
 
@@ -635,10 +640,11 @@ def update_purchase_status(
             text("""
                 SELECT expense_id FROM expenses
                 WHERE business_id = CAST(:bid AS uuid)
-                  AND expense_notes LIKE :note_pattern
+                  AND source_type = 'purchase'
+                  AND source_id = CAST(:pid AS uuid)
                   AND is_deleted = false
             """),
-            {"bid": business_id, "note_pattern": f"%{pur_id}%"}
+            {"bid": business_id, "pid": pur_id}
         ).fetchone()
 
         if not existing_expense:
@@ -646,14 +652,17 @@ def update_purchase_status(
                 text("""
                     INSERT INTO expenses (
                         expense_id, business_id, expense_category,
-                        expense_amount, expense_notes, created_by
+                        expense_amount, expense_notes, created_by,
+                        source_type, source_id
                     ) VALUES (
                         CAST(:expense_id AS uuid),
                         CAST(:business_id AS uuid),
                         :expense_category,
                         :expense_amount,
                         :expense_notes,
-                        CAST(:created_by AS uuid)
+                        CAST(:created_by AS uuid),
+                        :source_type,
+                        CAST(:source_id AS uuid)
                     )
                 """),
                 {
@@ -662,7 +671,9 @@ def update_purchase_status(
                     "expense_category": "purchase",
                     "expense_amount":   final_amount,
                     "expense_notes":    f"Auto-recorded from purchase {pur_id}",
-                    "created_by":       user_id
+                    "created_by":       user_id,
+                    "source_type":      "purchase",
+                    "source_id":        pur_id
                 }
             )
             expense_created = True

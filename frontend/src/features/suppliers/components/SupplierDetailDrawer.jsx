@@ -17,6 +17,7 @@ import {
   buildPrintFooter,
   buildPrintMetaGrid,
   buildPrintSectionTitle,
+  escapeHTML,
   triggerPrint,
 } from '../../../shared/utils/printUtils';
 import useAuthStore from '../../../store/authStore';
@@ -46,7 +47,7 @@ function buildSupplierPrintHTML(business, supplier) {
 
     <!-- Supplier name -->
     <div style="margin-bottom:20px;">
-      <div style="font-size:24px;font-weight:900;color:#111827;letter-spacing:-0.5px;line-height:1.1;">${supplier.supp_name}</div>
+      <div style="font-size:24px;font-weight:900;color:#111827;letter-spacing:-0.5px;line-height:1.1;">${escapeHTML(supplier.supp_name)}</div>
       <div style="font-size:11.5px;color:#9ca3af;margin-top:5px;">Supplier Profile</div>
     </div>
 

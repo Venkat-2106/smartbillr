@@ -12,6 +12,7 @@ import {
   buildPrintMetaGrid,
   buildPrintSectionTitle,
   buildPrintTable,
+  escapeHTML,
   triggerPrint,
 } from '../../../shared/utils/printUtils'
 import useAuthStore from '../../../store/authStore'
@@ -68,7 +69,7 @@ function buildReturnPrintHTML(business, detail) {
         Purchase Return
       </div>
       <div style="font-size:11.5px;color:#9ca3af;margin-top:5px;">
-        ${detail.supp_name || 'Return to Supplier'}
+        ${escapeHTML(detail.supp_name || 'Return to Supplier')}
       </div>
     </div>
 

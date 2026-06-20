@@ -1,18 +1,29 @@
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
+from app.schemas.validators import strip_and_escape_html
 
 
 class BusinessCreate(BaseModel):
     business_name: str
-    business_email: Optional[EmailStr] = None  # FIX: nullable in DB
+    business_email: Optional[EmailStr] = None
     business_phone: Optional[str] = None
     business_address: Optional[str] = None
     business_state: Optional[str] = None
     gstin: Optional[str] = None
     is_gst_registered: Optional[bool] = False
-    business_country_code: Optional[str] = None  # FIX: added missing field
+    business_country_code: Optional[str] = None
+
+    @field_validator("business_name")
+    @classmethod
+    def sanitize_name(cls, v: str) -> str:
+        return strip_and_escape_html(v)
+
+    @field_validator("business_phone", "business_address", "business_state", "gstin", "business_country_code")
+    @classmethod
+    def sanitize_optional_strings(cls, v):
+        return strip_and_escape_html(v)
 
 
 class BusinessUpdate(BaseModel):
@@ -23,7 +34,17 @@ class BusinessUpdate(BaseModel):
     business_state: Optional[str] = None
     gstin: Optional[str] = None
     is_gst_registered: Optional[bool] = None
-    business_country_code: Optional[str] = None  # FIX: added missing field
+    business_country_code: Optional[str] = None
+
+    @field_validator("business_name")
+    @classmethod
+    def sanitize_name(cls, v: Optional[str]) -> Optional[str]:
+        return strip_and_escape_html(v)
+
+    @field_validator("business_phone", "business_address", "business_state", "gstin", "business_country_code")
+    @classmethod
+    def sanitize_optional_strings(cls, v):
+        return strip_and_escape_html(v)
 
 
 class BusinessResponse(BaseModel):

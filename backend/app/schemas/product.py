@@ -19,6 +19,7 @@ from pydantic import BaseModel, field_validator, ConfigDict
 from typing import Optional
 from uuid import UUID
 from decimal import Decimal
+from app.schemas.validators import strip_and_escape_html
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -50,7 +51,12 @@ class ProductCreate(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("Product name cannot be blank")
-        return v
+        return strip_and_escape_html(v)
+
+    @field_validator("barcode", "unit", "tax_code")
+    @classmethod
+    def sanitize_strings(cls, v):
+        return strip_and_escape_html(v)
 
     # ── Price / qty guards ─────────────────────────────────────────────────────
     @field_validator("prod_sell_price", "prod_cost_price", "prod_mrp")
@@ -94,7 +100,13 @@ class ProductUpdate(BaseModel):
             v = v.strip()
             if not v:
                 raise ValueError("Product name cannot be blank")
+            v = strip_and_escape_html(v)
         return v
+
+    @field_validator("barcode", "unit", "tax_code")
+    @classmethod
+    def sanitize_strings(cls, v):
+        return strip_and_escape_html(v)
 
     # ── Price guard ────────────────────────────────────────────────────────────
     @field_validator("prod_sell_price", "prod_cost_price", "prod_mrp")

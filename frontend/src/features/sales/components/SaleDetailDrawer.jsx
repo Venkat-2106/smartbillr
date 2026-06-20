@@ -28,6 +28,7 @@ import {
   buildPrintHeader,
   buildPrintWatermark,
   buildPrintFooter,
+  escapeHTML,
   triggerPrint,
 } from '../../../shared/utils/printUtils';
 import useAuthStore from '../../../store/authStore';
@@ -77,8 +78,10 @@ function buildInvoiceHTML(
   cgst, sgst, igst, subtotal, taxTotal, discount, finalAmount, totalPaid, remaining
 ) {
   const payStatus = detail?.sales_payment_status || sale.sales_payment_status || 'pending';
-  const payMethod = (detail?.sales_payment_method || sale.sales_payment_method || '—')
-    .replace(/_/g, ' ').toUpperCase();
+  const payMethod = escapeHTML((detail?.sales_payment_method || sale.sales_payment_method || '—')
+    .replace(/_/g, ' ').toUpperCase());
+  const invNo     = escapeHTML(sale.invoice_no || '');
+  const custName  = escapeHTML(detail?.customer_name || sale.customer_name || 'Walk-in Customer');
 
   // MRP FEATURE: decide whether to show the MRP/Discount columns
   const showMRP       = anyItemHasMRP(items);
@@ -107,7 +110,7 @@ function buildInvoiceHTML(
 
     return `
       <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'};page-break-inside:avoid;">
-        <td style="padding:5px 5px;font-size:10.5px;color:#111827;word-break:break-word;">${item.product_name || 'Product'}</td>
+        <td style="padding:5px 5px;font-size:10.5px;color:#111827;word-break:break-word;">${escapeHTML(item.product_name || 'Product')}</td>
         <td style="padding:5px 5px;text-align:center;font-size:10px;color:#374151;white-space:nowrap;">${qty}</td>
         ${mrpCell}
         <td style="padding:5px 5px;text-align:right;font-size:10px;color:#374151;white-space:nowrap;">${formatCurrency(unitPrice)}</td>
@@ -155,7 +158,7 @@ function buildInvoiceHTML(
     <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:16px;">
       <div>
         <div style="font-size:24px;font-weight:900;color:#111827;letter-spacing:-1px;line-height:1;">INVOICE</div>
-        <div style="font-size:14px;font-weight:700;color:#4F46E5;margin-top:4px;letter-spacing:0.02em;">${sale.invoice_no || ''}</div>
+        <div style="font-size:14px;font-weight:700;color:#4F46E5;margin-top:4px;letter-spacing:0.02em;">${invNo}</div>
       </div>
       <div style="text-align:right;">
         <div style="font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:2px;">Invoice Date</div>
@@ -170,7 +173,7 @@ function buildInvoiceHTML(
     <!-- Bill To -->
     <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:10px 14px;margin-bottom:16px;">
       <div style="font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Bill To</div>
-      <div style="font-size:14px;font-weight:700;color:#111827;">${detail?.customer_name || sale.customer_name || 'Walk-in Customer'}</div>
+      <div style="font-size:14px;font-weight:700;color:#111827;">${custName}</div>
     </div>
 
     <!-- Items table -->

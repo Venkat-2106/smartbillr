@@ -12,6 +12,7 @@ import {
   buildPrintMetaGrid,
   buildPrintSectionTitle,
   buildPrintTable,
+  escapeHTML,
   triggerPrint,
 } from '../../../shared/utils/printUtils'
 import useAuthStore from '../../../store/authStore'
@@ -69,7 +70,7 @@ function buildReturnPrintHTML(business, detail) {
         Sales Return
       </div>
       <div style="font-size:11.5px;color:#9ca3af;margin-top:5px;">
-        ${detail.invoice_no ? `Invoice ${detail.invoice_no}` : ''}
+        ${detail.invoice_no ? `Invoice ${escapeHTML(detail.invoice_no)}` : ''}
       </div>
     </div>
 

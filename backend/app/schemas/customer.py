@@ -2,6 +2,8 @@ from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
+from app.schemas.validators import strip_and_escape_html
+
 
 class CustomerCreate(BaseModel):
     cust_name: str
@@ -19,6 +21,17 @@ class CustomerCreate(BaseModel):
             return None
         return v
 
+    @field_validator("cust_name")
+    @classmethod
+    def sanitize_name(cls, v: str) -> str:
+        return strip_and_escape_html(v)
+
+    @field_validator("cust_phone", "cust_address", "cust_state", "cust_country_code", "cust_tax_number")
+    @classmethod
+    def sanitize_optional_strings(cls, v):
+        return strip_and_escape_html(v)
+
+
 class CustomerUpdate(BaseModel):
     cust_name: Optional[str] = None
     cust_phone: Optional[str] = None
@@ -34,6 +47,16 @@ class CustomerUpdate(BaseModel):
         if v == '' or (isinstance(v, str) and not v.strip()):
             return None
         return v
+
+    @field_validator("cust_name")
+    @classmethod
+    def sanitize_name(cls, v: Optional[str]) -> Optional[str]:
+        return strip_and_escape_html(v)
+
+    @field_validator("cust_phone", "cust_address", "cust_state", "cust_country_code", "cust_tax_number")
+    @classmethod
+    def sanitize_optional_strings(cls, v):
+        return strip_and_escape_html(v)
 
 class CustomerOut(BaseModel):
     cust_id: UUID

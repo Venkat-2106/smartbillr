@@ -3,6 +3,7 @@ from typing import Optional
 from uuid import UUID
 from decimal import Decimal
 from datetime import date, datetime
+from app.schemas.validators import strip_and_escape_html
 
 ALLOWED_CATEGORIES = ["rent", "salary", "electricity", "internet", "maintenance", "marketing", "purchase", "other"]
 
@@ -19,6 +20,11 @@ class ExpenseCreate(BaseModel):
             raise ValueError(f"expense_category must be one of: {ALLOWED_CATEGORIES}")
         return v
 
+    @field_validator("expense_notes")
+    @classmethod
+    def sanitize_notes(cls, v):
+        return strip_and_escape_html(v)
+
 class ExpenseUpdate(BaseModel):
     expense_category: Optional[str] = None
     expense_amount: Optional[Decimal] = None
@@ -31,6 +37,11 @@ class ExpenseUpdate(BaseModel):
         if v is not None and v not in ALLOWED_CATEGORIES:
             raise ValueError(f"expense_category must be one of: {ALLOWED_CATEGORIES}")
         return v
+
+    @field_validator("expense_notes")
+    @classmethod
+    def sanitize_notes(cls, v):
+        return strip_and_escape_html(v)
 
 class ExpenseOut(BaseModel):
     expense_id: UUID

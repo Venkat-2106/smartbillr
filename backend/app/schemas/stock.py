@@ -2,6 +2,7 @@ from pydantic import BaseModel, field_validator, ConfigDict
 from typing import Optional
 from uuid import UUID
 from enum import Enum
+from app.schemas.validators import strip_and_escape_html
 
 
 # ─────────────────────────────────────────
@@ -42,6 +43,11 @@ class StockAdjustment(BaseModel):
         if v <= 0:
             raise ValueError("qty must be a positive number greater than zero")
         return v
+
+    @field_validator("move_notes")
+    @classmethod
+    def sanitize_notes(cls, v):
+        return strip_and_escape_html(v)
 
 
 # ── Output schemas (unchanged) ───────────────────────────────

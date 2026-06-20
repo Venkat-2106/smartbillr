@@ -63,6 +63,26 @@ import { formatGeneratedOn } from './formatDate';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * Escapes HTML special characters in user-supplied strings to prevent XSS
+ * when interpolating data into the print HTML template.
+ *
+ * Escapes: & < > " '
+ * Returns the original value unchanged if it is not a string.
+ *
+ * @param {*} str - The string to escape (or any value — non-strings pass through)
+ * @returns {string}
+ */
+export function escapeHTML(str) {
+  if (typeof str !== 'string') return str;
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
 // formatGeneratedOn() is defined in ./formatDate.js
 // It is re-exported below so printUtils callers can import it from here too.
 export { formatGeneratedOn };
@@ -202,12 +222,12 @@ export function getPrintRoot() {
  * @returns {string}         - HTML string
  */
 export function buildPrintHeader(business = {}) {
-  const name    = business?.business_name    || 'SmartBillr Business';
-  const address = business?.business_address || '';
-  const state   = business?.business_state   || '';
-  const gstin   = business?.gstin            || '';
-  const phone   = business?.business_phone   || '';
-  const email   = business?.business_email   || '';
+  const name    = escapeHTML(business?.business_name    || 'SmartBillr Business');
+  const address = escapeHTML(business?.business_address || '');
+  const state   = escapeHTML(business?.business_state   || '');
+  const gstin   = escapeHTML(business?.gstin            || '');
+  const phone   = escapeHTML(business?.business_phone   || '');
+  const email   = escapeHTML(business?.business_email   || '');
 
   const addressLine = [address, state].filter(Boolean).join(', ');
 
@@ -285,7 +305,7 @@ export function buildPrintFooter(extra = '') {
       color: #9ca3af;
     ">
       <span>Printed from <strong style="color: #6b7280;">SmartBillr</strong></span>
-      <span>${extra || formatGeneratedOn()}</span>
+      <span>${escapeHTML(extra) || formatGeneratedOn()}</span>
     </div>
   `;
 }
@@ -308,7 +328,7 @@ export function buildPrintMetaRow(label, value, isLast = false) {
       ${isLast ? '' : 'border-bottom: 1px solid #f3f4f6;'}
     ">
       <span style="font-size: 11.5px; color: #6b7280; font-weight: 500;">${label}</span>
-      <span style="font-size: 12.5px; color: #111827; font-weight: 600; text-align: right; max-width: 60%;">${value || '—'}</span>
+      <span style="font-size: 12.5px; color: #111827; font-weight: 600; text-align: right; max-width: 60%;">${escapeHTML(value) || '—'}</span>
     </div>
   `;
 }
@@ -327,7 +347,7 @@ export function buildPrintMetaGrid(fields, columns = 2) {
         ${f.label}
       </div>
       <div style="font-size: 12.5px; color: #111827; font-weight: 600; word-break: break-word;">
-        ${f.value || '—'}
+        ${escapeHTML(f.value) || '—'}
       </div>
     </div>
   `).join('');
@@ -378,8 +398,9 @@ export function buildPrintSectionTitle(title) {
  * @param {string} [emptyMessage]
  */
 export function buildPrintTable(columns, rows, emptyMessage = 'No records found.') {
+  const emptyMessageHTML = escapeHTML(emptyMessage);
   if (!rows || rows.length === 0) {
-    return `<p style="font-size: 12.5px; color: #9ca3af; padding: 16px 0;">${emptyMessage}</p>`;
+    return `<p style="font-size: 12.5px; color: #9ca3af; padding: 16px 0;">${emptyMessageHTML}</p>`;
   }
 
   const headerCells = columns.map(col => `
@@ -393,7 +414,7 @@ export function buildPrintTable(columns, rows, emptyMessage = 'No records found.
       letter-spacing: 0.04em;
       border-bottom: 2px solid #e5e7eb;
       white-space: normal;
-    ">${col.label}</th>
+    ">${escapeHTML(col.label)}</th>
   `).join('');
 
   const dataRows = rows.map((row, i) => {
@@ -407,7 +428,7 @@ export function buildPrintTable(columns, rows, emptyMessage = 'No records found.
           font-size: 10.5px;
           color: #111827;
           border-bottom: 1px solid #f3f4f6;
-        ">${val}</td>
+        ">${escapeHTML(val)}</td>
       `;
     }).join('');
 

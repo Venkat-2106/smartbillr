@@ -4,6 +4,7 @@ from typing import Optional, List
 from uuid import UUID
 from decimal import Decimal
 from datetime import datetime
+from app.schemas.validators import strip_and_escape_html
 
 
 class ReturnItemCreate(BaseModel):
@@ -21,8 +22,6 @@ class ReturnItemCreate(BaseModel):
     @field_validator("refund_amount")
     @classmethod
     def amount_must_be_non_negative(cls, v):
-        # Zero is valid: returns for replacement/warranty with no cash refund.
-        # Negative refund amounts are never valid here.
         if v < 0:
             raise ValueError("Refund amount cannot be negative")
         return v
@@ -59,6 +58,11 @@ class SalesReturnCreate(BaseModel):
         if v is not None and v not in allowed:
             raise ValueError(f"Status must be one of: {allowed}")
         return v
+
+    @field_validator("return_reason")
+    @classmethod
+    def sanitize_reason(cls, v):
+        return strip_and_escape_html(v)
 
 
 class SalesReturnUpdate(BaseModel):

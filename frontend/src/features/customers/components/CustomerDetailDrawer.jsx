@@ -35,7 +35,7 @@ import {
   buildPrintFooter,
   buildPrintMetaGrid,
   buildPrintSectionTitle,
-  buildPrintTable,
+  escapeHTML,
   triggerPrint,
 } from '../../../shared/utils/printUtils'
 import useAuthStore from '../../../store/authStore'
@@ -187,12 +187,14 @@ function buildCustomerPrintHTML(business, customer, summary, salesHistory) {
   const salesRowsHTML = salesHistory.map((row, i) => {
     const paid      = row.payment_summary?.total_paid || 0
     const due       = row.payment_summary?.remaining_balance || 0
-    const status    = row.payment_summary?.current_status || '—'
-    const sColor    = paymentStatusColor(status)
+    const rawStatus = row.payment_summary?.current_status || '—'
+    const status    = escapeHTML(rawStatus)
+    const invNo     = escapeHTML(row.invoice_no || '—')
+    const sColor    = paymentStatusColor(rawStatus)
     const bg        = i % 2 === 0 ? '#ffffff' : '#f9fafb'
     const dateStr   = formatDate(row.sales_created_at)
     return `<tr style="background:${bg};">
-      <td style="padding:7px 8px;font-size:12px;color:#111827;text-align:left;">${row.invoice_no || '—'}</td>
+      <td style="padding:7px 8px;font-size:12px;color:#111827;text-align:left;">${invNo}</td>
       <td style="padding:7px 8px;font-size:12px;color:#374151;text-align:left;">${dateStr}</td>
       <td style="padding:7px 8px;font-size:12px;color:#111827;text-align:right;font-weight:600;">${formatCurrency(row.sales_final_amount)}</td>
       <td style="padding:7px 8px;font-size:12px;color:#10B981;text-align:right;">${formatCurrency(paid)}</td>
@@ -222,7 +224,7 @@ function buildCustomerPrintHTML(business, customer, summary, salesHistory) {
     ${buildPrintHeader(business)}
 
     <div style="margin-bottom:20px;">
-      <div style="font-size:24px;font-weight:900;color:#111827;letter-spacing:-0.5px;line-height:1.1;">${customer.cust_name}</div>
+      <div style="font-size:24px;font-weight:900;color:#111827;letter-spacing:-0.5px;line-height:1.1;">${escapeHTML(customer.cust_name)}</div>
       <div style="font-size:11.5px;color:#9ca3af;margin-top:5px;">Customer Report</div>
     </div>
 

@@ -3,6 +3,7 @@ from pydantic import BaseModel, UUID4, field_validator, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 from decimal import Decimal
+from app.schemas.validators import strip_and_escape_html
 
 
 # ── Single item inside a purchase return request ──────────────────────────────
@@ -21,9 +22,6 @@ class PurchaseReturnItemCreate(BaseModel):
     @field_validator("refund_amount")
     @classmethod
     def amount_must_be_non_negative(cls, v):
-        # Zero is allowed: returning a defective item for replacement
-        # with no cash refund is a valid business workflow.
-        # Negative refund_amount has no meaning and is never allowed.
         if v < 0:
             raise ValueError("Refund amount cannot be negative")
         return v
@@ -53,6 +51,11 @@ class PurchaseReturnCreate(BaseModel):
             raise ValueError(f"Status must be one of: {allowed}")
         return v
 
+    @field_validator("return_reason")
+    @classmethod
+    def sanitize_reason(cls, v):
+        return strip_and_escape_html(v)
+
 
 # ── Request body when updating a purchase return ──────────────────────────────
 class PurchaseReturnUpdate(BaseModel):
@@ -67,6 +70,11 @@ class PurchaseReturnUpdate(BaseModel):
         if v not in allowed:
             raise ValueError(f"Status must be one of: {allowed}")
         return v
+
+    @field_validator("rejected_reason")
+    @classmethod
+    def sanitize_reason(cls, v):
+        return strip_and_escape_html(v)
 
 
 # ── Response for a single return item ─────────────────────────────────────────

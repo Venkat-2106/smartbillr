@@ -25,6 +25,9 @@ class SaleItem(Base):
     # at sale time, even after the product's MRP is changed later.
     item_mrp = Column(Numeric(10, 2), nullable=True)
 
+    # Snapshot of prod_cost_price at the moment of sale. NULL for pre-migration rows.
+    sale_item_cost_price_at_sale = Column(Numeric(10, 2), nullable=True)
+
     # DB trigger (trg_sale_stock_movement) fills these after insert
     gst_rate = Column(Numeric(5, 2), default=0)
     cgst_amount = Column(Numeric(10, 2), default=0)

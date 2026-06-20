@@ -148,8 +148,9 @@ def insert_sale_items(db: Session, business_id: str, new_sale_id: str, items, pr
     for idx, item in enumerate(items):
         product = product_cache[str(item.product_id)]
         item_mrp = str(product.prod_mrp) if product.prod_mrp is not None else None
+        cost_price = str(product.prod_cost_price) if product.prod_cost_price is not None else None
         value_clauses.append(
-            f"(:bid_{idx}, :sid_{idx}, :pid_{idx}, :qty_{idx}, :price_{idx}, :mrp_{idx})"
+            f"(:bid_{idx}, :sid_{idx}, :pid_{idx}, :qty_{idx}, :price_{idx}, :mrp_{idx}, :cost_{idx})"
         )
         value_params[f"bid_{idx}"] = business_id
         value_params[f"sid_{idx}"] = new_sale_id
@@ -157,13 +158,14 @@ def insert_sale_items(db: Session, business_id: str, new_sale_id: str, items, pr
         value_params[f"qty_{idx}"] = item.sale_item_quantity
         value_params[f"price_{idx}"] = str(item.sale_item_unit_price)
         value_params[f"mrp_{idx}"] = item_mrp
+        value_params[f"cost_{idx}"] = cost_price
 
     db.execute(
         text(f"""
             INSERT INTO sale_items (
                 business_id, sale_id, product_id,
                 sale_item_quantity, sale_item_unit_price,
-                item_mrp
+                item_mrp, sale_item_cost_price_at_sale
             ) VALUES
             {','.join(value_clauses)}
         """),

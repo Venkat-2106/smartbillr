@@ -241,19 +241,21 @@ def create_purchase_return(
             db.execute(text("""
                 INSERT INTO purchase_return_items
                     (return_item_id, return_id, product_id,
-                     return_qty, refund_amount)
+                     return_qty, refund_amount, business_id)
                 VALUES (
                     CAST(:return_item_id AS uuid),
                     CAST(:return_id AS uuid),
                     CAST(:product_id AS uuid),
-                    :return_qty, :refund_amount
+                    :return_qty, :refund_amount,
+                    CAST(:business_id AS uuid)
                 )
             """), {
                 "return_item_id": str(uuid.uuid4()),
                 "return_id":      new_return_id,
                 "product_id":     str(item.product_id),
                 "return_qty":     item.return_qty,
-                "refund_amount":  float(item.refund_amount)
+                "refund_amount":  float(item.refund_amount),
+                "business_id":    str(business_id)
             })
 
         # Step 6 → If created as approved + restock → reduce stock immediately

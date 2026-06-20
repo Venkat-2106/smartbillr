@@ -344,7 +344,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
           <select
             value={categoryId}
             onChange={e => setCategoryId(e.target.value)}
-            style={{ ...selectStyle, width: 'auto', padding: '9px 14px', fontSize: 13 }}
+            style={{ ...selectStyle, width: 'auto', padding: '9px 32px 9px 14px', fontSize: 13 }}
           >
             <option value="">All Categories</option>
             {categories.map(c => (
@@ -355,7 +355,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
           <select
             value={status}
             onChange={e => setStatus(e.target.value)}
-            style={{ ...selectStyle, width: 'auto', padding: '9px 14px', fontSize: 13 }}
+            style={{ ...selectStyle, width: 'auto', padding: '9px 32px 9px 14px', fontSize: 13 }}
           >
             <option value="">All Stock Status</option>
             <option value="in_stock">In Stock</option>
@@ -366,7 +366,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
           <select
             value={isActive}
             onChange={e => setIsActive(e.target.value)}
-            style={{ ...selectStyle, width: 'auto', padding: '9px 14px', fontSize: 13 }}
+            style={{ ...selectStyle, width: 'auto', padding: '9px 32px 9px 14px', fontSize: 13 }}
           >
             <option value="">Active &amp; Inactive</option>
             <option value="true">Active Only</option>
@@ -548,7 +548,7 @@ function StockMovementsTab({ active }) {
           <select
             value={moveType}
             onChange={e => setMoveType(e.target.value)}
-            style={{ ...selectStyle, width: 'auto', padding: '9px 14px', fontSize: 13 }}
+            style={{ ...selectStyle, width: 'auto', padding: '9px 32px 9px 14px', fontSize: 13 }}
           >
             <option value="">All Types</option>
             <option value="sale">Sale</option>

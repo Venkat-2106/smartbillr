@@ -234,7 +234,7 @@ export default function SalesPage() {
               className="sb-select"
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
-              style={{ ...selectStyle, width: 'auto', padding: '9px 14px', fontSize: 13 }}
+              style={{ ...selectStyle, width: 'auto', padding: '9px 32px 9px 14px', fontSize: 13 }}
             >
               <option value="">All Statuses</option>
               <option value="paid">Paid</option>

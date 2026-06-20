@@ -15,10 +15,10 @@ class Category(Base):
     # DB trigger trg_categories_updated_at fires on every UPDATE and sets this automatically.
     # We declare it here so SQLAlchemy can read the value after commit (via db.refresh()).
     updated_at = Column(DateTime, nullable=True, server_default=text("now()"))
-    # updated_by: plain UUID — no ForeignKey() here because SQLAlchemy cannot resolve
-    # 'profiles' (it lives in Supabase auth schema, no ORM model for it).
-    # The FK constraint already exists in the DB from the SQL migration.
-    # We set this value directly in the PUT route and JOIN via raw SQL to get the name.
+    # DB trigger trg_categories_updated_by fires on every UPDATE and auto-sets
+    # updated_by from the app.current_user_id session variable.
+    # We declare it here so SQLAlchemy can read the value after commit (via db.refresh()).
+    # FK constraint exists in the DB: REFERENCES profiles(id) ON DELETE SET NULL.
     updated_by = Column(UUID(as_uuid=True), nullable=True)
     # created_by: tracks who first created this category.
     # Set in the POST route. FK constraint in DB: REFERENCES profiles(id) ON DELETE SET NULL.

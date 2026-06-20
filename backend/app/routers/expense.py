@@ -228,7 +228,7 @@ def update_expense(
     if data.expense_notes is not None:
         expense.expense_notes = data.expense_notes
 
-    expense.updated_by = current_user["user_id"]
+    # updated_by is auto-set by DB trigger trg_expenses_updated_by
 
     db.commit()
     db.refresh(expense)
@@ -265,7 +265,7 @@ def delete_expense(
         return error_response("Expense not found", status_code=404)
 
     expense.is_deleted = True
-    expense.updated_by = current_user["user_id"]
+    # updated_by is auto-set by DB trigger trg_expenses_updated_by
     db.commit()
 
     return success_response({

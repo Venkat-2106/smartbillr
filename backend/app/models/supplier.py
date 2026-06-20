@@ -23,7 +23,7 @@ class Supplier(Base):
     # DB trigger trg_suppliers_updated_at fires on every UPDATE and sets this automatically.
     # We declare it here so SQLAlchemy can read the value after commit (via db.refresh()).
     updated_at        = Column(DateTime,    nullable=True, server_default=text("now()"))
-    # updated_by: plain UUID — no ForeignKey() declared here (same pattern as Category/Customer).
-    # The FK constraint exists in DB: REFERENCES profiles(id) ON DELETE SET NULL.
-    # We set this in POST/PUT routes and JOIN via raw SQL to get the name.
+    # DB trigger trg_suppliers_updated_by fires on every UPDATE and auto-sets
+    # updated_by from the app.current_user_id session variable.
+    # FK constraint exists in DB: REFERENCES profiles(id) ON DELETE SET NULL.
     updated_by        = Column(UUID(as_uuid=True), nullable=True)

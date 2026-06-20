@@ -260,8 +260,7 @@ def get_category(
 
 # ══════════════════════════════════════════════════════════════════
 # PUT /categories/{category_id} → Update category name
-# Sets updated_by = current_user["user_id"]
-# DB trigger automatically sets updated_at on commit
+# DB triggers automatically set updated_at + updated_by on commit
 # ══════════════════════════════════════════════════════════════════
 @router.put("/{category_id}")
 def update_category(
@@ -295,9 +294,8 @@ def update_category(
     for field, value in update_data.items():
         setattr(category, field, value)
 
-    # Track who last updated this category
-    # updated_at is set automatically by DB trigger trg_categories_updated_at
-    category.updated_by = current_user["user_id"]
+    # updated_at and updated_by are set automatically by DB triggers
+    # trg_categories_updated_at / trg_categories_updated_by
 
     db.commit()
     db.refresh(category)
@@ -359,8 +357,8 @@ def delete_category(
     )
 
     # Step 3 — Soft-delete the category itself
+    # updated_by is auto-set by DB trigger trg_categories_updated_by
     category.is_deleted = True
-    category.updated_by = current_user["user_id"]
     db.commit()
 
     return success_response({

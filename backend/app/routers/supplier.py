@@ -346,7 +346,7 @@ def update_supplier(
     if data.supp_country_code is not None: supplier.supp_country_code = data.supp_country_code
     if data.supp_tax_number   is not None: supplier.supp_tax_number   = data.supp_tax_number
 
-    supplier.updated_by = current_user["user_id"]
+    # updated_by is auto-set by DB trigger trg_suppliers_updated_by
 
     db.commit()
     db.refresh(supplier)
@@ -383,7 +383,7 @@ def delete_supplier(
         return error_response("Supplier not found", 404)
 
     supplier.is_deleted = True
-    supplier.updated_by = current_user["user_id"]
+    # updated_by is auto-set by DB trigger trg_suppliers_updated_by
     db.commit()
 
     return success_response({"message": "Supplier deleted successfully"})

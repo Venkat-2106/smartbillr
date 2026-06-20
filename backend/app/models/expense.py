@@ -19,6 +19,9 @@ class Expense(Base):
     created_at = Column(DateTime, nullable=True)
     created_by = Column(UUID(as_uuid=True), nullable=True)
     updated_at = Column(DateTime, nullable=True)
-    updated_by = Column(UUID(as_uuid=True), ForeignKey("profiles.id"), nullable=True)
+    # DB trigger trg_expenses_updated_by fires on every UPDATE and auto-sets
+    # updated_by from the app.current_user_id session variable.
+    # No ForeignKey() in ORM — FK constraint exists in the DB.
+    updated_by = Column(UUID(as_uuid=True), nullable=True)
     source_type = Column(String(50), nullable=True)
     source_id = Column(UUID(as_uuid=True), nullable=True)

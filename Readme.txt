@@ -26,16 +26,18 @@ backend/app/
 ├── middleware/
 │   ├── auth.py       ← verify_token(): base64 decode JWT → check exp → 1 DB query (STRING_AGG) → returns {user_id, business_id, role, permissions:set}
 │   └── rbac.py       ← require_permission(code), require_any_permission(*codes), require_all_permissions(*codes), get_current_user_with_permissions
-├── models/           ← SQLAlchemy ORM per table. updated_by has NO ForeignKey() in ORM (FK exists in DB only)
-├── schemas/          ← Pydantic: XxxCreate, XxxUpdate, XxxOut
-├── routers/          ← One file per domain (business, category, customer, supplier, product, sale, payment, purchase, stock, expense, sales_return, purchase_return, profiles, staff, dashboard, reports)
+├── models/           ← 17 ORM models (incl. rbac: Role, Permission, RolePermission). updated_by has NO ForeignKey() in ORM (FK exists in DB only). PurchaseItem uses raw SQL only.
+├── schemas/          ← 13 Pydantic schema files: XxxCreate, XxxUpdate, XxxOut per domain
+├── routers/          ← 16 domain files: business, category, customer, supplier, product, sale, payment, purchase, stock, expense, sales_return, purchase_return, profiles, staff, dashboard, reports (+43 report sub-endpoints)
 ├── services/
 │   └── sale_service.py       ← generate_invoice_number, validate_and_cache_products, calculate_total_amount, create_sale_header, handle_stock_overrides, insert_sale_items, update_sale_tax_totals, auto_record_payment, parse_sale_error, get_sales_list, get_sale_detail
 └── utils/
     ├── response.py         ← success_response(data, status_code=200), error_response(msg, status_code=400)
     ├── pagination.py       ← paginate() dep → {page, limit, offset} | pagination_response(data, total, page, limit) → {items, pagination:{total,page,limit,total_pages,has_next,has_prev,truncated}}
     ├── timestamp.py        ← fmt_ts(dt) → ISO "2026-06-05T03:00:00Z" | fmt_date(d) → "2026-06-05". ALWAYS use these, NEVER str(datetime)
-    └── payment_helpers.py  ← record_payment_and_sync(), calculate_payment_status(). Both sale.py + payment.py import from here (no circular imports)
+    ├── payment_helpers.py  ← record_payment_and_sync(), calculate_payment_status(). Both sale.py + payment.py import from here (no circular imports)
+    ├── tax_engine.py       ← Single source of truth for Python-side GST/VAT/Sales Tax calculations (DB trigger handles Sales trigger)
+    └── currency.py         ← Country→currency symbol map + formatting helpers
 
 ═══════════════════════════════════════════════
 FRONTEND FOLDER STRUCTURE
@@ -45,15 +47,16 @@ frontend/src/
 ├── app/router.jsx          ← All routes with React.lazy (code split per route) + ProtectedRoute
 ├── app/providers.jsx       ← QueryClient: staleTime=5min, retry=1, refetchOnWindowFocus=false
 ├── app/layouts/DashboardLayout.jsx  ← Sidebar (always dark #0B0F1A) + topbar + theme/accent switcher
-├── features/<feature>/
+├── features/<feature>/     ← 18 features: auth, businesses, categories, customers, dashboard, expenses, payments, products, public, purchaseReturns, purchases, reports, sales, salesReturns, settings, staff, stock, suppliers
 │   ├── pages/      ← Render only. Destructures everything from hook.
 │   ├── hooks/      ← useXxx.js. Owns ALL server state + filter/sort/page UI state.
 │   ├── api/        ← xxxApi.js. HTTP calls only. Returns res.data. NEVER import authStore here.
-│   └── components/ ← Feature drawers, forms
-├── shared/components/index.js  ← Barrel: named exports for all shared components
-├── shared/hooks/   ← usePermissions (named), useDebounce (named)
-├── shared/utils/   ← formatDate, formatCurrency, formatTax, csvExport, dateUtils, printUtils
-├── shared/constants/ ← paymentMethods, expenseCategories, taxFormats
+│   ├── components/ ← Feature drawers, forms (all except public, reports, settings)
+│   └── schemas/    ← Zod validation schemas (auth, dashboard, public, reports, settings, staff omit this dir)
+├── shared/components/index.js  ← Barrel: named exports for all 25 shared components
+├── shared/hooks/   ← usePermissions, useDebounce, useMediaQuery, useServerTableState, useShortcut, useTableKeyboardNav (6 hooks)
+├── shared/utils/   ← formatDate, formatCurrency, formatTax, csvExport, dateUtils, printUtils, preferences, scrollLock (8 utils)
+├── shared/constants/ ← paymentMethods, expenseCategories, taxFormats, styles (4 constant files)
 ├── shared/data/    ← countries.js, countryStates.js
 └── store/authStore.js  ← Zustand persist('sb-auth'): token, user, business, profile, permissions[], hasPermission(code), hasAnyPermission(...codes), clearAuth()
 
@@ -103,17 +106,23 @@ Every SQL query MUST filter by business_id = CAST(:bid AS uuid).
 business_id always comes from current_user["business_id"] (from JWT → DB). NEVER from request body.
 
 GENERATED COLUMNS — NEVER INSERT
-sales.sales_final_amount | sale_items.sale_item_subtotal, item_tax_total, item_total_with_tax | products.prod_profit | purchases.pur_final_amount | stock_movements.move_new_stock | purchase_items.item_subtotal, item_tax_total, item_total_with_tax | purchase_return_items.return_item_subtotal
+sales.sales_final_amount (DB generated, no Computed() in ORM)
+sale_items.sale_item_subtotal, item_tax_total, item_total_with_tax
+purchase_items.item_subtotal, item_tax_total, item_total_with_tax (raw SQL only — no ORM model)
+products.prod_profit
+purchases.pur_final_amount (DB generated, no Computed() in ORM)
+stock_movements.move_new_stock
+purchase_return_items.return_item_subtotal
 Use raw SQL and omit these columns entirely on INSERT.
 
-DB TRIGGERS — NEVER DUPLICATE IN PYTHON
+DB TRIGGERS — NEVER DUPLICATE IN PYTHON (7 triggers + 1 function, no .sql files — defined directly on PostgreSQL)
 fn_set_updated_at → BEFORE UPDATE on all major tables (sets updated_at automatically — NEVER set updated_at in Python)
-fn_sale_stock_movement → AFTER INSERT on sale_items (deducts stock, calculates CGST/SGST/IGST)
+fn_sale_stock_movement → AFTER INSERT on sale_items (deducts stock, calculates CGST/SGST/IGST/tax totals)
 fn_purchase_stock_movement → AFTER INSERT on purchase_items (adds stock)
 fn_sales_return_stock → AFTER UPDATE on sales_returns (restocks on approval)
-fn_audit_log → INSERT/UPDATE/DELETE on 6 tables
+fn_audit_log → INSERT/UPDATE/DELETE on 6+ tables (reads app.current_user_id session var set by auth.py)
 fn_validate_sales_return_items → BEFORE INSERT on sales_return_items
-fn_recalculate_return_total → after sales_return_items change
+fn_recalculate_return_total → AFTER INSERT/UPDATE/DELETE on sales_return_items (recalculates header total)
 get_next_invoice_number() → SELECT FOR UPDATE lock on business_counters (prevents duplicate invoice numbers)
 
 UPDATED_BY PATTERN
@@ -200,7 +209,7 @@ formatCurrency(amount, countryCode) from shared/utils/formatCurrency.js
 getTaxLabel(countryCode), getTaxBreakdown(countryCode, saleType) from shared/utils/formatTax.js
 
 ENVIRONMENT
-Backend .env: DATABASE_URL, SECRET_KEY, ENVIRONMENT (development|production), ALLOWED_ORIGINS, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+Backend .env: DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET, SECRET_KEY, ENVIRONMENT (development|production), ALLOWED_ORIGINS
 Frontend .env: VITE_API_URL, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
 /test-auth endpoint only exists when ENVIRONMENT=development — never in production
 
@@ -259,22 +268,28 @@ API FILE PATTERN (xxxApi.js):
 ═══════════════════════════════════════════════
 API FIELD NAMES (EXACT)
 ═══════════════════════════════════════════════
-Customers:  cust_id, business_id, cust_name, cust_phone, cust_email, cust_address, cust_state, cust_country_code, cust_tax_number, is_deleted, cust_created_at, updated_at, updated_by, last_updated_by
-Suppliers:  supp_id, business_id, supp_name, supp_phone, supp_email, supp_address, supp_state, supp_country_code, supp_tax_number, is_deleted, supp_created_at, updated_at, updated_by, last_updated_by
-Products:   prod_id, business_id, category_id, category_name, prod_name, prod_sell_price, prod_mrp, prod_cost_price, prod_profit(generated), prod_stock_qty, prod_low_stock_alert, tax_rate, tax_code, barcode, unit, is_deleted, prod_created_at, updated_at, created_by, created_by_name, updated_by, last_updated_by
-Categories: category_id, category_name, is_deleted, created_at, updated_at, updated_by, last_updated_by, created_by
-Sales:      sales_id, business_id, customer_id, customer_name, invoice_no, sales_total_amount, sales_discount, cgst_total, sgst_total, igst_total, tax_total, sales_final_amount(generated), sales_payment_status, sales_payment_method, sales_created_at, total_paid, remaining_balance, items[]
-Payments:   payment_id, business_id, sale_id, payment_amount, payment_method, payment_paid_at, payment_status, is_active, cumulative_paid
-Expenses:   expense_id, business_id, expense_category, expense_amount, expense_date, expense_notes, is_deleted, created_at, created_by
-Stock:      move_id, business_id, product_id, move_type, move_qty, move_prev_stock, move_new_stock(generated), sale_reference_id, purchase_reference_id, reference_type, reference_id, move_notes, created_at
-Purchases:  purchase_id, business_id, supplier_id, supplier_name, invoice_no, pur_total_amount, pur_discount, pur_final_amount(generated), pur_payment_status, pur_created_at, items[]
+Business/Settings: business_id, business_name, business_email, business_phone, business_address, business_state, gstin, is_gst_registered, business_country_code, is_deleted, created_at
+Customers: cust_id, business_id, cust_name, cust_phone, cust_email, cust_address, cust_state, cust_country_code, cust_tax_number, is_deleted, cust_created_at, updated_at, updated_by, last_updated_by
+Suppliers: supp_id, business_id, supp_name, supp_phone, supp_email, supp_address, supp_state, supp_country_code, supp_tax_number, is_deleted, supp_created_at, updated_at, updated_by, last_updated_by
+Categories: category_id, business_id, category_name, is_deleted, created_at, updated_at, updated_by, last_updated_by, created_by
+Products: prod_id, business_id, category_id, category_name, prod_name, prod_sell_price, prod_mrp, prod_cost_price, prod_profit(generated), prod_stock_qty, prod_low_stock_alert, tax_rate, tax_code, barcode, unit, is_deleted, prod_created_at, updated_at, created_by, created_by_name, updated_by, last_updated_by
+Sales: sales_id, business_id, customer_id, customer_name, invoice_no, sales_total_amount, sales_discount, cgst_total, sgst_total, igst_total, tax_total, sales_final_amount(generated), sales_payment_status, sales_payment_method, sales_created_at, total_paid, remaining_balance, items[{sale_item_id, product_id, product_name, sale_item_quantity, sale_item_unit_price, item_mrp, sale_item_cost_price_at_sale, sale_item_subtotal(generated), cgst_amount, sgst_amount, igst_amount, tax_amount, item_tax_total(generated), item_total_with_tax(generated)}]
+Payments: payment_id, business_id, sale_id, invoice_no, customer_name, sales_final_amount, payment_amount, cumulative_paid, payment_method, payment_paid_at, payment_status, is_active, remaining_balance
+Purchases: pur_id, business_id, supp_id, supplier_name, invoice_no, pur_total_amount, pur_discount, pur_cgst_total, pur_sgst_total, pur_igst_total, pur_tax_total, pur_final_amount(generated), pur_payment_status, pur_created_at, items[{purchase_item_id, product_id, product_name, pur_item_qty, item_unit_price, item_subtotal(generated), cgst_amount, sgst_amount, igst_amount, tax_amount, item_tax_total(generated), item_total_with_tax(generated)}]
+Expenses: expense_id, business_id, expense_category, expense_amount, expense_date, expense_notes, is_deleted, created_at, created_by, updated_at, updated_by
+Stock Movements: move_id, business_id, product_id, product_name, move_type, move_qty, move_prev_stock, move_new_stock(generated), sale_reference_id, purchase_reference_id, reference_type, reference_id, move_notes, move_created_at, move_created_by
+Stock Alerts: alert_id, business_id, product_id, alert_stock_qty, alert_threshold, alert_status, alert_created_at
+Sales Returns: return_id, business_id, sale_id, invoice_no, customer_name, sales_final_amount, return_amount, return_reason, return_status, restock, stock_updated, refund_method, approved_by, approved_at, rejected_reason, return_created_at, created_by, items[{return_item_id, product_id, product_name, return_qty, refund_amount, return_item_subtotal(generated)}]
+Purchase Returns: return_id, business_id, pur_id, supp_name, return_reason, return_status, restock, stock_updated, refund_method, approved_by, approved_at, rejected_reason, return_amount, return_created_at, created_by, items[{return_item_id, product_id, product_name, return_qty, refund_amount, return_item_subtotal(generated)}]
 
-PERMISSION CODES:
-dashboard.view | dashboard.financial (gates revenue/expenses)
-sales.view | sales.create
+PERMISSION CODES (22 unique codes):
+dashboard.view | dashboard.financial (gates revenue/cost/profit in dash + reports)
+sales.view | sales.create | sales.edit | sales.delete
 customers.manage | suppliers.manage
-products.view | products.edit (categories write uses products.edit)
-purchases.view | payments.manage | expenses.manage | stock.view
+products.view | products.edit (categories CRUD also uses products.edit)
+purchases.view | purchases.create | purchases.edit | purchases.delete
+payments.manage | expenses.manage
+stock.view | stock.adjust
 sales_returns.manage | purchase_returns.manage
 reports.view | settings.manage | staff.manage
 view_product_profit (gates prod_cost_price + prod_profit — omitted from response when absent)
@@ -303,22 +318,60 @@ PAGES STATUS
 ALL PAGES IMPLEMENTED
 
 ═══════════════════════════════════════════════
-SHARED COMPONENTS QUICK REFERENCE
+REPORTS MODULE
 ═══════════════════════════════════════════════
+12 report categories (~45 endpoints) at GET /reports/:
+
+1. Sales Summary          → trend, by-customer, by-product, by-category, by-payment-method, invoice-status
+2. Purchase Summary       → trend, by-supplier, by-product, tax-summary
+3. Expense Summary        → by-category, trend, distribution
+4. Customer Revenue       → top, customer-history, lifetime-value, outstanding
+5. Product Performance    → moving-products, sales-by-product
+6. Inventory Valuation    → valuation, movement-summary, stock-flow
+7. Tax Liability          → collected, paid, liability, by-rate
+8. Profit by Product      → gross, by-product, by-category, trend
+9. Profit by Customer     → by-customer, gross, trend
+10. Cash Flow             → collections, outstanding, by-method, partial
+11. Stock Movement History → stock-flow, movement-summary
+12. Audit Logs            → user-activities, login-activities, data-changes, exports
+
+Permission: reports.view. Financial KPIs gated by dashboard.financial.
+Cost/profit visibility gated by view_product_profit.
+Audit reports gated by staff.manage.
+
+═══════════════════════════════════════════════
+NEXT STEPS
+═══════════════════════════════════════════════
+1. Update reports profit queries (reports.py) to use sale_items.sale_item_cost_price_at_sale
+   instead of products.prod_cost_price for accurate historical profit calculation.
+
+═══════════════════════════════════════════════
+SHARED COMPONENTS QUICK REFERENCE (25 components)
+═══════════════════════════════════════════════
+Badge           → variant(success/warning/danger/info/neutral)
+BarChart         → data, keys, indexBy, height
 Button          → variant(primary/secondary/ghost/outline/danger), size(sm/md/lg), loading, disabled
+CommandPalette  → Cmd+K global search palette
+ConfirmDialog   → open, onClose, onConfirm, title, message, confirmText, loading
+DateRangeFilter → label, from, to, onChange(field,value)
+DonutChart      → data, colors, height
+EmptyState      → icon, title, description, action
+ErrorBoundary   → React error boundary with fallback UI
+ExportButton    → onFetch(async fn→array) OR data(array), filename, columns
+FormField       → label, error, required, helper, children. Exports: selectStyle, textareaStyle
+Input           → standalone styled input (use outside FormField)
+LineChart        → data, lines, height, enableArea
 Modal           → open, onClose, title, subtitle, size(sm/md/lg/xl), hideClose. Modal.Footer = sticky footer.
-Table           → columns, rows, loading, rowKey, sortKey, sortDir, onSort, onRowClick, emptyText
+ModalPortal     → teleported modal wrapper
+PageHeader      → title, subtitle, back, onBack, action(JSX)
 Pagination      → pagination(object), onPageChange
 SearchBar       → value, onChange, onSearch, placeholder, width
-DateRangeFilter → label, from, to, onChange(field,value)
-ExportButton    → onFetch(async fn→array) OR data(array), filename, columns
-PageHeader      → title, subtitle, back, onBack, action(JSX)
-FormField       → label, error, required, helper, children. Exports: selectStyle, textareaStyle
-ConfirmDialog   → open, onClose, onConfirm, title, message, confirmText, loading
-StateDropdown   → countryCode, value, onChange, label, error
-Badge           → variant(success/warning/danger/info/neutral)
 SelectField     → separate component for styled selects
+ShortcutHelp    → keyboard shortcuts reference modal
 SkeletonTable   → rows, cols
+Spinner          → loading spinner with optional label
+StateDropdown   → countryCode, value, onChange, label, error
+Table           → columns, rows, loading, rowKey, sortKey, sortDir, onSort, onRowClick, emptyText
 
 ═══════════════════════════════════════════════
 WHAT MUST NEVER BE DONE
@@ -355,8 +408,8 @@ Schema changes must be made via Alembic revisions, not directly in Supabase.
 The initial baseline (da22e1256e21) is an empty revision; the DB was stamped
 at that revision. All future schema changes go through new Alembic revisions.
 
-SQL files in backend/sql/ are for one-off database-side fixes (triggers,
-functions, etc.) that cannot be expressed as model changes.
+No raw .sql files are stored in the repo — triggers, functions, and indexes
+are defined directly on the PostgreSQL database instance.
 
 ═══════════════════════════════════════════════
 HOW TO START EVERY SESSION

@@ -1,10 +1,10 @@
 """Payment API integration tests.
 
-Tests the POST /payments/ endpoint:
+Tests the POST /v1/payments/ endpoint:
   - Successful payment recording
   - Overpayment rejection (payment > remaining balance)
   - Already-paid rejection (sale is fully paid)
-  - Payment history retrieval (GET /payments/sale/{id})
+  - Payment history retrieval (GET /v1/payments/sale/{id})
 
 Dependencies required by the endpoint are mocked:
   - verify_token   → mock_auth fixture (bypasses real JWT + profile lookup)
@@ -110,7 +110,7 @@ def seed_sale(db: Session, business_id: uuid.UUID, final_amount: float = 1000.0)
 # ── Tests ────────────────────────────────────────────────────────────────────
 
 class TestCreatePayment:
-    """POST /payments/"""
+    """POST /v1/payments/"""
 
     @pytest.fixture(autouse=True)
     def _setup(self, mock_auth, db, seed_data):
@@ -129,7 +129,7 @@ class TestCreatePayment:
 
         with self._patch_record_payment():
             resp = client.post(
-                "/payments/",
+                "/v1/payments/",
                 json={
                     "sale_id": str(sale_id),
                     "payment_amount": 500.0,
@@ -191,7 +191,7 @@ class TestCreatePayment:
             _sqlite_record_payment_and_sync,
         ):
             resp = client.post(
-                "/payments/",
+                "/v1/payments/",
                 json={
                     "sale_id": str(sale_id),
                     "payment_amount": 600.0,
@@ -230,7 +230,7 @@ class TestCreatePayment:
             _sqlite_record_payment_and_sync,
         ):
             resp = client.post(
-                "/payments/",
+                "/v1/payments/",
                 json={
                     "sale_id": str(sale_id),
                     "payment_amount": 100.0,
@@ -248,7 +248,7 @@ class TestCreatePayment:
 
         with self._patch_record_payment():
             resp = client.post(
-                "/payments/",
+                "/v1/payments/",
                 json={
                     "sale_id": str(fake_sale_id),
                     "payment_amount": 100.0,
@@ -262,7 +262,7 @@ class TestCreatePayment:
 
 
 class TestGetPaymentsBySale:
-    """GET /payments/sale/{sale_id}"""
+    """GET /v1/payments/sale/{sale_id}"""
 
     @pytest.fixture(autouse=True)
     def _setup(self, mock_auth, db, seed_data):
@@ -297,7 +297,7 @@ class TestGetPaymentsBySale:
             )
         self.db.commit()
 
-        resp = client.get(f"/payments/sale/{sale_id}")
+        resp = client.get(f"/v1/payments/sale/{sale_id}")
 
         assert resp.status_code == 200
         body = resp.json()
@@ -309,5 +309,5 @@ class TestGetPaymentsBySale:
     def test_sale_not_found_returns_404(self, client):
         """History for a non-existent sale is rejected."""
         fake_id = uuid.uuid4()
-        resp = client.get(f"/payments/sale/{fake_id}")
+        resp = client.get(f"/v1/payments/sale/{fake_id}")
         assert resp.status_code == 404

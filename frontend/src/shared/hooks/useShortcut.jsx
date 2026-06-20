@@ -36,10 +36,12 @@ function matchEvent(matcher, e) {
   if (matcher.type === 'sequence') return false
   const { modifiers, key } = matcher
 
+  const isQuestionSlash = key === '?' || key === '/'
+
   if (modifiers.ctrl && !(e.ctrlKey || e.metaKey)) return false
-  if (!modifiers.ctrl && !modifiers.meta && (e.ctrlKey || e.metaKey)) return false
+  if (!isQuestionSlash && !modifiers.ctrl && !modifiers.meta && (e.ctrlKey || e.metaKey)) return false
   if (modifiers.alt && !e.altKey) return false
-  if (!modifiers.alt && e.altKey) return false
+  if (!isQuestionSlash && !modifiers.alt && e.altKey) return false
   if (modifiers.shift && !e.shiftKey) return false
 
   if (key === e.key) return true

@@ -144,8 +144,7 @@ export default function ShortcutHelp({ open, onClose }) {
           {SECTIONS.map(section => (
             <div key={section.title}>
               <div style={{
-                position: 'sticky', top: 0, background: 'var(--bg-card)',
-                padding: '14px 0 4px', zIndex: 1,
+                padding: '14px 0 4px',
               }}>
                 <h3 style={{
                   fontSize: 12, fontWeight: 700, color: 'var(--text-muted)',

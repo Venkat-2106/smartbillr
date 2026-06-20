@@ -29,7 +29,7 @@ from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts
 import logging
 
-router = APIRouter(prefix="/staff", tags=["Staff"])
+router = APIRouter(prefix="/v1/staff", tags=["Staff"])
 
 SUPABASE_URL             = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY     = os.getenv("SUPABASE_SERVICE_ROLE_KEY")

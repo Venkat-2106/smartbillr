@@ -13,7 +13,7 @@ from app.utils.timestamp import fmt_ts
 import uuid
 import logging
 
-router = APIRouter(prefix="/stock", tags=["Stock"])
+router = APIRouter(prefix="/v1/stock", tags=["Stock"])
 
 # Mirrors PROFIT_PERMISSION in product.py — gates prod_cost_price / stock value
 PROFIT_PERMISSION = "view_product_profit"

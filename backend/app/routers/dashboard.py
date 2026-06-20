@@ -31,7 +31,7 @@ from app.middleware.rbac import require_permission, get_current_user_with_permis
 from app.utils.response import success_response, error_response
 from datetime import datetime, timedelta, timezone
 
-router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
+router = APIRouter(prefix="/v1/dashboard", tags=["Dashboard"])
 
 
 # ══════════════════════════════════════════════════════════════════

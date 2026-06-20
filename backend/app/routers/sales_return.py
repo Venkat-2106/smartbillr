@@ -14,7 +14,7 @@ import logging
 from decimal import Decimal
 import uuid
 
-router = APIRouter(prefix="/sales-returns", tags=["Sales Returns"])
+router = APIRouter(prefix="/v1/sales-returns", tags=["Sales Returns"])
 
 
 # ─────────────────────────────────────────

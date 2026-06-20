@@ -24,7 +24,7 @@ from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts
 from typing import Optional
 
-router = APIRouter(prefix="/customers", tags=["Customers"])
+router = APIRouter(prefix="/v1/customers", tags=["Customers"])
 
 
 # ─────────────────────────────────────────

@@ -17,7 +17,7 @@ from app.middleware.auth import verify_token
 from app.utils.response import success_response, error_response
 import logging
 
-router = APIRouter(prefix="/profiles", tags=["Profiles"])
+router = APIRouter(prefix="/v1/profiles", tags=["Profiles"])
 
 
 # ─── GET /profiles/me ─────────────────────────────────────────────────────────

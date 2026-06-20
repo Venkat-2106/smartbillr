@@ -6,7 +6,7 @@ from app.database import get_db
 from app.middleware.auth import verify_token, clear_user_cache
 from app.utils.response import success_response
 
-router = APIRouter(prefix="/auth", tags=["Auth"])
+router = APIRouter(prefix="/v1/auth", tags=["Auth"])
 
 
 @router.post("/logout")

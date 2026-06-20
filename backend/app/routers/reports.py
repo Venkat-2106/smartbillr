@@ -31,7 +31,7 @@ from app.middleware.rbac import require_permission
 from app.utils.response import success_response, error_response
 from datetime import datetime, timedelta, timezone
 
-router = APIRouter(prefix="/reports", tags=["Reports"])
+router = APIRouter(prefix="/v1/reports", tags=["Reports"])
 
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────

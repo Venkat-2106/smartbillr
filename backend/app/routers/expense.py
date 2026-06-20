@@ -10,7 +10,7 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts, fmt_date
 
-router = APIRouter(prefix="/expenses", tags=["Expenses"])
+router = APIRouter(prefix="/v1/expenses", tags=["Expenses"])
 
 
 # ─────────────────────────────────────────

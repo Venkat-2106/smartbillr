@@ -24,7 +24,7 @@ class PurchaseStatusUpdate(BaseModel):
     status: str
 
 
-router = APIRouter(prefix="/purchases", tags=["Purchases"])
+router = APIRouter(prefix="/v1/purchases", tags=["Purchases"])
 
 
 # ─────────────────────────────────────────

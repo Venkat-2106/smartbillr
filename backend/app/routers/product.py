@@ -77,7 +77,7 @@ from app.utils.timestamp import fmt_ts
 from sqlalchemy.exc import IntegrityError
 from typing import Optional
 
-router = APIRouter(prefix="/products", tags=["Products"])
+router = APIRouter(prefix="/v1/products", tags=["Products"])
 
 # ── Permission code constant ─────────────────────────────────────────────────
 PROFIT_PERMISSION = "view_product_profit"

@@ -12,7 +12,7 @@ from app.utils.timestamp import fmt_ts
 import uuid
 import logging
 
-router = APIRouter(prefix="/purchase-returns", tags=["Purchase Returns"])
+router = APIRouter(prefix="/v1/purchase-returns", tags=["Purchase Returns"])
 
 
 # ─────────────────────────────────────────────

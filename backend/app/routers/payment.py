@@ -14,7 +14,7 @@ from app.utils.payment_helpers import record_payment_and_sync, calculate_payment
 from datetime import datetime
 from app.utils.timestamp import fmt_ts
 
-router = APIRouter(prefix="/payments", tags=["Payments"])
+router = APIRouter(prefix="/v1/payments", tags=["Payments"])
 
 
 # ══════════════════════════════════════════════════════════════════

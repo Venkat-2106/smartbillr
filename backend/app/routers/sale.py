@@ -35,7 +35,7 @@ from app.utils.payment_helpers import record_payment_and_sync, calculate_payment
 from app.utils.currency import get_currency_symbol
 import uuid
 
-router = APIRouter(prefix="/sales", tags=["Sales"])
+router = APIRouter(prefix="/v1/sales", tags=["Sales"])
 
 
 class SaleStatusUpdate(BaseModel):

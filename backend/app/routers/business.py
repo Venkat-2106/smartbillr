@@ -10,7 +10,7 @@ from app.utils.timestamp import fmt_ts
 import uuid
 
 router = APIRouter(
-    prefix="/businesses",
+    prefix="/v1/businesses",
     tags=["Businesses"]
 )
 

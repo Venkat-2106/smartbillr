@@ -14,7 +14,7 @@ from typing import Optional
 import uuid
 
 router = APIRouter(
-    prefix="/categories",
+    prefix="/v1/categories",
     tags=["Categories"]
 )
 

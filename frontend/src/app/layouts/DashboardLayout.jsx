@@ -78,6 +78,15 @@ const NAV_FLAT = NAV.flatMap(s => s.items)
 const SLIM = 64, FULL = 248
 const MOBILE_BREAK = 768
 
+// ── Bottom navigation items (mobile only) ──
+const BOTTOM_NAV_ITEMS = [
+  { label: 'Dashboard', path: '/dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
+  { label: 'Sales',     path: '/sales',     icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
+  { label: 'Products',  path: '/products',  icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4' },
+  { label: 'Customers', path: '/customers', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
+  { label: 'More',      path: null,         icon: 'M12 5v.01M12 12v.01M12 19v.01' },
+]
+
 function Logo({ collapsed }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -267,6 +276,41 @@ function NavItem({ item, collapsed, onNavClick }) {
         {!collapsed && <span style={{ fontSize: '0.8rem', fontWeight: isActive ? 650 : 450, color: isActive ? 'var(--sb-text-primary)' : 'inherit', letterSpacing: isActive ? '-0.15px' : '-0.05px', whiteSpace: 'nowrap' }}>{item.label}</span>}
       </>)}
     </NavLink>
+  )
+}
+
+function BottomNav({ items, isMobile, onMoreClick }) {
+  if (!isMobile) return null
+  return (
+    <nav className="bottom-nav">
+      {items.map(item => {
+        if (item.path) {
+          return (
+            <NavLink
+              key={item.label}
+              to={item.path}
+              className="bottom-nav-item"
+              style={({ isActive }) => ({
+                color: isActive ? 'var(--accent-500)' : 'var(--text-muted)',
+              })}
+            >
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <path d={item.icon} />
+              </svg>
+              <span>{item.label}</span>
+            </NavLink>
+          )
+        }
+        return (
+          <button key={item.label} className="bottom-nav-item" onClick={onMoreClick} style={{ color: 'var(--text-muted)' }}>
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <path d={item.icon} />
+            </svg>
+            <span>{item.label}</span>
+          </button>
+        )
+      })}
+    </nav>
   )
 }
 
@@ -554,12 +598,16 @@ export default function DashboardLayout() {
 
         <main style={{
           flex: 1,
-          padding: isMobile ? '20px 16px' : '32px 36px',
+          padding: isMobile ? '1.25rem 1rem' : '2rem 2.25rem',
+          paddingBottom: isMobile ? 'calc(1.25rem + 3.5rem)' : '2rem',
           overflowY: 'auto', overflowX: 'hidden',
         }}>
           <div className="fade-up"><ErrorBoundary><Outlet /></ErrorBoundary></div>
         </main>
       </div>
+
+      {/* Bottom navigation — mobile only */}
+      <BottomNav items={BOTTOM_NAV_ITEMS} isMobile={isMobile} onMoreClick={() => setMobileOpen(true)} />
 
       {showLogout && <LogoutDialog onConfirm={handleLogout} onCancel={() => setShowLogout(false)} />}
 

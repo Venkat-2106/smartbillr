@@ -61,6 +61,8 @@ function Pagination({ pagination, onPageChange }) {
     transition: 'all 0.14s var(--ease-out)',
     userSelect: 'none',
     flexShrink: 0,
+    minWidth: 34,
+    minHeight: 34,
   }
 
   const activeStyle = {
@@ -165,6 +167,7 @@ function PaginationInner({ current, total, pages, pagination, onPageChange, btnB
             // FIX: onMouseEnter/Leave set hoveredPage state — no e.currentTarget.style mutation
             <button
               key={p}
+              className="page-btn"
               onClick={() => onPageChange(p)}
               onMouseEnter={() => p !== current && setHoveredPage(p)}
               onMouseLeave={() => setHoveredPage(null)}

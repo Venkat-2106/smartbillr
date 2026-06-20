@@ -72,13 +72,7 @@ const TABS = [
 
 function TabBar({ active, onChange }) {
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 4,
-      borderBottom: '2px solid var(--border)',
-      marginBottom: 24,
-    }}>
+    <div className="tab-bar-responsive">
       {TABS.map(tab => {
         const isActive = tab.key === active
         return (
@@ -98,6 +92,7 @@ function TabBar({ active, onChange }) {
               transition: 'all 0.15s',
               fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
               whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
           >
             {tab.label}

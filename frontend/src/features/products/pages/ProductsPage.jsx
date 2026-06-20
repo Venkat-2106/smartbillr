@@ -700,7 +700,7 @@ export default function ProductsPage() {
               to handleScannerEnter without modifying the shared SearchBar component */}
           <div
             onKeyDown={handleScannerEnter}
-            style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
           >
             <SearchBar
               value={search}

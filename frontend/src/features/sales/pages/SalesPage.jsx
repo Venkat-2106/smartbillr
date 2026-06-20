@@ -201,7 +201,7 @@ export default function SalesPage() {
         back
         onBack={() => navigate('/dashboard')}
         action={
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div className="action-group" style={{ display: 'flex', gap: 10 }}>
             <ExportButton
               onFetch={handleExport}
               filename="sales"

@@ -644,21 +644,57 @@ button:focus-visible, a:focus-visible {
   border: 0;
 }
 
-/* ─────────────────────────────────────────
-   RESPONSIVE: Sale creation page grid
-   Stacks the order summary below the line items
-   on screens narrower than 900px.
-───────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE / MOBILE UTILITIES
+   Breakpoints: 320px · 480px · 640px · 768px · 1024px
+═══════════════════════════════════════════════════════════════ */
+
+:root {
+  --page-padding-desktop: 2.25rem;  /* 36px */
+  --page-padding-mobile:  1rem;     /* 16px */
+}
+
+/* ── Responsive grid — stacks to single column below 640px ── */
+.responsive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+@media (max-width: 640px) {
+  .responsive-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Responsive two-column form grid ── */
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+@media (max-width: 640px) {
+  .form-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Responsive table wrapper — min-width ensures columns don't collapse ── */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.table-responsive table {
+  min-width: max(100%, 600px);
+}
+
+/* ── Sale creation page grid ── */
 @media (max-width: 900px) {
   .create-sale-grid {
     grid-template-columns: 1fr !important;
   }
 }
 
-/* ─────────────────────────────────────────
-   RESPONSIVE: AuthLayout — collapse to single column
-   on small screens (≤ 768px).
-───────────────────────────────────────── */
+/* ── AuthLayout — collapse to single column ── */
 @media (max-width: 768px) {
   .auth-layout {
     grid-template-columns: 1fr !important;
@@ -671,24 +707,113 @@ button:focus-visible, a:focus-visible {
   }
 }
 
-/* ─────────────────────────────────────────
-   RESPONSIVE: SearchBar — full width on mobile
-───────────────────────────────────────── */
+/* ── Mobile bottom navigation bar ── */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 80;
+  display: flex;
+  align-items: stretch;
+  height: 3.5rem;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.bottom-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  text-decoration: none;
+  font-size: 0.55rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  transition: color 0.14s;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  min-height: 44px;
+}
+
+/* ── SearchBar — full width on mobile ── */
 @media (max-width: 640px) {
   .search-bar-responsive {
     width: 100% !important;
   }
 }
 
-/* ─────────────────────────────────────────
-   RESPONSIVE: PageHeader font sizes
-───────────────────────────────────────── */
+/* ── PageHeader font sizes ── */
 @media (max-width: 640px) {
   .page-header-title {
-    font-size: 18px !important;
+    font-size: 1.125rem !important;
   }
   .page-header-subtitle {
-    font-size: 12px !important;
+    font-size: 0.75rem !important;
+  }
+}
+
+/* ── Tab bar — scrollable on mobile ── */
+.tab-bar-responsive {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.tab-bar-responsive::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Hide on desktop / show on mobile ── */
+@media (min-width: 769px) {
+  .hide-desktop {
+    display: none !important;
+  }
+}
+@media (max-width: 768px) {
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+/* ── EmptyState responsive padding ── */
+@media (max-width: 640px) {
+  .empty-state-responsive {
+    padding: 2.5rem 1rem !important;
+  }
+}
+
+/* ── Action button group — wrap on mobile ── */
+.action-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+@media (max-width: 640px) {
+  .action-group {
+    flex-wrap: wrap !important;
+  }
+}
+
+/* ── Pagination touch targets ── */
+@media (max-width: 640px) {
+  .page-btn {
+    min-width: 2.75rem !important;
+    min-height: 2.75rem !important;
+    width: 2.75rem !important;
+    height: 2.75rem !important;
   }
 }
 

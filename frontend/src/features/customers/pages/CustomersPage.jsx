@@ -346,7 +346,7 @@ export default function CustomersPage() {
         back
         onBack={() => navigate('/dashboard')}
         action={
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div className="action-group" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             {/* onFetch triggers a backend call on click — not from memory */}
             <ExportButton
               onFetch={handleExport}
@@ -479,7 +479,7 @@ export default function CustomersPage() {
             />
           </FormField>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+          <div className="form-grid-2" style={{ marginBottom: 16 }}>
             <FormField label="Phone Number" error={errors.cust_phone?.message}>
               <Input {...register('cust_phone')} placeholder="e.g. +91 98765 43210" type="tel" />
             </FormField>
@@ -488,7 +488,7 @@ export default function CustomersPage() {
             </FormField>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+          <div className="form-grid-2" style={{ marginBottom: 16 }}>
             <FormField label="Tax / GST Number" error={errors.cust_tax_number?.message}>
               <Input
                 {...register('cust_tax_number')}

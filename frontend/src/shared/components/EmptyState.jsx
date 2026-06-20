@@ -24,7 +24,7 @@ export default function EmptyState({
   action,
 }) {
   return (
-    <div style={{
+    <div className="empty-state-responsive" style={{
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',

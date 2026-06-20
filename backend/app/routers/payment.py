@@ -11,6 +11,7 @@ from app.schemas.payment import PaymentCreate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.payment_helpers import record_payment_and_sync, calculate_payment_status
+from datetime import datetime
 from app.utils.timestamp import fmt_ts
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
@@ -155,18 +156,6 @@ def create_payment(
 
     db.commit()
 
-    # ── Fetch the newly created row to return in response ─────────────────────
-    payment = db.execute(
-        text("""
-            SELECT payment_id, business_id, sale_id,
-                   payment_amount, cumulative_paid, payment_method,
-                   payment_status, is_active, payment_paid_at
-            FROM payments
-            WHERE payment_id = CAST(:pid AS uuid)
-        """),
-        {"pid": new_payment_id}
-    ).fetchone()
-
     new_remaining = round(sale_final - total_after, 2)
 
     return success_response({
@@ -176,15 +165,15 @@ def create_payment(
         "total_paid":         round(total_after, 2),
         "remaining_balance":  new_remaining if new_remaining > 0 else 0,
         "payment": {
-            "payment_id":      str(payment.payment_id),
-            "business_id":     str(payment.business_id),
-            "sale_id":         str(payment.sale_id),
-            "payment_amount":  float(payment.payment_amount),
-            "cumulative_paid": float(payment.cumulative_paid) if payment.cumulative_paid is not None else None,
-            "payment_method":  payment.payment_method,
-            "payment_status":  payment.payment_status,
-            "is_active":       payment.is_active,
-            "payment_paid_at": fmt_ts(payment.payment_paid_at)
+            "payment_id":      new_payment_id,
+            "business_id":     business_id,
+            "sale_id":         str(data.sale_id),
+            "payment_amount":  new_payment,
+            "cumulative_paid": round(total_after, 2),
+            "payment_method":  data.payment_method or "cash",
+            "payment_status":  new_status,
+            "is_active":       True,
+            "payment_paid_at": fmt_ts(datetime.utcnow())
         }
     }, status_code=201)
 

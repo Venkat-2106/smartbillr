@@ -1,14 +1,11 @@
 // src/features/auth/components/ProtectedRoute.jsx
 //
-// CHANGES FROM EXISTING:
-//   - Added optional `permission` prop → redirects to /unauthorized if missing
-//   - Added optional `role` prop → redirects to /unauthorized if role mismatch
-//   - Base behavior (no props) is identical to what you had before
+// All access control uses permission codes only.
 
 import { Navigate, Outlet } from 'react-router-dom'
 import useAuthStore from '../../../store/authStore'
 
-export default function ProtectedRoute({ children, permission = null, role = null }) {
+export default function ProtectedRoute({ children, permission = null }) {
   const token       = useAuthStore((s) => s.token)
   const profile     = useAuthStore((s) => s.profile)
   const permissions = useAuthStore((s) => s.permissions)
@@ -20,11 +17,6 @@ export default function ProtectedRoute({ children, permission = null, role = nul
 
   // Permission check → redirect to unauthorized page
   if (permission && !permissions.includes(permission)) {
-    return <Navigate to="/unauthorized" replace />
-  }
-
-  // Role check → redirect to unauthorized page
-  if (role && profile.role !== role) {
     return <Navigate to="/unauthorized" replace />
   }
 

@@ -378,7 +378,7 @@ export default function useCreateSale() {
         return;
       }
 
-      if (e.key === 'u' && (e.ctrlKey || e.metaKey)) {
+      if (e.key === 'U' && (e.ctrlKey || e.metaKey) && e.shiftKey) {
         e.preventDefault();
         handleOpenAddCust('');
         return;

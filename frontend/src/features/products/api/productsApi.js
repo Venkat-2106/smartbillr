@@ -108,3 +108,8 @@ export async function deleteProduct(prodId) {
   const res = await api.delete(`/products/${prodId}`)
   return res.data
 }
+// ---- Product summary (KPI cards) ------------------------------------------------------
+export async function fetchProductSummary() {
+  const res = await api.get('/products/summary')
+  return res.data
+}

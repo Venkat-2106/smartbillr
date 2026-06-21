@@ -122,3 +122,8 @@ export async function adjustStock(payload) {
   const res = await api.post('/stock/adjust', payload)
   return res.data
 }
+// ---- Stock summary (KPI cards) -------------------------------------------------------
+export async function fetchStockSummary() {
+  const res = await api.get('/stock/summary')
+  return res.data
+}

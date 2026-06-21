@@ -1,4 +1,4 @@
-// src/features/products/pages/ProductsPage.jsx
+﻿// src/features/products/pages/ProductsPage.jsx
 //
 // BARCODE CHANGES (2026-06-06):
 //   - AddProductForm / EditProductForm: barcode field now has a "Generate" button
@@ -69,7 +69,7 @@ import {
   useUpdateProduct,
   useDeleteProduct,
 } from '../hooks/useProducts'
-import { checkBarcode, fetchProductByBarcode } from '../api/productsApi'
+import { checkBarcode, fetchProductByBarcode, fetchProductSummary } from '../api/productsApi'
 import ProductDetailDrawer from '../components/ProductDetailDrawer'
 import AddProductModal from '../components/AddProductModal'
 import EditProductModal from '../components/EditProductModal'
@@ -263,6 +263,12 @@ export default function ProductsPage() {
 
   // Convenience: total record count (across all pages) for the toolbar.
   const totalCount = pagination ? (pagination.total ?? products.length) : products.length
+
+  const { data: productSummary } = useQuery({
+    queryKey: ['product-summary'],
+    queryFn: fetchProductSummary,
+    staleTime: 60_000,
+  })
 
   const { mutate: createProduct, isPending: isCreating } = useCreateProduct()
   const { mutate: updateProduct, isPending: isUpdating } = useUpdateProduct()
@@ -665,18 +671,11 @@ export default function ProductsPage() {
 
   const csvColumns = canViewProfit ? PRODUCT_CSV_COLUMNS : PRODUCT_CSV_COLUMNS_NO_PROFIT
 
-  // ── Metric computations from current page ──────────────────────────────────
-  const lowStockCount = products.filter(p => p.prod_stock_qty <= p.prod_low_stock_alert).length
-  const outOfStockCount = products.filter(p => p.prod_stock_qty === 0).length
-  const stockValue = canViewProfit
-    ? formatCurrency(
-        products.reduce((sum, p) => {
-          const cost = parseFloat(p.prod_cost_price) || 0
-          const qty = parseInt(p.prod_stock_qty) || 0
-          return sum + cost * qty
-        }, 0),
-        countryCode,
-      )
+  // ── Metric computations from server-side summary ────────────────────────────
+  const lowStockCount    = productSummary?.low_stock_count ?? 0
+  const outOfStockCount  = productSummary?.out_of_stock_count ?? 0
+  const stockValue = canViewProfit && productSummary?.stock_value != null
+    ? formatCurrency(productSummary.stock_value, countryCode)
     : '—'
 
   return (
@@ -745,18 +744,6 @@ export default function ProductsPage() {
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
               <polyline points="3.29 7 12 12 20.71 7" />
               <line x1="12" y1="22" x2="12" y2="12" />
-            </svg>
-          }
-          label="Total Products"
-          value={totalCount}
-        />
-        <MetricCard
-          colSpan={3}
-          loading={isLoading}
-          icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-              <polyline points="17 6 23 6 23 12" />
             </svg>
           }
           label="Total Products"
@@ -1003,3 +990,4 @@ export default function ProductsPage() {
     </>
   )
 }
+

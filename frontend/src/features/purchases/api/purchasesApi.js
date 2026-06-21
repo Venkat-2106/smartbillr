@@ -71,6 +71,12 @@ export async function deletePurchase(purId, reduceStock = false) {
   return res.data
 }
 
+// ── Purchase summary (KPI cards) ───────────────────────────────────
+export async function fetchPurchaseSummary() {
+  const res = await api.get('/purchases/summary')
+  return res.data
+}
+
 // ── GET lean supplier list (for create-purchase dropdown) ─────────────────────
 export async function fetchSuppliersLean() {
   const res = await api.get('/suppliers/lean')

@@ -13,11 +13,13 @@
 //   needed — server handles filtering so pagination is always accurate).
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { useForm }                               from 'react-hook-form'
-import { zodResolver }                           from '@hookform/resolvers/zod'
-import { useNavigate }                           from 'react-router-dom'
+import { useQuery }                               from '@tanstack/react-query'
+import { useForm }                                from 'react-hook-form'
+import { zodResolver }                            from '@hookform/resolvers/zod'
+import { useNavigate }                            from 'react-router-dom'
 
 import { useCustomers } from '../hooks/useCustomers'
+import { fetchCustomerSummary } from '../api/customersApi'
 import useAuthStore     from '../../../store/authStore'
 import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
 
@@ -32,6 +34,7 @@ import {
 import { selectStyle, textareaStyle } from '../../../shared/components/FormField'
 import { CUSTOMER_CSV_COLUMNS }       from '../../../shared/utils/csvExport'
 import { COUNTRIES }                  from '../../../shared/data/countries'
+import { formatCurrency }             from '../../../shared/utils/formatCurrency'
 import { formatDate }                 from '../../../shared/utils/formatDate'
 
 import CustomerDetailDrawer, { DrawerOverlay }
@@ -189,6 +192,12 @@ export default function CustomersPage() {
     createCustomer, updateCustomer, deleteCustomer,
     isCreating, isUpdating, isDeleting,
   } = useCustomers()
+
+  const { data: customerSummary } = useQuery({
+    queryKey: ['customer-summary'],
+    queryFn: fetchCustomerSummary,
+    staleTime: 60_000,
+  })
 
   // Modal state
   const [showModal,        setShowModal]        = useState(false)
@@ -392,7 +401,7 @@ export default function CustomersPage() {
             </svg>
           }
           label="Outstanding Balance"
-          value="—"
+          value={customerSummary?.outstanding_balance != null ? formatCurrency(customerSummary.outstanding_balance) : '\u2014'}
         />
         <MetricCard
           colSpan={3}
@@ -408,7 +417,7 @@ export default function CustomersPage() {
             </svg>
           }
           label="New This Month"
-          value="—"
+          value={customerSummary?.new_this_month ?? 0}
         />
       </div>
 

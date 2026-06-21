@@ -1,4 +1,4 @@
-// src/features/stock/pages/StockPage.jsx
+﻿// src/features/stock/pages/StockPage.jsx
 //
 // /stock — Stock Management Hub (permission: stock.view)
 //
@@ -33,6 +33,7 @@ import { formatDate }      from '../../../shared/utils/formatDate'
 import { formatCurrency }  from '../../../shared/utils/formatCurrency'
 import useAuthStore        from '../../../store/authStore'
 import { fetchCategories } from '../../categories/api/categoriesApi'
+import { fetchStockSummary } from '../api/stockApi'
 import { useStock, useStockMovements, useStockAlerts } from '../hooks/useStock'
 import AdjustStockModal from '../components/AdjustStockModal'
 import { useStockAlertRead } from '../hooks/useStock'
@@ -139,18 +140,15 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
   const handleAdjustClick = useCallback((row) => setAdjustTarget(row), [])
   const closeAdjust       = useCallback(() => setAdjustTarget(null), [])
 
-  const stockValue = useMemo(
-    () => stock.reduce((sum, p) => sum + (p.stock_value || 0), 0),
-    [stock]
-  )
-  const lowStockCount = useMemo(
-    () => stock.filter(p => p.stock_status === 'low_stock').length,
-    [stock]
-  )
-  const outOfStockCount = useMemo(
-    () => stock.filter(p => p.stock_status === 'out_of_stock').length,
-    [stock]
-  )
+  const { data: stockSummary } = useQuery({
+    queryKey: ['stock-summary'],
+    queryFn: fetchStockSummary,
+    staleTime: 60_000,
+  })
+
+  const stockValue = stockSummary?.stock_value
+  const lowStockCount    = stockSummary?.low_stock_count ?? 0
+  const outOfStockCount  = stockSummary?.out_of_stock_count ?? 0
 
   const columns = useMemo(() => [
     {
@@ -322,7 +320,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
             </svg>
           }
           label="Stock Value"
-          value={formatCurrency(stockValue, countryCode)}
+          value={stockValue != null ? formatCurrency(stockValue, countryCode) : '\u2014'}
         />
         <MetricCard
           colSpan={3}
@@ -983,3 +981,5 @@ export default function StockPage() {
     </>
   )
 }
+
+

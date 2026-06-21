@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { usePurchases } from '../hooks/usePurchases'
+import { fetchPurchaseSummary } from '../api/purchasesApi'
 import useAuthStore from '../../../store/authStore'
 import PurchaseDetailDrawer, { DrawerOverlay }
   from '../components/PurchaseDetailDrawer'
@@ -140,26 +142,17 @@ export default function PurchasesPage() {
     else setDateTo(value)
   }
 
+  const { data: purchaseSummary } = useQuery({
+    queryKey: ['purchase-summary'],
+    queryFn: fetchPurchaseSummary,
+    staleTime: 60_000,
+  })
+
   const activeFilters = [search.trim(), status, dateFrom, dateTo].filter(Boolean).length
 
-  const monthlyPurchases = useMemo(() => {
-    const now = new Date()
-    return purchases.filter(p => {
-      if (!p.pur_created_at) return false
-      const d = new Date(p.pur_created_at)
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-    }).length
-  }, [purchases])
-
-  const pendingPayments = useMemo(() => {
-    return purchases.filter(
-      p => p.pur_payment_status === 'pending' || p.pur_payment_status === 'partial'
-    ).length
-  }, [purchases])
-
-  const activeSuppliers = useMemo(() => {
-    return new Set(purchases.map(p => p.supp_name).filter(Boolean)).size
-  }, [purchases])
+  const monthlyPurchases = purchaseSummary?.monthly_count ?? 0
+  const pendingPayments  = purchaseSummary?.pending_count ?? 0
+  const activeSuppliers  = purchaseSummary?.active_suppliers ?? 0
 
   return (
     <>

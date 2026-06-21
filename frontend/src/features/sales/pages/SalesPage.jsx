@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSales } from '../hooks/useSales';
+import { fetchSalesSummary } from '../api/salesApi';
 import SaleDetailDrawer from '../components/SaleDetailDrawer';
 import {
   Table, Button, Badge, SearchBar,
@@ -11,6 +13,7 @@ import { selectStyle }       from '../../../shared/components/FormField';
 import { SALES_CSV_COLUMNS } from '../../../shared/utils/csvExport';
 import { formatCurrency }    from '../../../shared/utils/formatCurrency';
 import { formatDate }        from '../../../shared/utils/formatDate';
+import useAuthStore          from '../../../store/authStore';
 
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' };
 const STATUS_LABEL   = { paid: 'Paid',    partial: 'Partial', pending: 'Unpaid' };
@@ -26,6 +29,8 @@ function SvgIcon({ path, size = 18 }) {
 export default function SalesPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const business = useAuthStore(s => s.business);
+  const country = business?.business_country_code || 'IN';
 
   const {
     sales, isLoading, hasData, isError,
@@ -41,6 +46,12 @@ export default function SalesPage() {
     deleteSale, isDeleting,
     isExporting, handleExport,
   } = useSales();
+
+  const { data: salesSummary, isLoading: summaryLoading } = useQuery({
+    queryKey: ['sales-summary'],
+    queryFn: fetchSalesSummary,
+    staleTime: 60_000,
+  });
 
   const [showDelete,   setShowDelete]   = useState(false);
   const [deletingSale, setDeletingSale] = useState(null);
@@ -217,30 +228,30 @@ export default function SalesPage() {
         <MetricCard
           icon={<SvgIcon path="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />}
           label="Today's Sales"
-          value={formatCurrency(0)}
+          value={salesSummary?.today_revenue != null ? formatCurrency(salesSummary.today_revenue, country) : '\u2014'}
           colSpan={3}
-          loading={isLoading}
+          loading={isLoading || summaryLoading}
         />
         <MetricCard
           icon={<SvgIcon path="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />}
           label="Weekly Sales"
-          value={formatCurrency(0)}
+          value={salesSummary?.weekly_revenue != null ? formatCurrency(salesSummary.weekly_revenue, country) : '\u2014'}
           colSpan={3}
-          loading={isLoading}
+          loading={isLoading || summaryLoading}
         />
         <MetricCard
           icon={<SvgIcon path="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />}
           label="Monthly Sales"
-          value={formatCurrency(0)}
+          value={salesSummary?.monthly_revenue != null ? formatCurrency(salesSummary.monthly_revenue, country) : '\u2014'}
           colSpan={3}
-          loading={isLoading}
+          loading={isLoading || summaryLoading}
         />
         <MetricCard
           icon={<SvgIcon path="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />}
           label="Outstanding Payments"
-          value={formatCurrency(0)}
+          value={salesSummary?.outstanding_receivables != null ? formatCurrency(salesSummary.outstanding_receivables, country) : '\u2014'}
           colSpan={3}
-          loading={isLoading}
+          loading={isLoading || summaryLoading}
         />
       </div>
 

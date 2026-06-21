@@ -1,4 +1,4 @@
-// src/features/payments/pages/PaymentsPage.jsx
+﻿// src/features/payments/pages/PaymentsPage.jsx
 //
 // Standard list page following the SmartBillr page pattern exactly.
 //
@@ -15,7 +15,9 @@
 //   - ExportButton uses onFetch (lazy — only runs when clicked)
 
 import { useState, useMemo } from 'react'
+import { useQuery }         from '@tanstack/react-query'
 import { usePayments }       from '../hooks/usePayments'
+import { fetchPaymentSummary } from '../api/paymentsApi'
 import useAuthStore              from '../../../store/authStore'
 import PaymentHistoryDrawer, { DrawerOverlay }
   from '../components/PaymentHistoryDrawer'
@@ -144,6 +146,8 @@ function buildColumns(onRowClick) {
 export default function PaymentsPage() {
   const hasPermission = useAuthStore(s => s.hasPermission)
   const canManage     = hasPermission('payments.manage')
+  const business      = useAuthStore(s => s.business)
+  const country       = business?.business_country_code || 'IN'
 
   const {
     payments,
@@ -160,6 +164,12 @@ export default function PaymentsPage() {
     isRecording,
   } = usePayments()
 
+  const { data: paymentSummary, isLoading: summaryLoading } = useQuery({
+    queryKey: ['payment-summary'],
+    queryFn: fetchPaymentSummary,
+    staleTime: 60_000,
+  })
+
   // Drawer state — stores the sale_id of the selected row
   const [selectedSaleId, setSelectedSaleId] = useState(null)
 
@@ -174,15 +184,6 @@ export default function PaymentsPage() {
   }
 
   const activeFilters = [search.trim(), status, dateFrom, dateTo].filter(Boolean).length
-
-  const totalCollected = useMemo(
-    () => payments.reduce((sum, p) => sum + (p.cumulative_paid || 0), 0),
-    [payments]
-  )
-  const pendingCount = useMemo(
-    () => payments.filter(p => (p.remaining_balance || 0) > 0).length,
-    [payments]
-  )
 
   return (
     <>
@@ -218,11 +219,12 @@ export default function PaymentsPage() {
             </svg>
           }
           label="Total Payments Collected"
-          value={formatCurrency(totalCollected)}
+          value={paymentSummary?.total_collected != null ? formatCurrency(paymentSummary.total_collected, country) : '\u2014'}
+          loading={isLoading || summaryLoading}
         />
         <MetricCard
           colSpan={6}
-          loading={isLoading}
+          loading={isLoading || summaryLoading}
           icon={
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="10" />
@@ -230,7 +232,7 @@ export default function PaymentsPage() {
             </svg>
           }
           label="Pending Payments"
-          value={pendingCount}
+          value={paymentSummary?.pending_count ?? 0}
         />
       </div>
 
@@ -385,3 +387,4 @@ export default function PaymentsPage() {
     </>
   )
 }
+

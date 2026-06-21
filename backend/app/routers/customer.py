@@ -308,6 +308,44 @@ def search_customer_by_phone(
     return success_response(customer_to_dict(customer))
 
 
+# ── GET /customers/summary → KPI cards for customers page ──────────
+@router.get("/summary")
+def get_customer_summary_kpi(
+    current_user: dict = Depends(require_permission("customers.manage")),
+    db: Session = Depends(get_db)
+):
+    bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
+
+    row = db.execute(text("""
+        SELECT
+            COUNT(*)                                                              AS total_count,
+            COUNT(*) FILTER (WHERE date_trunc('month', cust_created_at) = date_trunc('month', CURRENT_DATE)) AS new_this_month,
+            COALESCE((
+                SELECT SUM(s.sales_final_amount - COALESCE((
+                    SELECT cumulative_paid FROM payments
+                    WHERE sale_id = s.sales_id AND is_active = true
+                    LIMIT 1
+                ), 0))
+                FROM sales s
+                WHERE s.customer_id = c.cust_id
+                  AND s.business_id = c.business_id
+                  AND s.is_deleted  = false
+                  AND s.sales_payment_status IN ('pending', 'partial')
+            ), 0) AS outstanding_balance
+        FROM customers c
+        WHERE c.business_id = CAST(:bid AS uuid)
+          AND c.is_deleted  = false
+    """), {"bid": bid}).fetchone()
+
+    return success_response({
+        "total_count":        int(row.total_count),
+        "new_this_month":     int(row.new_this_month),
+        "outstanding_balance": float(row.outstanding_balance) if can_financial else None,
+    })
+
+
 # ══════════════════════════════════════════════════════════════════
 # GET /customers/{cust_id} → Detail + summary + paginated sales history
 #
@@ -531,15 +569,17 @@ def get_customer(
             })
 
     total_pages = (total_count + pagination["limit"] - 1) // pagination["limit"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
 
     return success_response({
         **customer_to_dict(customer),
         "summary": {
-            "total_sales":         total_sales,
-            "total_spent":         round(total_spent, 2),
-            "total_paid":          round(total_paid, 2),
-            "outstanding_balance": outstanding if outstanding > 0 else 0,
-            "total_returns":       round(total_returns, 2)
+            "total_sales":         total_sales if can_financial else None,
+            "total_spent":         round(total_spent, 2) if can_financial else None,
+            "total_paid":          round(total_paid, 2) if can_financial else None,
+            "outstanding_balance": (outstanding if outstanding > 0 else 0) if can_financial else None,
+            "total_returns":       round(total_returns, 2) if can_financial else None
         },
         "sales_history": sales_history,
         "pagination": {

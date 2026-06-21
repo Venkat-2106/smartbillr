@@ -140,6 +140,12 @@ export const searchProductsLean = async (q) => {
   return []
 }
 
+// ── Sales summary (KPI cards) ───────────────────────────────────────
+export async function fetchSalesSummary() {
+  const res = await api.get('/sales/summary')
+  return res.data
+}
+
 // ── Exact barcode lookup for scanner input in the sales form ──────────────────
 //
 // PERF FIX (2026-06):

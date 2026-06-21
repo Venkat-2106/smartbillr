@@ -58,11 +58,11 @@ const SECTIONS = [
     title: 'Sales',
     description: 'Invoice creation shortcuts',
     shortcuts: [
-      { keys: 'Ctrl P', label: 'Add product line item' },
+      { keys: 'Alt P', label: 'Add product line item' },
       { keys: 'Ctrl ⇧ C', label: 'Select customer' },
       { keys: 'Ctrl Enter', label: 'Create invoice' },
       { keys: 'F2', label: 'Focus barcode scanner' },
-      { keys: 'Ctrl U', label: 'Add new customer' },
+      { keys: 'Ctrl ⇧ U', label: 'Add new customer' },
     ],
   },
   {

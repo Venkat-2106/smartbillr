@@ -294,6 +294,31 @@ def get_all_payments(
     )
 
 
+# ── GET /payments/summary → KPI cards for payments page ──────────────
+@router.get("/summary")
+def get_payment_summary_kpi(
+    current_user: dict = Depends(require_permission("payments.manage")),
+    db: Session = Depends(get_db)
+):
+    bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
+
+    row = db.execute(text("""
+        SELECT
+            (SELECT COALESCE(SUM(cumulative_paid), 0) FROM payments
+              WHERE business_id = CAST(:bid AS uuid) AND is_active = true)          AS total_collected,
+            (SELECT COUNT(*) FROM sales
+              WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false
+                AND sales_payment_status IN ('pending','partial'))                  AS pending_count
+    """), {"bid": bid}).fetchone()
+
+    return success_response({
+        "total_collected": float(row.total_collected) if can_financial else None,
+        "pending_count":   int(row.pending_count),
+    })
+
+
 # ══════════════════════════════════════════════════════════════════
 # GET /payments/sale/{sale_id} → Full payment history for one sale
 # (Declared BEFORE /{payment_id} to avoid FastAPI routing conflict)

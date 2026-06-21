@@ -1,5 +1,7 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
+import { fetchStaffSummary } from '../api/staffApi'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from 'react-router-dom'
 
@@ -119,6 +121,12 @@ export default function StaffPage() {
     isCreating, isUpdating, isDeactivating,
   } = useStaff()
 
+  const { data: staffSummary, isLoading: summaryLoading } = useQuery({
+    queryKey: ['staff-summary'],
+    queryFn: fetchStaffSummary,
+    staleTime: 60_000,
+  })
+
   const [showAdd, setShowAdd] = useState(false)
   const [editingStaff, setEditingStaff] = useState(null)
   const [deactivatingStaff, setDeactivatingStaff] = useState(null)
@@ -161,11 +169,6 @@ export default function StaffPage() {
     deactivateStaff(deactivatingStaff.id, { onSuccess: () => setShowDeactivate(false) })
   }
 
-  const activeCount = useMemo(
-    () => staffList ? staffList.filter(s => s.is_active).length : 0,
-    [staffList]
-  )
-
   const columns = useMemo(
     () => buildColumns(canManage, handleOpenEdit, handleDeactivateClick),
     [canManage]
@@ -207,9 +210,9 @@ export default function StaffPage() {
             </svg>
           }
           label="Active Staff"
-          value={String(isLoading ? '—' : activeCount)}
-          subtitle={isLoading ? '' : `${((activeCount / totalItems) * 100).toFixed(0)}% of total`}
-          loading={isLoading}
+          value={staffSummary?.active_count ?? (isLoading ? '—' : staffList.filter(s => s.is_active).length)}
+          subtitle={String(staffSummary?.total_count ?? totalItems) + ' total'}
+          loading={isLoading || summaryLoading}
         />
       </div>
 
@@ -410,3 +413,4 @@ export default function StaffPage() {
     </>
   )
 }
+

@@ -40,3 +40,9 @@ export async function deactivateStaff(staffId) {
   const res = await api.delete(`/staff/${staffId}/`)
   return res.data
 }
+
+// ---- Staff summary (KPI cards) -------------------------------------------------------
+export async function fetchStaffSummary() {
+  const res = await api.get('/staff/summary')
+  return res.data
+}

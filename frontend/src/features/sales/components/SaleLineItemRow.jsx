@@ -14,7 +14,7 @@
 //
 // Extracted from CreateSalePage.jsx (Step 5.16 refactor) — zero behaviour change.
 
-import { memo, useRef } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import { formatCurrency } from '../../../shared/utils/formatCurrency';
 import { selectStyle } from '../../../shared/components/FormField';
 import { NUM_INPUT_STYLE } from '../../../shared/constants/styles';
@@ -42,6 +42,25 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
   const availableQty = item.prod_stock_qty != null ? Number(item.prod_stock_qty) : null;
   const overStock = availableQty !== null && Number(item.quantity) > availableQty;
   const comboRef = useRef(null);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+
+  const onSearchKeyDown = useCallback((e) => {
+    if (!isOpen || searchResults.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(prev => (prev + 1) % searchResults.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(prev => (prev <= 0 ? searchResults.length - 1 : prev - 1));
+    } else if (e.key === 'Enter' && highlightedIndex >= 0) {
+      e.preventDefault();
+      onProductSelect(item._id, searchResults[highlightedIndex]);
+    } else if (e.key === 'Escape') {
+      onCloseDropdown(item._id);
+    }
+  }, [isOpen, searchResults, highlightedIndex, onProductSelect, onCloseDropdown, item._id]);
+
+  const resetHighlight = useCallback(() => setHighlightedIndex(-1), []);
 
   return (
     /* FIX L3: grid template matches updated header */
@@ -83,9 +102,10 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
             <input
               type="text"
               value={searchText}
-              onChange={e => onSearchChange(item._id, e.target.value)}
+              onChange={e => { onSearchChange(item._id, e.target.value); resetHighlight(); }}
               onFocus={() => onOpenDropdown(item._id)}
-              onBlur={() => setTimeout(() => onCloseDropdown(item._id), 150)}
+              onBlur={() => setTimeout(() => { onCloseDropdown(item._id); resetHighlight(); }, 150)}
+              onKeyDown={onSearchKeyDown}
               placeholder="Type to search…"
               autoComplete="off"
               style={{ ...selectStyle, fontSize: 13, padding: '7px 9px' }}
@@ -104,15 +124,17 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
                     No products found for "{searchText}"
                   </div>
                 ) : (
-                  searchResults.map(p => (
+                  searchResults.map((p, idx) => (
                     <div
                       key={p.prod_id}
                       onMouseDown={() => onProductSelect(item._id, p)}
+                      onMouseEnter={() => setHighlightedIndex(idx)}
                       style={{
                         padding: '9px 14px', cursor: 'pointer',
                         borderBottom: '1px solid var(--border)',
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         transition: 'background 0.1s',
+                        background: idx === highlightedIndex ? 'var(--bg-subtle)' : undefined,
                       }}
                       className="search-result-item"
                     >

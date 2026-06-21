@@ -1,5 +1,7 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
+import { fetchExpenseSummary } from '../api/expensesApi'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from 'react-router-dom'
 
@@ -150,6 +152,12 @@ export default function ExpensesPage() {
     isCreating, isUpdating, isDeleting,
   } = useExpenses()
 
+  const { data: expenseSummary, isLoading: summaryLoading } = useQuery({
+    queryKey: ['expense-summary'],
+    queryFn: fetchExpenseSummary,
+    staleTime: 60_000,
+  })
+
   const [showModal, setShowModal] = useState(false)
   const [editingExpense, setEditingExpense] = useState(null)
   const [deletingExpense, setDeletingExpense] = useState(null)
@@ -232,15 +240,6 @@ export default function ExpensesPage() {
 
   const activeFilters = [search.trim(), dateFrom, dateTo].filter(Boolean).length
 
-  const monthlyExpenses = useMemo(() => {
-    const now = new Date()
-    return expenses.filter(e => {
-      if (!e.expense_date) return false
-      const d = new Date(e.expense_date)
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-    }).length
-  }, [expenses])
-
   return (
     <>
       {/* PAGE HEADER */}
@@ -300,8 +299,8 @@ export default function ExpensesPage() {
             </svg>
           }
           label="Total Expenses"
-          value={totalItems.toLocaleString()}
-          loading={isLoading}
+          value={expenseSummary?.total_count ?? totalItems}
+          loading={isLoading || summaryLoading}
         />
         <MetricCard
           colSpan={4}
@@ -314,8 +313,8 @@ export default function ExpensesPage() {
             </svg>
           }
           label="Monthly Expenses"
-          value={monthlyExpenses}
-          loading={isLoading}
+          value={expenseSummary?.monthly_count ?? 0}
+          loading={isLoading || summaryLoading}
         />
       </div>
 
@@ -527,3 +526,4 @@ export default function ExpensesPage() {
     </>
   )
 }
+

@@ -477,6 +477,35 @@ def get_all_purchases(
 
 
 # ─────────────────────────────────────────
+# GET /purchases/summary → KPI summary for purchases page
+# ─────────────────────────────────────────
+@router.get("/summary")
+def get_purchase_summary_kpi(
+    current_user: dict = Depends(require_permission("purchases.view")),
+    db: Session = Depends(get_db)
+):
+    bid = current_user["business_id"]
+    row = db.execute(text("""
+        SELECT
+            COUNT(*)                                                             AS total_count,
+            COUNT(*) FILTER (WHERE date_trunc('month', pur_created_at) = date_trunc('month', CURRENT_DATE)) AS monthly_count,
+            COUNT(*) FILTER (WHERE pur_payment_status IN ('pending','partial'))  AS pending_count,
+            (SELECT COUNT(DISTINCT supp_id) FROM suppliers
+              WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false)     AS active_suppliers
+        FROM purchases
+        WHERE business_id = CAST(:bid AS uuid)
+          AND is_deleted  = false
+    """), {"bid": bid}).fetchone()
+
+    return success_response({
+        "total_count":       int(row.total_count),
+        "monthly_count":     int(row.monthly_count),
+        "pending_count":     int(row.pending_count),
+        "active_suppliers":  int(row.active_suppliers),
+    })
+
+
+# ─────────────────────────────────────────
 # GET /purchases/{pur_id} → Get one purchase
 # Includes: purchase details + items + all returns for this purchase
 # ─────────────────────────────────────────

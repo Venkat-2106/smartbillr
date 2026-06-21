@@ -213,6 +213,8 @@ def get_sales_trend(
     """Revenue over time — daily (weekly), monthly, yearly.
     Uses generate_series for zero-fill, returns revenue + invoice count."""
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
 
     if period not in ("weekly", "monthly", "yearly"):
         period = "monthly"
@@ -312,7 +314,7 @@ def get_sales_trend(
         result.append({
             "label": label,
             "invoice_count": int(r.invoice_count),
-            "revenue": float(r.revenue),
+            "revenue": float(r.revenue) if can_financial else None,
         })
 
     return success_response(result)
@@ -326,6 +328,8 @@ def get_sales_by_customer(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
     rows = db.execute(text(f"""
@@ -351,9 +355,9 @@ def get_sales_by_customer(
             "cust_id": str(r.cust_id),
             "cust_name": r.cust_name,
             "invoice_count": int(r.invoice_count),
-            "total_amount": float(r.total_amount),
-            "paid_amount": float(r.paid_amount),
-            "outstanding_amount": float(r.outstanding_amount),
+            "total_amount": float(r.total_amount) if can_financial else None,
+            "paid_amount": float(r.paid_amount) if can_financial else None,
+            "outstanding_amount": float(r.outstanding_amount) if can_financial else None,
         }
         for r in rows
     ])
@@ -368,6 +372,7 @@ def get_sales_by_product(
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     show_profit = "view_product_profit" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
@@ -399,10 +404,10 @@ def get_sales_by_product(
             "prod_name": r.prod_name,
             "category_name": r.category_name,
             "total_qty_sold": int(r.total_qty_sold),
-            "total_revenue": float(r.total_revenue),
+            "total_revenue": float(r.total_revenue) if can_financial else None,
         }
         if show_profit:
-            item["profit"] = float(r.profit)
+            item["profit"] = float(r.profit) if can_financial else None
         result.append(item)
 
     return success_response(result)
@@ -416,6 +421,8 @@ def get_sales_by_category(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
     rows = db.execute(text(f"""
@@ -442,7 +449,7 @@ def get_sales_by_category(
             "category_name": r.category_name or "Uncategorized",
             "invoice_count": int(r.invoice_count),
             "total_qty_sold": int(r.total_qty_sold),
-            "total_revenue": float(r.total_revenue),
+            "total_revenue": float(r.total_revenue) if can_financial else None,
         }
         for r in rows
     ])
@@ -456,6 +463,8 @@ def get_sales_by_payment_method(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
     rows = db.execute(text(f"""
@@ -475,7 +484,7 @@ def get_sales_by_payment_method(
         {
             "payment_method": r.payment_method or "unknown",
             "invoice_count": int(r.invoice_count),
-            "total_amount": float(r.total_amount),
+            "total_amount": float(r.total_amount) if can_financial else None,
         }
         for r in rows
     ])
@@ -489,6 +498,8 @@ def get_sales_invoice_status(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
     row = db.execute(text(f"""
@@ -511,9 +522,9 @@ def get_sales_invoice_status(
         "paid_count": int(row.paid_count) if row else 0,
         "partial_count": int(row.partial_count) if row else 0,
         "pending_count": int(row.pending_count) if row else 0,
-        "paid_amount": float(row.paid_amount) if row else 0,
-        "partial_amount": float(row.partial_amount) if row else 0,
-        "pending_amount": float(row.pending_amount) if row else 0,
+        "paid_amount": float(row.paid_amount) if can_financial else None,
+        "partial_amount": float(row.partial_amount) if can_financial else None,
+        "pending_amount": float(row.pending_amount) if can_financial else None,
     })
 
 
@@ -529,6 +540,8 @@ def get_purchase_summary(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("pr", "pur_created_at", date_from, date_to)
 
     row = db.execute(text(f"""
@@ -550,12 +563,12 @@ def get_purchase_summary(
 
     return success_response({
         "total_purchases": int(row.total_purchases) if row else 0,
-        "total_amount": float(row.total_amount) if row else 0,
-        "total_discount": float(row.total_discount) if row else 0,
-        "total_tax": float(row.total_tax) if row else 0,
-        "total_cgst": float(row.total_cgst) if row else 0,
-        "total_sgst": float(row.total_sgst) if row else 0,
-        "total_igst": float(row.total_igst) if row else 0,
+        "total_amount": float(row.total_amount) if can_financial else None,
+        "total_discount": float(row.total_discount) if can_financial else None,
+        "total_tax": float(row.total_tax) if can_financial else None,
+        "total_cgst": float(row.total_cgst) if can_financial else None,
+        "total_sgst": float(row.total_sgst) if can_financial else None,
+        "total_igst": float(row.total_igst) if can_financial else None,
         "paid_count": int(row.paid_count) if row else 0,
         "pending_count": int(row.pending_count) if row else 0,
     })
@@ -571,6 +584,8 @@ def get_purchase_trend(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     if period not in ("weekly", "monthly", "yearly"):
         period = "monthly"
 
@@ -651,7 +666,7 @@ def get_purchase_trend(
             label = month_short[r.bucket.month - 1] if hasattr(r.bucket, 'month') else str(r.bucket)
         else:
             label = str(int(r.bucket)) if hasattr(r.bucket, 'year') else str(r.bucket)
-        result.append({"label": label, "purchase_count": int(r.purchase_count), "amount": float(r.amount)})
+        result.append({"label": label, "purchase_count": int(r.purchase_count), "amount": float(r.amount) if can_financial else None})
 
     return success_response(result)
 
@@ -664,6 +679,8 @@ def get_purchases_by_supplier(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("pr", "pur_created_at", date_from, date_to)
 
     rows = db.execute(text(f"""
@@ -688,7 +705,7 @@ def get_purchases_by_supplier(
             "supp_id": str(r.supp_id),
             "supp_name": r.supp_name,
             "purchase_count": int(r.purchase_count),
-            "total_amount": float(r.total_amount),
+            "total_amount": float(r.total_amount) if can_financial else None,
             "total_discount": float(r.total_discount),
         }
         for r in rows
@@ -703,6 +720,8 @@ def get_purchases_by_product(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("pr", "pur_created_at", date_from, date_to)
 
     rows = db.execute(text(f"""
@@ -726,7 +745,7 @@ def get_purchases_by_product(
             "prod_id": str(r.prod_id),
             "prod_name": r.prod_name,
             "total_qty_purchased": int(r.total_qty_purchased),
-            "total_amount": float(r.total_amount),
+            "total_amount": float(r.total_amount) if can_financial else None,
         }
         for r in rows
     ])
@@ -740,6 +759,8 @@ def get_purchase_tax_summary(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("pr", "pur_created_at", date_from, date_to)
 
     row = db.execute(text(f"""
@@ -755,10 +776,10 @@ def get_purchase_tax_summary(
     """), {"bid": bid, **dp}).fetchone()
 
     return success_response({
-        "total_tax": float(row.total_tax) if row else 0,
-        "total_cgst": float(row.total_cgst) if row else 0,
-        "total_sgst": float(row.total_sgst) if row else 0,
-        "total_igst": float(row.total_igst) if row else 0,
+        "total_tax": float(row.total_tax) if can_financial else None,
+        "total_cgst": float(row.total_cgst) if can_financial else None,
+        "total_sgst": float(row.total_sgst) if can_financial else None,
+        "total_igst": float(row.total_igst) if can_financial else None,
     })
 
 
@@ -1279,6 +1300,8 @@ def get_top_customers(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
     rows = db.execute(text(f"""
@@ -1306,9 +1329,9 @@ def get_top_customers(
             "cust_name": r.cust_name,
             "cust_phone": r.cust_phone,
             "invoice_count": int(r.invoice_count),
-            "total_spent": float(r.total_spent),
+            "total_spent": float(r.total_spent) if can_financial else None,
             "recent_invoices": int(r.recent_invoices),
-            "avg_invoice_value": round(float(r.total_spent) / int(r.invoice_count), 2) if int(r.invoice_count) > 0 else 0,
+            "avg_invoice_value": round(float(r.total_spent) / int(r.invoice_count), 2) if can_financial and int(r.invoice_count) > 0 else None,
         }
         for r in rows
     ])
@@ -1423,6 +1446,8 @@ def get_customer_lifetime_value(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
 
     rows = db.execute(text("""
         SELECT
@@ -1445,9 +1470,9 @@ def get_customer_lifetime_value(
 
     result = []
     for r in rows:
-        total = float(r.total_spent)
+        total = float(r.total_spent) if can_financial else None
         count = int(r.invoice_count)
-        avg_value = round(total / count, 2) if count > 0 else 0
+        avg_value = round(float(r.total_spent) / count, 2) if can_financial and count > 0 else None
         result.append({
             "cust_id": str(r.cust_id),
             "cust_name": r.cust_name,
@@ -1468,6 +1493,8 @@ def get_customer_outstanding(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
 
     rows = db.execute(text("""
         SELECT
@@ -1492,8 +1519,8 @@ def get_customer_outstanding(
             "cust_id": str(r.cust_id),
             "cust_name": r.cust_name,
             "cust_phone": r.cust_phone,
-            "unpaid_invoices": int(r.unpaid_invoices),
-            "total_outstanding": float(r.total_outstanding),
+            "unpaid_invoices": int(r.unpaid_invoices) if can_financial else None,
+            "total_outstanding": float(r.total_outstanding) if can_financial else None,
         }
         for r in rows
     ])
@@ -1512,6 +1539,8 @@ def get_top_suppliers(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("pr", "pur_created_at", date_from, date_to)
 
     rows = db.execute(text(f"""
@@ -1538,8 +1567,8 @@ def get_top_suppliers(
             "supp_name": r.supp_name,
             "supp_phone": r.supp_phone,
             "purchase_count": int(r.purchase_count),
-            "total_spend": float(r.total_spend),
-            "avg_purchase_value": round(float(r.total_spend) / int(r.purchase_count), 2) if int(r.purchase_count) > 0 else 0,
+            "total_spend": float(r.total_spend) if can_financial else None,
+            "avg_purchase_value": round(float(r.total_spend) / int(r.purchase_count), 2) if can_financial and int(r.purchase_count) > 0 else None,
         }
         for r in rows
     ])
@@ -1616,6 +1645,8 @@ def get_supplier_spend_analysis(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
 
     rows = db.execute(text("""
         SELECT
@@ -1642,9 +1673,9 @@ def get_supplier_spend_analysis(
             "supp_id": str(r.supp_id),
             "supp_name": r.supp_name,
             "total_purchases": int(r.total_purchases),
-            "total_spend": float(r.total_spend),
-            "avg_spend": float(r.avg_spend),
-            "max_purchase": float(r.max_purchase) if r.max_purchase else 0,
+            "total_spend": float(r.total_spend) if can_financial else None,
+            "avg_spend": float(r.avg_spend) if can_financial else None,
+            "max_purchase": float(r.max_purchase) if can_financial and r.max_purchase else None,
             "first_purchase": str(r.first_purchase) if r.first_purchase else None,
             "last_purchase": str(r.last_purchase) if r.last_purchase else None,
         }
@@ -1664,6 +1695,8 @@ def get_expenses_by_category(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("e", "expense_date", date_from, date_to)
 
     rows = db.execute(text(f"""
@@ -1683,7 +1716,7 @@ def get_expenses_by_category(
         {
             "category": r.category,
             "expense_count": int(r.expense_count),
-            "total_amount": float(r.total_amount),
+            "total_amount": float(r.total_amount) if can_financial else None,
         }
         for r in rows
     ])
@@ -1698,6 +1731,8 @@ def get_expense_trend(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     if period not in ("weekly", "monthly", "yearly"):
         period = "monthly"
 
@@ -1777,7 +1812,7 @@ def get_expense_trend(
             label = month_short[r.bucket.month - 1] if hasattr(r.bucket, 'month') else str(r.bucket)
         else:
             label = str(int(r.bucket)) if hasattr(r.bucket, 'year') else str(r.bucket)
-        result.append({"label": label, "amount": float(r.amount), "expense_count": int(r.expense_count)})
+        result.append({"label": label, "amount": float(r.amount) if can_financial else None, "expense_count": int(r.expense_count)})
 
     return success_response(result)
 
@@ -1790,6 +1825,8 @@ def get_expense_distribution(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("e", "expense_date", date_from, date_to)
 
     row = db.execute(text(f"""
@@ -1815,17 +1852,17 @@ def get_expense_distribution(
         ORDER BY amount DESC
     """), {"bid": bid, **dp}).fetchall()
 
-    total = float(row.total_expenses) if row else 0
+    total = float(row.total_expenses) if row and can_financial else 0
 
     return success_response({
-        "total_expenses": total,
+        "total_expenses": float(row.total_expenses) if can_financial else None,
         "total_count": int(row.total_count) if row else 0,
         "categories": [
             {
                 "category": r.category,
-                "amount": float(r.amount),
+                "amount": float(r.amount) if can_financial else None,
                 "count": int(r.count),
-                "percentage": round(float(r.amount) / total * 100, 2) if total > 0 else 0,
+                "percentage": round(float(r.amount) / total * 100, 2) if can_financial and total > 0 else 0 if can_financial else None,
             }
             for r in rows
         ],
@@ -1844,6 +1881,8 @@ def get_tax_collected(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
     row = db.execute(text(f"""
@@ -1859,10 +1898,10 @@ def get_tax_collected(
     """), {"bid": bid, **dp}).fetchone()
 
     return success_response({
-        "total_tax": float(row.total_tax) if row else 0,
-        "total_cgst": float(row.total_cgst) if row else 0,
-        "total_sgst": float(row.total_sgst) if row else 0,
-        "total_igst": float(row.total_igst) if row else 0,
+        "total_tax": float(row.total_tax) if can_financial else None,
+        "total_cgst": float(row.total_cgst) if can_financial else None,
+        "total_sgst": float(row.total_sgst) if can_financial else None,
+        "total_igst": float(row.total_igst) if can_financial else None,
     })
 
 
@@ -1874,6 +1913,8 @@ def get_tax_paid(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("pr", "pur_created_at", date_from, date_to)
 
     row = db.execute(text(f"""
@@ -1889,10 +1930,10 @@ def get_tax_paid(
     """), {"bid": bid, **dp}).fetchone()
 
     return success_response({
-        "total_tax": float(row.total_tax) if row else 0,
-        "total_cgst": float(row.total_cgst) if row else 0,
-        "total_sgst": float(row.total_sgst) if row else 0,
-        "total_igst": float(row.total_igst) if row else 0,
+        "total_tax": float(row.total_tax) if can_financial else None,
+        "total_cgst": float(row.total_cgst) if can_financial else None,
+        "total_sgst": float(row.total_sgst) if can_financial else None,
+        "total_igst": float(row.total_igst) if can_financial else None,
     })
 
 
@@ -1982,6 +2023,8 @@ def get_sales_returns_summary(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("sr", "return_created_at", date_from, date_to)
 
     row = db.execute(text(f"""
@@ -2003,12 +2046,13 @@ def get_sales_returns_summary(
           {date_where}
         GROUP BY return_reason
         ORDER BY count DESC
+
     """), {"bid": bid, **dp}).fetchall()
 
     return success_response({
         "summary": {
             "total_returns": int(row.total_returns) if row else 0,
-            "total_amount": float(row.total_amount) if row else 0,
+            "total_amount": float(row.total_amount) if can_financial else None,
             "approved_count": int(row.approved_count) if row else 0,
             "pending_count": int(row.pending_count) if row else 0,
             "rejected_count": int(row.rejected_count) if row else 0,
@@ -2019,7 +2063,6 @@ def get_sales_returns_summary(
         ],
     })
 
-
 @router.get("/returns/purchases")
 def get_purchase_returns_summary(
     date_from: Optional[str] = Query(None),
@@ -2028,6 +2071,8 @@ def get_purchase_returns_summary(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("pr", "return_created_at", date_from, date_to)
 
     row = db.execute(text(f"""
@@ -2044,7 +2089,7 @@ def get_purchase_returns_summary(
 
     return success_response({
         "total_returns": int(row.total_returns) if row else 0,
-        "total_amount": float(row.total_amount) if row else 0,
+        "total_amount": float(row.total_amount) if can_financial else None,
         "approved_count": int(row.approved_count) if row else 0,
         "pending_count": int(row.pending_count) if row else 0,
         "rejected_count": int(row.rejected_count) if row else 0,
@@ -2060,6 +2105,8 @@ def get_returns_trend(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     if period not in ("weekly", "monthly", "yearly"):
         period = "monthly"
 
@@ -2114,9 +2161,9 @@ def get_returns_trend(
         result.append({
             "label": label,
             "sales_return_count": int(r.sales_return_count),
-            "sales_return_amount": float(r.sales_return_amount),
+            "sales_return_amount": float(r.sales_return_amount) if can_financial else None,
             "purchase_return_count": int(r.purchase_return_count),
-            "purchase_return_amount": float(r.purchase_return_amount),
+            "purchase_return_amount": float(r.purchase_return_amount) if can_financial else None,
         })
 
     return success_response(result)
@@ -2182,6 +2229,8 @@ def get_payment_collections(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     if period not in ("weekly", "monthly", "yearly"):
         period = "monthly"
 
@@ -2259,7 +2308,7 @@ def get_payment_collections(
             label = month_short[r.bucket.month - 1] if hasattr(r.bucket, 'month') else str(r.bucket)
         else:
             label = str(int(r.bucket)) if hasattr(r.bucket, 'year') else str(r.bucket)
-        result.append({"label": label, "payment_count": int(r.payment_count), "amount": float(r.amount)})
+        result.append({"label": label, "payment_count": int(r.payment_count), "amount": float(r.amount) if can_financial else None})
 
     return success_response(result)
 
@@ -2270,6 +2319,8 @@ def get_outstanding_receivables(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
 
     rows = db.execute(text("""
         SELECT
@@ -2295,14 +2346,14 @@ def get_outstanding_receivables(
             "sales_id": str(r.sales_id),
             "invoice_no": r.invoice_no,
             "cust_name": r.cust_name,
-            "invoice_total": float(r.sales_final_amount),
-            "total_paid": float(r.total_paid),
-            "balance": balance,
+            "invoice_total": float(r.sales_final_amount) if can_financial else None,
+            "total_paid": float(r.total_paid) if can_financial else None,
+            "balance": balance if can_financial else None,
             "payment_status": r.sales_payment_status,
         })
 
     return success_response({
-        "total_outstanding": total_outstanding,
+        "total_outstanding": total_outstanding if can_financial else None,
         "total_invoices": len(data),
         "invoices": data,
     })
@@ -2316,6 +2367,8 @@ def get_payments_by_method(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("pay", "payment_paid_at", date_from, date_to)
 
     rows = db.execute(text(f"""
@@ -2331,14 +2384,14 @@ def get_payments_by_method(
         ORDER BY total_amount DESC
     """), {"bid": bid, **dp}).fetchall()
 
-    total = sum(float(r.total_amount) for r in rows)
+    total = sum(float(r.total_amount) for r in rows) if can_financial else 0
 
     return success_response([
         {
             "method": r.method,
             "payment_count": int(r.payment_count),
-            "total_amount": float(r.total_amount),
-            "percentage": round(float(r.total_amount) / total * 100, 2) if total > 0 else 0,
+            "total_amount": float(r.total_amount) if can_financial else None,
+            "percentage": round(float(r.total_amount) / total * 100, 2) if can_financial and total > 0 else None,
         }
         for r in rows
     ])
@@ -2350,6 +2403,8 @@ def get_partial_payments(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
 
     rows = db.execute(text("""
         SELECT
@@ -2374,10 +2429,10 @@ def get_partial_payments(
             "sales_id": str(r.sales_id),
             "invoice_no": r.invoice_no,
             "cust_name": r.cust_name,
-            "invoice_total": float(r.sales_final_amount),
-            "cumulative_paid": float(r.cumulative_paid),
-            "remaining": float(r.remaining),
-            "last_payment_amount": float(r.last_payment_amount),
+            "invoice_total": float(r.sales_final_amount) if can_financial else None,
+            "cumulative_paid": float(r.cumulative_paid) if can_financial else None,
+            "remaining": float(r.remaining) if can_financial else None,
+            "last_payment_amount": float(r.last_payment_amount) if can_financial else None,
             "last_payment_method": r.payment_method,
             "last_payment_date": str(r.payment_paid_at) if r.payment_paid_at else None,
         }
@@ -2530,6 +2585,18 @@ def get_data_changes(
         for r in rows
     ])
 
+
+# ── SECURITY NOTE — Future export endpoints ──────────────────────────
+# Any new dedicated export endpoint (CSV/Excel/PDF) MUST enforce the
+# same permission checks as the corresponding read endpoint:
+#   - Revenue/profit/cost exports  → require dashboard.financial
+#   - Cost price exports            → require view_product_profit
+#   - Audit log exports             → require staff.manage
+# Client-side exports (ExportButton) only export the current paginated
+# page; they are constrained by the same backend permission checks that
+# gate the source data. Prefer server-side export for full data and
+# ALWAYS include the permission gates above.
+# ──────────────────────────────────────────────────────────────────────
 
 @router.get("/audit/exports")
 def get_export_activities(

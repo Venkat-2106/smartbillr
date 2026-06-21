@@ -44,7 +44,7 @@ export default function CreateSalePage() {
   const [addItemHovered, setAddItemHovered] = useState(false);
   const customerRef = useRef(null);
 
-  useShortcut('ctrl+p', () => { addItem(); }, { preventDefault: true })
+  useShortcut('alt+p', () => { addItem(); }, { preventDefault: true })
   useShortcut('ctrl+shift+c', () => {
     const selects = document.querySelectorAll('.sb-select')
     if (selects.length > 0) selects[0].focus()

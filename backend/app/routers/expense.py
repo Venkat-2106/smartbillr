@@ -168,6 +168,28 @@ def get_all_expenses(
     )
 
 
+# ── GET /expenses/summary → KPI cards for expenses page ──────────
+@router.get("/summary")
+def get_expense_summary_kpi(
+    current_user: dict = Depends(require_permission("expenses.manage")),
+    db: Session = Depends(get_db)
+):
+    bid = current_user["business_id"]
+    row = db.execute(text("""
+        SELECT
+            COUNT(*)                                                              AS total_count,
+            COUNT(*) FILTER (WHERE date_trunc('month', expense_date) = date_trunc('month', CURRENT_DATE)) AS monthly_count
+        FROM expenses
+        WHERE business_id = CAST(:bid AS uuid)
+          AND is_deleted  = false
+    """), {"bid": bid}).fetchone()
+
+    return success_response({
+        "total_count":   int(row.total_count),
+        "monthly_count": int(row.monthly_count),
+    })
+
+
 # ─────────────────────────────────────────
 # GET /expenses/{expense_id} → Get one expense
 # ─────────────────────────────────────────

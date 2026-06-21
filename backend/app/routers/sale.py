@@ -130,6 +130,41 @@ def get_sales(
     )
 
 
+@router.get("/summary")
+def get_sales_summary(
+    current_user: dict = Depends(require_permission("sales.view")),
+    db: Session = Depends(get_db)
+):
+    business_id = current_user["business_id"]
+    perms = current_user.get("permissions", set())
+    can_financial = "dashboard.financial" in perms
+
+    row = db.execute(text("""
+        SELECT
+            COALESCE(SUM(sales_final_amount)
+                FILTER (WHERE sales_created_at::date = CURRENT_DATE), 0) AS today_revenue,
+            COALESCE(SUM(sales_final_amount)
+                FILTER (WHERE sales_created_at >= CURRENT_DATE - INTERVAL '7 days'), 0) AS weekly_revenue,
+            COALESCE(SUM(sales_final_amount)
+                FILTER (WHERE date_trunc('month', sales_created_at) = date_trunc('month', CURRENT_DATE)), 0) AS monthly_revenue,
+            COALESCE(SUM(sales_final_amount - COALESCE((
+                SELECT cumulative_paid FROM payments
+                WHERE sale_id = s.sales_id AND is_active = true
+                LIMIT 1
+            ), 0)), 0) AS outstanding_receivables
+        FROM sales s
+        WHERE s.business_id = CAST(:bid AS uuid)
+          AND s.is_deleted = false
+    """), {"bid": business_id}).fetchone()
+
+    return success_response({
+        "today_revenue": float(row.today_revenue) if can_financial else None,
+        "weekly_revenue": float(row.weekly_revenue) if can_financial else None,
+        "monthly_revenue": float(row.monthly_revenue) if can_financial else None,
+        "outstanding_receivables": float(row.outstanding_receivables) if can_financial else None,
+    })
+
+
 @router.get("/{sales_id}")
 def get_sale(
     sales_id: str,

@@ -1,0 +1,60 @@
+class P:
+    DASHBOARD_VIEW = "dashboard.view"
+    DASHBOARD_FINANCIAL = "dashboard.financial"
+    SALES_VIEW = "sales.view"
+    SALES_CREATE = "sales.create"
+    SALES_EDIT = "sales.edit"
+    SALES_DELETE = "sales.delete"
+    SALES_RETURNS_MANAGE = "sales_returns.manage"
+    PURCHASES_VIEW = "purchases.view"
+    PURCHASES_CREATE = "purchases.create"
+    PURCHASES_EDIT = "purchases.edit"
+    PURCHASES_DELETE = "purchases.delete"
+    PURCHASE_RETURNS_MANAGE = "purchase_returns.manage"
+    PAYMENTS_MANAGE = "payments.manage"
+    CUSTOMERS_MANAGE = "customers.manage"
+    SUPPLIERS_MANAGE = "suppliers.manage"
+    PRODUCTS_VIEW = "products.view"
+    PRODUCTS_EDIT = "products.edit"
+    STOCK_VIEW = "stock.view"
+    STOCK_ADJUST = "stock.adjust"
+    VIEW_PRODUCT_PROFIT = "view_product_profit"
+    EXPENSES_MANAGE = "expenses.manage"
+    REPORTS_VIEW = "reports.view"
+    STAFF_MANAGE = "staff.manage"
+    SETTINGS_MANAGE = "settings.manage"
+
+    ALL = [
+        DASHBOARD_VIEW, DASHBOARD_FINANCIAL,
+        SALES_VIEW, SALES_CREATE, SALES_EDIT, SALES_DELETE,
+        SALES_RETURNS_MANAGE,
+        PURCHASES_VIEW, PURCHASES_CREATE, PURCHASES_EDIT, PURCHASES_DELETE,
+        PURCHASE_RETURNS_MANAGE,
+        PAYMENTS_MANAGE, CUSTOMERS_MANAGE, SUPPLIERS_MANAGE,
+        PRODUCTS_VIEW, PRODUCTS_EDIT, STOCK_VIEW, STOCK_ADJUST,
+        VIEW_PRODUCT_PROFIT, EXPENSES_MANAGE,
+        REPORTS_VIEW, STAFF_MANAGE, SETTINGS_MANAGE,
+    ]
+
+    FINANCIAL = [
+        DASHBOARD_FINANCIAL, VIEW_PRODUCT_PROFIT,
+    ]
+
+    MANAGER = [
+        DASHBOARD_VIEW, DASHBOARD_FINANCIAL,
+        SALES_VIEW, SALES_CREATE, SALES_EDIT, SALES_DELETE,
+        SALES_RETURNS_MANAGE,
+        PURCHASES_VIEW, PURCHASES_CREATE, PURCHASES_EDIT, PURCHASES_DELETE,
+        PURCHASE_RETURNS_MANAGE,
+        PAYMENTS_MANAGE, CUSTOMERS_MANAGE, SUPPLIERS_MANAGE,
+        PRODUCTS_VIEW, PRODUCTS_EDIT, STOCK_VIEW, STOCK_ADJUST,
+        VIEW_PRODUCT_PROFIT, EXPENSES_MANAGE,
+        REPORTS_VIEW,
+    ]
+
+    STAFF = [
+        DASHBOARD_VIEW,
+        SALES_VIEW, SALES_CREATE,
+        CUSTOMERS_MANAGE,
+        PRODUCTS_VIEW, STOCK_VIEW,
+    ]

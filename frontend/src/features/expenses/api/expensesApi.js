@@ -61,3 +61,9 @@ export async function deleteExpense(expenseId) {
   const res = await api.delete(`/expenses/${expenseId}/`)
   return res.data
 }
+
+// ---- Expense summary (KPI cards) -----------------------------------------------------
+export async function fetchExpenseSummary() {
+  const res = await api.get('/expenses/summary')
+  return res.data
+}

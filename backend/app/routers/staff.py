@@ -281,6 +281,27 @@ def list_staff(
     )
 
 
+# ── GET /staff/summary → KPI cards for staff page ───────────────────
+@router.get("/summary")
+def get_staff_summary_kpi(
+    current_user: dict = Depends(require_permission("staff.manage")),
+    db: Session = Depends(get_db)
+):
+    bid = current_user["business_id"]
+    row = db.execute(text("""
+        SELECT
+            COUNT(*)                                AS total_count,
+            COUNT(*) FILTER (WHERE is_active = true) AS active_count
+        FROM profiles
+        WHERE business_id = CAST(:bid AS uuid)
+    """), {"bid": bid}).fetchone()
+
+    return success_response({
+        "total_count":  int(row.total_count),
+        "active_count": int(row.active_count),
+    })
+
+
 # ── PATCH /staff/{id} — Update staff name, role, or active status ─────────────
 
 @router.patch("/{staff_id}")

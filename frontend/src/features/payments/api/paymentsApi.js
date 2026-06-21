@@ -67,3 +67,8 @@ export async function recordPayment(payload) {
   const res = await api.post('/payments', payload)
   return res.data
 }
+// ---- Payment summary (KPI cards) -----------------------------------------------------
+export async function fetchPaymentSummary() {
+  const res = await api.get('/payments/summary')
+  return res.data
+}

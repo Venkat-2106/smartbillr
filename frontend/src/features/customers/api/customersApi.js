@@ -82,3 +82,8 @@ export async function deleteCustomer(id) {
   const res = await api.delete(`/customers/${id}`)
   return res.data
 }
+// ---- Customer summary (KPI cards) ----------------------------------------------------
+export async function fetchCustomerSummary() {
+  const res = await api.get('/customers/summary')
+  return res.data
+}

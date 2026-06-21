@@ -136,7 +136,7 @@ def get_report_summary(
                     AND la.alert_status = 'unread'
                     AND p.is_deleted = false
                     AND p.prod_stock_qty <= p.prod_low_stock_alert) AS low_stock_count,
-                COALESCE((SELECT SUM(si.sale_item_subtotal - (si.sale_item_quantity * p.prod_cost_price))
+                COALESCE((SELECT SUM(si.sale_item_subtotal - (si.sale_item_quantity * COALESCE(si.sale_item_cost_price_at_sale, p.prod_cost_price)))
                            FROM sale_items si
                            JOIN sales s ON s.sales_id = si.sale_id
                            JOIN products p ON p.prod_id = si.product_id
@@ -370,7 +370,7 @@ def get_sales_by_product(
     show_profit = "view_product_profit" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
-    profit_col = ", COALESCE(SUM(si.sale_item_subtotal - (si.sale_item_quantity * p.prod_cost_price)), 0) AS profit" if show_profit else ""
+    profit_col = ", COALESCE(SUM(si.sale_item_subtotal - (si.sale_item_quantity * COALESCE(si.sale_item_cost_price_at_sale, p.prod_cost_price))), 0) AS profit" if show_profit else ""
 
     rows = db.execute(text(f"""
         SELECT
@@ -784,7 +784,7 @@ def get_gross_profit(
     row = db.execute(text(f"""
         SELECT
             COALESCE(SUM(si.sale_item_subtotal), 0) AS total_revenue,
-            COALESCE(SUM(si.sale_item_quantity * p.prod_cost_price), 0) AS total_cost
+            COALESCE(SUM(si.sale_item_quantity * COALESCE(si.sale_item_cost_price_at_sale, p.prod_cost_price)), 0) AS total_cost
         FROM sale_items si
         JOIN sales s ON s.sales_id = si.sale_id
         JOIN products p ON p.prod_id = si.product_id
@@ -823,7 +823,7 @@ def get_profit_by_product(
             p.prod_id,
             p.prod_name,
             COALESCE(SUM(si.sale_item_subtotal), 0) AS revenue,
-            COALESCE(SUM(si.sale_item_quantity * p.prod_cost_price), 0) AS cost,
+            COALESCE(SUM(si.sale_item_quantity * COALESCE(si.sale_item_cost_price_at_sale, p.prod_cost_price)), 0) AS cost,
             SUM(si.sale_item_quantity) AS qty_sold
         FROM sale_items si
         JOIN sales s ON s.sales_id = si.sale_id
@@ -872,7 +872,7 @@ def get_profit_by_category(
             c.category_id,
             COALESCE(c.category_name, 'Uncategorized') AS category_name,
             COALESCE(SUM(si.sale_item_subtotal), 0) AS revenue,
-            COALESCE(SUM(si.sale_item_quantity * p.prod_cost_price), 0) AS cost
+            COALESCE(SUM(si.sale_item_quantity * COALESCE(si.sale_item_cost_price_at_sale, p.prod_cost_price)), 0) AS cost
         FROM sale_items si
         JOIN sales s ON s.sales_id = si.sale_id
         JOIN products p ON p.prod_id = si.product_id
@@ -921,7 +921,7 @@ def get_profit_by_customer(
             c.cust_name,
             COUNT(DISTINCT s.sales_id) AS invoice_count,
             COALESCE(SUM(si.sale_item_subtotal), 0) AS revenue,
-            COALESCE(SUM(si.sale_item_quantity * p.prod_cost_price), 0) AS cost
+            COALESCE(SUM(si.sale_item_quantity * COALESCE(si.sale_item_cost_price_at_sale, p.prod_cost_price)), 0) AS cost
         FROM sale_items si
         JOIN sales s ON s.sales_id = si.sale_id
         JOIN customers c ON c.cust_id = s.customer_id
@@ -1022,7 +1022,7 @@ def get_profit_trend(
             SELECT
                 {group_expr} AS bucket,
                 COALESCE(SUM(si.sale_item_subtotal), 0) AS revenue,
-                COALESCE(SUM(si.sale_item_quantity * p.prod_cost_price), 0) AS cost
+                COALESCE(SUM(si.sale_item_quantity * COALESCE(si.sale_item_cost_price_at_sale, p.prod_cost_price)), 0) AS cost
             FROM sale_items si
             JOIN sales s ON s.sales_id = si.sale_id
             JOIN products p ON p.prod_id = si.product_id

@@ -28,6 +28,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from app.database import get_db
 from app.middleware.rbac import require_permission
+from app.utils.timestamp import fmt_ts
 from app.utils.response import success_response, error_response
 from app.utils.mv_refresh import refresh_dashboard_mvs
 from datetime import datetime, timedelta, timezone
@@ -1084,6 +1085,7 @@ def get_inventory_valuation(
             p.prod_stock_qty,
             p.prod_cost_price,
             p.prod_sell_price,
+            p.updated_at,
             (p.prod_stock_qty * p.prod_cost_price) AS stock_value
         FROM products p
         LEFT JOIN categories c ON c.category_id = p.category_id
@@ -1107,6 +1109,7 @@ def get_inventory_valuation(
             "cost_price": cost_price,
             "sell_price": float(r.prod_sell_price) if r.prod_sell_price else 0,
             "stock_value": stock_value,
+            "updated_at": fmt_ts(r.updated_at),
         })
 
     return success_response({

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 
 function Kbd({ children }) {
   return <kbd style={{
-    fontFamily: 'monospace', fontSize: 10.5, fontWeight: 700,
+    fontFamily: 'monospace', fontSize: 11, fontWeight: 700,
     padding: '2px 6px', borderRadius: 5,
     border: '1px solid var(--border)',
     background: 'var(--bg-subtle)',
@@ -131,7 +131,7 @@ export default function ShortcutHelp({ open, onClose }) {
         <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Keyboard Shortcuts</h2>
-            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '2px 0 0' }}>Press <Kbd>?</Kbd> anywhere to open this dialog</p>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0' }}>Press <Kbd>?</Kbd> anywhere to open this dialog</p>
           </div>
           <button onClick={onClose} aria-label="Close shortcuts help" style={{
             background: 'none', border: 'none', cursor: 'pointer',
@@ -153,7 +153,7 @@ export default function ShortcutHelp({ open, onClose }) {
                   {section.title}
                 </h3>
                 {section.description && (
-                  <p style={{ fontSize: 11.5, color: 'var(--text-disabled)', margin: '2px 0 0' }}>{section.description}</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-disabled)', margin: '2px 0 0' }}>{section.description}</p>
                 )}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>

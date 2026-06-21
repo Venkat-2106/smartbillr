@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { PageHeader, LineChart, BarChart, DonutChart, EmptyState } from '../../../shared/components'
+import { BentoCard, LineChart, BarChart, DonutChart, EmptyState } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate } from '../../../shared/utils/formatDate'
 import useAuthStore from '../../../store/authStore'
@@ -28,7 +28,7 @@ function Skeleton({ w = '60%', h = 28 }) {
 
 function SkeletonCard() {
   return (
-    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 18, padding: '24px 22px 22px', display: 'flex', flexDirection: 'column', gap: 18, boxShadow: 'var(--shadow-card)' }}>
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--r-xl)', padding: '24px', display: 'flex', flexDirection: 'column', gap: 16, boxShadow: 'var(--shadow-card)' }}>
       <Skeleton w={46} h={46} />
       <Skeleton w="70%" h={28} />
       <Skeleton w="50%" h={14} />
@@ -37,14 +37,13 @@ function SkeletonCard() {
 }
 
 // ─── Stat Card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, gradient, icon, loading, currency }) {
+function StatCard({ label, value, sub, icon, loading }) {
   return (
-    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 18, padding: '24px 22px 22px', display: 'flex', flexDirection: 'column', gap: 18, boxShadow: 'var(--shadow-card)', minWidth: 0, overflow: 'hidden', position: 'relative' }}>
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3.5, background: gradient, borderRadius: '18px 18px 0 0' }} />
-      <div style={{ width: 46, height: 46, borderRadius: 14, background: gradient, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, boxShadow: '0 4px 12px rgba(0,0,0,0.10)' }}>{icon}</div>
-      {loading ? <Skeleton w="70%" h={28} /> : <div style={{ fontSize: 'clamp(18px, 2.4vw, 28px)', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.6px', lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>}
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 14, boxShadow: 'var(--shadow-card)', minWidth: 0, overflow: 'hidden' }}>
+      <div style={{ width: 36, height: 36, borderRadius: 'var(--r-md)', background: 'var(--accent-50)', border: '1px solid var(--accent-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-600)', flexShrink: 0 }}>{icon}</div>
+      {loading ? <Skeleton w="70%" h={28} /> : <div style={{ fontSize: 'clamp(18px, 2.4vw, 28px)', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>}
       <div>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3 }}>{label}</div>
+        <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 3 }}>{label}</div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}>{sub}</div>
       </div>
     </div>
@@ -55,8 +54,8 @@ function StatCard({ label, value, sub, gradient, icon, loading, currency }) {
 function SectionTitle({ title, subtitle }) {
   return (
     <div style={{ marginBottom: 20 }}>
-      <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px', letterSpacing: '-0.3px' }}>{title}</h2>
-      {subtitle && <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0, fontWeight: 400 }}>{subtitle}</p>}
+      <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px', letterSpacing: '-0.3px' }}>{title}</h2>
+      {subtitle && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, fontWeight: 400 }}>{subtitle}</p>}
     </div>
   )
 }
@@ -68,36 +67,35 @@ function ChartCard({ title, subtitle, children, period, onPeriodChange }) {
     { key: 'yearly', label: 'Yearly' },
   ]
   return (
-    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 18, boxShadow: 'var(--shadow-card)', padding: '24px 24px 20px', marginBottom: 20 }}>
+    <BentoCard style={{ marginBottom: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px' }}>{title}</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px' }}>{title}</h3>
           {subtitle && <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{subtitle}</p>}
         </div>
-        {onPeriodChange && <div style={{ display: 'flex', gap: 6, background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: 10, padding: 4 }}>
+        {onPeriodChange && <div style={{ display: 'flex', gap: 6, background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', padding: 4 }}>
           {PERIODS.map(p => (
             <button key={p.key} onClick={() => onPeriodChange(p.key)}
-              style={{ padding: '5px 14px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, transition: 'all 0.15s',
-                background: period === p.key ? 'linear-gradient(135deg, var(--accent-600), var(--accent-500))' : 'transparent',
-                color: period === p.key ? '#fff' : 'var(--text-secondary)',
-                boxShadow: period === p.key ? '0 2px 8px var(--accent-glow)' : 'none' }}>
+              style={{ padding: '4px 12px', borderRadius: 'var(--r-sm)', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, transition: 'background 0.15s, color 0.15s',
+                background: period === p.key ? 'var(--accent-500)' : 'transparent',
+                color: period === p.key ? '#fff' : 'var(--text-secondary)' }}>
               {p.label}
             </button>
           ))}
         </div>}
       </div>
       {children}
-    </div>
+    </BentoCard>
   )
 }
 
-function InfoCard({ title, subtitle, children }) {
+function InfoCard({ title, subtitle, children, style }) {
   return (
-    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 18, boxShadow: 'var(--shadow-card)', padding: '24px' }}>
+    <BentoCard style={style}>
       <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px' }}>{title}</h3>
       {subtitle && <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 16px' }}>{subtitle}</p>}
       {children}
-    </div>
+    </BentoCard>
   )
 }
 
@@ -105,20 +103,20 @@ function DataTable({ columns, data, loading }) {
   if (loading) return <Skeleton w="100%" h={200} />
   if (!data || data.length === 0) return <EmptyState title="No data" description="No records found for the selected period." />
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+    <div className="premium-table-wrap" style={{ overflowX: 'auto' }}>
+      <table className="premium-table" style={{ width: '100%' }}>
         <thead>
           <tr>
             {columns.map(col => (
-              <th key={col.key} style={{ textAlign: col.align || 'left', padding: '8px 10px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', borderBottom: '2px solid var(--border)', whiteSpace: 'nowrap' }}>{col.label}</th>
+              <th key={col.key} style={{ textAlign: col.align || 'left', padding: '12px 16px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', borderBottom: '2px solid var(--border)', whiteSpace: 'nowrap' }}>{col.label}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {data.map((row, i) => (
-            <tr key={row.id || i} style={{ background: i % 2 === 0 ? 'transparent' : 'var(--bg-subtle)' }}>
+            <tr key={row.id || i}>
               {columns.map(col => (
-                <td key={col.key} style={{ textAlign: col.align || 'left', padding: '7px 10px', color: 'var(--text-primary)', fontWeight: col.bold ? 700 : 500, borderBottom: '1px solid var(--border)', whiteSpace: col.nowrap ? 'nowrap' : 'normal' }}>
+                <td key={col.key} style={{ textAlign: col.align || 'left', padding: '12px 16px', color: 'var(--text-primary)', fontWeight: col.bold ? 700 : 500, borderBottom: '1px solid var(--border)', whiteSpace: col.nowrap ? 'nowrap' : 'normal' }}>
                   {col.format ? col.format(row[col.key], row) : (row[col.key] ?? '—')}
                 </td>
               ))}
@@ -131,35 +129,24 @@ function DataTable({ columns, data, loading }) {
 }
 
 // ─── Tab Config ────────────────────────────────────────────────────────────────
+const _S = (d) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>
+
 const TABS = [
-  { key: 'summary', label: 'Summary', icon: '📊', permission: 'reports.view' },
-  { key: 'sales', label: 'Sales', icon: '💰', permission: 'reports.view' },
-  { key: 'purchases', label: 'Purchases', icon: '📦', permission: 'reports.view' },
-  { key: 'profit', label: 'Profitability', icon: '📈', permission: 'reports.view' },
-  { key: 'inventory', label: 'Inventory', icon: '🏷️', permission: 'reports.view' },
-  { key: 'customers', label: 'Customers', icon: '👥', permission: 'reports.view' },
-  { key: 'suppliers', label: 'Suppliers', icon: '🏭', permission: 'reports.view' },
-  { key: 'expenses', label: 'Expenses', icon: '💸', permission: 'reports.view' },
-  { key: 'tax', label: 'Tax', icon: '🧾', permission: 'reports.view' },
-  { key: 'returns', label: 'Returns', icon: '🔄', permission: 'reports.view' },
-  { key: 'payments', label: 'Payments', icon: '💳', permission: 'reports.view' },
-  { key: 'audit', label: 'Audit', icon: '📋', permission: 'reports.view' },
+  { key: 'summary', label: 'Summary', icon: _S(<><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></>), permission: 'reports.view' },
+  { key: 'sales', label: 'Sales', icon: _S(<><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></>), permission: 'reports.view' },
+  { key: 'purchases', label: 'Purchases', icon: _S(<><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></>), permission: 'reports.view' },
+  { key: 'profit', label: 'Profitability', icon: _S(<><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></>), permission: 'reports.view' },
+  { key: 'inventory', label: 'Inventory', icon: _S(<><path d="M12 2H2v10l9.29 9.29a2 2 0 002.83 0l6.17-6.17a2 2 0 000-2.83L12 2z"/><circle cx="7" cy="7" r="1"/></>), permission: 'reports.view' },
+  { key: 'customers', label: 'Customers', icon: _S(<><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></>), permission: 'reports.view' },
+  { key: 'suppliers', label: 'Suppliers', icon: _S(<><rect x="4" y="2" width="16" height="20"/><path d="M9 22v-4h6v4"/><path d="M8 6h2"/><path d="M8 10h2"/><path d="M14 6h2"/><path d="M14 10h2"/></>), permission: 'reports.view' },
+  { key: 'expenses', label: 'Expenses', icon: _S(<><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></>), permission: 'reports.view' },
+  { key: 'tax', label: 'Tax', icon: _S(<><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></>), permission: 'reports.view' },
+  { key: 'returns', label: 'Returns', icon: _S(<><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></>), permission: 'reports.view' },
+  { key: 'payments', label: 'Payments', icon: _S(<><rect x="1" y="6" width="22" height="12" rx="2"/><circle cx="7" cy="12" r="2"/><path d="M17 12h.01"/></>), permission: 'reports.view' },
+  { key: 'audit', label: 'Audit', icon: _S(<><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></>), permission: 'reports.view' },
 ]
 
-const GRADIENTS = {
-  sales: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
-  purchases: 'linear-gradient(135deg, #F59E0B, #F97316)',
-  profit: 'linear-gradient(135deg, #10B981, #059669)',
-  expenses: 'linear-gradient(135deg, #EF4444, #DC2626)',
-  revenue: 'linear-gradient(135deg, #3B82F6, #2563EB)',
-  inventory: 'linear-gradient(135deg, #8B5CF6, #A855F7)',
-  customers: 'linear-gradient(135deg, #0EA5E9, #06B6D4)',
-  suppliers: 'linear-gradient(135deg, #F97316, #EA580C)',
-  tax: 'linear-gradient(135deg, #6B7280, #4B5563)',
-  returns: 'linear-gradient(135deg, #EC4899, #DB2777)',
-  payments: 'linear-gradient(135deg, #14B8A6, #0D9488)',
-  audit: 'linear-gradient(135deg, #374151, #1F2937)',
-}
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 1. SUMMARY SECTION
@@ -173,25 +160,25 @@ function SummarySection({ dateFrom, dateTo }) {
   const cards = useMemo(() => {
     if (!s) return []
     return [
-      { key: 'sales', label: 'Total Sales', value: s.total_sales != null ? formatCurrency(s.total_sales, country) : '—', sub: `${s.total_invoices ?? 0} invoices`, gradient: GRADIENTS.sales, icon: '💰' },
-      { key: 'purchases', label: 'Total Purchases', value: s.total_purchases != null ? formatCurrency(s.total_purchases, country) : '—', sub: `${s.total_purchases_count ?? 0} purchases`, gradient: GRADIENTS.purchases, icon: '📦' },
-      { key: 'profit', label: 'Gross Profit', value: s.gross_profit != null ? formatCurrency(s.gross_profit, country) : '—', sub: s.total_sales ? `${((s.gross_profit / s.total_sales) * 100).toFixed(1)}% margin` : '—', gradient: GRADIENTS.profit, icon: '📈' },
-      { key: 'expenses', label: 'Expenses', value: s.total_expenses != null ? formatCurrency(s.total_expenses, country) : '—', sub: 'Operating costs', gradient: GRADIENTS.expenses, icon: '💸' },
-      { key: 'net', label: 'Net Profit', value: (s.total_sales != null && s.total_expenses != null) ? formatCurrency(s.total_sales - s.total_expenses, country) : '—', sub: 'Revenue minus expenses', gradient: GRADIENTS.revenue, icon: '📊' },
-      { key: 'outstanding', label: 'Outstanding', value: s.outstanding_receivables != null ? formatCurrency(s.outstanding_receivables, country) : '—', sub: 'Pending collections', gradient: GRADIENTS.customers, icon: '⏳' },
-      { key: 'inventory', label: 'Inventory Value', value: s.inventory_value != null ? formatCurrency(s.inventory_value, country) : '—', sub: `${s.total_products ?? 0} products`, gradient: GRADIENTS.inventory, icon: '🏷️' },
-      { key: 'lowstock', label: 'Low Stock', value: String(s.low_stock_count ?? 0), sub: 'Products below threshold', gradient: 'linear-gradient(135deg, #EF4444, #DC2626)', icon: '⚠️' },
+      { key: 'sales', label: 'Total Sales', value: s.total_sales != null ? formatCurrency(s.total_sales, country) : '—', sub: `${s.total_invoices ?? 0} invoices`, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> },
+      { key: 'purchases', label: 'Total Purchases', value: s.total_purchases != null ? formatCurrency(s.total_purchases, country) : '—', sub: `${s.total_purchases_count ?? 0} purchases`, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg> },
+      { key: 'profit', label: 'Gross Profit', value: s.gross_profit != null ? formatCurrency(s.gross_profit, country) : '—', sub: s.total_sales ? `${((s.gross_profit / s.total_sales) * 100).toFixed(1)}% margin` : '—', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg> },
+      { key: 'expenses', label: 'Expenses', value: s.total_expenses != null ? formatCurrency(s.total_expenses, country) : '—', sub: 'Operating costs', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> },
+      { key: 'net', label: 'Net Profit', value: (s.total_sales != null && s.total_expenses != null) ? formatCurrency(s.total_sales - s.total_expenses, country) : '—', sub: 'Revenue minus expenses', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg> },
+      { key: 'outstanding', label: 'Outstanding', value: s.outstanding_receivables != null ? formatCurrency(s.outstanding_receivables, country) : '—', sub: 'Pending collections', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
+      { key: 'inventory', label: 'Inventory Value', value: s.inventory_value != null ? formatCurrency(s.inventory_value, country) : '—', sub: `${s.total_products ?? 0} products`, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 2H2v10l9.29 9.29a2 2 0 002.83 0l6.17-6.17a2 2 0 000-2.83L12 2z"/><circle cx="7" cy="7" r="1"/></svg> },
+      { key: 'lowstock', label: 'Low Stock', value: String(s.low_stock_count ?? 0), sub: 'Products below threshold', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> },
     ]
   }, [s, country])
 
   return (
-    <div>
+    <BentoCard>
       <SectionTitle title="Dashboard Summary" subtitle="Key metrics at a glance" />
       {isError && <div style={{ padding: '12px 16px', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 12, color: 'var(--danger-text)', fontSize: 13, marginBottom: 20 }}>Could not load summary data.</div>}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 28 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
         {(isLoading ? Array(8).fill(null) : cards).map((card, i) => card ? <StatCard key={card.key} {...card} loading={false} /> : <SkeletonCard key={i} />)}
       </div>
-    </div>
+    </BentoCard>
   )
 }
 
@@ -227,16 +214,16 @@ function SalesSection({ dateFrom, dateTo }) {
   }, [byPayment.data])
 
   return (
-    <div>
+    <BentoCard>
       <SectionTitle title="Sales Reports" subtitle="Revenue, customer trends, product performance" />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
         {[
           { label: 'Total Revenue', value: invoiceStatus.data ? formatCurrency(
-            (invoiceStatus.data.paid_amount + invoiceStatus.data.partial_amount + invoiceStatus.data.pending_amount), country) : '—', gradient: GRADIENTS.sales, icon: '💰' },
-          { label: 'Paid Invoices', value: invoiceStatus.data?.paid_count ?? '—', sub: `${invoiceStatus.data?.paid_amount ? formatCurrency(invoiceStatus.data.paid_amount, country) : ''}`, gradient: GRADIENTS.profit, icon: '✅' },
-          { label: 'Partial', value: invoiceStatus.data?.partial_count ?? '—', sub: `${invoiceStatus.data?.partial_amount ? formatCurrency(invoiceStatus.data.partial_amount, country) : ''}`, gradient: GRADIENTS.expenses, icon: '⏳' },
-          { label: 'Pending', value: invoiceStatus.data?.pending_count ?? '—', sub: `${invoiceStatus.data?.pending_amount ? formatCurrency(invoiceStatus.data.pending_amount, country) : ''}`, gradient: 'linear-gradient(135deg, #EF4444, #DC2626)', icon: '⚠️' },
+            (invoiceStatus.data.paid_amount + invoiceStatus.data.partial_amount + invoiceStatus.data.pending_amount), country) : '—', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> },
+          { label: 'Paid Invoices', value: invoiceStatus.data?.paid_count ?? '—', sub: `${invoiceStatus.data?.paid_amount ? formatCurrency(invoiceStatus.data.paid_amount, country) : ''}`, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> },
+          { label: 'Partial', value: invoiceStatus.data?.partial_count ?? '—', sub: `${invoiceStatus.data?.partial_amount ? formatCurrency(invoiceStatus.data.partial_amount, country) : ''}`, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
+          { label: 'Pending', value: invoiceStatus.data?.pending_count ?? '—', sub: `${invoiceStatus.data?.pending_amount ? formatCurrency(invoiceStatus.data.pending_amount, country) : ''}`, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> },
         ].map((c, i) => <StatCard key={i} {...c} loading={invoiceStatus.isLoading} />)}
       </div>
 
@@ -276,7 +263,7 @@ function SalesSection({ dateFrom, dateTo }) {
           { key: 'total_revenue', label: 'Revenue', align: 'right', format: v => formatCurrency(v, country) },
         ]} data={Array.isArray(byProduct.data) ? byProduct.data : []} loading={byProduct.isLoading} />
       </InfoCard>
-    </div>
+    </BentoCard>
   )
 }
 
@@ -302,14 +289,14 @@ function PurchasesSection({ dateFrom, dateTo }) {
   const s = summary.data
 
   return (
-    <div>
+    <BentoCard>
       <SectionTitle title="Purchase Reports" subtitle="Spend analysis and supplier performance" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
         {[
-          { label: 'Total Spend', value: s ? formatCurrency(s.total_amount, country) : '—', sub: `${s?.total_purchases ?? 0} purchases`, gradient: GRADIENTS.purchases, icon: '📦' },
-          { label: 'Total Tax', value: s ? formatCurrency(s.total_tax, country) : '—', sub: `CGST: ${formatCurrency(s?.total_cgst ?? 0, country)} · SGST: ${formatCurrency(s?.total_sgst ?? 0, country)}`, gradient: GRADIENTS.tax, icon: '🧾' },
-          { label: 'Paid', value: s?.paid_count ?? '—', sub: 'Completed purchases', gradient: GRADIENTS.profit, icon: '✅' },
-          { label: 'Pending', value: s?.pending_count ?? '—', sub: 'Unpaid purchases', gradient: 'linear-gradient(135deg, #EF4444, #DC2626)', icon: '⏳' },
+          { label: 'Total Spend', value: s ? formatCurrency(s.total_amount, country) : '—', sub: `${s?.total_purchases ?? 0} purchases`, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg> },
+          { label: 'Total Tax', value: s ? formatCurrency(s.total_tax, country) : '—', sub: `CGST: ${formatCurrency(s?.total_cgst ?? 0, country)} · SGST: ${formatCurrency(s?.total_sgst ?? 0, country)}`, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> },
+          { label: 'Paid', value: s?.paid_count ?? '—', sub: 'Completed purchases', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> },
+          { label: 'Pending', value: s?.pending_count ?? '—', sub: 'Unpaid purchases', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
         ].map((c, i) => <StatCard key={i} {...c} loading={summary.isLoading} />)}
       </div>
 
@@ -323,7 +310,7 @@ function PurchasesSection({ dateFrom, dateTo }) {
             loading={bySupplier.isLoading} error={bySupplier.isError} />
         </InfoCard>
       </div>
-    </div>
+    </BentoCard>
   )
 }
 
@@ -352,21 +339,21 @@ function ProfitSection({ dateFrom, dateTo }) {
 
   if (grossProfit.data?.gross_profit === undefined || grossProfit.data?.gross_profit === null) {
     return (
-      <div>
+      <BentoCard>
         <SectionTitle title="Profitability Reports" subtitle="You need financial access to view profit data." />
-        <EmptyState icon="🔒" title="Restricted" description="Contact your admin for financial report access." />
-      </div>
+        <EmptyState icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>} title="Restricted" description="Contact your admin for financial report access." />
+      </BentoCard>
     )
   }
 
   const profitCards = [
-    { label: 'Gross Revenue', value: formatCurrency(grossProfit.data?.total_revenue ?? 0, country), sub: 'Total sales revenue', gradient: GRADIENTS.sales, icon: '💰' },
-    { label: 'Total Cost', value: formatCurrency(grossProfit.data?.total_cost ?? 0, country), sub: 'Cost of goods sold', gradient: GRADIENTS.purchases, icon: '📦' },
-    { label: 'Gross Profit', value: formatCurrency(grossProfit.data?.gross_profit ?? 0, country), sub: `${grossProfit.data?.margin_pct ?? 0}% margin`, gradient: GRADIENTS.profit, icon: '📈' },
+    { label: 'Gross Revenue', value: formatCurrency(grossProfit.data?.total_revenue ?? 0, country), sub: 'Total sales revenue', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> },
+    { label: 'Total Cost', value: formatCurrency(grossProfit.data?.total_cost ?? 0, country), sub: 'Cost of goods sold', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg> },
+    { label: 'Gross Profit', value: formatCurrency(grossProfit.data?.gross_profit ?? 0, country), sub: `${grossProfit.data?.margin_pct ?? 0}% margin`, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg> },
   ]
 
   return (
-    <div>
+    <BentoCard>
       <SectionTitle title="Profitability Reports" subtitle="Revenue, costs, and margin analysis" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14, marginBottom: 20 }}>
         {profitCards.map(c => <StatCard key={c.label} {...c} loading={grossProfit.isLoading} />)}
@@ -384,7 +371,7 @@ function ProfitSection({ dateFrom, dateTo }) {
             loading={byCategory.isLoading} error={byCategory.isError} />
         </InfoCard>
       </div>
-    </div>
+    </BentoCard>
   )
 }
 
@@ -405,13 +392,13 @@ function InventorySection({ dateFrom, dateTo }) {
   const sf = stockFlow.data
 
   return (
-    <div>
+    <BentoCard>
       <SectionTitle title="Inventory Reports" subtitle="Stock levels, valuation, and movement analysis" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
-        <StatCard label="Total Products" value={String(valuation.data?.total_products ?? '—')} sub={valuation.data ? `${valuation.data.total_stock_qty} units total` : ''} gradient={GRADIENTS.inventory} icon="🏷️" loading={valuation.isLoading} />
-        <StatCard label="Stock Value" value={valuation.data?.total_value != null ? formatCurrency(valuation.data.total_value, country) : '—'} sub="Current stock × cost price" gradient={GRADIENTS.sales} icon="💰" loading={valuation.isLoading} />
-        <StatCard label="Stock In" value={sf?.stock_in ?? '—'} sub="Units received" gradient={GRADIENTS.profit} icon="📥" loading={stockFlow.isLoading} />
-        <StatCard label="Stock Out" value={sf?.stock_out ?? '—'} sub="Units sold/removed" gradient={GRADIENTS.expenses} icon="📤" loading={stockFlow.isLoading} />
+        <StatCard label="Total Products" value={String(valuation.data?.total_products ?? '—')} sub={valuation.data ? `${valuation.data.total_stock_qty} units total` : ''} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 2H2v10l9.29 9.29a2 2 0 002.83 0l6.17-6.17a2 2 0 000-2.83L12 2z"/><circle cx="7" cy="7" r="1"/></svg>} loading={valuation.isLoading} />
+        <StatCard label="Stock Value" value={valuation.data?.total_value != null ? formatCurrency(valuation.data.total_value, country) : '—'} sub="Current stock × cost price" icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>} loading={valuation.isLoading} />
+        <StatCard label="Stock In" value={sf?.stock_in ?? '—'} sub="Units received" icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>} loading={stockFlow.isLoading} />
+        <StatCard label="Stock Out" value={sf?.stock_out ?? '—'} sub="Units sold/removed" icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>} loading={stockFlow.isLoading} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
@@ -434,11 +421,11 @@ function InventorySection({ dateFrom, dateTo }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             {[
-              { title: '🚀 Fast', data: moving.data?.fast_moving ?? [], key: 'qty_sold' },
-              { title: '🐢 Slow', data: moving.data?.slow_moving ?? [], key: 'qty_sold' },
-              { title: '💀 Dead', data: moving.data?.dead_stock ?? [], key: 'stock_qty' },
+              { title: 'Fast', data: moving.data?.fast_moving ?? [], key: 'qty_sold' },
+              { title: 'Slow', data: moving.data?.slow_moving ?? [], key: 'qty_sold' },
+              { title: 'Dead', data: moving.data?.dead_stock ?? [], key: 'stock_qty' },
             ].map(box => (
-              <div key={box.title} style={{ background: 'var(--bg-subtle)', borderRadius: 10, padding: 12 }}>
+              <div key={box.title} style={{ background: 'var(--bg-subtle)', borderRadius: 'var(--r-md)', padding: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>{box.title}</div>
                 {box.data.slice(0, 5).map(item => (
                   <div key={item.prod_id} style={{ fontSize: 11.5, padding: '3px 0', color: 'var(--text-primary)', display: 'flex', justifyContent: 'space-between' }}>
@@ -452,7 +439,7 @@ function InventorySection({ dateFrom, dateTo }) {
           </div>
         </InfoCard>
       </div>
-    </div>
+    </BentoCard>
   )
 }
 
@@ -467,7 +454,7 @@ function CustomersSection({ dateFrom, dateTo }) {
   const country = business?.business_country_code || 'IN'
 
   return (
-    <div>
+    <BentoCard>
       <SectionTitle title="Customer Reports" subtitle="Top customers, outstanding, and purchase history" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         <InfoCard title="Top Customers" subtitle="By total spend">
@@ -486,7 +473,7 @@ function CustomersSection({ dateFrom, dateTo }) {
           ]} data={Array.isArray(outstanding.data) ? outstanding.data : []} loading={outstanding.isLoading} />
         </InfoCard>
       </div>
-    </div>
+    </BentoCard>
   )
 }
 
@@ -501,7 +488,7 @@ function SuppliersSection({ dateFrom, dateTo }) {
   const country = business?.business_country_code || 'IN'
 
   return (
-    <div>
+    <BentoCard>
       <SectionTitle title="Supplier Reports" subtitle="Supplier performance and spend analysis" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         <InfoCard title="Top Suppliers" subtitle="By total spend">
@@ -517,7 +504,7 @@ function SuppliersSection({ dateFrom, dateTo }) {
             loading={spend.isLoading} error={spend.isError} />
         </InfoCard>
       </div>
-    </div>
+    </BentoCard>
   )
 }
 
@@ -549,11 +536,11 @@ function ExpensesSection({ dateFrom, dateTo }) {
   }, [distribution.data])
 
   return (
-    <div>
+    <BentoCard>
       <SectionTitle title="Expense Reports" subtitle="Expense tracking and category analysis" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
-        <StatCard label="Total Expenses" value={distribution.data ? formatCurrency(distribution.data.total_expenses, country) : '—'} sub={`${distribution.data?.total_count ?? 0} entries`} gradient={GRADIENTS.expenses} icon="💸" loading={distribution.isLoading} />
-        <StatCard label="Categories" value={String(distribution.data?.categories?.length ?? '—')} sub="Active expense categories" gradient={GRADIENTS.tax} icon="📂" loading={distribution.isLoading} />
+        <StatCard label="Total Expenses" value={distribution.data ? formatCurrency(distribution.data.total_expenses, country) : '—'} sub={`${distribution.data?.total_count ?? 0} entries`} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>} loading={distribution.isLoading} />
+        <StatCard label="Categories" value={String(distribution.data?.categories?.length ?? '—')} sub="Active expense categories" icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>} loading={distribution.isLoading} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
@@ -572,7 +559,7 @@ function ExpensesSection({ dateFrom, dateTo }) {
           { key: 'total_amount', label: 'Amount', align: 'right', format: v => formatCurrency(v, country) },
         ]} data={Array.isArray(byCategory.data) ? byCategory.data : []} loading={byCategory.isLoading} />
       </InfoCard>
-    </div>
+    </BentoCard>
   )
 }
 
@@ -593,12 +580,12 @@ function TaxSection({ dateFrom, dateTo }) {
   const netLiability = liability.data?.net_tax_liability
 
   return (
-    <div>
+    <BentoCard>
       <SectionTitle title="Tax Reports" subtitle="Tax collected, paid, and net liability" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
-        <StatCard label="Tax Collected" value={formatCurrency(totalCollected, country)} sub={`CGST: ${formatCurrency(collected.data?.total_cgst ?? 0, country)} · SGST: ${formatCurrency(collected.data?.total_sgst ?? 0, country)}`} gradient={GRADIENTS.sales} icon="📤" loading={collected.isLoading} />
-        <StatCard label="Tax Paid" value={formatCurrency(totalPaid, country)} sub={`On purchases`} gradient={GRADIENTS.purchases} icon="📥" loading={paid.isLoading} />
-        {netLiability != null && <StatCard label="Net Liability" value={formatCurrency(Math.abs(netLiability), country)} sub={netLiability >= 0 ? 'Payable' : 'Refundable'} gradient={netLiability >= 0 ? GRADIENTS.expenses : GRADIENTS.profit} icon="🧾" loading={liability.isLoading} />}
+        <StatCard label="Tax Collected" value={formatCurrency(totalCollected, country)} sub={`CGST: ${formatCurrency(collected.data?.total_cgst ?? 0, country)} · SGST: ${formatCurrency(collected.data?.total_sgst ?? 0, country)}`} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>} loading={collected.isLoading} />
+        <StatCard label="Tax Paid" value={formatCurrency(totalPaid, country)} sub={`On purchases`} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>} loading={paid.isLoading} />
+        {netLiability != null && <StatCard label="Net Liability" value={formatCurrency(Math.abs(netLiability), country)} sub={netLiability >= 0 ? 'Payable' : 'Refundable'} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>} loading={liability.isLoading} />}
       </div>
 
       <InfoCard title="Tax by GST Rate" subtitle="Breakdown by tax slab">
@@ -609,7 +596,7 @@ function TaxSection({ dateFrom, dateTo }) {
           { key: 'tax_amount', label: 'Tax Amount', align: 'right', format: v => formatCurrency(v, country) },
         ]} data={Array.isArray(byRate.data) ? byRate.data : []} loading={byRate.isLoading} />
       </InfoCard>
-    </div>
+    </BentoCard>
   )
 }
 
@@ -635,12 +622,12 @@ function ReturnsSection({ dateFrom, dateTo }) {
   }, [trend.data])
 
   return (
-    <div>
+    <BentoCard>
       <SectionTitle title="Return Reports" subtitle="Sales returns, purchase returns, and profit impact" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
-        <StatCard label="Sales Returns" value={sr ? formatCurrency(sr.summary?.total_amount ?? 0, country) : '—'} sub={`${sr?.summary?.total_returns ?? 0} returns | ${sr?.summary?.approved_count ?? 0} approved`} gradient={GRADIENTS.returns} icon="🔄" loading={salesReturns.isLoading} />
-        <StatCard label="Purchase Returns" value={pr ? formatCurrency(pr.total_amount ?? 0, country) : '—'} sub={`${pr?.total_returns ?? 0} returns`} gradient={GRADIENTS.purchases} icon="↩️" loading={purchaseReturns.isLoading} />
-        {impact.data && <StatCard label="Net Return Impact" value={formatCurrency(impact.data.net_return_impact ?? 0, country)} sub={`Sales: ${formatCurrency(impact.data.sales_return_value ?? 0, country)}`} gradient={GRADIENTS.expenses} icon="📊" loading={false} />}
+        <StatCard label="Sales Returns" value={sr ? formatCurrency(sr.summary?.total_amount ?? 0, country) : '—'} sub={`${sr?.summary?.total_returns ?? 0} returns | ${sr?.summary?.approved_count ?? 0} approved`} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>} loading={salesReturns.isLoading} />
+        <StatCard label="Purchase Returns" value={pr ? formatCurrency(pr.total_amount ?? 0, country) : '—'} sub={`${pr?.total_returns ?? 0} returns`} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>} loading={purchaseReturns.isLoading} />
+        {impact.data && <StatCard label="Net Return Impact" value={formatCurrency(impact.data.net_return_impact ?? 0, country)} sub={`Sales: ${formatCurrency(impact.data.sales_return_value ?? 0, country)}`} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg>} loading={false} />}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
@@ -654,7 +641,7 @@ function ReturnsSection({ dateFrom, dateTo }) {
           ]} data={sr?.reasons ?? []} loading={salesReturns.isLoading} />
         </InfoCard>
       </div>
-    </div>
+    </BentoCard>
   )
 }
 
@@ -682,10 +669,10 @@ function PaymentsSection({ dateFrom, dateTo }) {
   }, [byMethod.data])
 
   return (
-    <div>
+    <BentoCard>
       <SectionTitle title="Payment Reports" subtitle="Collections, outstanding, and payment methods" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
-        <StatCard label="Total Outstanding" value={outstanding.data ? formatCurrency(outstanding.data.total_outstanding, country) : '—'} sub={`${outstanding.data?.total_invoices ?? 0} unpaid invoices`} gradient={GRADIENTS.expenses} icon="⏳" loading={outstanding.isLoading} />
+        <StatCard label="Total Outstanding" value={outstanding.data ? formatCurrency(outstanding.data.total_outstanding, country) : '—'} sub={`${outstanding.data?.total_invoices ?? 0} unpaid invoices`} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>} loading={outstanding.isLoading} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
@@ -706,7 +693,7 @@ function PaymentsSection({ dateFrom, dateTo }) {
           { key: 'remaining', label: 'Remaining', align: 'right', format: v => formatCurrency(v, country) },
         ]} data={Array.isArray(partial.data) ? partial.data : []} loading={partial.isLoading} />
       </InfoCard>
-    </div>
+    </BentoCard>
   )
 }
 
@@ -724,11 +711,11 @@ function AuditSection({ dateFrom, dateTo }) {
   const isAdmin = perms?.includes('staff.manage')
 
   if (!isAdmin) {
-    return <EmptyState icon="🔒" title="Admin Only" description="Audit reports are restricted to administrators." />
+    return <EmptyState icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>} title="Admin Only" description="Audit reports are restricted to administrators." />
   }
 
   return (
-    <div>
+    <BentoCard>
       <SectionTitle title="Audit Reports" subtitle="User activities, login history, and data changes" />
       <InfoCard title="Recent User Activities" subtitle="Latest 500 actions">
         <DataTable columns={[
@@ -754,7 +741,7 @@ function AuditSection({ dateFrom, dateTo }) {
           { key: 'created_at', label: 'Time', format: v => v ? new Date(v).toLocaleString() : '—' },
         ]} data={Array.isArray(changes.data) ? changes.data.slice(0, 50) : []} loading={changes.isLoading} />
       </InfoCard>
-    </div>
+    </BentoCard>
   )
 }
 
@@ -842,12 +829,14 @@ export default function ReportsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Reports"
-        subtitle="Business performance and financial reporting"
-        back
-        onBack={() => navigate('/dashboard')}
-      />
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
+          Reports
+        </h1>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '6px 0 0', fontWeight: 400 }}>
+          Business performance and financial reporting
+        </p>
+      </div>
 
       {/* ── Date Range Filter ── */}
       <div style={{
@@ -858,18 +847,18 @@ export default function ReportsPage() {
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Period</span>
         {PRESETS.map(p => (
           <button key={p.key} onClick={() => handlePresetChange(p.key)}
-            style={{ padding: '4px 12px', borderRadius: 7, border: '1px solid var(--border)', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+            style={{ padding: '4px 12px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', cursor: 'pointer', fontSize: 12, fontWeight: 600,
               background: datePreset === p.key ? 'var(--accent-500)' : 'transparent',
               color: datePreset === p.key ? '#fff' : 'var(--text-secondary)',
-              transition: 'all 0.15s' }}>{p.label}</button>
+              transition: 'background 0.15s, color 0.15s' }}>{p.label}</button>
         ))}
         {datePreset === 'custom' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 4 }}>
             <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
-              style={{ padding: '4px 8px', borderRadius: 6, border: '1.5px solid var(--border)', fontSize: 12, background: 'var(--bg-card)', color: 'var(--text-primary)', outline: 'none' }} />
+              style={{ padding: '4px 8px', borderRadius: 'var(--r-sm)', border: '1.5px solid var(--border)', fontSize: 12, background: 'var(--bg-card)', color: 'var(--text-primary)', outline: 'none' }} />
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>to</span>
             <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
-              style={{ padding: '4px 8px', borderRadius: 6, border: '1.5px solid var(--border)', fontSize: 12, background: 'var(--bg-card)', color: 'var(--text-primary)', outline: 'none' }} />
+              style={{ padding: '4px 8px', borderRadius: 'var(--r-sm)', border: '1.5px solid var(--border)', fontSize: 12, background: 'var(--bg-card)', color: 'var(--text-primary)', outline: 'none' }} />
           </div>
         )}
       </div>
@@ -884,13 +873,13 @@ export default function ReportsPage() {
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
             style={{
               padding: '8px 16px', borderRadius: 9, border: 'none', cursor: 'pointer',
-              fontSize: 12.5, fontWeight: 600, transition: 'all 0.15s',
+              fontSize: 13, fontWeight: 600, transition: 'all 0.15s',
               background: activeTab === tab.key ? 'var(--bg-card)' : 'transparent',
               color: activeTab === tab.key ? 'var(--accent-500)' : 'var(--text-secondary)',
               boxShadow: activeTab === tab.key ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
               display: 'flex', alignItems: 'center', gap: 6,
             }}>
-            <span style={{ fontSize: 16, lineHeight: 1 }}>{tab.icon}</span>
+            {tab.icon}
             {tab.label}
           </button>
         ))}

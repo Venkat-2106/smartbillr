@@ -135,7 +135,7 @@ function PaginationInner({ current, total, pages, pagination, onPageChange, btnB
     }}>
       {/* Info text */}
       <span style={{
-        fontSize: 12.5,
+        fontSize: 13,
         color: 'var(--text-muted)',
         fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
         fontWeight: 500,

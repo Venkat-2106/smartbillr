@@ -354,7 +354,7 @@ export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManag
       )}
 
       {isError && (
-        <div style={{ padding: 24, color: 'var(--danger-text)', fontSize: 13.5 }}>
+        <div style={{ padding: 24, color: 'var(--danger-text)', fontSize: 13 }}>
           ⚠️ Could not load customer details.
         </div>
       )}

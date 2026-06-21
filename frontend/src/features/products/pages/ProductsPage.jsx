@@ -39,7 +39,7 @@
 //   ✅ Profit permission gate (canViewProfit) for cost/profit columns + form
 //   ✅ Zod .trim() on prod_name (trimmed before schema min/max check)
 
-import React, { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
@@ -49,10 +49,11 @@ import {
   Badge,
   ConfirmDialog,
   EmptyState,
-  PageHeader,
   Pagination,
   SearchBar,
   ExportButton,
+  MetricCard,
+  BentoCard,
 } from '../../../shared/components'
 
 import { PRODUCT_CSV_COLUMNS, PRODUCT_CSV_COLUMNS_NO_PROFIT } from '../../../shared/utils/csvExport'
@@ -106,9 +107,9 @@ const dateInputStyle = {
   background: 'var(--bg-card)',
   border: '1.5px solid var(--border)',
   borderRadius: 8,
-  fontSize: 12.5,
+  fontSize: 13,
   color: 'var(--text-primary)',
-  fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
+  fontFamily: 'var(--font-sans)',
   outline: 'none',
   cursor: 'pointer',
 }
@@ -492,7 +493,7 @@ export default function ProductsPage() {
       sortable: true,
       render: (row) => (
         <div>
-          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13.5 }}>
+          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
             {row.prod_name}
           </div>
           {row.barcode && (
@@ -523,7 +524,7 @@ export default function ProductsPage() {
         const isLow = row.prod_stock_qty <= row.prod_low_stock_alert
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontWeight: 600, fontSize: 13.5, color: isLow ? 'var(--danger-text)' : 'var(--text-primary)' }}>
+            <span style={{ fontWeight: 600, fontSize: 13, color: isLow ? 'var(--danger-text)' : 'var(--text-primary)' }}>
               {row.prod_stock_qty}
             </span>
             <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{row.unit ?? 'pcs'}</span>
@@ -538,7 +539,7 @@ export default function ProductsPage() {
       sortable: true,
       width:    110,
       render: (row) => (
-        <span style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--text-primary)' }}>
+        <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
           {formatCurrency(row.prod_sell_price, countryCode)}
         </span>
       ),
@@ -602,7 +603,7 @@ export default function ProductsPage() {
       sortable: true,
       width:    70,
       render: (row) => (
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
           {row.tax_rate ?? 0}%
         </span>
       ),
@@ -613,7 +614,7 @@ export default function ProductsPage() {
       sortable: true,
       width:    110,
       render: (row) => (
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
           {row.updated_at ? formatDate(row.updated_at) : '—'}
         </span>
       ),
@@ -626,7 +627,7 @@ export default function ProductsPage() {
       render: (row) => (
         row.last_updated_by
           ? (
-            <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: 500 }}>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
               {row.last_updated_by}
             </span>
           )
@@ -643,7 +644,13 @@ export default function ProductsPage() {
               <Button variant="secondary" size="sm" onClick={(e) => { e.stopPropagation(); setEditTarget(row) }}>
                 Edit
               </Button>
-              <Button variant="danger" size="sm" onClick={(e) => { e.stopPropagation(); setDeleteTarget(row) }}>
+              <Button variant="danger" size="sm" onClick={(e) => { e.stopPropagation(); setDeleteTarget(row) }}
+                leftIcon={
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                }>
                 Delete
               </Button>
             </div>
@@ -658,33 +665,143 @@ export default function ProductsPage() {
 
   const csvColumns = canViewProfit ? PRODUCT_CSV_COLUMNS : PRODUCT_CSV_COLUMNS_NO_PROFIT
 
+  // ── Metric computations from current page ──────────────────────────────────
+  const lowStockCount = products.filter(p => p.prod_stock_qty <= p.prod_low_stock_alert).length
+  const outOfStockCount = products.filter(p => p.prod_stock_qty === 0).length
+  const stockValue = canViewProfit
+    ? formatCurrency(
+        products.reduce((sum, p) => {
+          const cost = parseFloat(p.prod_cost_price) || 0
+          const qty = parseInt(p.prod_stock_qty) || 0
+          return sum + cost * qty
+        }, 0),
+        countryCode,
+      )
+    : '—'
+
   return (
     <>
-      <PageHeader
-        title="Products"
-        subtitle="Manage your product catalogue, prices, and stock alerts"
-        back
-        onBack={() => navigate('/dashboard')}
-        action={
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <ExportButton
-              onFetch={handleExport}
-              filename="products"
-              columns={csvColumns}
-            />
-            {canManage && (
-              <Button
-                variant="primary"
-                leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
-                onClick={() => setShowAdd(true)}
-                data-shortcut="new"
-              >
-                Add Product
-              </Button>
-            )}
+      {/* PAGE HEADER */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: 24, flexWrap: 'wrap', gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            onClick={() => navigate('/dashboard')}
+            style={{
+              background: 'var(--bg-card)', border: '1.5px solid var(--border)',
+              borderRadius: 'var(--r-md)', cursor: 'pointer', padding: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--text-secondary)', lineHeight: 1,
+            }}
+            aria-label="Back to dashboard"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+          <div>
+            <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
+              Products
+            </h1>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
+              Manage your product catalogue, prices, and stock alerts
+            </p>
           </div>
-        }
-      />
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <ExportButton
+            onFetch={handleExport}
+            filename="products"
+            columns={csvColumns}
+          />
+          {canManage && (
+            <Button
+              variant="primary"
+              leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
+              onClick={() => setShowAdd(true)}
+              data-shortcut="new"
+            >
+              Add Product
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* METRIC CARDS */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(12, 1fr)',
+        gap: 16,
+        marginBottom: 24,
+      }}>
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M16.5 9.4 7.55 4.24" />
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              <polyline points="3.29 7 12 12 20.71 7" />
+              <line x1="12" y1="22" x2="12" y2="12" />
+            </svg>
+          }
+          label="Total Products"
+          value={totalCount}
+        />
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+              <polyline points="17 6 23 6 23 12" />
+            </svg>
+          }
+          label="Total Products"
+          value={totalCount}
+        />
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+              <polyline points="17 6 23 6 23 12" />
+            </svg>
+          }
+          label="Stock Value"
+          value={stockValue}
+        />
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          }
+          label="Low Stock"
+          value={lowStockCount}
+          subtitle="Items below alert threshold"
+        />
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+          }
+          label="Out of Stock"
+          value={outOfStockCount}
+        />
+      </div>
 
       {/* Toolbar */}
       <div style={{
@@ -712,7 +829,7 @@ export default function ProductsPage() {
             {/* Barcode scanner hint pill — tells the user that a USB scanner works here */}
             <BarcodeHint />
           </div>
-          <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>
             {totalCount} product{totalCount !== 1 ? 's' : ''}
             {activeFilters && ' (filtered)'}
           </span>
@@ -722,11 +839,14 @@ export default function ProductsPage() {
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
                 fontSize: 12, color: 'var(--accent-600)', fontWeight: 600,
-                padding: '2px 6px',
-                fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+                padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: 4,
               }}
             >
-              ✕ Clear filters
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              Clear filters
             </button>
           )}
         </div>
@@ -736,37 +856,61 @@ export default function ProductsPage() {
       {isError && (
         <div style={{
           background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-          borderRadius: 12, padding: '13px 18px', color: 'var(--danger-text)',
-          fontSize: 13.5, marginBottom: 24, fontWeight: 500,
+          borderRadius: 12, padding: '12px 16px', color: 'var(--danger-text)',
+          fontSize: 13, marginBottom: 24, fontWeight: 500,
+          display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          ⚠️ Could not load products. Check that the backend is running and refresh.
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          Could not load products. Check that the backend is running and refresh.
         </div>
       )}
 
       {!isLoading && products.length === 0 ? (
-        <EmptyState
-          icon={activeFilters ? '🔍' : '📦'}
-          title={activeFilters ? 'No results matching your filters' : 'Nothing here yet'}
-          description={activeFilters ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'Add your first product to get started.'}
-          action={activeFilters ? (
-            <Button variant="secondary" size="sm" onClick={() => { setSearch(''); handleDateChange('from', ''); handleDateChange('to', '') }}>
-              Clear filters
-            </Button>
-          ) : undefined}
-        />
+        <BentoCard>
+          <EmptyState
+            icon={
+              activeFilters ? (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              ) : (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M16.5 9.4 7.55 4.24" />
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                  <polyline points="3.29 7 12 12 20.71 7" />
+                  <line x1="12" y1="22" x2="12" y2="12" />
+                </svg>
+              )
+            }
+            title={activeFilters ? 'No results matching your filters' : 'Nothing here yet'}
+            description={activeFilters ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'Add your first product to get started.'}
+            action={activeFilters ? (
+              <Button variant="secondary" size="sm" onClick={() => { setSearch(''); handleDateChange('from', ''); handleDateChange('to', '') }}>
+                Clear filters
+              </Button>
+            ) : undefined}
+          />
+        </BentoCard>
       ) : (
-      <div style={{ overflowX: 'auto', width: '100%' }}>
-        <Table
-          columns={columns}
-          rows={products}
-          loading={isLoading}
-          rowKey="prod_id"
-          onRowClick={(row) => setDetailProduct(row)}
-          sortKey={sortKey}
-          sortDir={sortDir}
-          onSort={handleSort}
-        />
-      </div>
+        <BentoCard padding={false} className="premium-table-wrap">
+          <div className="premium-table" style={{ overflowX: 'auto', width: '100%' }}>
+            <Table
+              columns={columns}
+              rows={products}
+              loading={isLoading}
+              rowKey="prod_id"
+              onRowClick={(row) => setDetailProduct(row)}
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
+          </div>
+        </BentoCard>
       )}
 
       <Pagination pagination={pagination} onPageChange={setPage} />

@@ -11,18 +11,20 @@ import ShortcutHelp from '../../shared/components/ShortcutHelp'
 const THEME_KEY  = 'sb-theme'
 const ACCENT_KEY = 'sb-accent'
 const ACCENT_OPTIONS = [
-  { id: 'purple',  label: 'Royal Purple', hex: '#4F46E5' },
   { id: 'blue',    label: 'Ocean Blue',   hex: '#2563EB' },
+  { id: 'purple',  label: 'Royal Purple', hex: '#4F46E5' },
   { id: 'emerald', label: 'Emerald',      hex: '#059669' },
   { id: 'amber',   label: 'Amber Gold',   hex: '#D97706' },
 ]
+
 function applyTheme(theme, accent) {
   document.documentElement.setAttribute('data-theme',  theme)
   document.documentElement.setAttribute('data-accent', accent)
 }
+
 function useTheme() {
   const [theme,  setThemeState]  = useState(() => localStorage.getItem(THEME_KEY)  || 'light')
-  const [accent, setAccentState] = useState(() => localStorage.getItem(ACCENT_KEY) || 'purple')
+  const [accent, setAccentState] = useState(() => localStorage.getItem(ACCENT_KEY) || 'blue')
   useEffect(() => { applyTheme(theme, accent) }, [theme, accent])
   function setTheme(t)  { localStorage.setItem(THEME_KEY,  t); setThemeState(t) }
   function setAccent(a) { localStorage.setItem(ACCENT_KEY, a); setAccentState(a) }
@@ -75,10 +77,9 @@ const NAV = [
 ]
 const NAV_FLAT = NAV.flatMap(s => s.items)
 
-const SLIM = 64, FULL = 248
+const SLIM = 64, FULL = 240
 const MOBILE_BREAK = 768
 
-// ── Bottom navigation items (mobile only) ──
 const BOTTOM_NAV_ITEMS = [
   { label: 'Dashboard', path: '/dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
   { label: 'Sales',     path: '/sales',     icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
@@ -90,12 +91,23 @@ const BOTTOM_NAV_ITEMS = [
 function Logo({ collapsed }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, background: 'var(--accent-600)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{
+        width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+        background: 'var(--accent-600)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
         <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
           <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
       </div>
-      {!collapsed && <span style={{ fontSize: '0.95rem', fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--sb-text-primary)', whiteSpace: 'nowrap' }}>Smart<span style={{ color: 'var(--accent-400)' }}>Billr</span></span>}
+      {!collapsed && (
+        <span style={{
+          fontSize: '0.9rem', fontWeight: 700, letterSpacing: '-0.3px',
+          color: 'var(--sb-text-primary)', whiteSpace: 'nowrap',
+        }}>
+          Smart<span style={{ color: 'var(--accent-400)' }}>Billr</span>
+        </span>
+      )}
     </div>
   )
 }
@@ -108,22 +120,62 @@ function ThemePanel({ theme, setTheme, accent, setAccent, onClose }) {
     return () => document.removeEventListener('mousedown', h)
   }, [onClose])
   return (
-    <div ref={ref} style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 200, width: 240, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-elevated)', padding: '16px', animation: 'scaleIn 0.18s var(--ease-spring) both' }}>
-      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>Appearance</p>
+    <div ref={ref} style={{
+      position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 200,
+      width: 240, background: 'var(--bg-card)', border: '1px solid var(--border)',
+      borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-elevated)',
+      padding: '16px', animation: 'scaleIn 0.18s var(--ease-spring) both',
+    }}>
+      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+        Theme
+      </p>
       <div style={{ display: 'flex', gap: 6, marginBottom: 18 }}>
         {['light','dark'].map(t => (
-          <button key={t} onClick={() => setTheme(t)} aria-label={`${t.charAt(0).toUpperCase()+t.slice(1)} theme`} aria-pressed={theme===t} style={{ flex: 1, height: 34, background: theme===t?'var(--accent-600)':'var(--bg-subtle)', color: theme===t?'#fff':'var(--text-secondary)', border: `1px solid ${theme===t?'var(--accent-600)':'var(--border)'}`, borderRadius: 'var(--r-md)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.14s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-            {t==='light'?'☀':'🌙'} {t.charAt(0).toUpperCase()+t.slice(1)}
+          <button
+            key={t}
+            onClick={() => setTheme(t)}
+            aria-label={`${t} theme`}
+            aria-pressed={theme === t}
+            style={{
+              flex: 1, height: 34,
+              background: theme === t ? 'var(--accent-600)' : 'var(--bg-subtle)',
+              color: theme === t ? '#fff' : 'var(--text-secondary)',
+              border: `1px solid ${theme === t ? 'var(--accent-600)' : 'var(--border)'}`,
+              borderRadius: 'var(--r-md)', fontSize: 12.5, fontWeight: 600,
+              cursor: 'pointer', fontFamily: 'inherit',
+              transition: 'all 0.14s',
+            }}
+          >
+            {t === 'light' ? 'Light' : 'Dark'}
           </button>
         ))}
       </div>
-      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>Accent Color</p>
+      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+        Accent
+      </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         {ACCENT_OPTIONS.map(a => (
-          <button key={a.id} onClick={() => setAccent(a.id)} aria-label={`${a.label} accent`} aria-pressed={accent===a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: accent===a.id?'var(--bg-hover)':'transparent', border: `1px solid ${accent===a.id?'var(--border-hover)':'transparent'}`, borderRadius: 'var(--r-md)', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s' }}>
+          <button
+            key={a.id}
+            onClick={() => setAccent(a.id)}
+            aria-label={`${a.label} accent`}
+            aria-pressed={accent === a.id}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 10px',
+              background: accent === a.id ? 'var(--bg-hover)' : 'transparent',
+              border: `1px solid ${accent === a.id ? 'var(--border-hover)' : 'transparent'}`,
+              borderRadius: 'var(--r-md)', cursor: 'pointer', fontFamily: 'inherit',
+              transition: 'all 0.12s',
+            }}
+          >
             <div style={{ width: 16, height: 16, borderRadius: '50%', background: a.hex, flexShrink: 0 }} />
-            <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: accent===a.id?600:400 }}>{a.label}</span>
-            {accent===a.id && <svg style={{ marginLeft: 'auto', color: a.hex }} width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
+            <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: accent === a.id ? 600 : 400 }}>{a.label}</span>
+            {accent === a.id && (
+              <svg style={{ marginLeft: 'auto', color: a.hex }} width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+              </svg>
+            )}
           </button>
         ))}
       </div>
@@ -133,17 +185,42 @@ function ThemePanel({ theme, setTheme, accent, setAccent, onClose }) {
 
 function LogoutDialog({ onConfirm, onCancel }) {
   return (
-    <div onClick={onCancel} role="dialog" aria-modal="true" aria-label="Sign out confirmation" style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.15s var(--ease-out)' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--r-2xl)', padding: '28px', width: '100%', maxWidth: 360, boxShadow: 'var(--shadow-elevated)', animation: 'scaleIn 0.2s var(--ease-spring)' }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
-          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="var(--danger)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+    <div
+      onClick={onCancel}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Sign out confirmation"
+      style={{
+        position: 'fixed', inset: 0, zIndex: 999,
+        background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        animation: 'fadeIn 0.15s var(--ease-out)',
+      }}
+    >
+      <div onClick={e => e.stopPropagation()} style={{
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
+        borderRadius: 'var(--r-2xl)', padding: '28px', width: '100%', maxWidth: 360,
+        boxShadow: 'var(--shadow-elevated)', animation: 'scaleIn 0.2s var(--ease-spring)',
+      }}>
+        <div style={{
+          width: 44, height: 44, borderRadius: 12,
+          background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18,
+        }}>
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="var(--danger)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+          </svg>
         </div>
-        <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>Sign out of SmartBillr?</h3>
-        <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>You'll be returned to the login screen. Any unsaved changes will be lost.</p>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
+          Sign out of SmartBillr?
+        </h3>
+        <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+          You'll be returned to the login screen.
+        </p>
         <div style={{ height: 1, background: 'var(--border)', margin: '20px 0' }} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onCancel} aria-label="Cancel sign out" className="btn btn-secondary" style={{ flex: 1, height: 38 }}>Cancel</button>
-          <button onClick={onConfirm} aria-label="Confirm sign out" className="btn btn-danger" style={{ flex: 1, height: 38 }}>Sign out</button>
+          <button onClick={onCancel} className="btn btn-secondary" style={{ flex: 1, height: 38 }}>Cancel</button>
+          <button onClick={onConfirm} className="btn btn-danger" style={{ flex: 1, height: 38 }}>Sign out</button>
         </div>
       </div>
     </div>
@@ -159,82 +236,18 @@ function IconButton({ onClick, children, style = {}, 'aria-label': ariaLabel }) 
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        background:   hovered ? 'var(--bg-hover)'    : 'var(--bg-subtle)',
-        border:       `1px solid ${hovered ? 'var(--border-hover)' : 'var(--border)'}`,
-        borderRadius: 'var(--r-md)',
+        background: 'transparent',
+        border: 'none',
         width: 34, height: 34,
+        borderRadius: 8,
         cursor: 'pointer',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--text-secondary)',
+        color: hovered ? 'var(--text-primary)' : 'var(--text-secondary)',
         transition: 'all 0.13s',
         ...style,
       }}
     >
       {children}
-    </button>
-  )
-}
-
-function UserPill({ initials, userName, userRole, minimal }) {
-  const [hovered, setHovered] = useState(false)
-  return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 9,
-        background:   hovered ? 'var(--bg-hover)'    : 'var(--bg-subtle)',
-        border:       `1px solid ${hovered ? 'var(--border-hover)' : 'var(--border)'}`,
-        borderRadius: 'var(--r-lg)',
-        padding: '4px 12px 4px 4px',
-        cursor: 'pointer',
-        transition: 'all 0.13s',
-      }}
-    >
-      <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--accent-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-        {initials}
-      </div>
-      {!minimal && (
-        <>
-          <div>
-            <p style={{ fontSize: '0.74rem', fontWeight: 650, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.1px', lineHeight: 1.3, textTransform: 'capitalize' }}>
-              {userName}
-            </p>
-            <p style={{ fontSize: '0.62rem', color: 'var(--text-muted)', margin: 0 }}>
-              {userRole}
-            </p>
-          </div>
-          <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="var(--text-muted)" strokeWidth={2.5} style={{ marginLeft: 2 }}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
-          </svg>
-        </>
-      )}
-    </div>
-  )
-}
-
-function LogoutButton({ onClick }) {
-  const [hovered, setHovered] = useState(false)
-  return (
-    <button
-      onClick={onClick}
-      aria-label="Sign out"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        background:   hovered ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.07)',
-        border:       '1px solid rgba(239,68,68,0.12)',
-        borderRadius: 7,
-        width: 28, height: 28,
-        cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: '#F87171', flexShrink: 0,
-        transition: 'background 0.13s',
-      }}
-    >
-      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-      </svg>
     </button>
   )
 }
@@ -251,10 +264,10 @@ function NavItem({ item, collapsed, onNavClick }) {
       style={({ isActive }) => ({
         display: 'flex',
         alignItems: 'center',
-        gap: collapsed ? 0 : 9,
+        gap: collapsed ? 0 : 10,
         justifyContent: collapsed ? 'center' : 'flex-start',
-        padding: collapsed ? '10px' : '8px 10px',
-        borderRadius: 9,
+        padding: collapsed ? '10px' : '8px 12px',
+        borderRadius: 8,
         marginBottom: 1,
         textDecoration: 'none',
         color: isActive
@@ -267,15 +280,28 @@ function NavItem({ item, collapsed, onNavClick }) {
           : hovered
           ? 'var(--sb-hover-bg)'
           : 'transparent',
-        border: `1px solid ${isActive ? 'var(--accent-sidebar-border)' : 'transparent'}`,
+        border: 'none',
+        borderLeft: isActive ? '2px solid var(--accent-500)' : '2px solid transparent',
         transition: 'all 0.13s',
       })}
     >
       {({ isActive }) => (<>
         <span style={{ color: isActive ? 'var(--accent-sidebar-icon)' : 'inherit', display: 'flex' }}>
-          <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d={item.icon}/></svg>
+          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <path d={item.icon}/>
+          </svg>
         </span>
-        {!collapsed && <span style={{ fontSize: '0.8rem', fontWeight: isActive ? 650 : 450, color: isActive ? 'var(--sb-text-primary)' : 'inherit', letterSpacing: isActive ? '-0.15px' : '-0.05px', whiteSpace: 'nowrap' }}>{item.label}</span>}
+        {!collapsed && (
+          <span style={{
+            fontSize: '0.8rem',
+            fontWeight: isActive ? 600 : 450,
+            color: isActive ? 'var(--sb-text-primary)' : 'inherit',
+            letterSpacing: '-0.1px',
+            whiteSpace: 'nowrap',
+          }}>
+            {item.label}
+          </span>
+        )}
       </>)}
     </NavLink>
   )
@@ -297,7 +323,7 @@ function BottomNav({ items, isMobile, onMoreClick }) {
                 color: isActive ? 'var(--accent-500)' : 'var(--text-muted)',
               })}
             >
-              <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                 <path d={item.icon} />
               </svg>
               <span>{item.label}</span>
@@ -306,7 +332,7 @@ function BottomNav({ items, isMobile, onMoreClick }) {
         }
         return (
           <button key={item.label} className="bottom-nav-item" aria-label="More navigation" onClick={onMoreClick} style={{ color: 'var(--text-muted)' }}>
-            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
               <path d={item.icon} />
             </svg>
             <span>{item.label}</span>
@@ -319,10 +345,10 @@ function BottomNav({ items, isMobile, onMoreClick }) {
 
 export default function DashboardLayout() {
   const isMobile = useMediaQuery(`(max-width: ${MOBILE_BREAK}px)`)
-  const [collapsed,       setCollapsed]       = useState(false)
-  const [mobileOpen,      setMobileOpen]      = useState(false)
-  const [showLogout,      setShowLogout]      = useState(false)
-  const [showTheme,       setShowTheme]       = useState(false)
+  const [collapsed,  setCollapsed]  = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [showLogout, setShowLogout] = useState(false)
+  const [showTheme,  setShowTheme]  = useState(false)
 
   const { theme, setTheme, accent, setAccent } = useTheme()
   const { user, business, profile, hasPermission } = useAuthStore()
@@ -333,20 +359,14 @@ export default function DashboardLayout() {
   const businessName = business?.business_name || 'Your Business'
   const userRole     = profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : 'Staff'
   const initials     = userName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-  const greeting     = useMemo(() => {
-    const h = new Date().getHours()
-    return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
-  }, [])
 
   const currentPage = useMemo(() =>
     NAV_FLAT.find(item => location.pathname.startsWith(item.path))?.label || 'Dashboard',
     [location.pathname]
   )
 
-  // Close mobile sidebar on navigation
   useEffect(() => { setMobileOpen(false) }, [location.pathname])
 
-  // ── Global keyboard shortcuts ──────────────────────────────────────────
   const { registerShortcut, paletteOpen, setPaletteOpen, helpOpen, setHelpOpen } = useShortcutContext()
   const paletteOpenRef = useRef(paletteOpen)
   paletteOpenRef.current = paletteOpen
@@ -357,32 +377,24 @@ export default function DashboardLayout() {
     e: '/expenses',  r: '/reports',   h: '/settings',
   }), [])
 
-  const handleNav = useCallback((path) => {
-    navigate(path)
-  }, [navigate])
+  const handleNav = useCallback((path) => { navigate(path) }, [navigate])
 
   useEffect(() => {
-    const unregisters = Object.entries(navMap).map(([key, path]) => {
-      const combo = 'g+' + key
-      return registerShortcut(combo, () => handleNav(path), { preventDefault: true })
-    })
-
+    const unregisters = Object.entries(navMap).map(([key, path]) =>
+      registerShortcut('g+' + key, () => handleNav(path), { preventDefault: true })
+    )
     const helpUnregister = registerShortcut('?', () => setHelpOpen(true), { preventDefault: true })
-
     const ctrlKUnregister = registerShortcut('ctrl+k', () => {
       if (paletteOpenRef.current) return
       setPaletteOpen(true)
     }, { preventDefault: true })
-
     const ctrlNUnregister = registerShortcut('alt+n', () => {
       document.querySelector('[data-shortcut="new"]')?.click()
     }, { preventDefault: true })
-
     const ctrlFUnregister = registerShortcut('ctrl+f', () => {
       const input = document.querySelector('[data-search-input]')
       if (input) { input.focus(); input.select() }
     }, { preventDefault: true })
-
     const f5Unregister = registerShortcut('f5', () => {
       window.dispatchEvent(new CustomEvent('sb:refresh'))
     }, { preventDefault: true })
@@ -397,7 +409,6 @@ export default function DashboardLayout() {
     }
   }, [navMap, handleNav, registerShortcut, setHelpOpen, setPaletteOpen])
 
-  // ── Refresh listener (exposed via a global for pages to use) ───────────
   useEffect(() => {
     const handler = () => window.dispatchEvent(new CustomEvent('sb:data-refresh'))
     window.addEventListener('sb:refresh', handler)
@@ -409,23 +420,29 @@ export default function DashboardLayout() {
       const { default: api } = await import('../../api/axios')
       await api.post('/auth/logout')
     } catch {
-      // Network error or token already expired — still clear local state
+      // ignore
     }
     useAuthStore.getState().clearAuth()
     toast.success('Signed out successfully')
     navigate('/login')
   }
 
-  const visibleNav = useMemo(() =>NAV
-    .map(section => ({ ...section, items: section.items.filter(item => hasPermission(item.permission)) }))
-    .filter(section => section.items.length > 0),[hasPermission])
+  const visibleNav = useMemo(() =>
+    NAV
+      .map(section => ({ ...section, items: section.items.filter(item => hasPermission(item.permission)) }))
+      .filter(section => section.items.length > 0),
+    [hasPermission]
+  )
 
   const W = isMobile ? FULL : (collapsed ? SLIM : FULL)
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily:"'Plus Jakarta Sans', -apple-system, sans-serif", background: 'var(--bg-page)' }}>
+    <div style={{
+      display: 'flex', height: '100vh', overflow: 'hidden',
+      fontFamily: "'Inter', -apple-system, sans-serif",
+      background: 'var(--bg-page)',
+    }}>
 
-      {/* Mobile sidebar overlay backdrop */}
       {isMobile && mobileOpen && (
         <div
           onClick={() => setMobileOpen(false)}
@@ -441,88 +458,202 @@ export default function DashboardLayout() {
       )}
 
       {/* ── SIDEBAR ── */}
-      <aside role="navigation" aria-label="Main navigation" style={{
-        width: isMobile ? FULL : W,
-        minHeight: '100vh',
-        background: 'var(--sb-bg)',
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        bottom: 0,
-        zIndex: isMobile ? 100 : 100,
-        transform: isMobile ? `translateX(${mobileOpen ? '0' : `-${FULL}px`})` : 'none',
-        transition: 'width 0.2s var(--ease-out), transform 0.22s var(--ease-out)',
-        overflow: 'hidden',
-        borderRight: '1px solid var(--sb-border)',
-        boxShadow: isMobile && mobileOpen ? 'var(--shadow-elevated)' : 'none',
-      }}>
-
-        {/* Logo */}
-        <div style={{ height: 60, display: 'flex', alignItems: 'center', padding: collapsed && !isMobile?'0 18px':'0 16px', justifyContent: (collapsed && !isMobile) ?'center':'space-between', borderBottom: '1px solid var(--sb-border)', flexShrink: 0 }}>
+      <aside
+        role="navigation"
+        aria-label="Main navigation"
+        style={{
+          width: isMobile ? FULL : W,
+          minHeight: '100vh',
+          background: 'var(--sb-bg)',
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'fixed',
+          top: 0, left: 0, bottom: 0,
+          zIndex: isMobile ? 100 : 100,
+          transform: isMobile ? `translateX(${mobileOpen ? '0' : `-${FULL}px`})` : 'none',
+          transition: 'width 0.2s var(--ease-out), transform 0.22s var(--ease-out)',
+          overflow: 'hidden',
+          borderRight: '1px solid var(--sb-border)',
+          boxShadow: isMobile && mobileOpen ? 'var(--shadow-elevated)' : 'none',
+        }}
+      >
+        {/* Logo header */}
+        <div style={{
+          height: 60,
+          display: 'flex', alignItems: 'center',
+          padding: collapsed && !isMobile ? '0 18px' : '0 16px',
+          justifyContent: (collapsed && !isMobile) ? 'center' : 'space-between',
+          borderBottom: '1px solid var(--sb-border)',
+          flexShrink: 0,
+        }}>
           {isMobile ? (
             <>
               <Logo collapsed={false} />
-              <button onClick={() => setMobileOpen(false)} aria-label="Close sidebar" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 7, width: 26, height: 26, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--sb-text-muted)', flexShrink: 0 }}>
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M6 18L18 6M6 6l12 12"/></svg>
+              <button
+                onClick={() => setMobileOpen(false)}
+                aria-label="Close sidebar"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                  borderRadius: 7, width: 26, height: 26, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'var(--sb-text-muted)', flexShrink: 0,
+                }}
+              >
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                  <path d="M6 18L18 6M6 6l12 12"/>
+                </svg>
               </button>
             </>
           ) : collapsed ? (
-            <button onClick={() => setCollapsed(false)} aria-label="Expand sidebar" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}><Logo collapsed /></button>
+            <button onClick={() => setCollapsed(false)} aria-label="Expand sidebar" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+              <Logo collapsed />
+            </button>
           ) : (
             <>
               <Logo collapsed={false} />
-              <button onClick={() => setCollapsed(true)} aria-label="Collapse sidebar" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 7, width: 26, height: 26, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--sb-text-muted)', flexShrink: 0, transition: 'background 0.13s' }}>
-                <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
+              <button
+                onClick={() => setCollapsed(true)}
+                aria-label="Collapse sidebar"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                  borderRadius: 7, width: 26, height: 26, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'var(--sb-text-muted)', flexShrink: 0,
+                }}
+              >
+                <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                  <path d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
+                </svg>
               </button>
             </>
           )}
         </div>
 
-        {/* Workspace chip */}
+        {/* Workspace badge */}
         {!collapsed && (
-          <div style={{ margin: '12px 10px 4px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '9px 10px', display: 'flex', alignItems: 'center', gap: 9 }}>
-            <div style={{ width: 24, height: 24, borderRadius: 6, background: 'var(--accent-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 800, color: '#fff', flexShrink: 0 }}>{businessName[0]?.toUpperCase()}</div>
+          <div style={{
+            margin: '12px 10px 4px',
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: 10, padding: '9px 10px',
+            display: 'flex', alignItems: 'center', gap: 9,
+          }}>
+            <div style={{
+              width: 24, height: 24, borderRadius: 6,
+              background: 'var(--accent-600)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '0.6rem', fontWeight: 800, color: '#fff', flexShrink: 0,
+            }}>
+              {businessName[0]?.toUpperCase()}
+            </div>
             <div style={{ overflow: 'hidden', flex: 1 }}>
-              <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--sb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0 }}>{businessName}</p>
-              <p style={{ fontSize: '0.6rem', color: 'var(--sb-text-muted)', margin: 0 }}>Active workspace</p>
+              <p style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--sb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0 }}>
+                {businessName}
+              </p>
+              <p style={{ fontSize: '0.58rem', color: 'var(--sb-text-muted)', margin: 0 }}>Workspace</p>
             </div>
             <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#22C55E', flexShrink: 0 }} />
           </div>
         )}
 
-        {/* Nav */}
-        <nav aria-label="Page sections" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: collapsed && !isMobile?'10px 8px':'6px 8px', scrollbarWidth: 'none' }}>
+        {/* Nav sections */}
+        <nav
+          aria-label="Page sections"
+          style={{
+            flex: 1, overflowY: 'auto', overflowX: 'hidden',
+            padding: collapsed && !isMobile ? '10px 8px' : '6px 8px',
+            scrollbarWidth: 'none',
+          }}
+        >
           {visibleNav.map(section => (
             <div key={section.label} style={{ marginBottom: 2 }}>
-              {!collapsed && <p style={{ fontSize: '0.58rem', fontWeight: 700, color: 'var(--sb-text-section)', textTransform: 'uppercase', letterSpacing: '0.1em', padding: '12px 10px 4px', margin: 0 }}>{section.label}</p>}
-              {collapsed && !isMobile && <div style={{ height: 6 }} />}
-              {section.items.map(item => <NavItem key={item.path} item={item} collapsed={collapsed && !isMobile} />)}
+              {!collapsed && (
+                <p style={{
+                  fontSize: '0.58rem', fontWeight: 700, color: 'var(--sb-text-section)',
+                  textTransform: 'uppercase', letterSpacing: '0.08em',
+                  padding: '16px 10px 6px', margin: 0,
+                }}>
+                  {section.label}
+                </p>
+              )}
+              {collapsed && !isMobile && <div style={{ height: 8 }} />}
+              {section.items.map(item => (
+                <NavItem key={item.path} item={item} collapsed={collapsed && !isMobile} />
+              ))}
             </div>
           ))}
         </nav>
 
         {/* User footer */}
-        <div style={{ padding: collapsed && !isMobile?'12px 8px':'12px 10px', borderTop: '1px solid var(--sb-border)', flexShrink: 0 }}>
+        <div style={{
+          padding: collapsed && !isMobile ? '12px 8px' : '12px 10px',
+          borderTop: '1px solid var(--sb-border)', flexShrink: 0,
+        }}>
           {(!collapsed || isMobile) ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--accent-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem', fontWeight: 700, color: '#fff', flexShrink: 0 }}>{initials}</div>
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <p style={{ fontSize: '0.75rem', fontWeight: 650, color: 'var(--sb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0, textTransform: 'capitalize' }}>{userName}</p>
-                <p style={{ fontSize: '0.6rem', color: 'var(--sb-text-muted)', margin: 0 }}>{userRole}</p>
+              <div style={{
+                width: 32, height: 32, borderRadius: 8,
+                background: 'var(--accent-600)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.68rem', fontWeight: 700, color: '#fff', flexShrink: 0,
+              }}>
+                {initials}
               </div>
-              <LogoutButton onClick={() => setShowLogout(true)} />
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <p style={{
+                  fontSize: '0.72rem', fontWeight: 600, color: 'var(--sb-text-primary)',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  margin: 0, textTransform: 'capitalize',
+                }}>
+                  {userName}
+                </p>
+                <p style={{ fontSize: '0.6rem', color: 'var(--sb-text-muted)', margin: 0 }}>
+                  {userRole}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowLogout(true)}
+                aria-label="Sign out"
+                style={{
+                  background: 'rgba(239,68,68,0.08)',
+                  border: '1px solid rgba(239,68,68,0.12)',
+                  borderRadius: 7, width: 28, height: 28, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#F87171', flexShrink: 0,
+                  transition: 'background 0.13s',
+                }}
+              >
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                </svg>
+              </button>
             </div>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--accent-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem', fontWeight: 700, color: '#fff', cursor: 'pointer' }} title={userName} role="button" tabIndex={0}>{initials}</div>
+              <div style={{
+                width: 32, height: 32, borderRadius: 8,
+                background: 'var(--accent-600)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.68rem', fontWeight: 700, color: '#fff', cursor: 'pointer',
+              }} title={userName} role="button" tabIndex={0}>
+                {initials}
+              </div>
             </div>
           )}
           {!collapsed && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--sb-border)' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+              marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--sb-border)',
+            }}>
               <span style={{ fontSize: '0.6rem', color: 'var(--sb-text-muted)' }}>
-                Press <kbd style={{ fontFamily: 'monospace', fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)', color: 'var(--sb-text-muted)' }}>?</kbd> for shortcuts
+                Press <kbd style={{
+                  fontFamily: "'JetBrains Mono', monospace", fontSize: 9, fontWeight: 600,
+                  padding: '1px 4px', borderRadius: 3,
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'rgba(255,255,255,0.04)', color: 'var(--sb-text-muted)',
+                }}>?</kbd> for shortcuts
               </span>
             </div>
           )}
@@ -540,14 +671,14 @@ export default function DashboardLayout() {
 
         {/* Topbar */}
         <header style={{
-          height: 60,
+          height: 56,
           background: 'var(--topbar-bg)',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
           borderBottom: '1px solid var(--topbar-border)',
           display: 'flex', alignItems: 'center',
           justifyContent: 'space-between',
-          padding: isMobile ? '0 16px' : '0 32px',
+          padding: isMobile ? '0 16px' : '0 28px',
           position: 'sticky', top: 0, zIndex: 50,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -556,70 +687,90 @@ export default function DashboardLayout() {
                 onClick={() => setMobileOpen(true)}
                 aria-label="Open sidebar"
                 style={{
-                  background: 'var(--bg-subtle)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8, width: 34, height: 34,
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'var(--text-secondary)', flexShrink: 0,
+                  background: 'transparent',
+                  border: 'none',
+                  width: 34, height: 34,
+                  cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'var(--text-secondary)',
                 }}
               >
-                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path d="M3 6h18M3 12h18M3 18h18"/>
                 </svg>
               </button>
             )}
             <div>
-              <h1 style={{
-                fontSize: isMobile ? '0.8rem' : '0.875rem',
+              <p style={{
+                fontSize: isMobile ? '0.8rem' : '0.85rem',
                 fontWeight: 700, color: 'var(--text-primary)', margin: 0,
                 letterSpacing: '-0.2px',
               }}>
-                {greeting}, {userName.split(' ')[0]} 👋
-              </h1>
-              <p style={{
-                fontSize: isMobile ? '0.65rem' : '0.7rem',
-                color: 'var(--text-muted)', margin: 0, marginTop: 1,
-              }}>
-                {currentPage} · {businessName}
+                {currentPage}
               </p>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 8 }}>
 
-            <IconButton aria-label="Notifications" style={{ position: 'relative' }}>
-              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.9}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+            <IconButton aria-label="Notifications">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
               </svg>
-              <span style={{ position: 'absolute', top: 8, right: 9, width: 5, height: 5, background: 'var(--accent-600)', borderRadius: '50%', border: '1.5px solid var(--topbar-bg)' }} />
+              <span style={{
+                position: 'absolute', top: 8, right: 9,
+                width: 5, height: 5, background: 'var(--accent-600)',
+                borderRadius: '50%',
+                border: '1.5px solid var(--topbar-bg)',
+              }} />
             </IconButton>
 
-            <div style={{ width: 1, height: 20, background: 'var(--border)' }} />
+            <div style={{ width: 1, height: 18, background: 'var(--border)' }} />
 
             <div style={{ position: 'relative' }}>
               <IconButton onClick={() => setShowTheme(v => !v)} aria-label="Toggle theme">
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.9}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
                 </svg>
               </IconButton>
               {showTheme && <ThemePanel theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} onClose={() => setShowTheme(false)} />}
             </div>
 
-            <UserPill initials={initials} userName={userName} userRole={userRole} minimal={isMobile} />
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: 'var(--bg-subtle)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              padding: '3px 10px 3px 3px',
+              cursor: 'pointer',
+            }}>
+              <div style={{
+                width: 26, height: 26, borderRadius: 6,
+                background: 'var(--accent-600)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.6rem', fontWeight: 700, color: '#fff',
+              }}>
+                {initials}
+              </div>
+              {!isMobile && (
+                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-primary)', textTransform: 'capitalize' }}>
+                  {userName}
+                </span>
+              )}
+            </div>
 
           </div>
         </header>
 
         <main style={{
           flex: 1,
-          padding: isMobile ? '1.25rem 1rem' : '2rem 2.25rem',
-          paddingBottom: isMobile ? 'calc(1.25rem + 3.5rem)' : '2rem',
+          padding: isMobile ? '1.25rem 1rem' : '1.5rem 2rem',
+          paddingBottom: isMobile ? 'calc(1.25rem + 3.5rem)' : '1.5rem',
           overflowY: 'auto', overflowX: 'hidden',
         }}>
           <div className="fade-up"><ErrorBoundary><Outlet /></ErrorBoundary></div>
         </main>
       </div>
 
-      {/* Bottom navigation — mobile only */}
       <BottomNav items={BOTTOM_NAV_ITEMS} isMobile={isMobile} onMoreClick={() => setMobileOpen(true)} />
 
       {showLogout && <LogoutDialog onConfirm={handleLogout} onCancel={() => setShowLogout(false)} />}

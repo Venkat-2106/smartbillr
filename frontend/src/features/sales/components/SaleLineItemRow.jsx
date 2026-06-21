@@ -95,12 +95,12 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
               <div style={{
                 background: 'var(--bg-card)',
                 border: '1.5px solid var(--border)',
-                borderRadius: 10,
+                borderRadius: 'var(--r-md)',
                 boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
                 maxHeight: 220, overflowY: 'auto',
               }}>
                 {searchResults.length === 0 ? (
-                  <div style={{ padding: '10px 14px', fontSize: 12.5, color: 'var(--text-muted)' }}>
+                  <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
                     No products found for "{searchText}"
                   </div>
                 ) : (
@@ -117,7 +117,7 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
                       className="search-result-item"
                     >
                       <div>
-                        <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                           {p.prod_name}
                         </div>
                         {p.barcode && (
@@ -146,8 +146,8 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
               <ProductSearchDropdownPortal anchorRef={comboRef}>
               <div style={{
                 background: 'var(--bg-card)', border: '1.5px solid var(--border)',
-                borderRadius: 10, padding: '10px 14px',
-                fontSize: 12.5, color: 'var(--text-muted)',
+                borderRadius: 'var(--r-md)', padding: '10px 14px',
+                fontSize: 13, color: 'var(--text-muted)',
               }}>
                 Type at least 2 characters to search
               </div>

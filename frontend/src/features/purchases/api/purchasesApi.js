@@ -63,6 +63,14 @@ export async function updatePurchaseStatus(purId, status) {
   return res.data
 }
 
+// ── DELETE purchase (soft-delete with optional stock reduction) ───────────────
+export async function deletePurchase(purId, reduceStock = false) {
+  const res = await api.delete(`/purchases/${purId}`, {
+    params: { reduce_stock: reduceStock || undefined },
+  })
+  return res.data
+}
+
 // ── GET lean supplier list (for create-purchase dropdown) ─────────────────────
 export async function fetchSuppliersLean() {
   const res = await api.get('/suppliers/lean')

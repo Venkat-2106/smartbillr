@@ -316,7 +316,7 @@ export default function PaymentHistoryDrawer({ saleId, onClose, onRecorded, isRe
               </h4>
 
               {data.payment_history?.length === 0 && (
-                <div style={{ fontSize: 13.5, color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>
                   No payments recorded yet.
                 </div>
               )}
@@ -328,7 +328,7 @@ export default function PaymentHistoryDrawer({ saleId, onClose, onRecorded, isRe
                     style={{
                       background: p.is_active ? 'var(--bg-subtle)' : 'var(--bg-card)',
                       border: `1px solid ${p.is_active ? 'var(--accent-ring, var(--border))' : 'var(--border)'}`,
-                      borderRadius: 10, padding: '12px 14px',
+                      borderRadius: 'var(--r-md)', padding: '12px 14px',
                       opacity: p.is_active ? 1 : 0.75,
                     }}
                   >

@@ -22,7 +22,7 @@ import { useDebounce } from '../hooks/useDebounce'
 // Magnifier icon (inline SVG — no heroicons dependency needed here)
 function SearchIcon({ size = 15, color = 'currentColor' }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="9" cy="9" r="6" />
       <path d="m16 16-3.5-3.5" />
     </svg>
@@ -32,7 +32,7 @@ function SearchIcon({ size = 15, color = 'currentColor' }) {
 function MiniSpinner() {
   return (
     <>
-      <svg width="14" height="14" viewBox="0 0 16 16" style={{ animation: 'sb-spin 0.7s linear infinite' }}>
+      <svg width="14" height="14" viewBox="0 0 16 16" style={{ animation: 'sb-spin 0.7s linear infinite' }} aria-hidden="true">
         <circle cx="8" cy="8" r="6" fill="none" stroke="var(--accent-600)" strokeWidth="2.5" strokeDasharray="28" strokeDashoffset="10" strokeLinecap="round" />
       </svg>
     </>
@@ -72,7 +72,7 @@ export default function SearchBar({
       {/* Left icon */}
       <span style={{
         position: 'absolute',
-        left: 11,
+        left: 12,
         color: focused ? 'var(--accent-600)' : 'var(--text-muted)',
         display: 'flex',
         alignItems: 'center',
@@ -91,16 +91,17 @@ export default function SearchBar({
         placeholder={placeholder}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
+        autoComplete="off"
         style={{
           width: '100%',
-          padding: '8px 36px 8px 34px',
+          padding: '8px 36px 8px 36px',
           background: 'var(--bg-card)',
           border: `1.5px solid ${focused ? 'var(--accent-600)' : 'var(--border)'}`,
-          borderRadius: 10,
+          borderRadius: 'var(--r-md)',
           fontSize: 13,
           fontWeight: 400,
           color: 'var(--text-primary)',
-          fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
+          fontFamily: 'var(--font-sans, "Inter", sans-serif)',
           outline: 'none',
           transition: 'border-color 0.15s, box-shadow 0.15s',
           boxShadow: focused ? '0 0 0 3px var(--accent-glow, rgba(79,70,229,0.14))' : 'none',
@@ -111,7 +112,7 @@ export default function SearchBar({
       {(loading || value) && (
         <span style={{
           position: 'absolute',
-          right: 10,
+          right: 12,
           display: 'flex',
           alignItems: 'center',
           color: 'var(--text-muted)',
@@ -127,7 +128,7 @@ export default function SearchBar({
           {loading
             ? <MiniSpinner />
             : (
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" aria-label="Clear search">
                 <path d="M3 3l10 10M13 3L3 13" />
               </svg>
             )

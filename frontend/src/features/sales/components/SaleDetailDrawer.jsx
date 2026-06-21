@@ -364,7 +364,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                 cursor: isLoading || isError ? 'not-allowed' : 'pointer',
                 padding: '6px 12px', borderRadius: 8,
                 color: isLoading || isError ? 'var(--text-muted)' : 'var(--text-secondary)',
-                fontSize: 12.5, fontWeight: 600,
+                fontSize: 13, fontWeight: 600,
                 fontFamily: 'inherit',
                 opacity: isLoading || isError ? 0.5 : 1,
                 transition: 'all 0.13s',
@@ -399,7 +399,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
               background: 'var(--danger-bg, #FEF2F2)',
               border: '1px solid var(--danger-border, #FCA5A5)',
               borderRadius: 12,
-              fontSize: 13.5, color: 'var(--danger-text, #B91C1C)',
+              fontSize: 13, color: 'var(--danger-text, #B91C1C)',
               fontWeight: 500, lineHeight: 1.5,
             }}>
               ⚠️ Could not load invoice details. Close and click the invoice again.
@@ -465,7 +465,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                       }}>
                         <div style={{
                           background: 'var(--bg-card)',
-                          borderRadius: 10,
+                          borderRadius: 'var(--r-md)',
                           border: '1px solid var(--border)',
                           overflow: 'hidden',
                         }}>
@@ -483,7 +483,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                           <div style={{ padding: '10px 12px' }}>
                             <div style={{
                               display: 'flex', justifyContent: 'space-between',
-                              fontSize: 12.5, color: 'var(--text-secondary)',
+                              fontSize: 13, color: 'var(--text-secondary)',
                               marginBottom: 6,
                             }}>
                               <span>Invoice Total</span>
@@ -493,7 +493,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                             </div>
                             <div style={{
                               display: 'flex', justifyContent: 'space-between',
-                              fontSize: 12.5, color: 'var(--text-secondary)',
+                              fontSize: 13, color: 'var(--text-secondary)',
                               marginBottom: 6,
                             }}>
                               <span>Already Paid</span>
@@ -503,7 +503,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                             </div>
                             <div style={{
                               display: 'flex', justifyContent: 'space-between',
-                              fontSize: 12.5, color: 'var(--text-secondary)',
+                              fontSize: 13, color: 'var(--text-secondary)',
                               marginBottom: 12,
                               paddingBottom: 12,
                               borderBottom: '1px solid var(--border)',
@@ -731,7 +731,7 @@ function InfoRow({ icon, label, value, isLast = false }) {
         </span>
       )}
       <span style={{
-        fontSize: 12.5, color: 'var(--text-muted)',
+        fontSize: 13, color: 'var(--text-muted)',
         minWidth: 120, fontWeight: 500, flexShrink: 0,
       }}>
         {label}

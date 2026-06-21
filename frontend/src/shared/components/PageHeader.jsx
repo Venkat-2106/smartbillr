@@ -47,7 +47,7 @@ export default function PageHeader({
             border: 'none',
             cursor: 'pointer',
             color: backHovered ? 'var(--accent-600)' : 'var(--text-muted)',
-            fontSize: 12.5,
+            fontSize: 13,
             fontWeight: 500,
             fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
             padding: '0 0 10px',

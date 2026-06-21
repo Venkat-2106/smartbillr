@@ -89,13 +89,13 @@ const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
                 position: 'absolute', top: 'calc(100% + 3px)', left: 0, right: 0,
                 background: 'var(--bg-card)',
                 border: '1.5px solid var(--border)',
-                borderRadius: 10,
+                borderRadius: 'var(--r-md)',
                 boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
                 zIndex: 300,
                 maxHeight: 220, overflowY: 'auto',
               }}>
                 {searchResults.length === 0 ? (
-                  <div style={{ padding: '10px 14px', fontSize: 12.5, color: 'var(--text-muted)' }}>
+                  <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
                     No products found for "{searchText}"
                   </div>
                 ) : (
@@ -113,7 +113,7 @@ const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
                       }}
                     >
                       <div>
-                        <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                           {p.prod_name}
                         </div>
                         {p.barcode && (
@@ -139,8 +139,8 @@ const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
               <div style={{
                 position: 'absolute', top: 'calc(100% + 3px)', left: 0, right: 0,
                 background: 'var(--bg-card)', border: '1.5px solid var(--border)',
-                borderRadius: 10, padding: '10px 14px',
-                fontSize: 12.5, color: 'var(--text-muted)', zIndex: 300,
+                borderRadius: 'var(--r-md)', padding: '10px 14px',
+                fontSize: 13, color: 'var(--text-muted)', zIndex: 300,
               }}>
                 Type at least 2 characters to search
               </div>

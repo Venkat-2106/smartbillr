@@ -203,7 +203,7 @@ export default function CreateSalePage() {
                   gap: 6, marginTop: 10, width: '100%',
                   background: 'none',
                   border: `1.5px dashed ${addItemHovered ? 'var(--accent-400)' : 'var(--border)'}`,
-                  borderRadius: 10, padding: '8px 0',
+                  borderRadius: 'var(--r-md)', padding: '8px 0',
                   cursor: 'pointer', color: addItemHovered ? 'var(--accent-600)' : 'var(--text-muted)',
                   fontSize: 13, fontFamily: 'inherit',
                   transition: 'border-color 0.15s, color 0.15s',
@@ -330,7 +330,7 @@ export default function CreateSalePage() {
 
               <label style={{
                 display: 'flex', alignItems: 'center', gap: 8,
-                fontSize: 12.5, color: 'var(--text-secondary)',
+                fontSize: 13, color: 'var(--text-secondary)',
                 cursor: 'pointer', userSelect: 'none',
               }}>
                 <input

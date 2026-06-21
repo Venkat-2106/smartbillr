@@ -218,7 +218,7 @@ function InfoRow({ label, value, isLast }) {
       padding: '10px 14px',
       borderBottom: isLast ? 'none' : '1px solid var(--border)',
     }}>
-      <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>{label}</span>
+      <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>{label}</span>
       <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600, textAlign: 'right' }}>{value}</span>
     </div>
   )
@@ -261,7 +261,7 @@ function AuditGrid({ createdAt, createdBy, updatedAt, updatedBy }) {
         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
           Created On
         </div>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
           {createdAt ? formatDate(createdAt) : '—'}
         </div>
       </div>
@@ -270,7 +270,7 @@ function AuditGrid({ createdAt, createdBy, updatedAt, updatedBy }) {
         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
           Created By
         </div>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
           {createdBy || '—'}
         </div>
       </div>
@@ -279,7 +279,7 @@ function AuditGrid({ createdAt, createdBy, updatedAt, updatedBy }) {
         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
           Last Updated On
         </div>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
           {updatedAt ? formatDate(updatedAt) : '—'}
         </div>
       </div>
@@ -288,7 +288,7 @@ function AuditGrid({ createdAt, createdBy, updatedAt, updatedBy }) {
         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
           Last Updated By
         </div>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
           {updatedBy || '—'}
         </div>
       </div>
@@ -403,7 +403,7 @@ export default function ProductDetailDrawer({ product, onClose }) {
                 background: printHovered ? 'var(--bg-hover)' : 'var(--bg-page)',
                 border: '1px solid var(--border)',
                 cursor: 'pointer', padding: '6px 12px', borderRadius: 8,
-                color: 'var(--text-secondary)', fontSize: 12.5, fontWeight: 600,
+                color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600,
                 fontFamily: 'inherit', transition: 'background 0.12s',
               }}
             >
@@ -435,7 +435,7 @@ export default function ProductDetailDrawer({ product, onClose }) {
               padding: '18px 16px',
               background: 'var(--danger-bg, #FEF2F2)',
               border: '1px solid var(--danger-border, #FCA5A5)',
-              borderRadius: 12, fontSize: 13.5,
+              borderRadius: 12, fontSize: 13,
               color: 'var(--danger-text, #B91C1C)', fontWeight: 500,
             }}>
               ⚠️ Could not load product details. Close and try again.
@@ -579,8 +579,8 @@ export default function ProductDetailDrawer({ product, onClose }) {
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                           marginTop: 4,
                         }}>
-                          <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>{ch.label}</span>
-                          <span style={{ fontSize: 12.5, color: 'var(--text-primary)', fontWeight: 600 }}>
+                          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{ch.label}</span>
+                          <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>
                             {formatCurrency(ch.old_value)} → {formatCurrency(ch.new_value)}
                             <span style={{
                               marginLeft: 6, fontSize: 11.5,

@@ -111,7 +111,7 @@ export default function SuppliersPage() {
       label: 'Supplier Name',
       sortable: true,
       render: (row) => (
-        <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13.5 }}>
+        <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
           {row.supp_name || '—'}
         </span>
       ),
@@ -166,7 +166,7 @@ export default function SuppliersPage() {
       sortable: false,
       width: 150,
       render: (row) => (
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
           {row.supp_tax_number || '—'}
         </span>
       ),
@@ -177,7 +177,7 @@ export default function SuppliersPage() {
       sortable: true,
       width: 145,
       render: (row) => (
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
           {row.updated_at ? formatDate(row.updated_at) : '—'}
         </span>
       ),
@@ -190,7 +190,7 @@ export default function SuppliersPage() {
       render: (row) => (
         row.last_updated_by
           ? (
-            <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: 500 }}>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
               {row.last_updated_by}
             </span>
           )
@@ -266,7 +266,7 @@ export default function SuppliersPage() {
               placeholder="Search name, phone, email, country..."
               width="290px"
             />
-            <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>
               {totalItems} record{totalItems !== 1 ? 's' : ''}
               {activeFiltersCount > 0 && ' (filtered)'}
             </span>
@@ -497,7 +497,7 @@ function fieldInput(hasError) {
   return {
     width: '100%', padding: '10px 14px',
     border: `1.5px solid ${hasError ? 'var(--danger-text)' : 'var(--border)'}`,
-    borderRadius: 10, fontSize: 14,
+    borderRadius: 'var(--r-md)', fontSize: 14,
     background: 'var(--bg-page)',
     color: 'var(--text-primary)',
     outline: 'none', boxSizing: 'border-box',

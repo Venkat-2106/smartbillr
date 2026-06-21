@@ -98,7 +98,7 @@ export default function LandingNav() {
             style={{
               width: 34,
               height: 34,
-              borderRadius: 10,
+              borderRadius: 'var(--r-md)',
               background: 'linear-gradient(135deg, var(--accent-600, #4F46E5), var(--accent-500, #6366F1))',
               display: 'flex',
               alignItems: 'center',
@@ -142,7 +142,7 @@ export default function LandingNav() {
             onMouseLeave={() => setLoginHovered(false)}
             style={{
               padding: '8px 18px',
-              borderRadius: 10,
+              borderRadius: 'var(--r-md)',
               border: '1px solid rgba(255,255,255,0.12)',
               background: loginHovered ? 'rgba(255,255,255,0.08)' : 'transparent',
               color: '#E2E8F0',
@@ -161,7 +161,7 @@ export default function LandingNav() {
             onMouseLeave={() => setSignupHovered(false)}
             style={{
               padding: '8px 18px',
-              borderRadius: 10,
+              borderRadius: 'var(--r-md)',
               border: 'none',
               background: signupHovered
                 ? 'linear-gradient(135deg, var(--accent-700, #4338CA), var(--accent-600, #4F46E5))'
@@ -233,7 +233,7 @@ export default function LandingNav() {
               style={{
                 flex: 1,
                 padding: '10px 0',
-                borderRadius: 10,
+                borderRadius: 'var(--r-md)',
                 border: '1px solid rgba(255,255,255,0.12)',
                 background: 'transparent',
                 color: '#E2E8F0',
@@ -250,7 +250,7 @@ export default function LandingNav() {
               style={{
                 flex: 1,
                 padding: '10px 0',
-                borderRadius: 10,
+                borderRadius: 'var(--r-md)',
                 border: 'none',
                 background: 'linear-gradient(135deg, var(--accent-600, #4F46E5), var(--accent-500, #6366F1))',
                 color: '#fff',

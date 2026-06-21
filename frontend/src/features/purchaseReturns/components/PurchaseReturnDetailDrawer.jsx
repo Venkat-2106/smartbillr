@@ -192,7 +192,7 @@ export default function PurchaseReturnDetailDrawer({ returnId, onClose, onStatus
                 cursor: isLoading || isError ? 'not-allowed' : 'pointer',
                 padding: '6px 12px', borderRadius: 8,
                 color: isLoading || isError ? 'var(--text-muted)' : 'var(--text-secondary)',
-                fontSize: 12.5, fontWeight: 600,
+                fontSize: 13, fontWeight: 600,
                 fontFamily: 'inherit', opacity: isLoading || isError ? 0.5 : 1,
                 transition: 'background 0.12s',
               }}
@@ -224,7 +224,7 @@ export default function PurchaseReturnDetailDrawer({ returnId, onClose, onStatus
               padding: '18px 16px',
               background: 'var(--danger-bg, #FEF2F2)',
               border: '1px solid var(--danger-border, #FCA5A5)',
-              borderRadius: 12, fontSize: 13.5,
+              borderRadius: 12, fontSize: 13,
               color: 'var(--danger-text, #B91C1C)', fontWeight: 500,
             }}>
               Could not load return details. Close and try again.

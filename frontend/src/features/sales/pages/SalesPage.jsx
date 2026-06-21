@@ -3,19 +3,25 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useSales } from '../hooks/useSales';
 import SaleDetailDrawer from '../components/SaleDetailDrawer';
 import {
-  Button, Table, Badge, SearchBar,
-  Pagination, PageHeader, DateRangeFilter, ExportButton, SkeletonTable,
-  ConfirmDialog, EmptyState,
+  Table, Button, Badge, SearchBar,
+  Pagination, DateRangeFilter, ExportButton,
+  ConfirmDialog, EmptyState, BentoCard, MetricCard,
 } from '../../../shared/components';
 import { selectStyle }       from '../../../shared/components/FormField';
 import { SALES_CSV_COLUMNS } from '../../../shared/utils/csvExport';
 import { formatCurrency }    from '../../../shared/utils/formatCurrency';
 import { formatDate }        from '../../../shared/utils/formatDate';
 
-// Backend sends: "pending" | "partial" | "paid"
-// "pending" = not yet paid (what the UI calls "Unpaid")
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' };
 const STATUS_LABEL   = { paid: 'Paid',    partial: 'Partial', pending: 'Unpaid' };
+
+function SvgIcon({ path, size = 18 }) {
+  return (
+    <svg width={size} height={size} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={path} />
+    </svg>
+  )
+}
 
 export default function SalesPage() {
   const navigate = useNavigate();
@@ -36,10 +42,9 @@ export default function SalesPage() {
     isExporting, handleExport,
   } = useSales();
 
-  // ── Delete dialog state ──────────────────────────────────────────────────
-  const [showDelete,       setShowDelete]       = useState(false);
-  const [deletingSale,     setDeletingSale]     = useState(null);
-  const [restoreStock,     setRestoreStock]     = useState(false);
+  const [showDelete,   setShowDelete]   = useState(false);
+  const [deletingSale, setDeletingSale] = useState(null);
+  const [restoreStock, setRestoreStock] = useState(false);
 
   function handleDeleteClick(sale) {
     setDeletingSale(sale);
@@ -57,16 +62,6 @@ export default function SalesPage() {
     deleteSale(deletingSale.sales_id, restoreStock, { onSuccess: handleCloseDelete });
   }
 
-  // ── Auto-open drawer after invoice creation ──────────────────────────────
-  // CreateSalePage navigates here with:
-  //   state = { openInvoice: sales_id, autoPrint: true, invoiceNo: "INV-001" }
-  //
-  // We open the drawer immediately with the minimal data we have (just the ID
-  // and the _autoPrint flag). SaleDetailDrawer fetches the full detail via
-  // useQuery and then auto-triggers window.print() once loaded.
-  //
-  // WHY window.history.replaceState: clears the navigation state so that a
-  // page refresh doesn't re-open the drawer and trigger print again.
   useEffect(() => {
     if (location.state?.openInvoice) {
       setDrawerSale({
@@ -74,18 +69,11 @@ export default function SalesPage() {
         invoice_no: location.state.invoiceNo || '',
         _autoPrint: location.state.autoPrint === true,
       });
-      // Clear state immediately so refresh doesn't re-trigger
       window.history.replaceState({}, '');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once on mount only — location.state is stable at mount time
+  }, []);
 
-  // ── Column definitions ───────────────────────────────────────────────────
-  // PERF: columns only reference `row` data and module-level constants
-  // (STATUS_VARIANT, STATUS_LABEL, formatCurrency, formatDate). There are no
-  // component-scope dependencies, so the array is stable for the lifetime of
-  // the component. setDrawerSale is used on the Table's onRowClick prop, not
-  // inside these column definitions, so it is not a dependency here.
   const columns = useMemo(() => [
     {
       key: 'invoice_no',
@@ -93,11 +81,8 @@ export default function SalesPage() {
       sortable: true,
       width: 130,
       render: (row) => (
-        <span style={{
-          fontWeight: 700, color: 'var(--accent-600)',
-          fontFamily: 'monospace', fontSize: 13,
-        }}>
-          {row.invoice_no || '—'}
+        <span style={{ fontWeight: 700, color: 'var(--accent-600)', fontFamily: "'JetBrains Mono', monospace", fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>
+          {row.invoice_no || '-'}
         </span>
       ),
     },
@@ -106,7 +91,7 @@ export default function SalesPage() {
       label: 'Customer',
       sortable: true,
       render: (row) => (
-        <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13.5 }}>
+        <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
           {row.customer_name || 'Walk-in'}
         </span>
       ),
@@ -128,7 +113,7 @@ export default function SalesPage() {
       sortable: false,
       width: 100,
       render: (row) => (
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
           {formatCurrency(row.tax_total || 0)}
         </span>
       ),
@@ -141,7 +126,7 @@ export default function SalesPage() {
       render: (row) => (
         <Badge
           variant={STATUS_VARIANT[row.sales_payment_status] || 'default'}
-          label={STATUS_LABEL[row.sales_payment_status]    || row.sales_payment_status || '—'}
+          label={STATUS_LABEL[row.sales_payment_status] || row.sales_payment_status || '-'}
           dot
         />
       ),
@@ -152,8 +137,8 @@ export default function SalesPage() {
       sortable: false,
       width: 120,
       render: (row) => (
-        <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
-          {(row.sales_payment_method || '—').replace('_', ' ').toUpperCase()}
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+          {(row.sales_payment_method || '-').replace('_', ' ').toUpperCase()}
         </span>
       ),
     },
@@ -163,8 +148,8 @@ export default function SalesPage() {
       sortable: true,
       width: 120,
       render: (row) => (
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-          {row.sales_created_at ? formatDate(row.sales_created_at) : '—'}
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+          {row.sales_created_at ? formatDate(row.sales_created_at) : '-'}
         </span>
       ),
     },
@@ -178,136 +163,190 @@ export default function SalesPage() {
           onClick={(e) => { e.stopPropagation(); handleDeleteClick(row); }}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--danger)', fontSize: 16, padding: '4px 8px',
-            fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
+            color: 'var(--danger)', padding: '4px 8px',
           }}
           title="Delete invoice"
         >
-          🗑️
+          <SvgIcon path="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" size={15} />
         </button>
       ),
     },
-  ], []); // no component-scope deps — STATUS_VARIANT/STATUS_LABEL are module-level constants
+  ], []);
 
   const activeCount =
     (activeSearch ? 1 : 0) + (activeDateFilter ? 1 : 0) + (activeStatusFilter ? 1 : 0);
 
   return (
-    <>
-
-      <PageHeader
-        title="Sales"
-        subtitle="View and manage all sales invoices"
-        back
-        onBack={() => navigate('/dashboard')}
-        action={
-          <div className="action-group" style={{ display: 'flex', gap: 10 }}>
-            <ExportButton
-              onFetch={handleExport}
-              filename="sales"
-              columns={SALES_CSV_COLUMNS}
-            />
-            <Button variant="primary" onClick={() => navigate('/sales/new')}>
-              + New Invoice
-            </Button>
+    <div>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: 24, flexWrap: 'wrap', gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            onClick={() => navigate('/dashboard')}
+            style={{
+              background: 'var(--bg-card)', border: '1.5px solid var(--border)',
+              borderRadius: 'var(--r-md)', cursor: 'pointer', padding: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--text-secondary)', lineHeight: 1,
+            }}
+            aria-label="Back to dashboard"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+          <div>
+            <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
+              Sales
+            </h1>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
+              View and manage all sales invoices
+            </p>
           </div>
-        }
-      />
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <Button variant="primary" onClick={() => navigate('/sales/new')} data-shortcut="new">
+            + New Invoice
+          </Button>
+        </div>
+      </div>
 
-      {/* Toolbar */}
+      <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>
+        <MetricCard
+          icon={<SvgIcon path="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />}
+          label="Today's Sales"
+          value={formatCurrency(0)}
+          colSpan={3}
+          loading={isLoading}
+        />
+        <MetricCard
+          icon={<SvgIcon path="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />}
+          label="Weekly Sales"
+          value={formatCurrency(0)}
+          colSpan={3}
+          loading={isLoading}
+        />
+        <MetricCard
+          icon={<SvgIcon path="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />}
+          label="Monthly Sales"
+          value={formatCurrency(0)}
+          colSpan={3}
+          loading={isLoading}
+        />
+        <MetricCard
+          icon={<SvgIcon path="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />}
+          label="Outstanding Payments"
+          value={formatCurrency(0)}
+          colSpan={3}
+          loading={isLoading}
+        />
+      </div>
+
       <div style={{
         display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 20,
-        gap: 12, flexWrap: 'wrap',
+        justifyContent: 'space-between', flexWrap: 'wrap',
+        gap: 12, marginBottom: 24,
       }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <SearchBar
-              value={search}
-              onChange={setSearch}
-              onSearch={setSearch}
-              placeholder="Search invoice, customer..."
-              width="240px"
-            />
-            {/* Payment status filter */}
-            <select
-              className="sb-select"
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-              style={{ ...selectStyle, width: 'auto', padding: '9px 32px 9px 14px', fontSize: 13 }}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            onSearch={setSearch}
+            placeholder="Search invoice, customer..."
+            width="240px"
+          />
+          <select
+            className="sb-select"
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            style={{ ...selectStyle, width: 'auto', padding: '9px 32px 9px 14px', fontSize: 13 }}
+          >
+            <option value="">All Statuses</option>
+            <option value="paid">Paid</option>
+            <option value="partial">Partial</option>
+            <option value="pending">Unpaid</option>
+          </select>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>
+            {totalItems} invoice{totalItems !== 1 ? 's' : ''}
+            {activeCount > 0 && ' (filtered)'}
+          </span>
+          {anyFilterActive && (
+            <button
+              onClick={() => { setSearch(''); setStatusFilter(''); handleDateChange('from', ''); handleDateChange('to', '') }}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 12, color: 'var(--accent-600)', fontWeight: 600,
+                padding: '2px 6px', fontFamily: 'inherit',
+              }}
             >
-              <option value="">All Statuses</option>
-              <option value="paid">Paid</option>
-              <option value="partial">Partial</option>
-              <option value="pending">Unpaid</option>
-            </select>
-            <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
-              {totalItems} invoice{totalItems !== 1 ? 's' : ''}
-              {activeCount > 0 && ' (filtered)'}
-            </span>
-            {anyFilterActive && (
-              <button
-                onClick={() => { setSearch(''); setStatusFilter(''); handleDateChange('from', ''); handleDateChange('to', '') }}
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  fontSize: 12, color: 'var(--accent-600)', fontWeight: 600,
-                  padding: '2px 6px',
-                  fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
-                }}
-              >
-                ✕ Clear filters
-              </button>
-            )}
-          </div>
+              Clear filters
+            </button>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
           <DateRangeFilter
             label="Invoice Date"
             from={dateFrom}
             to={dateTo}
             onChange={handleDateChange}
           />
+          <ExportButton onFetch={handleExport} filename="sales" columns={SALES_CSV_COLUMNS} />
+        </div>
       </div>
 
       {isError && (
         <div style={{
           background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-          borderRadius: 12, padding: '13px 18px', color: 'var(--danger-text)',
-          fontSize: 13.5, marginBottom: 20, fontWeight: 500,
+          borderRadius: 8, padding: '12px 16px', color: 'var(--danger-text)',
+          fontSize: 13, marginBottom: 24, fontWeight: 500,
         }}>
-          ⚠️ Could not load sales. Check that the backend is running and refresh.
+          Could not load sales. Check that the backend is running and refresh.
         </div>
       )}
 
-      <div style={{ overflowX: 'auto', width: '100%' }}>
-        {isLoading && !hasData
-          ? <SkeletonTable rows={10} columns={7} />
-          : !isLoading && sales.length === 0
-            ? <EmptyState
-                icon={anyFilterActive ? '🔍' : '📄'}
-                title={anyFilterActive ? 'No results matching your filters' : 'Nothing here yet'}
-                description={anyFilterActive ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'No sales yet. Click "+ New Invoice" to create your first one.'}
-                action={anyFilterActive ? (
-                  <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setStatusFilter(''); handleDateChange('from', ''); handleDateChange('to', '') }}>
-                    Clear filters
-                  </Button>
-                ) : undefined}
-              />
-            : <Table
-                columns={columns}
-                rows={sales}
-                loading={false}
-                rowKey="sales_id"
-                sortKey={sortKey}
-                sortDir={sortDir}
-                onSort={handleSort}
-                onRowClick={(row) => setDrawerSale(row)}
-              />
-        }
-      </div>
+      {!isLoading && sales.length === 0 ? (
+        <BentoCard>
+          <EmptyState
+            icon={
+              <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
+                <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            }
+            title={anyFilterActive ? 'No matching results' : 'No sales yet'}
+            description={anyFilterActive
+              ? 'Try adjusting your search or filters.'
+              : 'Create your first sale to start tracking revenue.'}
+            action={anyFilterActive ? (
+              <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setStatusFilter(''); handleDateChange('from', ''); handleDateChange('to', '') }}>
+                Clear filters
+              </Button>
+            ) : (
+              <Button variant="primary" size="sm" onClick={() => navigate('/sales/new')}>
+                New Sale
+              </Button>
+            )}
+          />
+        </BentoCard>
+      ) : (
+        <BentoCard padding={false} className="premium-table-wrap">
+          <div className="premium-table" style={{ overflowX: 'auto', width: '100%' }}>
+            <Table
+              columns={columns}
+              rows={sales}
+              rowKey="sales_id"
+              loading={isLoading}
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleSort}
+              onRowClick={(row) => setDrawerSale(row)}
+            />
+          </div>
+        </BentoCard>
+      )}
 
-      {/* Pagination — Pagination's own `if (total_pages <= 1) return null`   */}
-      {/* guard handles the single-page case. No outer conditional needed.   */}
-      {/* This matches CustomersPage, SuppliersPage, and the documented rule. */}
-      <div style={{ marginTop: 16 }}>
+      <div style={{ marginTop: 24 }}>
         <Pagination
           pagination={{
             page,
@@ -320,7 +359,6 @@ export default function SalesPage() {
         />
       </div>
 
-      {/* Detail drawer */}
       {drawerSale && (
         <SaleDetailDrawer
           sale={drawerSale}
@@ -329,36 +367,20 @@ export default function SalesPage() {
         />
       )}
 
-      {/* Delete confirmation */}
       <ConfirmDialog
         open={showDelete}
         onClose={handleCloseDelete}
         onConfirm={onConfirmDelete}
         title={`Delete "${deletingSale?.invoice_no}"?`}
-        message={
-          'This action cannot be undone. The invoice will be soft-deleted ' +
-          'and will no longer appear in reports.'
-        }
+        message="This action cannot be undone. The invoice will be soft-deleted and will no longer appear in reports."
         confirmText={isDeleting ? 'Deleting...' : 'Yes, Delete Invoice'}
         loading={isDeleting}
       >
-        <label
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            fontSize: 13, color: 'var(--text-secondary)',
-            cursor: 'pointer', userSelect: 'none',
-            padding: '4px 0',
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={restoreStock}
-            onChange={(e) => setRestoreStock(e.target.checked)}
-            style={{ accentColor: 'var(--accent-600)', cursor: 'pointer' }}
-          />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none', padding: '4px 0' }}>
+          <input type="checkbox" checked={restoreStock} onChange={(e) => setRestoreStock(e.target.checked)} style={{ accentColor: 'var(--accent-600)', cursor: 'pointer' }} />
           Restore product stock
         </label>
       </ConfirmDialog>
-    </>
+    </div>
   );
 }

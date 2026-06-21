@@ -143,7 +143,7 @@ export default function CommandPalette({ open, onClose }) {
             aria-controls="cmd-results-list"
             style={{
               flex: 1, border: 'none', outline: 'none',
-              fontSize: 14.5, color: 'var(--text-primary)',
+              fontSize: 14, color: 'var(--text-primary)',
               background: 'transparent', fontFamily: 'inherit',
             }}
           />
@@ -187,7 +187,7 @@ export default function CommandPalette({ open, onClose }) {
                     </svg>
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: isActive ? 650 : 500, color: 'var(--text-primary)' }}>{page.label}</div>
+                    <div style={{ fontSize: 13, fontWeight: isActive ? 650 : 500, color: 'var(--text-primary)' }}>{page.label}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{page.category}</div>
                   </div>
                   <Kbd>{page.path}</Kbd>

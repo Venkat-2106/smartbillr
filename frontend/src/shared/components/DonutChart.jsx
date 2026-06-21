@@ -35,7 +35,7 @@ export default function DonutChart({ data = [], size = 140, loading, error, cent
   }, [segments])
 
   if (error) {
-    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--danger-text)', fontSize: 13.5 }}>Failed to load.</div>
+    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--danger-text)', fontSize: 13 }}>Failed to load.</div>
   }
 
   if (loading) {
@@ -62,7 +62,7 @@ export default function DonutChart({ data = [], size = 140, loading, error, cent
         {arcs.map(arc => (
           <div key={arc.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 10, height: 10, borderRadius: '50%', background: arc.color, flexShrink: 0 }} />
-            <span style={{ fontSize: 12.5, color: 'var(--text-primary)', fontWeight: 600 }}>{arc.label}</span>
+            <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>{arc.label}</span>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{arc.pct}%</span>
           </div>
         ))}

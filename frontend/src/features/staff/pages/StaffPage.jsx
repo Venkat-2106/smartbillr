@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom'
 
 import {
   Button, Input, Modal, Table, Badge, SearchBar,
-  Pagination, PageHeader, FormField, ExportButton,
+  Pagination, BentoCard, MetricCard, FormField, ExportButton,
   ConfirmDialog, EmptyState,
 } from '../../../shared/components'
 import { selectStyle } from '../../../shared/components/FormField'
@@ -42,7 +42,7 @@ function buildColumns(canManage, onEdit, onDeactivate) {
       label: 'Name',
       render: (row) => (
         <div>
-          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13.5 }}>
+          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
             {row.full_name}
           </div>
           <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
@@ -80,7 +80,7 @@ function buildColumns(canManage, onEdit, onDeactivate) {
       label: 'Joined',
       width: 110,
       render: (row) => (
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
           {row.created_at ? formatDate(row.created_at) : '—'}
         </span>
       ),
@@ -173,6 +173,11 @@ export default function StaffPage() {
     deactivateStaff(deactivatingStaff.id, { onSuccess: () => setShowDeactivate(false) })
   }
 
+  const activeCount = useMemo(
+    () => staffList ? staffList.filter(s => s.is_active).length : 0,
+    [staffList]
+  )
+
   const columns = useMemo(
     () => buildColumns(canManage, handleOpenEdit, handleDeactivateClick),
     [canManage]
@@ -180,37 +185,45 @@ export default function StaffPage() {
 
   return (
     <>
-      <PageHeader
-        title="Staff"
-        subtitle="Manage team members, roles, and access permissions"
-        back
-        onBack={() => navigate('/dashboard')}
-        action={
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <ExportButton
-              onFetch={handleExport}
-              filename="staff"
-              columns={[
-                { key: 'full_name', label: 'Name' },
-                { key: 'email', label: 'Email' },
-                { key: 'role', label: 'Role' },
-                { key: 'is_active', label: 'Active', format: (v) => v ? 'Yes' : 'No' },
-                { key: 'created_at', label: 'Joined', format: (v) => formatDateCSV(v) },
-              ]}
-            />
-            {canManage && (
-              <Button
-                variant="primary"
-                leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
-                onClick={handleOpenAdd}
-                data-shortcut="new"
-              >
-                Add Staff
-              </Button>
-            )}
-          </div>
-        }
-      />
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
+          Staff
+        </h1>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '6px 0 0', fontWeight: 400 }}>
+          Manage team members, roles, and access permissions
+        </p>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 16, marginBottom: 24 }}>
+        <MetricCard
+          colSpan={6}
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 00-3-3.87" />
+              <path d="M16 3.13a4 4 0 010 7.75" />
+            </svg>
+          }
+          label="Total Staff"
+          value={String(totalItems)}
+          subtitle="All team members"
+          loading={isLoading}
+        />
+        <MetricCard
+          colSpan={6}
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
+            </svg>
+          }
+          label="Active Staff"
+          value={String(isLoading ? '—' : activeCount)}
+          subtitle={isLoading ? '' : `${((activeCount / totalItems) * 100).toFixed(0)}% of total`}
+          loading={isLoading}
+        />
+      </div>
 
       <div style={{
         display: 'flex',
@@ -228,17 +241,45 @@ export default function StaffPage() {
             placeholder="Search by name or email\u2026"
             width="260px"
           />
-          <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>
             {totalItems} member{totalItems !== 1 ? 's' : ''}
           </span>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <ExportButton
+            onFetch={handleExport}
+            filename="staff"
+            columns={[
+              { key: 'full_name', label: 'Name' },
+              { key: 'email', label: 'Email' },
+              { key: 'role', label: 'Role' },
+              { key: 'is_active', label: 'Active', format: (v) => v ? 'Yes' : 'No' },
+              { key: 'created_at', label: 'Joined', format: (v) => formatDateCSV(v) },
+            ]}
+          />
+          {canManage && (
+            <Button
+              variant="primary"
+              leftIcon={
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              }
+              onClick={handleOpenAdd}
+              data-shortcut="new"
+            >
+              Add Staff
+            </Button>
+          )}
         </div>
       </div>
 
       {isError && (
         <div style={{
           background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-          borderRadius: 12, padding: '13px 18px', color: 'var(--danger-text)',
-          fontSize: 13.5, marginBottom: 24, fontWeight: 500,
+          borderRadius: 12, padding: '12px 16px', color: 'var(--danger-text)',
+          fontSize: 13, marginBottom: 24, fontWeight: 500,
         }}>
           Could not load staff. Check that the backend is running and refresh.
         </div>
@@ -246,7 +287,14 @@ export default function StaffPage() {
 
       {!isLoading && staffList.length === 0 ? (
         <EmptyState
-          icon="👤"
+          icon={
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 00-3-3.87" />
+              <path d="M16 3.13a4 4 0 010 7.75" />
+            </svg>
+          }
           title="Nothing here yet"
           description="Add team members to collaborate."
           action={
@@ -256,14 +304,16 @@ export default function StaffPage() {
           }
         />
       ) : (
-      <div style={{ overflowX: 'auto', width: '100%' }}>
-        <Table
-          columns={columns}
-          rows={staffList}
-          rowKey="id"
-          loading={isLoading}
-        />
-      </div>
+        <BentoCard padding={false} className="premium-table-wrap">
+          <div className="premium-table" style={{ overflowX: 'auto', width: '100%' }}>
+            <Table
+              columns={columns}
+              rows={staffList}
+              rowKey="id"
+              loading={isLoading}
+            />
+          </div>
+        </BentoCard>
       )}
 
       <Pagination
@@ -303,7 +353,7 @@ export default function StaffPage() {
           </div>
 
           <FormField label="Role" error={addForm.formState.errors.role?.message} required style={{ marginBottom: 8 }}>
-            <select {...addForm.register('role')} style={selectStyle}>
+            <select {...addForm.register('role')} style={selectStyle} aria-label="Role">
               <option value="">— Select Role —</option>
               {ROLES.map((r) => (
                 <option key={r.value} value={r.value}>{r.label}</option>
@@ -340,7 +390,7 @@ export default function StaffPage() {
             </FormField>
 
             <FormField label="Role" error={editForm.formState.errors.role?.message} required style={{ marginBottom: 8 }}>
-              <select {...editForm.register('role')} style={selectStyle}>
+              <select {...editForm.register('role')} style={selectStyle} aria-label="Role">
                 <option value="">— Select Role —</option>
                 {ROLES.map((r) => (
                   <option key={r.value} value={r.value}>{r.label}</option>

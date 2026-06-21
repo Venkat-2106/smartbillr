@@ -38,9 +38,9 @@ export default function SelectField({
   const [focused, setFocused] = useState(false);
 
   const sizes = {
-    sm: { padding: '6px 32px 6px 10px', fontSize: 12.5, height: 32 },
-    md: { padding: '9px 36px 9px 12px', fontSize: 13.5, height: 38 },
-    lg: { padding: '11px 40px 11px 14px', fontSize: 14.5, height: 44 },
+    sm: { padding: '6px 32px 6px 10px', fontSize: 13, height: 32 },
+    md: { padding: '9px 36px 9px 12px', fontSize: 13, height: 38 },
+    lg: { padding: '11px 40px 11px 14px', fontSize: 14, height: 44 },
   };
 
   const s = sizes[size] || sizes.md;

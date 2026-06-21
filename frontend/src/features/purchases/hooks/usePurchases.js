@@ -13,6 +13,7 @@ import {
   fetchPurchase,
   createPurchase,
   updatePurchaseStatus,
+  deletePurchase as deletePurchaseApi,
   fetchSuppliersLean,
 } from '../api/purchasesApi'
 
@@ -130,6 +131,21 @@ export function usePurchases() {
     },
   })
 
+  // ── Delete mutation ─────────────────────────────────────────────────────────
+  const deleteMutation = useMutation({
+    mutationFn: ({ purId, reduceStock }) => deletePurchaseApi(purId, reduceStock),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['purchases'] })
+      queryClient.invalidateQueries({ queryKey: ['purchase', variables.purId] })
+      queryClient.invalidateQueries({ queryKey: ['products-search-lean'] })
+      toast.success('Purchase deleted successfully')
+      if (variables.callbacks?.onSuccess) variables.callbacks.onSuccess()
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Failed to delete purchase')
+    },
+  })
+
   // ── Create purchase mutation ───────────────────────────────────────────────
   const createMutation = useMutation({
     mutationFn: createPurchase,
@@ -160,6 +176,9 @@ export function usePurchases() {
 
     updateStatus:    (purId, status, callbacks) => statusMutation.mutate({ purId, status }, callbacks),
     isUpdatingStatus: statusMutation.isPending,
+
+    deletePurchase:  (purId, reduceStock, callbacks) => deleteMutation.mutate({ purId, reduceStock, callbacks }),
+    isDeleting:      deleteMutation.isPending,
 
     createPurchase:  (body, callbacks) => createMutation.mutate(body, callbacks),
     isCreating:      createMutation.isPending,

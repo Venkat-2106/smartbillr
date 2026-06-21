@@ -107,8 +107,8 @@ export default function Badge({
   const c = VARIANTS[variant] || VARIANTS.neutral
 
   const sizeStyle = size === 'sm'
-    ? { fontSize: 10.5, padding: '2px 8px',  gap: 4 }
-    : { fontSize: 11.5, padding: '3px 10px', gap: 5 }
+    ? { fontSize: 11, padding: '2px 8px',  gap: 4 }
+    : { fontSize: 12, padding: '3px 10px', gap: 5 }
 
   return (
     <span

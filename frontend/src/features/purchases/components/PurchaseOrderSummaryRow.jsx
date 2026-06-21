@@ -14,7 +14,7 @@
 export default function PurchaseOrderSummaryRow({ label, value, bold, muted }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ fontSize: 13.5, color: muted ? 'var(--text-muted)' : 'var(--text-secondary)' }}>
+      <span style={{ fontSize: 13, color: muted ? 'var(--text-muted)' : 'var(--text-secondary)' }}>
         {label}
       </span>
       <span style={{

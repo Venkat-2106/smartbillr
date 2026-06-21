@@ -156,7 +156,7 @@ export default function CategoriesPage() {
       label: 'Category Name',
       sortable: true,
       render: (row) => (
-        <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13.5 }}>
+        <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
           {row.category_name}
         </span>
       ),
@@ -180,7 +180,7 @@ export default function CategoriesPage() {
       sortable: true,
       width: 140,
       render: (row) => (
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
           {row.updated_at ? formatDate(row.updated_at) : '—'}
         </span>
       ),
@@ -193,7 +193,7 @@ export default function CategoriesPage() {
       render: (row) => (
         row.last_updated_by
           ? (
-            <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: 500 }}>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
               {row.last_updated_by}
             </span>
           )
@@ -277,7 +277,7 @@ export default function CategoriesPage() {
           />
           <DateRangeFilter label="Last Updated" from={dateFrom} to={dateTo} onChange={handleDateChange} />
         </div>
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>
           {totalItems} record{totalItems !== 1 ? 's' : ''}
           {activeFilters > 0 && ' (filtered)'}
         </span>
@@ -299,8 +299,8 @@ export default function CategoriesPage() {
       {isError && (
         <div style={{
           background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-          borderRadius: 12, padding: '13px 18px', color: 'var(--danger-text)',
-          fontSize: 13.5, marginBottom: 24, fontWeight: 500,
+          borderRadius: 12, padding: '12px 16px', color: 'var(--danger-text)',
+          fontSize: 13, marginBottom: 24, fontWeight: 500,
         }}>
           ⚠️ Could not load categories. Check that the backend is running and refresh.
         </div>

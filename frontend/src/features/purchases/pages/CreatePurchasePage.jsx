@@ -311,7 +311,7 @@ export default function CreatePurchasePage() {
                       position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
                       background: 'var(--bg-card)',
                       border: '1.5px solid var(--border)',
-                      borderRadius: 10,
+                      borderRadius: 'var(--r-md)',
                       boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
                       zIndex: 200,
                       maxHeight: 240,
@@ -323,13 +323,13 @@ export default function CreatePurchasePage() {
                         </span>
                       </div>
                       {filteredSuppliers.length === 0 ? (
-                        <div style={{ padding: '10px 14px', fontSize: 12.5, color: 'var(--text-muted)' }}>
+                        <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
                           No suppliers match "{suppSearch}"
                         </div>
                       ) : (
                         filteredSuppliers.map(s => (
                           <div key={s.supp_id} onMouseDown={() => handleSuppSelect(s)} style={dropItemStyle}>
-                            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                               {s.supp_name}
                             </div>
                             {s.supp_phone && (
@@ -399,7 +399,7 @@ export default function CreatePurchasePage() {
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   gap: 6, marginTop: 12, width: '100%',
                   background: 'none', border: `1.5px dashed ${addBtnHovered ? 'var(--accent-400)' : 'var(--border)'}`,
-                  borderRadius: 10, padding: '9px 0',
+                  borderRadius: 'var(--r-md)', padding: '9px 0',
                   cursor: 'pointer', color: 'var(--text-muted)',
                   fontSize: 13, fontFamily: 'inherit',
                 }}

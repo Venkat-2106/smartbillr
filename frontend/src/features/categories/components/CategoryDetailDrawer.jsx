@@ -198,7 +198,7 @@ export default function CategoryDetailDrawer({ category, onClose }) {
                 cursor: isLoading || isError ? 'not-allowed' : 'pointer',
                 padding: '6px 12px', borderRadius: 8,
                 color: isLoading || isError ? 'var(--text-muted)' : 'var(--text-secondary)',
-                fontSize: 12.5, fontWeight: 600,
+                fontSize: 13, fontWeight: 600,
                 fontFamily: 'inherit', opacity: isLoading || isError ? 0.5 : 1,
                 transition: 'background 0.12s',
               }}
@@ -231,7 +231,7 @@ export default function CategoryDetailDrawer({ category, onClose }) {
               padding: '18px 16px',
               background: 'var(--danger-bg, #FEF2F2)',
               border: '1px solid var(--danger-border, #FCA5A5)',
-              borderRadius: 12, fontSize: 13.5,
+              borderRadius: 12, fontSize: 13,
               color: 'var(--danger-text, #B91C1C)', fontWeight: 500,
             }}>
               ⚠️ Could not load category details. Close and try again.
@@ -254,7 +254,7 @@ export default function CategoryDetailDrawer({ category, onClose }) {
                   <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
                     Created On
                   </div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                     {detail?.created_at ? formatDate(detail.created_at) : '—'}
                   </div>
                 </div>
@@ -264,7 +264,7 @@ export default function CategoryDetailDrawer({ category, onClose }) {
                   <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
                     Created By
                   </div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                     {detail?.created_by_name || '—'}
                   </div>
                 </div>
@@ -274,7 +274,7 @@ export default function CategoryDetailDrawer({ category, onClose }) {
                   <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
                     Last Updated On
                   </div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                     {detail?.updated_at ? formatDate(detail.updated_at) : '—'}
                   </div>
                 </div>
@@ -284,7 +284,7 @@ export default function CategoryDetailDrawer({ category, onClose }) {
                   <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
                     Last Updated By
                   </div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                     {detail?.last_updated_by || '—'}
                   </div>
                 </div>

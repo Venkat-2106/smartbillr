@@ -40,7 +40,7 @@ export default function LineChart({ data = [], accentColor, areaColor, loading, 
   }
 
   if (error) {
-    return <div style={{ height: H, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger-text)', fontSize: 13.5 }}>Failed to load chart data.</div>
+    return <div style={{ height: H, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger-text)', fontSize: 13 }}>Failed to load chart data.</div>
   }
 
   if (loading) {
@@ -50,7 +50,7 @@ export default function LineChart({ data = [], accentColor, areaColor, loading, 
   }
 
   if (points.every(p => p.value === 0)) {
-    return <div style={{ height: H, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13.5 }}>No data for this period.</div>
+    return <div style={{ height: H, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No data for this period.</div>
   }
 
   return (

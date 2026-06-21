@@ -59,7 +59,7 @@ const Input = forwardRef(function Input(
     border: 'none',
     outline: 'none',
     fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
-    fontSize: 13.5,
+    fontSize: 13,
     fontWeight: 400,
     color: disabled ? 'var(--text-muted)' : 'var(--text-primary)',
     padding: leftIcon ? '9px 12px 9px 0' : '9px 12px',
@@ -84,7 +84,7 @@ const Input = forwardRef(function Input(
         <label
           htmlFor={fieldId}
           style={{
-            fontSize: 12.5,
+            fontSize: 13,
             fontWeight: 600,
             color: hasError ? 'var(--danger-text, #EF4444)' : 'var(--text-secondary)',
             letterSpacing: '0.02em',
@@ -113,7 +113,7 @@ const Input = forwardRef(function Input(
 
       {(error || helper) && (
         <p style={{
-          fontSize: 11.5,
+          fontSize: 12,
           fontWeight: 400,
           margin: 0,
           color: hasError ? 'var(--danger-text, #EF4444)' : 'var(--text-muted)',

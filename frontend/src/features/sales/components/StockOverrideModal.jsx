@@ -31,7 +31,7 @@ export default function StockOverrideModal({
       <div style={{
         background: '#FEF9EC',
         border: '1.5px solid #F59E0B',
-        borderRadius: 10,
+        borderRadius: 'var(--r-md)',
         padding: '12px 16px',
         marginBottom: 20,
         display: 'flex',
@@ -40,10 +40,10 @@ export default function StockOverrideModal({
       }}>
         <span style={{ fontSize: 20, flexShrink: 0, lineHeight: 1.2 }}>⚠️</span>
         <div>
-          <div style={{ fontSize: 13.5, fontWeight: 700, color: '#92400E', marginBottom: 3 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#92400E', marginBottom: 3 }}>
             Requested quantity exceeds available stock
           </div>
-          <div style={{ fontSize: 12.5, color: '#B45309', lineHeight: 1.5 }}>
+          <div style={{ fontSize: 13, color: '#B45309', lineHeight: 1.5 }}>
             You can override and proceed — a <strong>manual adjustment</strong> record
             will be created automatically in stock movements with the note
             "Manual adjustment during sale".
@@ -53,7 +53,7 @@ export default function StockOverrideModal({
 
       <div style={{
         border: '1px solid var(--border)',
-        borderRadius: 10,
+        borderRadius: 'var(--r-md)',
         overflow: 'hidden',
         marginBottom: 4,
       }}>
@@ -89,7 +89,7 @@ export default function StockOverrideModal({
               background: 'var(--bg-card)',
             }}
           >
-            <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
               {err.product_name}
             </span>
             <span style={{ fontSize: 13, fontWeight: 600, color: '#059669', textAlign: 'right' }}>

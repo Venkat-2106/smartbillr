@@ -135,7 +135,7 @@ export default function ExpenseDetailDrawer({ expenseId, onClose, onEdit, canMan
                 cursor: isLoading || isError ? 'not-allowed' : 'pointer',
                 padding: '6px 12px', borderRadius: 8,
                 color: isLoading || isError ? 'var(--text-muted)' : 'var(--text-secondary)',
-                fontSize: 12.5, fontWeight: 600,
+                fontSize: 13, fontWeight: 600,
                 fontFamily: 'inherit', opacity: isLoading || isError ? 0.5 : 1,
                 transition: 'background 0.12s',
               }}
@@ -167,7 +167,7 @@ export default function ExpenseDetailDrawer({ expenseId, onClose, onEdit, canMan
               padding: '18px 16px',
               background: 'var(--danger-bg, #FEF2F2)',
               border: '1px solid var(--danger-border, #FCA5A5)',
-              borderRadius: 12, fontSize: 13.5,
+              borderRadius: 12, fontSize: 13,
               color: 'var(--danger-text, #B91C1C)', fontWeight: 500,
             }}>
               Could not load expense details. Close and try again.
@@ -250,7 +250,7 @@ export default function ExpenseDetailDrawer({ expenseId, onClose, onEdit, canMan
                   style={{
                     width: '100%', padding: '10px 0',
                     background: 'var(--bg-page)', border: '1px solid var(--border)',
-                    borderRadius: 10, cursor: 'pointer',
+                    borderRadius: 'var(--r-md)', cursor: 'pointer',
                     color: 'var(--accent-600)', fontSize: 13, fontWeight: 600,
                     fontFamily: 'inherit', transition: 'background 0.12s',
                   }}

@@ -1,84 +1,43 @@
-// src/shared/components/EmptyState.jsx
-//
-// A centered placeholder shown when a list has no data.
-// Use inside Table (via emptyText) OR as a standalone full-section placeholder.
-//
-// Props:
-//   icon        → emoji or JSX icon shown large (default: 📭)
-//   title       → main heading (default: "Nothing here yet")
-//   description → smaller subtext
-//   action      → JSX — optional button/link shown below (e.g. "Create your first X")
-//
-// Usage:
-//   <EmptyState
-//     icon="📦"
-//     title="No products yet"
-//     description="Add your first product to start selling."
-//     action={<Button onClick={...}>Add Product</Button>}
-//   />
-
 export default function EmptyState({
-  icon = '📭',
-  title = 'Nothing here yet',
+  icon,
+  title,
   description,
   action,
+  compact,
 }) {
   return (
-    <div className="empty-state-responsive" style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '80px 24px',
-      textAlign: 'center',
-      gap: 16,
-    }}>
-      <div style={{
-        width: 80,
-        height: 80,
-        borderRadius: '50%',
-        background: 'var(--bg-subtle)',
-        border: '1px solid var(--border)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: 36,
-        marginBottom: 4,
-        transition: 'transform 0.2s var(--ease-out)',
-      }}>
-        {icon}
-      </div>
-
-      <p style={{
-        margin: 0,
-        fontSize: 16,
-        fontWeight: 700,
-        color: 'var(--text-primary)',
-        fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
-        letterSpacing: '-0.3px',
-      }}>
-        {title}
-      </p>
-
-      {description && (
-        <p style={{
-          margin: 0,
-          fontSize: 13.5,
+    <div
+      className="empty-state-responsive"
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        padding: compact ? '40px 20px' : '64px 24px',
+        textAlign: 'center',
+        maxWidth: 420, margin: '0 auto',
+      }}
+    >
+      {icon && (
+        <div style={{
+          width: 48, height: 48, borderRadius: 12,
+          background: 'var(--bg-subtle)',
+          border: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: 'var(--text-muted)',
-          fontWeight: 400,
-          maxWidth: 340,
-          lineHeight: 1.6,
-          fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
+          marginBottom: 20,
         }}>
+          {icon}
+        </div>
+      )}
+      {title && (
+        <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>
+          {title}
+        </p>
+      )}
+      {description && (
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 20 }}>
           {description}
         </p>
       )}
-
-      {action && (
-        <div style={{ marginTop: 8 }}>
-          {action}
-        </div>
-      )}
+      {action && <div>{action}</div>}
     </div>
   )
 }

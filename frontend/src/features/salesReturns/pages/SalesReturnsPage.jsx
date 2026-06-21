@@ -195,7 +195,7 @@ export default function SalesReturnsPage() {
             placeholder="Search by reason or invoice\u2026"
             width="280px"
           />
-          <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>
             {totalItems} return{totalItems !== 1 ? 's' : ''}
             {activeFilters > 0 && ' (filtered)'}
           </span>
@@ -224,8 +224,8 @@ export default function SalesReturnsPage() {
       {isError && (
         <div style={{
           background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-          borderRadius: 12, padding: '13px 18px', color: 'var(--danger-text)',
-          fontSize: 13.5, marginBottom: 24, fontWeight: 500,
+          borderRadius: 12, padding: '12px 16px', color: 'var(--danger-text)',
+          fontSize: 13, marginBottom: 24, fontWeight: 500,
         }}>
           Could not load sales returns. Check that the backend is running and refresh.
         </div>

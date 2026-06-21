@@ -51,7 +51,7 @@ export default function BarcodeScanner({
           style={{
             flex: 1, padding: '9px 12px',
             border: '1.5px solid var(--border)',
-            borderRadius: 10, fontSize: 13.5,
+            borderRadius: 'var(--r-md)', fontSize: 13,
             background: 'var(--bg-page)',
             color: 'var(--text-primary)',
             outline: 'none', fontFamily: 'inherit',

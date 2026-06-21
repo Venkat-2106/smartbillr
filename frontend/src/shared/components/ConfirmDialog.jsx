@@ -104,7 +104,7 @@ export default function ConfirmDialog({
         {message && (
           <p style={{
             margin: 0,
-            fontSize: 13.5,
+            fontSize: 13,
             color: 'var(--text-muted)',
             fontWeight: 400,
             lineHeight: 1.55,

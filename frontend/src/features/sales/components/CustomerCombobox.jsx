@@ -109,7 +109,7 @@ export default function CustomerCombobox({ customers = [], customerId, onChange,
             position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
             background: 'var(--bg-card)',
             border: '1.5px solid var(--border)',
-            borderRadius: 10,
+            borderRadius: 'var(--r-md)',
             boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
             zIndex: 200,
             maxHeight: 240,
@@ -138,13 +138,13 @@ export default function CustomerCombobox({ customers = [], customerId, onChange,
             </div>
 
             {filtered.length === 0 ? (
-              <div style={{ padding: '10px 14px', fontSize: 12.5, color: 'var(--text-muted)' }}>
+              <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
                 No customers match &quot;{search}&quot;
               </div>
             ) : (
               filtered.map(c => (
                 <div key={c.cust_id} onMouseDown={() => handleSelect(c)} style={dropItemStyle}>
-                  <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                     {c.cust_name}
                   </div>
                   {c.cust_phone && (

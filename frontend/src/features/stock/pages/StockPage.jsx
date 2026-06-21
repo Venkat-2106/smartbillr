@@ -10,7 +10,6 @@
 // Adjust Stock modal: POST /stock/adjust (gated by stock.adjust permission).
 
 import React, { useState, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 
 import {
@@ -18,11 +17,13 @@ import {
   Badge,
   Button,
   EmptyState,
-  PageHeader,
   Pagination,
   SearchBar,
   ExportButton,
   DateRangeFilter,
+  MetricCard,
+  BentoCard,
+  TabBar,
   selectStyle,
 } from '../../../shared/components'
 
@@ -69,39 +70,6 @@ const TABS = [
   { key: 'movements', label: 'Stock Movements' },
   { key: 'alerts',    label: 'Low Stock Alerts' },
 ]
-
-function TabBar({ active, onChange }) {
-  return (
-    <div className="tab-bar-responsive">
-      {TABS.map(tab => {
-        const isActive = tab.key === active
-        return (
-          <button
-            key={tab.key}
-            onClick={() => onChange(tab.key)}
-            style={{
-              background: 'none',
-              border: 'none',
-              borderBottom: isActive ? '2px solid var(--accent-600)' : '2px solid transparent',
-              marginBottom: -2,
-              padding: '10px 18px',
-              fontSize: 13.5,
-              fontWeight: isActive ? 700 : 500,
-              color: isActive ? 'var(--accent-600)' : 'var(--text-muted)',
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-              fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            {tab.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
 
 // ── Category dropdown (shared by Current Stock tab) ───────────────────────────
 function useCategoryOptions() {
@@ -168,6 +136,19 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
   const handleAdjustClick = useCallback((row) => setAdjustTarget(row), [])
   const closeAdjust       = useCallback(() => setAdjustTarget(null), [])
 
+  const stockValue = useMemo(
+    () => stock.reduce((sum, p) => sum + (p.stock_value || 0), 0),
+    [stock]
+  )
+  const lowStockCount = useMemo(
+    () => stock.filter(p => p.stock_status === 'low_stock').length,
+    [stock]
+  )
+  const outOfStockCount = useMemo(
+    () => stock.filter(p => p.stock_status === 'out_of_stock').length,
+    [stock]
+  )
+
   const columns = useMemo(() => [
     {
       key:      'prod_name',
@@ -175,7 +156,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
       sortable: true,
       render: (row) => (
         <div>
-          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13.5 }}>
+          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
             {row.prod_name}
           </div>
           {row.barcode && (
@@ -203,7 +184,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
       sortable: true,
       width:    80,
       render: (row) => (
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
           {row.unit ?? 'pcs'}
         </span>
       ),
@@ -214,7 +195,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
       sortable: true,
       width:    110,
       render: (row) => (
-        <span style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--text-primary)' }}>
+        <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
           {row.prod_stock_qty}
         </span>
       ),
@@ -261,7 +242,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
             width:    120,
             render: (row) => (
               row.stock_value != null
-                ? <span style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--text-primary)' }}>{formatCurrency(row.stock_value, countryCode)}</span>
+                ? <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{formatCurrency(row.stock_value, countryCode)}</span>
                 : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
             ),
           },
@@ -280,7 +261,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
       sortable: true,
       width:    110,
       render: (row) => (
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
           {row.updated_at ? formatDate(row.updated_at) : '—'}
         </span>
       ),
@@ -308,6 +289,66 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
 
   return (
     <>
+      {/* METRIC CARDS */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(12, 1fr)',
+        gap: 16,
+        marginBottom: 24,
+      }}>
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+              <line x1="12" y1="22.08" x2="12" y2="12" />
+            </svg>
+          }
+          label="Total Products"
+          value={totalItems}
+        />
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="12" y1="1" x2="12" y2="23" />
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+          }
+          label="Stock Value"
+          value={formatCurrency(stockValue, countryCode)}
+        />
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          }
+          label="Low Stock"
+          value={lowStockCount}
+        />
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+          }
+          label="Out of Stock"
+          value={outOfStockCount}
+        />
+      </div>
+
       {/* Toolbar */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -321,7 +362,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
             placeholder="Search by product name or barcode…"
             width="290px"
           />
-          <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>
             {totalItems} product{totalItems !== 1 ? 's' : ''}
             {activeFilters && ' (filtered)'}
           </span>
@@ -331,11 +372,14 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
                 fontSize: 12, color: 'var(--accent-600)', fontWeight: 600,
-                padding: '2px 6px',
-                fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+                padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: 4,
               }}
             >
-              ✕ Clear filters
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              Clear filters
             </button>
           )}
         </div>
@@ -345,6 +389,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
             value={categoryId}
             onChange={e => setCategoryId(e.target.value)}
             style={{ ...selectStyle, width: 'auto', padding: '9px 32px 9px 14px', fontSize: 13 }}
+            aria-label="Filter by category"
           >
             <option value="">All Categories</option>
             {categories.map(c => (
@@ -356,6 +401,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
             value={status}
             onChange={e => setStatus(e.target.value)}
             style={{ ...selectStyle, width: 'auto', padding: '9px 32px 9px 14px', fontSize: 13 }}
+            aria-label="Filter by stock status"
           >
             <option value="">All Stock Status</option>
             <option value="in_stock">In Stock</option>
@@ -367,6 +413,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
             value={isActive}
             onChange={e => setIsActive(e.target.value)}
             style={{ ...selectStyle, width: 'auto', padding: '9px 32px 9px 14px', fontSize: 13 }}
+            aria-label="Filter by active status"
           >
             <option value="">Active &amp; Inactive</option>
             <option value="true">Active Only</option>
@@ -380,36 +427,57 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
       {isError && (
         <div style={{
           background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-          borderRadius: 12, padding: '13px 18px', color: 'var(--danger-text)',
-          fontSize: 13.5, marginBottom: 24, fontWeight: 500,
+          borderRadius: 12, padding: '12px 16px', color: 'var(--danger-text)',
+          fontSize: 13, marginBottom: 24, fontWeight: 500,
+          display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          ⚠️ Could not load stock data. Check that the backend is running and refresh.
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          Could not load stock data. Check that the backend is running and refresh.
         </div>
       )}
 
       {!isLoading && stock.length === 0 ? (
-        <EmptyState
-          icon={activeFilters ? '🔍' : '📦'}
-          title={activeFilters ? 'No results matching your filters' : 'Nothing here yet'}
-          description={activeFilters ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'Add products to start tracking stock.'}
-          action={activeFilters ? (
-            <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setCategoryId(''); setStatus(''); setIsActive('') }}>
-              Clear filters
-            </Button>
-          ) : undefined}
-        />
+        <BentoCard>
+          <EmptyState
+            icon={
+              activeFilters ? (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              ) : (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                </svg>
+              )
+            }
+            title={activeFilters ? 'No results matching your filters' : 'Nothing here yet'}
+            description={activeFilters ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'Add products to start tracking stock.'}
+            action={activeFilters ? (
+              <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setCategoryId(''); setStatus(''); setIsActive('') }}>
+                Clear filters
+              </Button>
+            ) : undefined}
+          />
+        </BentoCard>
       ) : (
-      <div style={{ overflowX: 'auto', width: '100%' }}>
-        <Table
-          columns={columns}
-          rows={stock}
-          loading={isLoading}
-          rowKey="prod_id"
-          sortKey={sortKey}
-          sortDir={sortDir}
-          onSort={handleSort}
-        />
-      </div>
+        <BentoCard padding={false} className="premium-table-wrap">
+          <div className="premium-table" style={{ overflowX: 'auto', width: '100%' }}>
+            <Table
+              columns={columns}
+              rows={stock}
+              loading={isLoading}
+              rowKey="prod_id"
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
+          </div>
+        </BentoCard>
       )}
 
       <Pagination pagination={pagination} onPageChange={setPage} />
@@ -454,7 +522,7 @@ function StockMovementsTab({ active }) {
       label:    'Product',
       sortable: true,
       render: (row) => (
-        <span style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--text-primary)' }}>
+        <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
           {row.prod_name ?? <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Unknown</span>}
         </span>
       ),
@@ -472,7 +540,7 @@ function StockMovementsTab({ active }) {
       sortable: false,
       width:    140,
       render: (row) => (
-        <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
           {getReferenceLabel(row)}
         </span>
       ),
@@ -488,7 +556,7 @@ function StockMovementsTab({ active }) {
         return (
           <span style={{
             fontWeight: 700,
-            fontSize: 13.5,
+            fontSize: 13,
             color: positive ? 'var(--success-text, #16A34A)' : 'var(--danger-text, #DC2626)',
           }}>
             {positive ? `+${qty}` : qty}
@@ -512,7 +580,7 @@ function StockMovementsTab({ active }) {
       label:    'Reason',
       sortable: false,
       render: (row) => (
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
           {row.move_notes ?? '—'}
         </span>
       ),
@@ -523,7 +591,7 @@ function StockMovementsTab({ active }) {
       sortable: true,
       width:    130,
       render: (row) => (
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
           {row.move_created_at ? formatDate(row.move_created_at) : '—'}
         </span>
       ),
@@ -549,6 +617,7 @@ function StockMovementsTab({ active }) {
             value={moveType}
             onChange={e => setMoveType(e.target.value)}
             style={{ ...selectStyle, width: 'auto', padding: '9px 32px 9px 14px', fontSize: 13 }}
+            aria-label="Filter by movement type"
           >
             <option value="">All Types</option>
             <option value="sale">Sale</option>
@@ -556,7 +625,7 @@ function StockMovementsTab({ active }) {
             <option value="adjustment">Adjustment</option>
             <option value="return">Return</option>
           </select>
-          <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>
             {totalItems} movement{totalItems !== 1 ? 's' : ''}
             {activeFilters && ' (filtered)'}
           </span>
@@ -566,11 +635,14 @@ function StockMovementsTab({ active }) {
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
                 fontSize: 12, color: 'var(--accent-600)', fontWeight: 600,
-                padding: '2px 6px',
-                fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+                padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: 4,
               }}
             >
-              ✕ Clear filters
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              Clear filters
             </button>
           )}
         </div>
@@ -593,36 +665,61 @@ function StockMovementsTab({ active }) {
       {isError && (
         <div style={{
           background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-          borderRadius: 12, padding: '13px 18px', color: 'var(--danger-text)',
-          fontSize: 13.5, marginBottom: 24, fontWeight: 500,
+          borderRadius: 12, padding: '12px 16px', color: 'var(--danger-text)',
+          fontSize: 13, marginBottom: 24, fontWeight: 500,
+          display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          ⚠️ Could not load stock movements. Check that the backend is running and refresh.
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          Could not load stock movements. Check that the backend is running and refresh.
         </div>
       )}
 
       {!isLoading && movements.length === 0 ? (
-        <EmptyState
-          icon={activeFilters ? '🔍' : '📋'}
-          title={activeFilters ? 'No results matching your filters' : 'Nothing here yet'}
-          description={activeFilters ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'No stock movements recorded yet.'}
-          action={activeFilters ? (
-            <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setMoveType(''); setDateFrom(''); setDateTo('') }}>
-              Clear filters
-            </Button>
-          ) : undefined}
-        />
+        <BentoCard>
+          <EmptyState
+            icon={
+              activeFilters ? (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              ) : (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10 9 9 9 8 9" />
+                </svg>
+              )
+            }
+            title={activeFilters ? 'No results matching your filters' : 'Nothing here yet'}
+            description={activeFilters ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'No stock movements recorded yet.'}
+            action={activeFilters ? (
+              <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setMoveType(''); setDateFrom(''); setDateTo('') }}>
+                Clear filters
+              </Button>
+            ) : undefined}
+          />
+        </BentoCard>
       ) : (
-      <div style={{ overflowX: 'auto', width: '100%' }}>
-        <Table
-          columns={columns}
-          rows={movements}
-          loading={isLoading}
-          rowKey="move_id"
-          sortKey={sortKey}
-          sortDir={sortDir}
-          onSort={handleSort}
-        />
-      </div>
+        <BentoCard padding={false} className="premium-table-wrap">
+          <div className="premium-table" style={{ overflowX: 'auto', width: '100%' }}>
+            <Table
+              columns={columns}
+              rows={movements}
+              loading={isLoading}
+              rowKey="move_id"
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
+          </div>
+        </BentoCard>
       )}
 
       <Pagination pagination={pagination} onPageChange={setPage} />
@@ -655,7 +752,7 @@ function LowStockAlertsTab({ active }) {
       sortable: false,
       render: (row) => (
         <div>
-          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13.5 }}>
+          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
             {row.prod_name ?? <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Unknown</span>}
           </div>
           {row.barcode && (
@@ -715,7 +812,7 @@ function LowStockAlertsTab({ active }) {
         const shortage = thresh - qty
         return (
           <span style={{
-            fontWeight: 600, fontSize: 13.5,
+            fontWeight: 600, fontSize: 13,
             color: shortage > 0 ? 'var(--danger-text, #DC2626)' : 'var(--text-muted)',
           }}>
             {shortage > 0 ? `-${shortage}` : '0'}
@@ -742,7 +839,7 @@ function LowStockAlertsTab({ active }) {
       sortable: false,
       width:    120,
       render: (row) => (
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
           {row.alert_created_at ? formatDate(row.alert_created_at) : '—'}
         </span>
       ),
@@ -756,63 +853,88 @@ function LowStockAlertsTab({ active }) {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         marginBottom: 20, gap: 12, flexWrap: 'wrap',
       }}>
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>
           {totalItems} alert{totalItems !== 1 ? 's' : ''} active
         </span>
         <Button
           variant="secondary"
           size="sm"
           onClick={() => refetch()}
-          style={{ fontSize: 12.5 }}
+          style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
         >
-          ↻ Refresh
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="23 4 23 10 17 10" />
+            <polyline points="1 20 1 14 7 14" />
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+          </svg>
+          Refresh
         </Button>
       </div>
 
-      {/* Info note */}
       <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
         background: 'color-mix(in srgb, var(--accent-500) 8%, transparent)',
         border: '1px solid color-mix(in srgb, var(--accent-500) 20%, transparent)',
-        borderRadius: 10,
+        borderRadius: 'var(--r-md)',
         padding: '10px 14px',
-        fontSize: 12.5,
+        fontSize: 13,
         color: 'var(--accent-600)',
         marginBottom: 18,
         fontWeight: 500,
       }}>
-        💡 Alerts are generated automatically when product stock falls at or below its reorder level.
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="16" x2="12" y2="12" />
+          <line x1="12" y1="8" x2="12.01" y2="8" />
+        </svg>
+        Alerts are generated automatically when product stock falls at or below its reorder level.
         Use <strong>Adjust Stock</strong> on the <strong>Current Stock</strong> tab to restock.
       </div>
 
       {isError && (
         <div style={{
           background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-          borderRadius: 12, padding: '13px 18px', color: 'var(--danger-text)',
-          fontSize: 13.5, marginBottom: 24, fontWeight: 500,
+          borderRadius: 12, padding: '12px 16px', color: 'var(--danger-text)',
+          fontSize: 13, marginBottom: 24, fontWeight: 500,
+          display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          ⚠️ Could not load stock alerts. Check that the backend is running and refresh.
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          Could not load stock alerts. Check that the backend is running and refresh.
         </div>
       )}
 
       {!isLoading && alerts.length === 0 ? (
-        <EmptyState
-          icon="🎉"
-          title="All stocked up!"
-          description="No low stock alerts — all products are well stocked!"
-        />
+        <BentoCard>
+          <EmptyState
+            icon={
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+            }
+            title="All stocked up!"
+            description="No low stock alerts — all products are well stocked!"
+          />
+        </BentoCard>
       ) : (
-      <div style={{ overflowX: 'auto', width: '100%' }}>
-        <Table
-          columns={columns}
-          rows={alerts}
-          loading={isLoading}
-          rowKey="alert_id"
-          sortKey={null}
-          sortDir={null}
-          onSort={null}
-          onRowClick={handleAlertClick}
-        />
-      </div>
+        <BentoCard padding={false} className="premium-table-wrap">
+          <div className="premium-table" style={{ overflowX: 'auto', width: '100%' }}>
+            <Table
+              columns={columns}
+              rows={alerts}
+              loading={isLoading}
+              rowKey="alert_id"
+              sortKey={null}
+              sortDir={null}
+              onSort={null}
+              onRowClick={handleAlertClick}
+            />
+          </div>
+        </BentoCard>
       )}
 
       <Pagination pagination={pagination} onPageChange={setPage} />
@@ -827,20 +949,21 @@ export default function StockPage() {
   const { can }        = usePermissions()
   const canViewProfit  = can('view_product_profit')
   const canAdjust      = can('stock.adjust')
-  const navigate       = useNavigate()
 
   const [activeTab, setActiveTab] = useState('current')
 
   return (
     <>
-      <PageHeader
-        title="Stock"
-        subtitle="Track current inventory levels, movements, and reorder alerts"
-        back
-        onBack={() => navigate('/dashboard')}
-      />
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
+          Stock
+        </h1>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
+          Monitor inventory levels, stock movements, and low stock alerts
+        </p>
+      </div>
 
-      <TabBar active={activeTab} onChange={setActiveTab} />
+      <TabBar tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'current' && (
         <CurrentStockTab canViewProfit={canViewProfit} canAdjust={canAdjust} />

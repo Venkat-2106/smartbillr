@@ -24,9 +24,10 @@ import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
 
 import {
   Button, Input, Modal, Table, SearchBar,
-  Pagination, ConfirmDialog, PageHeader,
+  Pagination, ConfirmDialog,
   FormField, StateDropdown, ExportButton,
   DateRangeFilter, EmptyState,
+  MetricCard, BentoCard,
 } from '../../../shared/components'
 
 import { selectStyle, textareaStyle } from '../../../shared/components/FormField'
@@ -112,7 +113,7 @@ function buildColumns(canManage, onEdit, onDelete) {
       sortable: true,
       render:   (row) => (
         <div>
-          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13.5 }}>
+          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
             {row.cust_name}
           </div>
           {row.cust_tax_number && (
@@ -163,7 +164,7 @@ function buildColumns(canManage, onEdit, onDelete) {
       sortable: true,
       width:    110,
       render:   (row) => (
-        <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
           {row.updated_at ? formatDate(row.updated_at) : '—'}
         </span>
       ),
@@ -175,7 +176,7 @@ function buildColumns(canManage, onEdit, onDelete) {
       width:    150,
       render:   (row) => (
         row.last_updated_by
-          ? <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: 500 }}>
+          ? <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
               {row.last_updated_by}
             </span>
           : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
@@ -197,6 +198,12 @@ function buildColumns(canManage, onEdit, onDelete) {
           <Button
             variant="danger"
             size="sm"
+            leftIcon={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+            }
             onClick={(e) => { e.stopPropagation(); onDelete(row) }}
           >
             Delete
@@ -340,39 +347,119 @@ export default function CustomersPage() {
   // ─── RENDER ───────────────────────────────────────────────────────────────
   return (
     <>
-      <PageHeader
-        title="Customers"
-        subtitle="Manage your customer list, contacts, and billing details"
-        back
-        onBack={() => navigate('/dashboard')}
-        action={
-          <div className="action-group" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            {/* onFetch triggers a backend call on click — not from memory */}
-            <ExportButton
-              onFetch={handleExport}
-              filename="customers"
-              columns={CUSTOMER_CSV_COLUMNS}
-            />
-            <Button
-              variant="primary"
-              leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
-              onClick={handleOpenAdd}
-              data-shortcut="new"
-            >
-              Add Customer
-            </Button>
+      {/* PAGE HEADER */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: 24, flexWrap: 'wrap', gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            onClick={() => navigate('/dashboard')}
+            style={{
+              background: 'var(--bg-card)', border: '1.5px solid var(--border)',
+              borderRadius: 'var(--r-md)', cursor: 'pointer', padding: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--text-secondary)', lineHeight: 1,
+            }}
+            aria-label="Back to dashboard"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+          <div>
+            <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
+              Customers
+            </h1>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
+              Manage your customer list, contacts, and billing details
+            </p>
           </div>
-        }
-      />
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <ExportButton
+            onFetch={handleExport}
+            filename="customers"
+            columns={CUSTOMER_CSV_COLUMNS}
+          />
+          <Button
+            variant="primary"
+            leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
+            onClick={handleOpenAdd}
+            data-shortcut="new"
+          >
+            Add Customer
+          </Button>
+        </div>
+      </div>
+
+      {/* METRIC CARDS */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(12, 1fr)',
+        gap: 16,
+        marginBottom: 24,
+      }}>
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          }
+          label="Total Customers"
+          value={totalItems}
+        />
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
+            </svg>
+          }
+          label="Active Customers"
+          value={totalItems}
+        />
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="12" y1="1" x2="12" y2="23" />
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+          }
+          label="Outstanding Balance"
+          value="—"
+        />
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+              <line x1="12" y1="14" x2="12" y2="18" />
+              <line x1="10" y1="16" x2="14" y2="16" />
+            </svg>
+          }
+          label="New This Month"
+          value="—"
+        />
+      </div>
 
       {/* TOOLBAR */}
       <div style={{
-        display:        'flex',
-        alignItems:     'center',
-        justifyContent: 'space-between',
-        marginBottom:   20,
-        gap:            12,
-        flexWrap:       'wrap',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: 20, gap: 12, flexWrap: 'wrap',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <SearchBar
@@ -382,7 +469,7 @@ export default function CustomersPage() {
             placeholder="Search by name, phone, email…"
             width="280px"
           />
-          <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 500 }}>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>
             {totalItems} customer{totalItems !== 1 ? 's' : ''}
             {activeFilters > 0 && ' (filtered)'}
           </span>
@@ -392,11 +479,14 @@ export default function CustomersPage() {
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
                 fontSize: 12, color: 'var(--accent-600)', fontWeight: 600,
-                padding: '2px 6px',
-                fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+                padding: '2px 6px', display: 'inline-flex', alignItems: 'center', gap: 4,
               }}
             >
-              ✕ Clear filters
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              Clear filters
             </button>
           )}
         </div>
@@ -412,40 +502,64 @@ export default function CustomersPage() {
       {isError && (
         <div style={{
           background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-          borderRadius: 12, padding: '13px 18px', color: 'var(--danger-text)',
-          fontSize: 13.5, marginBottom: 24, fontWeight: 500,
+          borderRadius: 12, padding: '12px 16px', color: 'var(--danger-text)',
+          fontSize: 13, marginBottom: 24, fontWeight: 500,
+          display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          ⚠️ Could not load customers. Check that the backend is running and refresh.
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          Could not load customers. Check that the backend is running and refresh.
         </div>
       )}
 
       {/* TABLE */}
       {!isLoading && customers.length === 0 ? (
-        <EmptyState
-          icon={activeFilters > 0 ? '🔍' : '👥'}
-          title={activeFilters > 0 ? 'No results matching your filters' : 'Nothing here yet'}
-          description={activeFilters > 0 ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'Add your first customer to get started.'}
-          action={activeFilters > 0 ? (
-            <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setDateFrom(''); setDateTo('') }}>
-              Clear filters
-            </Button>
-          ) : undefined}
-        />
+        <BentoCard>
+          <EmptyState
+            icon={
+              activeFilters > 0 ? (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              ) : (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+              )
+            }
+            title={activeFilters > 0 ? 'No results matching your filters' : 'Nothing here yet'}
+            description={activeFilters > 0 ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'Add your first customer to get started.'}
+            action={activeFilters > 0 ? (
+              <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setDateFrom(''); setDateTo('') }}>
+                Clear filters
+              </Button>
+            ) : undefined}
+          />
+        </BentoCard>
       ) : (
-      <div style={{ overflowX: 'auto', width: '100%' }}>
-          <Table
-            columns={columns}
-            rows={customers}
-            rowKey="cust_id"
-            loading={isLoading}
-            sortKey={sortKey}
-            sortDir={sortDir}
-            onSort={handleSort}
-            selectedIndex={selectedIndex}
-            onSelectedIndexChange={setSelectedIndex}
-            onRowClick={(row) => setSelectedCustomer(row)}
-        />
-      </div>
+        <BentoCard padding={false} className="premium-table-wrap">
+          <div className="premium-table" style={{ overflowX: 'auto', width: '100%' }}>
+            <Table
+              columns={columns}
+              rows={customers}
+              rowKey="cust_id"
+              loading={isLoading}
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleSort}
+              selectedIndex={selectedIndex}
+              onSelectedIndexChange={setSelectedIndex}
+              onRowClick={(row) => setSelectedCustomer(row)}
+            />
+          </div>
+        </BentoCard>
       )}
 
       {/* PAGINATION — always shown (server handles filtering) */}
@@ -476,15 +590,16 @@ export default function CustomersPage() {
               {...register('cust_name')}
               placeholder="e.g. Rajesh Kumar / ABC Enterprises"
               autoFocus
+              autoComplete="name"
             />
           </FormField>
 
           <div className="form-grid-2" style={{ marginBottom: 16 }}>
             <FormField label="Phone Number" error={errors.cust_phone?.message}>
-              <Input {...register('cust_phone')} placeholder="e.g. +91 98765 43210" type="tel" />
+              <Input {...register('cust_phone')} placeholder="e.g. +91 98765 43210" type="tel" autoComplete="tel" />
             </FormField>
             <FormField label="Email Address" error={errors.cust_email?.message}>
-              <Input {...register('cust_email')} placeholder="e.g. rajesh@example.com" type="email" />
+              <Input {...register('cust_email')} placeholder="e.g. rajesh@example.com" type="email" autoComplete="email" />
             </FormField>
           </div>
 
@@ -521,12 +636,13 @@ export default function CustomersPage() {
             error={errors.cust_state?.message}
           />
 
-          <FormField label="Address" error={errors.cust_address?.message} style={{ marginBottom: 8 }}>
+            <FormField label="Address" error={errors.cust_address?.message} style={{ marginBottom: 8 }}>
             <textarea
               {...register('cust_address')}
               placeholder="Street address, area, city..."
               rows={3}
               style={textareaStyle}
+              autoComplete="street-address"
             />
           </FormField>
 

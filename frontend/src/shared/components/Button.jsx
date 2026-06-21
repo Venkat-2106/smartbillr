@@ -11,7 +11,7 @@ const BASE = {
   alignItems: 'center',
   justifyContent: 'center',
   gap: 7,
-  fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
+  fontFamily: 'var(--font-sans, "Inter", sans-serif)',
   fontWeight: 600,
   borderRadius: 10,
   border: 'none',
@@ -27,9 +27,9 @@ const BASE = {
 }
 
 const SIZE = {
-  sm: { padding: '7px 14px',  fontSize: 12.5, height: 32, minWidth: 64  },
-  md: { padding: '9px 18px',  fontSize: 13.5, height: 38, minWidth: 80  },
-  lg: { padding: '11px 24px', fontSize: 14.5, height: 44, minWidth: 100 },
+  sm: { padding: '7px 14px',  fontSize: 13, height: 32, minWidth: 64  },
+  md: { padding: '9px 18px',  fontSize: 13, height: 38, minWidth: 80  },
+  lg: { padding: '11px 24px', fontSize: 14, height: 44, minWidth: 100 },
 }
 
 const VARIANT_STYLE = {

@@ -70,7 +70,7 @@ function SummaryRow({ label, value, bold, danger }) {
   )
 }
 
-export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, isUpdatingStatus, canEdit }) {
+export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, isUpdatingStatus, canEdit, onDelete }) {
   const { data, isLoading } = usePurchaseDetail(purId)
   const [editingStatus, setEditingStatus] = useState(false)
   const [newStatus,     setNewStatus]     = useState('')
@@ -127,16 +127,37 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
             </p>
           )}
         </div>
-        <button
-          onClick={onClose}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--text-muted)', padding: 6, borderRadius: 8,
-            display: 'flex', alignItems: 'center',
-          }}
-        >
-          <XMarkIcon style={{ width: 20, height: 20 }} />
-        </button>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {onDelete && data && (
+            <button
+              onClick={() => onDelete(data)}
+              style={{
+                background: 'none', border: '1.5px solid var(--danger-border, #FECACA)',
+                cursor: 'pointer', color: 'var(--danger-text, #DC2626)',
+                padding: '4px 10px', borderRadius: 8,
+                fontSize: 12, fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: 4,
+              }}
+              title="Delete purchase"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+              </svg>
+              Delete
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--text-muted)', padding: 6, borderRadius: 8,
+              display: 'flex', alignItems: 'center',
+            }}
+          >
+            <XMarkIcon style={{ width: 20, height: 20 }} />
+          </button>
+        </div>
       </div>
 
       {/* Body */}
@@ -182,7 +203,7 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
               <div style={{
                 background: 'var(--bg-subtle)',
                 border: '1px solid var(--accent-ring, var(--border))',
-                borderRadius: 10, padding: '12px 14px',
+                borderRadius: 'var(--r-md)', padding: '12px 14px',
                 marginTop: 10,
                 display: 'flex', alignItems: 'center', gap: 10,
               }}>
@@ -314,7 +335,7 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
                       style={{
                         background: 'var(--bg-subtle)',
                         border: '1px solid var(--border)',
-                        borderRadius: 10, padding: '12px 14px',
+                        borderRadius: 'var(--r-md)', padding: '12px 14px',
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>

@@ -47,7 +47,7 @@ const dateInputStyle = {
   background: 'var(--bg-card)',
   border: '1.5px solid var(--border)',
   borderRadius: 8,
-  fontSize: 12.5,
+  fontSize: 13,
   color: 'var(--text-primary)',
   fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
   outline: 'none',

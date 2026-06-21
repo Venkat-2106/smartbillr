@@ -53,10 +53,10 @@ function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categori
       <div style={{
         background: 'var(--bg-page)',
         border: '1.5px solid var(--border)',
-        borderRadius: 10,
+        borderRadius: 'var(--r-md)',
         padding: '10px 14px',
         marginBottom: 16,
-        fontSize: 12.5,
+        fontSize: 13,
         color: 'var(--text-muted)',
         display: 'flex',
         alignItems: 'center',

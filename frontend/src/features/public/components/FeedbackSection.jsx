@@ -110,7 +110,7 @@ export default function FeedbackSection() {
               required
               style={{
                 padding: '12px 16px',
-                borderRadius: 10,
+                borderRadius: 'var(--r-md)',
                 border: '1.5px solid var(--border)',
                 background: 'var(--bg-card)',
                 color: 'var(--text-primary)',
@@ -125,7 +125,7 @@ export default function FeedbackSection() {
               onChange={e => setEmail(e.target.value)}
               style={{
                 padding: '12px 16px',
-                borderRadius: 10,
+                borderRadius: 'var(--r-md)',
                 border: '1.5px solid var(--border)',
                 background: 'var(--bg-card)',
                 color: 'var(--text-primary)',
@@ -141,7 +141,7 @@ export default function FeedbackSection() {
               rows={5}
               style={{
                 padding: '12px 16px',
-                borderRadius: 10,
+                borderRadius: 'var(--r-md)',
                 border: '1.5px solid var(--border)',
                 background: 'var(--bg-card)',
                 color: 'var(--text-primary)',
@@ -155,7 +155,7 @@ export default function FeedbackSection() {
               type="submit"
               style={{
                 padding: '12px 24px',
-                borderRadius: 10,
+                borderRadius: 'var(--r-md)',
                 border: 'none',
                 background: 'var(--accent-500)',
                 color: '#fff',

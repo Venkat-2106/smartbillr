@@ -8,7 +8,7 @@ export default function BarChart({ data = [], bars = 8, loading, error, valueLab
   }, [data, bars])
 
   if (error) {
-    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--danger-text)', fontSize: 13.5 }}>Failed to load.</div>
+    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--danger-text)', fontSize: 13 }}>Failed to load.</div>
   }
 
   if (loading) {
@@ -34,7 +34,7 @@ export default function BarChart({ data = [], bars = 8, loading, error, valueLab
         return (
           <div key={item.label || i}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                 {item.label}
               </span>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginLeft: 8, flexShrink: 0 }}>

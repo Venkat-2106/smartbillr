@@ -136,7 +136,7 @@ export default function SupplierDetailDrawer({ supplier, onClose }) {
                 background: printHovered ? 'var(--bg-hover)' : 'var(--bg-page)',
                 border: '1px solid var(--border)',
                 cursor: 'pointer', padding: '6px 12px', borderRadius: 8,
-                color: 'var(--text-secondary)', fontSize: 12.5, fontWeight: 600,
+                color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600,
                 fontFamily: 'inherit', transition: 'background 0.12s',
               }}
             >
@@ -235,7 +235,7 @@ function InfoRow({ icon, label, value, isLast = false }) {
         </span>
       )}
       <span style={{
-        fontSize: 12.5, color: 'var(--text-muted)',
+        fontSize: 13, color: 'var(--text-muted)',
         minWidth: 130, fontWeight: 500, flexShrink: 0,
       }}>
         {label}

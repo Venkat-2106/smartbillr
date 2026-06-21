@@ -53,7 +53,7 @@ export default function FormField({
     }}>
       {label && (
         <label style={{
-          fontSize: 12.5,
+          fontSize: 13,
           fontWeight: 600,
           color: errorMsg ? 'var(--danger-text, #EF4444)' : 'var(--text-secondary)',
           letterSpacing: '0.02em',
@@ -76,7 +76,7 @@ export default function FormField({
       {(errorMsg || helper) && (
         <p style={{
           margin: 0,
-          fontSize: 11.5,
+          fontSize: 12,
           fontWeight: 400,
           color: errorMsg ? 'var(--danger-text, #EF4444)' : 'var(--text-muted)',
           lineHeight: 1.4,
@@ -104,7 +104,7 @@ export const selectStyle = {
   background: 'var(--bg-card)',
   border: '1.5px solid var(--border)',
   borderRadius: 10,
-  fontSize: 13.5,
+  fontSize: 13,
   fontWeight: 500,
   color: 'var(--text-primary)',
   fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
@@ -127,7 +127,7 @@ export const textareaStyle = {
   background: 'var(--bg-card)',
   border: '1.5px solid var(--border)',
   borderRadius: 10,
-  fontSize: 13.5,
+  fontSize: 13,
   fontWeight: 400,
   color: 'var(--text-primary)',
   fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',

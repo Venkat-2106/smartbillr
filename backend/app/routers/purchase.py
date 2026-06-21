@@ -696,10 +696,12 @@ def update_purchase_status(
 @router.delete("/{pur_id}")
 def delete_purchase(
     pur_id: str,
+    reduce_stock: bool = Query(False),
     current_user: dict = Depends(require_permission("purchases.delete")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
+    user_id = current_user["user_id"]
 
     purchase = db.query(Purchase).filter(
         Purchase.pur_id      == pur_id,
@@ -711,7 +713,38 @@ def delete_purchase(
         return error_response("Purchase not found", status_code=404)
 
     purchase.is_deleted = True
-    purchase.updated_by = current_user["user_id"]
-    db.commit()
+    purchase.updated_by = user_id
 
+    if reduce_stock:
+        items = db.execute(text("""
+            SELECT product_id, pur_item_qty FROM purchase_items
+            WHERE pur_id = CAST(:pur_id AS uuid) AND business_id = CAST(:bid AS uuid)
+        """), {"pur_id": pur_id, "bid": business_id}).fetchall()
+
+        for item in items:
+            product = db.query(Product).filter(
+                Product.prod_id == item.product_id,
+                Product.business_id == business_id
+            ).first()
+            if not product:
+                continue
+
+            prev_stock = product.prod_stock_qty
+            db.execute(text("""
+                UPDATE products SET prod_stock_qty = prod_stock_qty - :qty,
+                    updated_by = CAST(:user_id AS uuid)
+                WHERE prod_id = CAST(:pid AS uuid) AND business_id = CAST(:bid AS uuid)
+            """), {"qty": item.pur_item_qty, "user_id": user_id, "pid": str(item.product_id), "bid": business_id})
+
+            db.execute(text("""
+                INSERT INTO stock_movements (move_id, business_id, product_id,
+                    move_type, move_qty, move_prev_stock, purchase_reference_id, move_notes, move_created_by)
+                VALUES (CAST(:mid AS uuid), CAST(:bid AS uuid), CAST(:pid AS uuid),
+                    'purchase_delete', :qty, :prev, CAST(:pur_id AS uuid),
+                    :notes, CAST(:uid AS uuid))
+            """), {"mid": str(uuid.uuid4()), "bid": business_id, "pid": str(item.product_id),
+                   "qty": -item.pur_item_qty, "prev": prev_stock, "pur_id": pur_id,
+                   "notes": f"Stock reduced from deleted purchase {purchase.pur_id}", "uid": user_id})
+
+    db.commit()
     return success_response({"message": "Purchase deleted successfully"})

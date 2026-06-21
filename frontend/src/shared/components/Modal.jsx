@@ -38,7 +38,7 @@ function ModalFooter({ children }) {
       padding: '16px 24px',
       borderTop: '1px solid var(--border)',
       background: 'var(--bg-subtle)',
-      borderRadius: '0 0 18px 18px',
+      borderRadius: '0 0 var(--r-xl)',
       flexShrink: 0,
     }}>
       {children}
@@ -89,7 +89,7 @@ export default function Modal({
         style={{
           background: 'var(--bg-card)',
           border: '1px solid var(--border)',
-          borderRadius: 18,
+          borderRadius: 'var(--r-xl)',
           boxShadow: 'var(--shadow-elevated, 0 20px 60px rgba(0,0,0,0.18))',
           width: '100%',
           maxWidth: maxW,
@@ -107,7 +107,7 @@ export default function Modal({
             display: 'flex',
             alignItems: 'flex-start',
             justifyContent: 'space-between',
-            padding: '20px 24px 18px',
+            padding: '20px 24px 16px',
             borderBottom: '1px solid var(--border)',
             flexShrink: 0,
             gap: 12,
@@ -131,7 +131,7 @@ export default function Modal({
               {subtitle && (
                 <p style={{
                   margin: '4px 0 0',
-                  fontSize: 12.5,
+                  fontSize: 13,
                   color: 'var(--text-muted)',
                   fontWeight: 400,
                 }}>
@@ -150,20 +150,23 @@ export default function Modal({
                 onMouseEnter={() => setCloseBtnHovered(true)}
                 onMouseLeave={() => setCloseBtnHovered(false)}
                 style={{
-                  width: 30, height: 30,
+                  width: 32, height: 32,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: closeBtnHovered ? 'var(--bg-hover)' : 'var(--bg-subtle)',
                   border: '1px solid var(--border)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--r-md)',
                   cursor: 'pointer',
                   color: closeBtnHovered ? 'var(--text-primary)' : 'var(--text-muted)',
                   fontSize: 16,
                   lineHeight: 1,
                   flexShrink: 0,
-                  transition: 'all 0.14s',
+                  transition: 'background 0.14s, color 0.14s',
                 }}
               >
-                ✕
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
               </button>
             )}
           </div>
@@ -174,8 +177,11 @@ export default function Modal({
           flex: 1,
           overflowY: 'auto',
           padding: '20px 24px',
+          overscrollBehavior: 'contain',
         }}>
-          {bodyChildren}
+          <div aria-live="polite" aria-atomic="true">
+            {bodyChildren}
+          </div>
         </div>
 
         {/* Footer — sticky at bottom. Renders Modal.Footer children OR the footer prop */}

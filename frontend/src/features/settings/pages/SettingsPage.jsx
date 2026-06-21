@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { useNavigate } from 'react-router-dom'
 
 import {
-  Button, Input, PageHeader, FormField,
+  Button, Input, BentoCard, FormField,
 } from '../../../shared/components'
 import { selectStyle } from '../../../shared/components/FormField'
 import { Spinner } from '../../../shared/components'
@@ -86,19 +86,16 @@ export default function SettingsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Settings"
-        subtitle="Manage your business profile and preferences"
-        back
-        onBack={() => navigate('/dashboard')}
-      />
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
+          Settings
+        </h1>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '6px 0 0', fontWeight: 400 }}>
+          Manage your business profile and preferences
+        </p>
+      </div>
 
-      <div style={{
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderRadius: 16,
-        overflow: 'hidden',
-      }}>
+      <BentoCard padding={false}>
         <div style={{
           display: 'flex', borderBottom: '1px solid var(--border)',
           background: 'var(--bg-page)',
@@ -113,7 +110,7 @@ export default function SettingsPage() {
                 borderBottom: activeTab === tab.key ? '2px solid var(--accent-600)' : '2px solid transparent',
                 color: activeTab === tab.key ? 'var(--accent-600)' : 'var(--text-muted)',
                 fontWeight: activeTab === tab.key ? 700 : 500,
-                fontSize: 13.5,
+                fontSize: 13,
                 cursor: 'pointer',
                 fontFamily: 'inherit',
                 transition: 'color 0.12s, border-color 0.12s',
@@ -133,7 +130,7 @@ export default function SettingsPage() {
             <div style={{
               padding: '18px 16px',
               background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-              borderRadius: 12, fontSize: 13.5,
+              borderRadius: 12, fontSize: 13,
               color: 'var(--danger-text)', fontWeight: 500,
             }}>
               Could not load business settings. Check that the backend is running and refresh.
@@ -175,7 +172,7 @@ export default function SettingsPage() {
                       style={{
                         ...selectStyle,
                         resize: 'vertical', minHeight: 72,
-                        fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)",
+                        fontFamily: "var(--font-sans, 'Inter', sans-serif)",
                       }}
                     />
                   </FormField>
@@ -185,7 +182,7 @@ export default function SettingsPage() {
                       <Input {...register('business_state')} placeholder="e.g. Tamil Nadu" />
                     </FormField>
                     <FormField label="Country" error={errors.business_country_code?.message}>
-                      <select {...register('business_country_code')} style={selectStyle}>
+                      <select {...register('business_country_code')} style={selectStyle} aria-label="Business country">
                         <option value="">— Select Country —</option>
                         {COUNTRIES.map((c) => (
                           <option
@@ -237,6 +234,7 @@ export default function SettingsPage() {
                         type="checkbox"
                         {...register('is_gst_registered')}
                         style={{ opacity: 0, width: 0, height: 0 }}
+                        aria-label="GST registered"
                       />
                       <span style={{
                         position: 'absolute', inset: 0,
@@ -289,7 +287,7 @@ export default function SettingsPage() {
             </form>
           )}
         </div>
-      </div>
+      </BentoCard>
     </>
   )
 }

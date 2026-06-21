@@ -3,136 +3,43 @@ import { useNavigate } from 'react-router-dom'
 import { useDashboard, useSalesTrend } from '../hooks/useDashboard'
 import useAuthStore from '../../../store/authStore'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
+import { BentoCard, MetricCard } from '../../../shared/components'
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
-function Skeleton({ w = '60%', h = 28 }) {
+function SvgIcon({ path, size = 18 }) {
   return (
-    <div style={{
-      height: h, width: w,
-      background: 'var(--bg-hover)',
-      borderRadius: 6,
-      animation: 'pulse-shimmer 1.5s ease-in-out infinite',
-    }} />
+    <svg width={size} height={size} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={path} />
+    </svg>
   )
 }
 
-// ─── Stat Card (Premium Colored) ──────────────────────────────────────────────
-function StatCard({ label, value, sub, icon, gradient, loading, onClick }) {
-  const isClickable = typeof onClick === 'function'
-  const [hovered, setHovered] = useState(false)
-
-  return (
-    <div
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        background: 'var(--bg-card)',
-        border: `1px solid ${hovered
-          ? (isClickable ? 'var(--accent-500)' : 'var(--border-hover)')
-          : 'var(--border)'}`,
-        borderRadius: 18,
-        padding: '24px 22px 22px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 18,
-        boxShadow: hovered ? '0 8px 30px var(--accent-glow), var(--shadow-elevated)' : 'var(--shadow-card)',
-        transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
-        transition: 'transform 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out), border-color 0.25s',
-        minWidth: 0,
-        overflow: 'hidden',
-        position: 'relative',
-        cursor: isClickable ? 'pointer' : 'default',
-        willChange: 'transform',
-      }}
-    >
-      {/* Subtle top gradient stripe */}
-      <div style={{
-        position: 'absolute', top: 0, left: 0, right: 0, height: 3.5,
-        background: gradient,
-        borderRadius: '18px 18px 0 0',
-      }} />
-
-      {/* Icon pill */}
-      <div style={{
-        width: 46, height: 46, borderRadius: 14,
-        background: gradient,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 22,
-        flexShrink: 0,
-        boxShadow: '0 4px 12px rgba(0,0,0,0.10)',
-      }}>
-        {icon}
-      </div>
-
-      {/* Value */}
-      {loading
-        ? <Skeleton w="70%" h={28} />
-        : (
-          <div style={{
-            fontSize: 'clamp(18px, 2.4vw, 28px)',
-            fontWeight: 800,
-            color: 'var(--text-primary)',
-            letterSpacing: '-0.6px',
-            lineHeight: 1.1,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}>
-            {value}
-          </div>
-        )
-      }
-
-      {/* Label + sub */}
-      <div>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3 }}>
-          {label}
-          {isClickable && (
-            <span style={{ marginLeft: 6, fontSize: 12, color: 'var(--accent-500)', verticalAlign: 'middle', fontWeight: 700 }}>
-              →
-            </span>
-          )}
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}>
-          {sub}
-        </div>
-      </div>
-    </div>
-  )
+const ICONS = {
+  revenue: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6',
+  expenses: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z',
+  invoices: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+  customers: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z',
+  products: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4',
+  payments: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z',
+  alerts: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z',
 }
 
-// ─── Sales Trend Chart (pure SVG) ────────────────────────────────────────────
+// ── Sales Trend Chart ──────────────────────────────────────────────
 function SalesTrendChart({ period, onPeriodChange }) {
   const { data: raw, isLoading, isError } = useSalesTrend(period)
   const points = Array.isArray(raw) ? raw : []
 
-  const W = 600
-  const H = 180
-  const PAD_L = 56
-  const PAD_R = 20
-  const PAD_T = 20
-  const PAD_B = 40
-
+  const W = 600, H = 200, PAD_L = 56, PAD_R = 20, PAD_T = 30, PAD_B = 40
   const chartW = W - PAD_L - PAD_R
   const chartH = H - PAD_T - PAD_B
 
-  // PERF: maxVal, coords, and yTicks are all derived purely from `points`.
-  // Without memoization these array maps + Math.max spread re-run on every
-  // render (sidebar toggle, theme switch, unrelated parent state changes),
-  // even though `points` itself only changes when useSalesTrend refetches.
   const { maxVal, coords, yTicks } = useMemo(() => {
     const maxVal = Math.max(...points.map(p => p.value), 1)
-
     const coords = points.map((p, i) => ({
       x: PAD_L + (i / Math.max(points.length - 1, 1)) * chartW,
       y: PAD_T + chartH - (p.value / maxVal) * chartH,
-      label: p.label,
-      value: p.value,
+      label: p.label, value: p.value,
     }))
-
     const yTicks = [...new Set([0, Math.ceil(maxVal / 2), maxVal])]
-
     return { maxVal, coords, yTicks }
   }, [points])
 
@@ -140,8 +47,7 @@ function SalesTrendChart({ period, onPeriodChange }) {
     if (pts.length < 2) return ''
     let d = `M ${pts[0].x} ${pts[0].y}`
     for (let i = 1; i < pts.length; i++) {
-      const prev = pts[i - 1]
-      const curr = pts[i]
+      const prev = pts[i - 1], curr = pts[i]
       const cpx = (prev.x + curr.x) / 2
       d += ` C ${cpx} ${prev.y} ${cpx} ${curr.y} ${curr.x} ${curr.y}`
     }
@@ -151,12 +57,8 @@ function SalesTrendChart({ period, onPeriodChange }) {
   function areaPath(pts) {
     if (pts.length < 2) return ''
     const baseline = PAD_T + chartH
-    return smoothPath(pts)
-      + ` L ${pts[pts.length - 1].x} ${baseline}`
-      + ` L ${pts[0].x} ${baseline} Z`
+    return smoothPath(pts) + ` L ${pts[pts.length - 1].x} ${baseline} L ${pts[0].x} ${baseline} Z`
   }
-
-  function fmtY(val) { return String(Math.round(val)) }
 
   const PERIODS = [
     { key: 'weekly',  label: 'Weekly' },
@@ -165,45 +67,24 @@ function SalesTrendChart({ period, onPeriodChange }) {
   ]
 
   return (
-    <div style={{
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border)',
-      borderRadius: 18,
-      boxShadow: 'var(--shadow-card)',
-      padding: '24px 24px 20px',
-      marginBottom: 40,
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 20, flexWrap: 'wrap', gap: 12,
-      }}>
+    <BentoCard colSpan={8} padding style={{ minHeight: 320 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px' }}>
-            Sales Trend
-          </h2>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, fontWeight: 400 }}>
-            Invoices raised over time
-          </p>
+          <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>Sales Trend</p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Invoices raised over time</p>
         </div>
-        <div style={{
-          display: 'flex', gap: 6,
-          background: 'var(--bg-subtle)',
-          border: '1px solid var(--border)',
-          borderRadius: 10, padding: 4,
-        }}>
+        <div style={{ display: 'flex', gap: 4, background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: 8, padding: 3 }}>
           {PERIODS.map(p => (
             <button
               key={p.key}
               onClick={() => onPeriodChange(p.key)}
               style={{
-                padding: '5px 14px', borderRadius: 7, border: 'none', cursor: 'pointer',
-                fontSize: 12, fontWeight: 600, transition: 'all 0.15s',
-                background: period === p.key
-                  ? 'linear-gradient(135deg, var(--accent-600), var(--accent-500))'
-                  : 'transparent',
-                color: period === p.key ? '#fff' : 'var(--text-secondary)',
-                boxShadow: period === p.key ? '0 2px 8px var(--accent-glow)' : 'none',
+                padding: '4px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                fontSize: 11.5, fontWeight: 600, fontFamily: 'inherit',
+                background: period === p.key ? 'var(--bg-card)' : 'transparent',
+                color: period === p.key ? 'var(--text-primary)' : 'var(--text-muted)',
+                boxShadow: period === p.key ? 'var(--shadow-xs)' : 'none',
+                transition: 'all 0.13s',
               }}
             >
               {p.label}
@@ -213,115 +94,67 @@ function SalesTrendChart({ period, onPeriodChange }) {
       </div>
 
       {isError ? (
-        <div style={{
-          height: H, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'var(--danger-text)', fontSize: 13.5, flexDirection: 'column', gap: 8,
-        }}>
-          <span style={{ fontSize: 24 }}>⚠️</span>
-          <span>Failed to load trend data.</span>
+        <div style={{ height: H, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger-text)', fontSize: 13 }}>
+          Failed to load trend data.
         </div>
       ) : isLoading ? (
-        <div style={{ height: H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Skeleton w="80%" h={H - 60} />
-        </div>
+        <div className="skeleton" style={{ width: '100%', height: H, borderRadius: 8 }} />
       ) : points.every(p => p.value === 0) ? (
-        <div style={{
-          height: H, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'var(--text-muted)', fontSize: 13.5,
-        }}>
+        <div style={{ height: H, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
           No sales data for this period.
         </div>
       ) : (
-        <svg
-          viewBox={`0 0 ${W} ${H}`}
-          preserveAspectRatio="xMidYMid meet"
-          style={{ width: '100%', height: 'auto', overflow: 'visible' }}
-        >
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: 'auto', overflow: 'visible' }}>
           <defs>
             <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stopColor="var(--accent-500)" stopOpacity="0.18" />
+              <stop offset="0%" stopColor="var(--accent-500)" stopOpacity="0.15" />
               <stop offset="100%" stopColor="var(--accent-500)" stopOpacity="0.01" />
             </linearGradient>
-            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="3" result="coloredBlur" />
-              <feMerge>
-                <feMergeNode in="coloredBlur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
           </defs>
-
           {yTicks.map((tick, i) => {
             const y = PAD_T + chartH - (tick / maxVal) * chartH
             return (
               <g key={i}>
                 <line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y} stroke="var(--border)" strokeWidth="1" strokeDasharray="4 4" />
-                <text x={PAD_L - 8} y={y + 4} textAnchor="end" fontSize="10" fill="var(--text-muted)"
-                  fontFamily="var(--font-sans, 'Plus Jakarta Sans', sans-serif)">
-                  {fmtY(tick)}
-                </text>
+                <text x={PAD_L - 8} y={y + 4} textAnchor="end" fontSize="10" fill="var(--text-muted)" fontFamily="var(--font-sans, 'Inter', sans-serif)">{String(Math.round(tick))}</text>
               </g>
             )
           })}
-
           <path d={areaPath(coords)} fill="url(#trendFill)" />
-          <path d={smoothPath(coords)} fill="none" stroke="var(--accent-600)" strokeWidth="2.5"
-            strokeLinecap="round" strokeLinejoin="round" filter="url(#glow)" />
-
+          <path d={smoothPath(coords)} fill="none" stroke="var(--accent-600)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           {coords.map((pt, i) => (
             <g key={i}>
-              <circle cx={pt.x} cy={pt.y} r={4} fill="var(--accent-600)" stroke="var(--bg-card)" strokeWidth="2" />
-              <text x={pt.x} y={PAD_T + chartH + 20} textAnchor="middle" fontSize="10.5"
-                fill="var(--text-muted)" fontFamily="var(--font-sans, 'Plus Jakarta Sans', sans-serif)" fontWeight="500">
-                {pt.label}
-              </text>
+              <circle cx={pt.x} cy={pt.y} r={3.5} fill="var(--accent-600)" stroke="var(--bg-card)" strokeWidth="2" />
+              <text x={pt.x} y={PAD_T + chartH + 20} textAnchor="middle" fontSize="10" fill="var(--text-muted)" fontFamily="var(--font-sans, 'Inter', sans-serif)" fontWeight="500">{pt.label}</text>
             </g>
           ))}
         </svg>
       )}
-    </div>
+    </BentoCard>
   )
 }
 
-// ─── Payment Status Donut ─────────────────────────────────────────────────────
-// Uses paid_count, pending_payments (partial), unpaid_count from summary.
-// Pure SVG arc math — no library needed.
+// ── Payment Donut ──────────────────────────────────────────────────
 function PaymentDonut({ paid = 0, partial = 0, unpaid = 0, loading }) {
-  // FIX 1: rawTotal is the real count shown in the center text.
-  // 'total' (safe divisor) uses || 1 only to avoid division-by-zero in % math.
-  // Previously both used the same variable so the center showed "1" when empty.
   const rawTotal = paid + partial + unpaid
-  const total    = rawTotal || 1
+  const total = rawTotal || 1
   const segments = [
     { label: 'Paid',    value: paid,    color: 'var(--success)' },
     { label: 'Partial', value: partial, color: 'var(--warning)' },
     { label: 'Unpaid',  value: unpaid,  color: 'var(--danger)' },
   ]
-
-  // Build SVG arc paths. cx,cy = center, r = radius, hole = donut hole radius
   const cx = 80, cy = 80, r = 60, hole = 36
-  let startAngle = -Math.PI / 2   // start at 12 o'clock
+  let startAngle = -Math.PI / 2
 
   function polarToXY(angle, radius) {
-    return {
-      x: cx + radius * Math.cos(angle),
-      y: cy + radius * Math.sin(angle),
-    }
+    return { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) }
   }
 
   function arcPath(start, end, outerR, innerR) {
     const largeArc = end - start > Math.PI ? 1 : 0
-    const o1 = polarToXY(start, outerR)
-    const o2 = polarToXY(end,   outerR)
-    const i1 = polarToXY(end,   innerR)
-    const i2 = polarToXY(start, innerR)
-    return [
-      `M ${o1.x} ${o1.y}`,
-      `A ${outerR} ${outerR} 0 ${largeArc} 1 ${o2.x} ${o2.y}`,
-      `L ${i1.x} ${i1.y}`,
-      `A ${innerR} ${innerR} 0 ${largeArc} 0 ${i2.x} ${i2.y}`,
-      'Z'
-    ].join(' ')
+    const o1 = polarToXY(start, outerR), o2 = polarToXY(end, outerR)
+    const i1 = polarToXY(end, innerR), i2 = polarToXY(start, innerR)
+    return `M ${o1.x} ${o1.y} A ${outerR} ${outerR} 0 ${largeArc} 1 ${o2.x} ${o2.y} L ${i1.x} ${i1.y} A ${innerR} ${innerR} 0 ${largeArc} 0 ${i2.x} ${i2.y} Z`
   }
 
   const arcs = segments.map(seg => {
@@ -333,431 +166,311 @@ function PaymentDonut({ paid = 0, partial = 0, unpaid = 0, loading }) {
   })
 
   return (
-    <div style={{
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border)',
-      borderRadius: 18,
-      boxShadow: 'var(--shadow-card)',
-      padding: '24px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 16,
-    }}>
-      <div>
-        <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 3px' }}>
-          Payment Status
-        </h2>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
-          Breakdown across all invoices
-        </p>
-      </div>
-
+    <BentoCard colSpan={4} style={{ minHeight: 260 }}>
+      <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>Payment Status</p>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>Breakdown across all invoices</p>
       {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
-          <Skeleton w={120} h={120} />
+        <div className="skeleton" style={{ width: 140, height: 140, borderRadius: '50%', margin: '0 auto' }} />
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <svg viewBox="0 0 160 160" style={{ width: 130, height: 130, flexShrink: 0 }}>
+            {arcs.map(arc => arc.path && <path key={arc.label} d={arc.path} fill={arc.color} opacity={0.92} />)}
+            <text x={cx} y={cy - 6} textAnchor="middle" fontSize="18" fontWeight="800" fill="var(--text-primary)" fontFamily="Inter, sans-serif">{rawTotal}</text>
+            <text x={cx} y={cy + 10} textAnchor="middle" fontSize="10" fill="var(--text-muted)" fontFamily="Inter, sans-serif">invoices</text>
+          </svg>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {segments.map(seg => (
+              <div key={seg.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: seg.color, flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{seg.value}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{seg.label} ({total > 0 ? Math.round(seg.value / total * 100) : 0}%)</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </BentoCard>
+  )
+}
+
+// ── Revenue vs Expenses ────────────────────────────────────────────
+function RevenueExpensesBar({ revenue, expenses, country, loading }) {
+  if (!loading && (revenue == null || expenses == null)) return null
+  const maxVal = Math.max(revenue || 0, expenses || 0, 1)
+  const revenueW = ((revenue || 0) / maxVal) * 100
+  const expensesW = ((expenses || 0) / maxVal) * 100
+  const profit = (revenue || 0) - (expenses || 0)
+  const profitPct = revenue > 0 ? Math.round((profit / revenue) * 100) : 0
+  const isProfitable = profit >= 0
+
+  return (
+    <BentoCard colSpan={4} style={{ minHeight: 260 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+        <div>
+          <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>Revenue vs Expenses</p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>All-time totals</p>
+        </div>
+        {!loading && (
+          <div style={{
+            padding: '3px 10px', borderRadius: 6, fontSize: 11.5, fontWeight: 600,
+            background: isProfitable ? 'var(--success-bg)' : 'var(--danger-bg)',
+            color: isProfitable ? 'var(--success-text)' : 'var(--danger-text)',
+          }}>
+            {Math.abs(profitPct)}% margin
+          </div>
+        )}
+      </div>
+      {loading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="skeleton" style={{ width: '80%', height: 18, borderRadius: 4 }} />
+          <div className="skeleton" style={{ width: '60%', height: 18, borderRadius: 4 }} />
         </div>
       ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
-          <svg viewBox="0 0 160 160" style={{ width: 140, height: 140, flexShrink: 0 }}>
-            {arcs.map(arc => arc.path && (
-              <path key={arc.label} d={arc.path} fill={arc.color} opacity={0.92} />
-            ))}
-            {/* Center text — FIX 1: use rawTotal (real count), not total (safe divisor) */}
-            <text x={cx} y={cy - 6} textAnchor="middle" fontSize="18" fontWeight="800"
-              fill="var(--text-primary)" fontFamily="var(--font-sans,'Plus Jakarta Sans',sans-serif)">
-              {rawTotal}
-            </text>
-            <text x={cx} y={cy + 10} textAnchor="middle" fontSize="10"
-              fill="var(--text-muted)" fontFamily="var(--font-sans,'Plus Jakarta Sans',sans-serif)">
-              invoices
-            </text>
-          </svg>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {segments.map(seg => (
-              <div key={seg.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: seg.color, flexShrink: 0 }} />
-                <div>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {seg.value}
-                  </span>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6 }}>
-                    {seg.label} ({total > 0 ? Math.round(seg.value / total * 100) : 0}%)
-                  </span>
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {[
+              { label: 'Revenue',  value: revenue || 0, pct: revenueW,  color: 'var(--success)' },
+              { label: 'Expenses', value: expenses || 0, pct: expensesW, color: 'var(--danger)' },
+            ].map(bar => (
+              <div key={bar.label}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{bar.label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{formatCurrency(bar.value, country)}</span>
+                </div>
+                <div style={{ height: 8, background: 'var(--bg-subtle)', borderRadius: 99, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${bar.pct}%`, background: bar.color, borderRadius: 99, transition: 'width 0.6s ease' }} />
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Revenue vs Expenses Bar ──────────────────────────────────────────────────
-// Two bars side by side using the revenue + expenses already in summary.
-// Only shown when both values are non-null (admin/manager).
-function RevenueExpensesBar({ revenue, expenses, country, loading }) {
-  if (!loading && (revenue == null || expenses == null)) return null
-
-  const maxVal = Math.max(revenue || 0, expenses || 0, 1)
-  const revenueW  = ((revenue  || 0) / maxVal) * 100
-  const expensesW = ((expenses || 0) / maxVal) * 100
-  const profit    = (revenue || 0) - (expenses || 0)
-  const profitPct = revenue > 0 ? Math.round((profit / revenue) * 100) : 0
-
-  const bars = [
-    { label: 'Revenue',  value: revenue  || 0, pct: revenueW,  color: 'var(--success)' },
-    { label: 'Expenses', value: expenses || 0, pct: expensesW, color: 'var(--danger)' },
-  ]
-
-  return (
-    <div style={{
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border)',
-      borderRadius: 18,
-      boxShadow: 'var(--shadow-card)',
-      padding: '24px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 16,
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 3px' }}>
-            Revenue vs Expenses
-          </h2>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
-            All-time totals comparison
-          </p>
-        </div>
-        {!loading && (
-          <div style={{
-            padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700,
-            background: profit >= 0 ? 'var(--success-bg)' : 'var(--danger-bg)',
-            color: profit >= 0 ? 'var(--success-text)' : 'var(--danger-text)',
-          }}>
-            {profit >= 0 ? '▲' : '▼'} {Math.abs(profitPct)}% margin
-          </div>
-        )}
-      </div>
-
-      {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <Skeleton w="80%" h={20} />
-          <Skeleton w="60%" h={20} />
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          {bars.map(bar => (
-            <div key={bar.label}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{bar.label}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {formatCurrency(bar.value, country)}
-                </span>
-              </div>
-              <div style={{ height: 10, background: 'var(--bg-subtle)', borderRadius: 999, overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%',
-                  width: `${bar.pct}%`,
-                  background: bar.color,
-                  borderRadius: 999,
-                  transition: 'width 0.6s ease',
-                }} />
-              </div>
-            </div>
-          ))}
-
-          <div style={{
-            marginTop: 4,
-            paddingTop: 14,
-            borderTop: '1px solid var(--border)',
-            display: 'flex',
-            justifyContent: 'space-between',
-          }}>
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Net Profit</span>
-            <span style={{
-              fontSize: 14, fontWeight: 800,
-              color: profit >= 0 ? 'var(--success-text)' : 'var(--danger-text)',
-            }}>
+            <span style={{ fontSize: 14, fontWeight: 800, color: isProfitable ? 'var(--success-text)' : 'var(--danger-text)' }}>
               {formatCurrency(Math.abs(profit), country)}
-              <span style={{ fontSize: 11, fontWeight: 500, marginLeft: 4 }}>
-                {profit >= 0 ? 'profit' : 'loss'}
+              <span style={{ fontSize: 11, fontWeight: 500, marginLeft: 4, color: 'var(--text-muted)' }}>
+                {isProfitable ? 'profit' : 'loss'}
               </span>
             </span>
           </div>
-        </div>
+        </>
       )}
-    </div>
+    </BentoCard>
   )
 }
 
-// ─── Business Health Score ────────────────────────────────────────────────────
-// Computed entirely from existing summary fields — no new API call.
-// Score 0-100 based on: payment collection rate, stock alerts, expense ratio.
+// ── Business Health ────────────────────────────────────────────────
 function HealthScore({ data, loading }) {
   if (!loading && !data) return null
 
-  // Each metric contributes to the score (computed from already-fetched data)
-  const total = (data?.total_invoices || 0)
-  const paid  = (data?.paid_count     || 0)
-  const low   = (data?.low_stock_alerts || 0)
-  const rev   = data?.total_revenue   || 0
-  const exp   = data?.total_expenses  || 0
-
-  // FIX 2: Detect whether there is any real data to compute a score from.
-  // When a brand-new business has zero invoices and zero stock alerts,
-  // the old formula gave stockScore=30 + expenseScore=10 = 40 for free.
-  // Now we show an empty state instead of a misleading score.
+  const total = data?.total_invoices || 0
+  const paid = data?.paid_count || 0
+  const low = data?.low_stock_alerts || 0
+  const rev = data?.total_revenue || 0
+  const exp = data?.total_expenses || 0
   const hasAnyData = total > 0 || low > 0 || rev > 0
 
-  // Metric 1: Collection rate — paid / total invoices (max 50 pts)
   const collectionRate = total > 0 ? paid / total : 0
   const collectionScore = Math.round(collectionRate * 50)
-
-  // Metric 2: Stock health — 0 alerts = 30 pts, deduct 5 per alert (min 0)
   const stockScore = Math.max(0, 30 - low * 5)
-
-  // Metric 3: Expense ratio — only if financial data present (max 20 pts)
-  let expenseScore = 10  // neutral if no financial data
+  let expenseScore = 10
   if (rev > 0 && exp != null) {
-    const ratio = exp / rev   // lower = healthier
+    const ratio = exp / rev
     expenseScore = ratio <= 0.5 ? 20 : ratio <= 0.8 ? 12 : 4
   }
-
   const score = Math.min(100, collectionScore + stockScore + expenseScore)
-
   const scoreColor = score >= 75 ? 'var(--success-text)' : score >= 50 ? 'var(--warning-text)' : 'var(--danger-text)'
   const scoreLabel = score >= 75 ? 'Healthy' : score >= 50 ? 'Moderate' : 'Needs Attention'
 
-  // SVG arc for the score gauge
-  const radius = 54
-  const circ   = 2 * Math.PI * radius
-  const dash   = (score / 100) * circ * 0.75   // 270° arc
-  const gap    = circ - dash
+  const radius = 54, circ = 2 * Math.PI * radius
+  const dash = (score / 100) * circ * 0.75
+  const gap = circ - dash
 
   return (
-    <div style={{
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border)',
-      borderRadius: 18,
-      boxShadow: 'var(--shadow-card)',
-      padding: '24px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 16,
-    }}>
-      <div>
-        <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 3px' }}>
-          Business Health
-        </h2>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
-          Score based on payments, stock &amp; expenses
-        </p>
-      </div>
-
+    <BentoCard colSpan={4} style={{ minHeight: 260 }}>
+      <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>Business Health</p>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>Score based on payments, stock & expenses</p>
       {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '20px 0' }}>
-          <Skeleton w={120} h={120} />
-        </div>
+        <div className="skeleton" style={{ width: 120, height: 120, borderRadius: '50%', margin: '0 auto' }} />
       ) : !hasAnyData ? (
-        /* FIX 2: No data yet — show empty state instead of a fake score */
-        <div style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center',
-          justifyContent: 'center', padding: '24px 0', gap: 8,
-        }}>
-          <div style={{ fontSize: 32 }}>📊</div>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, textAlign: 'center', lineHeight: 1.6 }}>
-            No data yet.<br />Score will appear once invoices are raised.
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 0', gap: 8 }}>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.6 }}>
+            No data yet. Score will appear once invoices are raised.
           </p>
         </div>
       ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
-          {/* Gauge */}
-          <svg viewBox="0 0 130 130" style={{ width: 120, height: 120, flexShrink: 0, transform: 'rotate(135deg)' }}>
-            {/* Background track */}
-            <circle cx="65" cy="65" r={radius} fill="none"
-              stroke="var(--bg-subtle)" strokeWidth="10"
-              strokeDasharray={`${circ * 0.75} ${circ * 0.25}`}
-              strokeLinecap="round" />
-            {/* Score arc */}
-            <circle cx="65" cy="65" r={radius} fill="none"
-              stroke={scoreColor} strokeWidth="10"
-              strokeDasharray={`${dash} ${gap + circ * 0.25}`}
-              strokeLinecap="round"
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <svg viewBox="0 0 130 130" style={{ width: 110, height: 110, flexShrink: 0, transform: 'rotate(135deg)' }}>
+            <circle cx="65" cy="65" r={radius} fill="none" stroke="var(--bg-subtle)" strokeWidth="10"
+              strokeDasharray={`${circ * 0.75} ${circ * 0.25}`} strokeLinecap="round" />
+            <circle cx="65" cy="65" r={radius} fill="none" stroke={scoreColor} strokeWidth="10"
+              strokeDasharray={`${dash} ${gap + circ * 0.25}`} strokeLinecap="round"
               style={{ transition: 'stroke-dasharray 0.8s ease' }} />
-            {/* Center — rotate back to read text normally */}
             <g transform="rotate(-135 65 65)">
-              <text x="65" y="60" textAnchor="middle" fontSize="22" fontWeight="800"
-                fill="var(--text-primary)" fontFamily="var(--font-sans,'Plus Jakarta Sans',sans-serif)">
-                {score}
-              </text>
-              <text x="65" y="75" textAnchor="middle" fontSize="10"
-                fill="var(--text-muted)" fontFamily="var(--font-sans,'Plus Jakarta Sans',sans-serif)">
-                / 100
-              </text>
+              <text x="65" y="60" textAnchor="middle" fontSize="20" fontWeight="800" fill="var(--text-primary)" fontFamily="Inter, sans-serif">{score}</text>
+              <text x="65" y="75" textAnchor="middle" fontSize="9" fill="var(--text-muted)" fontFamily="Inter, sans-serif">/ 100</text>
             </g>
           </svg>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{
-              padding: '4px 12px', borderRadius: 8, fontSize: 13, fontWeight: 700,
-              background: score >= 75 ? 'var(--success-bg)' : score >= 50 ? 'var(--warning-bg)' : 'var(--danger-bg)',
-              color: scoreColor, display: 'inline-block', alignSelf: 'flex-start',
-            }}>
-              {scoreLabel}
-            </div>
+          <div>
+            <div style={{ padding: '3px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: score >= 75 ? 'var(--success-bg)' : score >= 50 ? 'var(--warning-bg)' : 'var(--danger-bg)', color: scoreColor, display: 'inline-block', marginBottom: 10 }}>{scoreLabel}</div>
             {[
               { label: 'Collection Rate', val: `${Math.round(collectionRate * 100)}%` },
-              { label: 'Stock Alerts',    val: low },
+              { label: 'Stock Alerts', val: low },
             ].map(m => (
-              <div key={m.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 20 }}>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.label}</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{m.val}</span>
+              <div key={m.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 4 }}>
+                <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{m.label}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-primary)' }}>{m.val}</span>
               </div>
             ))}
           </div>
         </div>
       )}
-    </div>
+    </BentoCard>
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ── Quick Actions ──────────────────────────────────────────────────
+function QuickActions({ navigate }) {
+  const [hoveredIdx, setHoveredIdx] = useState(null)
+  const actions = [
+    { label: 'New Sale', path: '/sales/new', icon: 'M12 4v16m8-8H4', color: 'var(--accent-600)' },
+    { label: 'New Product', path: '/products', icon: 'M12 4v16m8-8H4', color: 'var(--success)' },
+    { label: 'New Customer', path: '/customers', icon: 'M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z', color: 'var(--info)' },
+    { label: 'New Purchase', path: '/purchases/new', icon: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z', color: 'var(--warning)' },
+  ]
+
+  return (
+    <BentoCard colSpan={4}>
+      <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>Quick Actions</p>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        {actions.map((a, i) => {
+          const isHovered = hoveredIdx === i
+          return (
+          <button
+            key={a.label}
+            onClick={() => navigate(a.path)}
+            onMouseEnter={() => setHoveredIdx(i)}
+            onMouseLeave={() => setHoveredIdx(null)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '12px', borderRadius: 8,
+              background: isHovered ? 'var(--bg-hover)' : 'var(--bg-subtle)',
+              border: `1px solid ${isHovered ? 'var(--border-hover)' : 'var(--border)'}`,
+              cursor: 'pointer', fontFamily: 'inherit',
+              transition: 'background 0.13s, border-color 0.13s',
+            }}
+          >
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke={a.color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d={a.icon} />
+            </svg>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{a.label}</span>
+          </button>
+          )
+        })}
+      </div>
+    </BentoCard>
+  )
+}
+
+// ── Main Page ──────────────────────────────────────────────────────
 export default function DashboardPage() {
   const { data, isLoading, isError } = useDashboard()
-  const business      = useAuthStore(s => s.business)
-  const country       = business?.business_country_code || 'IN'
-  const navigate      = useNavigate()
+  const business = useAuthStore(s => s.business)
+  const country = business?.business_country_code || 'IN'
+  const navigate = useNavigate()
   const [trendPeriod, setTrendPeriod] = useState('weekly')
 
-  // ── Build stat cards ──────────────────────────────────────────────────────
-  // Financial cards only appear when the backend returns a non-null value.
-  // Backend sends null when user lacks dashboard.financial permission.
-  // This way the frontend never needs to check permission codes directly —
-  // null is the signal to hide.
-
-  const allCards = [
-    // Financial (shown only when backend returns a value — admin/manager)
+  const metricCards = [
     data?.total_revenue != null ? {
-      label: 'Total Revenue',
+      label: 'Revenue',
       value: formatCurrency(data.total_revenue, country),
-      sub: 'Gross from all invoices',
-      icon: '💰',
-      gradient: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
+      icon: <SvgIcon path={ICONS.revenue} size={18} />,
       onClick: () => navigate('/reports'),
+      growth: data?.revenue_growth,
+      subtitle: 'Gross from all invoices',
     } : null,
-    data?.total_expenses != null ? {
-      label: 'Total Expenses',
-      value: formatCurrency(data.total_expenses, country),
-      sub: 'All recorded expenses',
-      icon: '📊',
-      gradient: 'linear-gradient(135deg, #8B5CF6, #A855F7)',
-      onClick: () => navigate('/expenses'),
-    } : null,
-
-    // Always visible (dashboard.view)
     {
-      label: 'Total Invoices',
+      label: 'Invoices',
       value: data?.total_invoices ?? 0,
-      sub: 'All invoices raised',
-      icon: '🧾',
-      gradient: 'linear-gradient(135deg, #0EA5E9, #06B6D4)',
+      icon: <SvgIcon path={ICONS.invoices} size={18} />,
       onClick: () => navigate('/sales'),
+      subtitle: 'All invoices raised',
     },
     {
       label: 'Customers',
       value: data?.total_customers ?? 0,
-      sub: 'Active accounts — click to view',
-      icon: '👥',
-      gradient: 'linear-gradient(135deg, #10B981, #059669)',
+      icon: <SvgIcon path={ICONS.customers} size={18} />,
       onClick: () => navigate('/customers'),
+      subtitle: 'Active accounts',
     },
     {
       label: 'Products',
       value: data?.total_products ?? 0,
-      sub: 'Active products — click to view',
-      icon: '📦',
-      gradient: 'linear-gradient(135deg, #F59E0B, #F97316)',
-      onClick: () => navigate('/products')
+      icon: <SvgIcon path={ICONS.products} size={18} />,
+      onClick: () => navigate('/products'),
+      subtitle: 'Active products',
     },
+    data?.total_expenses != null ? {
+      label: 'Expenses',
+      value: formatCurrency(data.total_expenses, country),
+      icon: <SvgIcon path={ICONS.expenses} size={18} />,
+      onClick: () => navigate('/expenses'),
+      subtitle: 'All recorded expenses',
+    } : null,
     {
       label: 'Pending Payments',
       value: data?.pending_payments ?? 0,
-      sub: 'Unpaid + partially paid invoices',
-      icon: '⏳',
-      gradient: 'linear-gradient(135deg, #F97316, #EF4444)',
-      onClick: () => navigate('/payments')
+      icon: <SvgIcon path={ICONS.payments} size={18} />,
+      onClick: () => navigate('/payments'),
+      subtitle: 'Unpaid + partially paid',
     },
     {
-      label: 'Low Stock Alerts',
+      label: 'Stock Alerts',
       value: data?.low_stock_alerts ?? 0,
-      sub: 'Unread alerts',
-      icon: '⚠️',
-      gradient: 'linear-gradient(135deg, #EF4444, #DC2626)',
-      onClick: () => navigate('/stock')
+      icon: <SvgIcon path={ICONS.alerts} size={18} />,
+      onClick: () => navigate('/stock'),
+      subtitle: 'Unread alerts',
     },
-  ].filter(Boolean)   // removes the null entries when financial fields are absent
+  ].filter(Boolean)
 
   return (
-    <>
-      {/* ── Page header ── */}
-      <div style={{ marginBottom: 40 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+    <div>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px', margin: '0 0 6px' }}>
+            <p style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', marginBottom: 4 }}>
               Overview
-            </h1>
-            <p style={{ fontSize: 13.5, color: 'var(--text-muted)', margin: 0, fontWeight: 400 }}>
-              {business?.business_name || 'Your store'} · live summary
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              {business?.business_name || 'Your business'} &middot; live summary
             </p>
           </div>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '6px 12px', background: 'var(--bg-subtle)',
-            border: '1px solid var(--border)', borderRadius: 10,
-            fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 500, flexShrink: 0,
-          }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', flexShrink: 0 }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 500 }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--success)' }} />
             Live
           </div>
         </div>
       </div>
 
-      {/* ── Error banner ── */}
       {isError && (
-        <div style={{
-          background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-          borderRadius: 12, padding: '13px 18px', color: 'var(--danger-text)',
-          fontSize: 13.5, marginBottom: 32, fontWeight: 500,
-        }}>
-          ⚠️ Could not load data. Make sure the backend is running, then refresh.
+        <div style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: 8, padding: '12px 16px', color: 'var(--danger-text)', fontSize: 13, marginBottom: 24, fontWeight: 500 }}>
+          Could not load data. Make sure the backend is running, then refresh.
         </div>
       )}
 
-      {/* ── Stat cards grid ── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-        gap: 18,
-        marginBottom: 40,
-      }}>
-        {(isLoading ? Array(5).fill(null) : allCards).map((card, i) => (
+      <div className="bento-grid bento-grid-12" style={{ marginBottom: 16 }}>
+        {(isLoading ? Array(7).fill(null) : metricCards).map((card, i) => (
           card
-            ? <StatCard key={card.label} {...card} loading={false} />
-            : <StatCard key={i} label="" value="" sub="" icon="💰"
-                gradient="linear-gradient(135deg, #4F46E5, #7C3AED)" loading={true} />
+            ? <MetricCard key={card.label} {...card} colSpan={3} loading={false} style={{ cursor: card.onClick ? 'pointer' : 'default' }} />
+            : <MetricCard key={i} label="" value="" icon={<SvgIcon path={ICONS.invoices} />} colSpan={3} loading />
         ))}
       </div>
 
-      {/* ── BI Visuals row ── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-        gap: 18,
-        marginBottom: 40,
-      }}>
+      <div className="bento-grid bento-grid-12" style={{ marginBottom: 16 }}>
+        <SalesTrendChart period={trendPeriod} onPeriodChange={setTrendPeriod} />
+        <QuickActions navigate={navigate} />
+      </div>
+
+      <div className="bento-grid bento-grid-12">
         <PaymentDonut
           paid={data?.paid_count}
           partial={data?.partial_count}
@@ -772,9 +485,6 @@ export default function DashboardPage() {
         />
         <HealthScore data={data} loading={isLoading} />
       </div>
-
-      {/* ── Sales Trend Chart ── */}
-      <SalesTrendChart period={trendPeriod} onPeriodChange={setTrendPeriod} />
-    </>
+    </div>
   )
 }

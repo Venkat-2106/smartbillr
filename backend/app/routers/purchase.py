@@ -322,6 +322,8 @@ def create_purchase(
         # WHY: Cash purchase = money leaves the business immediately.
         # Without this, the accountant must manually add an expense for every
         # cash purchase — that is error-prone.
+        # Race-safety: INSERT ... WHERE NOT EXISTS prevents duplicate expenses
+        # when PATCH /status is called concurrently with "paid".
         if data.pur_payment_status == "paid":
             pur_row      = fetch_full_purchase(db, new_pur_id, business_id)
             final_amount = float(pur_row.pur_final_amount) if pur_row and pur_row.pur_final_amount else float(total_amount)
@@ -332,7 +334,8 @@ def create_purchase(
                         expense_id, business_id, expense_category,
                         expense_amount, expense_notes, created_by,
                         source_type, source_id
-                    ) VALUES (
+                    )
+                    SELECT
                         CAST(:expense_id AS uuid),
                         CAST(:business_id AS uuid),
                         :expense_category,
@@ -341,6 +344,12 @@ def create_purchase(
                         CAST(:created_by AS uuid),
                         :source_type,
                         CAST(:source_id AS uuid)
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM expenses
+                        WHERE source_type = 'purchase'
+                          AND source_id    = CAST(:source_id AS uuid)
+                          AND business_id  = CAST(:business_id AS uuid)
+                          AND is_deleted   = false
                     )
                 """),
                 {
@@ -635,48 +644,48 @@ def update_purchase_status(
         ).fetchone()
         final_amount = float(pur_row.pur_final_amount) if pur_row and pur_row.pur_final_amount else 0
 
-        # Check if an expense for this purchase was already recorded
-        existing_expense = db.execute(
+        # Race-safe insert: the WHERE NOT EXISTS check runs inside the same
+        # statement as the INSERT, so it sees the latest committed (or even
+        # uncommitted within this transaction) state.  Combined with the
+        # unique partial index (business_id, source_type, source_id) this
+        # guarantees at most one expense per purchase.
+        result = db.execute(
             text("""
-                SELECT expense_id FROM expenses
-                WHERE business_id = CAST(:bid AS uuid)
-                  AND source_type = 'purchase'
-                  AND source_id = CAST(:pid AS uuid)
-                  AND is_deleted = false
+                INSERT INTO expenses (
+                    expense_id, business_id, expense_category,
+                    expense_amount, expense_notes, created_by,
+                    source_type, source_id
+                )
+                SELECT
+                    CAST(:expense_id AS uuid),
+                    CAST(:business_id AS uuid),
+                    :expense_category,
+                    :expense_amount,
+                    :expense_notes,
+                    CAST(:created_by AS uuid),
+                    :source_type,
+                    CAST(:source_id AS uuid)
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM expenses
+                    WHERE source_type = 'purchase'
+                      AND source_id    = CAST(:source_id AS uuid)
+                      AND business_id  = CAST(:business_id AS uuid)
+                      AND is_deleted   = false
+                )
+                RETURNING expense_id
             """),
-            {"bid": business_id, "pid": pur_id}
+            {
+                "expense_id":       str(uuid.uuid4()),
+                "business_id":      business_id,
+                "expense_category": "purchase",
+                "expense_amount":   final_amount,
+                "expense_notes":    f"Auto-recorded from purchase {pur_id}",
+                "created_by":       user_id,
+                "source_type":      "purchase",
+                "source_id":        pur_id
+            }
         ).fetchone()
-
-        if not existing_expense:
-            db.execute(
-                text("""
-                    INSERT INTO expenses (
-                        expense_id, business_id, expense_category,
-                        expense_amount, expense_notes, created_by,
-                        source_type, source_id
-                    ) VALUES (
-                        CAST(:expense_id AS uuid),
-                        CAST(:business_id AS uuid),
-                        :expense_category,
-                        :expense_amount,
-                        :expense_notes,
-                        CAST(:created_by AS uuid),
-                        :source_type,
-                        CAST(:source_id AS uuid)
-                    )
-                """),
-                {
-                    "expense_id":       str(uuid.uuid4()),
-                    "business_id":      business_id,
-                    "expense_category": "purchase",
-                    "expense_amount":   final_amount,
-                    "expense_notes":    f"Auto-recorded from purchase {pur_id}",
-                    "created_by":       user_id,
-                    "source_type":      "purchase",
-                    "source_id":        pur_id
-                }
-            )
-            expense_created = True
+        expense_created = result is not None
 
     db.commit()
 

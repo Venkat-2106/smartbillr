@@ -29,6 +29,7 @@ from sqlalchemy import text
 from app.database import get_db
 from app.middleware.rbac import require_permission, get_current_user_with_permissions
 from app.utils.response import success_response, error_response
+from app.utils.mv_refresh import refresh_dashboard_mvs
 from datetime import datetime, timedelta, timezone
 
 router = APIRouter(prefix="/v1/dashboard", tags=["Dashboard"])
@@ -74,8 +75,10 @@ def get_dashboard_summary(
     permissions = current_user.get("permissions", set())
     can_see_financials = "dashboard.financial" in permissions
 
-    # Read from materialized view for instant reads.
-    # The MV is refreshed every 5 min via POST /reports/refresh.
+    # Auto-refresh materialized view if stale (>= 5 min since last refresh).
+    # Falls back to live query below if MV hasn't been populated yet.
+    refresh_dashboard_mvs(db)
+
     main_row = db.execute(
         text("""
             SELECT

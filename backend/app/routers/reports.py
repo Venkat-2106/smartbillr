@@ -29,6 +29,7 @@ from sqlalchemy.exc import OperationalError
 from app.database import get_db
 from app.middleware.rbac import require_permission
 from app.utils.response import success_response, error_response
+from app.utils.mv_refresh import refresh_dashboard_mvs
 from datetime import datetime, timedelta, timezone
 
 router = APIRouter(prefix="/v1/reports", tags=["Reports"])
@@ -189,15 +190,9 @@ def refresh_materialized_views(
 ):
     """Refresh all report materialized views concurrently.
     Admin-only — requires staff.manage permission.
-    Call this on a schedule (e.g. every 5 min via pg_cron or external cron).
+    Also called automatically by the dashboard endpoint when views are stale.
     """
-    try:
-        db.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_dashboard_summary"))
-        db.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_sales_trend_monthly"))
-    except OperationalError:
-        # Gracefully handle non-PostgreSQL databases (e.g. SQLite in tests)
-        pass
-    db.commit()
+    refresh_dashboard_mvs(db, force=True)
     return success_response({"message": "Materialized views refreshed"})
 
 

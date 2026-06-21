@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import { useNavigate } from 'react-router-dom'
 
 import {
@@ -14,23 +13,12 @@ import { usePermissions } from '../../../shared/hooks/usePermissions'
 import { formatDate, formatDateCSV } from '../../../shared/utils/formatDate'
 
 import { useStaff } from '../hooks/useStaff'
+import { addStaffSchema, editStaffSchema } from '../schemas/staffSchema'
 
 const ROLES = [
   { value: 'manager', label: 'Manager' },
   { value: 'staff', label: 'Staff' },
 ]
-
-const addStaffSchema = z.object({
-  full_name: z.string().min(1, 'Name is required').max(100),
-  email: z.string().email('Enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  role: z.string().min(1, 'Role is required'),
-})
-
-const editStaffSchema = z.object({
-  full_name: z.string().min(1, 'Name is required').max(100),
-  role: z.string().min(1, 'Role is required'),
-})
 
 const ADD_DEFAULTS = { full_name: '', email: '', password: '', role: '' }
 const EDIT_DEFAULTS = { full_name: '', role: '' }

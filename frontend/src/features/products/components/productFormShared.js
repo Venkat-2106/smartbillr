@@ -1,45 +1,13 @@
 // src/features/products/components/productFormShared.js
 //
 // Shared between AddProductModal.jsx and EditProductModal.jsx.
-// Extracted from ProductsPage.jsx (Task 4 — modal extraction) with no
-// behaviour changes — same Zod schemas, same UNITS list as before.
+// Schemas live in ../schemas/productSchemas.js — re-exported here for
+// backward compatibility with existing imports.
 
-import { z } from 'zod'
+export { createSchema, editSchema } from '../schemas/productSchemas'
 
 // ── Unit options ───────────────────────────────────────────────────────────────
 export const UNITS = ['pcs', 'kg', 'g', 'litre', 'ml', 'box', 'pack', 'pair', 'set', 'dozen']
-
-// ── Zod schema (create) ───────────────────────────────────────────────────────
-// .trim() is first so whitespace-only names ("   ") fail the .min(1) check.
-export const createSchema = z.object({
-  prod_name:            z.string().trim().min(1, 'Product name is required').max(100),
-  prod_sell_price:      z.coerce.number({ invalid_type_error: 'Enter a valid price' }).min(0, 'Cannot be negative'),
-  prod_cost_price:      z.coerce.number({ invalid_type_error: 'Enter a valid price' }).min(0, 'Cannot be negative'),
-  // MRP FEATURE: optional — coerce '' or 0 to null in buildPayload
-  prod_mrp:             z.coerce.number().min(0, 'Cannot be negative').default(0),
-  prod_stock_qty:       z.coerce.number().int().min(0, 'Cannot be negative').default(0),
-  prod_low_stock_alert: z.coerce.number().int().min(0, 'Cannot be negative').default(10),
-  tax_rate:             z.coerce.number().min(0, 'Cannot be negative').max(100, 'Max 100%').default(0),
-  tax_code:             z.string().max(50).optional().or(z.literal('')),
-  barcode:              z.string().max(100).optional().or(z.literal('')),
-  unit:                 z.string().default('pcs'),
-  category_id:          z.string().optional().or(z.literal('')),
-})
-
-// ── Zod schema (edit — stock qty excluded) ────────────────────────────────────
-export const editSchema = z.object({
-  prod_name:            z.string().trim().min(1, 'Product name is required').max(100),
-  prod_sell_price:      z.coerce.number({ invalid_type_error: 'Enter a valid price' }).min(0, 'Cannot be negative'),
-  prod_cost_price:      z.coerce.number({ invalid_type_error: 'Enter a valid price' }).min(0, 'Cannot be negative'),
-  // MRP FEATURE: optional — coerce '' or 0 to null in buildPayload
-  prod_mrp:             z.coerce.number().min(0, 'Cannot be negative').default(0),
-  prod_low_stock_alert: z.coerce.number().int().min(0, 'Cannot be negative').default(10),
-  tax_rate:             z.coerce.number().min(0, 'Cannot be negative').max(100, 'Max 100%').default(0),
-  tax_code:             z.string().max(50).optional().or(z.literal('')),
-  barcode:              z.string().max(100).optional().or(z.literal('')),
-  unit:                 z.string().default('pcs'),
-  category_id:          z.string().optional().or(z.literal('')),
-})
 
 // ── Barcode: generate EAN-13 barcode ────────────────────────────────────────
 // Shared by AddProductForm and EditProductForm (identical logic in both).

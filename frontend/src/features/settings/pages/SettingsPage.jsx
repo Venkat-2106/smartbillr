@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import { useNavigate } from 'react-router-dom'
 
 import {
@@ -11,22 +10,12 @@ import { selectStyle } from '../../../shared/components/FormField'
 import { Spinner } from '../../../shared/components'
 import { COUNTRIES } from '../../../shared/data/countries'
 import { useBusiness, useUpdateBusiness } from '../hooks/useSettings'
+import { businessSchema } from '../schemas/businessSchema'
 
 const TABS = [
   { key: 'general', label: 'Business Info' },
   { key: 'tax', label: 'Tax Settings' },
 ]
-
-const businessSchema = z.object({
-  business_name: z.string().min(1, 'Business name is required').max(200),
-  business_email: z.string().email('Invalid email').optional().or(z.literal('')),
-  business_phone: z.string().max(20).optional().or(z.literal('')),
-  business_address: z.string().max(500).optional().or(z.literal('')),
-  business_state: z.string().max(100).optional().or(z.literal('')),
-  business_country_code: z.string().max(5).optional().or(z.literal('')),
-  gstin: z.string().max(50).optional().or(z.literal('')),
-  is_gst_registered: z.boolean().optional(),
-})
 
 export default function SettingsPage() {
   const navigate = useNavigate()

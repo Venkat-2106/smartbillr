@@ -14,7 +14,6 @@
 import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 
 import {
   Modal,
@@ -24,18 +23,7 @@ import {
 } from '../../../shared/components'
 import { selectStyle, textareaStyle } from '../../../shared/components/FormField'
 import { useStockAdjust } from '../hooks/useStock'
-
-// ── Zod schema ─────────────────────────────────────────────────────────────────
-const adjustSchema = z.object({
-  adjustment_type: z.enum(['add', 'remove', 'set'], {
-    required_error: 'Select an adjustment type',
-  }),
-  qty: z.coerce
-    .number({ invalid_type_error: 'Enter a valid number' })
-    .int('Must be a whole number')
-    .positive('Must be greater than zero'),
-  move_notes: z.string().max(500, 'Max 500 characters').optional().or(z.literal('')),
-})
+import { adjustSchema } from '../schemas/adjustSchema'
 
 // ── Type descriptions shown to user ────────────────────────────────────────────
 const TYPE_INFO = {

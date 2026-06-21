@@ -8,20 +8,10 @@
 
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 
 import { Button, Modal, Input, FormField, selectStyle, textareaStyle } from '../../../shared/components'
 
-// ── Zod schema ────────────────────────────────────────────────────────────────
-export const customerSchema = z.object({
-  cust_name:         z.string().min(1, 'Name is required').max(150).trim(),
-  cust_phone:        z.string().max(20).trim().optional().or(z.literal('')),
-  cust_email:        z.string().email('Invalid email').optional().or(z.literal('')),
-  cust_address:      z.string().max(300).trim().optional().or(z.literal('')),
-  cust_state:        z.string().max(100).trim().optional().or(z.literal('')),
-  cust_country_code: z.string().max(5).trim().optional().or(z.literal('')),
-  cust_tax_number:   z.string().max(50).trim().optional().or(z.literal('')),
-})
+import { customerSchema } from '../schemas/customerSchema'
 
 // ── Country list ──────────────────────────────────────────────────────────────
 export const COUNTRY_CODES = [

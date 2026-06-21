@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import { useNavigate } from 'react-router-dom'
 
 import {
@@ -18,6 +17,7 @@ import { formatCurrency } from '../../../shared/utils/formatCurrency'
 
 import { useExpenses } from '../hooks/useExpenses'
 import ExpenseDetailDrawer from '../components/ExpenseDetailDrawer'
+import { expenseSchema } from '../schemas/expenseSchema'
 
 const ALLOWED_CATEGORIES = [
   { value: 'rent', label: 'Rent' },
@@ -29,16 +29,6 @@ const ALLOWED_CATEGORIES = [
   { value: 'purchase', label: 'Purchase' },
   { value: 'other', label: 'Other' },
 ]
-
-const expenseSchema = z.object({
-  expense_category: z.string().min(1, 'Category is required'),
-  expense_amount: z
-    .string()
-    .min(1, 'Amount is required')
-    .refine((v) => !isNaN(Number(v)) && Number(v) > 0, 'Amount must be positive'),
-  expense_date: z.string().optional().or(z.literal('')),
-  expense_notes: z.string().max(500, 'Max 500 characters').optional().or(z.literal('')),
-})
 
 const DEFAULT_VALUES = {
   expense_category: '',

@@ -14,7 +14,6 @@
 import { useState, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import { useNavigate } from 'react-router-dom'
 
 import {
@@ -44,15 +43,7 @@ import {
   useDeleteCategory,
 } from '../hooks/useCategories'
 import CategoryDetailDrawer from '../components/CategoryDetailDrawer'
-
-// ── Zod schema ────────────────────────────────────────────────────────────────
-const categorySchema = z.object({
-  category_name: z
-    .string()
-    .min(1, 'Name is required')
-    .max(100, 'Name must be 100 characters or less')
-    .trim(),
-})
+import { categorySchema } from '../schemas/categorySchema'
 
 // ── Category Form ─────────────────────────────────────────────────────────────
 function CategoryForm({ defaultValues = {}, onSubmit, onClose, isPending }) {

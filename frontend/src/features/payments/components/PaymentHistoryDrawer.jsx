@@ -12,7 +12,6 @@
 import { useState }                 from 'react'
 import { useForm }                  from 'react-hook-form'
 import { zodResolver }              from '@hookform/resolvers/zod'
-import { z }                        from 'zod'
 import { XMarkIcon }                from '@heroicons/react/24/outline'
 import { usePaymentHistory }        from '../hooks/usePayments'
 import { Badge, Button, Spinner, FormField } from '../../../shared/components'
@@ -20,17 +19,7 @@ import { selectStyle }              from '../../../shared/components/FormField'
 import { formatCurrency }           from '../../../shared/utils/formatCurrency'
 import { formatDate }               from '../../../shared/utils/formatDate'
 import { PAYMENT_METHODS }          from '../../../shared/constants/paymentMethods'
-
-// ── Zod schema for the record-payment form ────────────────────────────────────
-const paymentSchema = z.object({
-  payment_amount: z
-    .string()
-    .min(1, 'Amount is required')
-    .refine(v => !isNaN(Number(v)) && Number(v) > 0, 'Must be a positive number'),
-  payment_method: z
-    .string()
-    .min(1, 'Payment method is required'),
-})
+import { paymentSchema }            from '../schemas/paymentSchema'
 
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' }
 const STATUS_LABEL   = { paid: 'Paid',    partial: 'Partial', pending: 'Unpaid' }

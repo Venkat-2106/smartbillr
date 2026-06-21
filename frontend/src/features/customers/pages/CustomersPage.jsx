@@ -15,7 +15,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useForm }                               from 'react-hook-form'
 import { zodResolver }                           from '@hookform/resolvers/zod'
-import { z }                                     from 'zod'
 import { useNavigate }                           from 'react-router-dom'
 
 import { useCustomers } from '../hooks/useCustomers'
@@ -37,50 +36,7 @@ import { formatDate }                 from '../../../shared/utils/formatDate'
 
 import CustomerDetailDrawer, { DrawerOverlay }
   from '../components/CustomerDetailDrawer'
-
-
-// ─── ZOD VALIDATION SCHEMA ────────────────────────────────────────────────────
-const customerSchema = z.object({
-  cust_name: z
-    .string()
-    .min(1, 'Customer name is required')
-    .max(100, 'Max 100 characters'),
-
-  cust_phone: z
-    .string()
-    .max(15, 'Max 15 digits')
-    .optional()
-    .or(z.literal('')),
-
-  cust_email: z
-    .union([
-      z.string().email('Enter a valid email address'),
-      z.literal(''),
-    ])
-    .optional(),
-
-  cust_address: z
-    .string()
-    .max(500, 'Max 500 characters')
-    .optional()
-    .or(z.literal('')),
-
-  cust_country_code: z
-    .string()
-    .optional()
-    .or(z.literal('')),
-
-  cust_state: z
-    .string()
-    .optional()
-    .or(z.literal('')),
-
-  cust_tax_number: z
-    .string()
-    .max(50, 'Max 50 characters')
-    .optional()
-    .or(z.literal('')),
-})
+import { customerSchema } from '../schemas/customerSchema'
 
 const DEFAULT_VALUES = {
   cust_name:         '',

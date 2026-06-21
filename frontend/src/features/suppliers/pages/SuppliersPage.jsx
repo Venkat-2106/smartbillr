@@ -9,7 +9,6 @@ import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { useSuppliers } from '../hooks/useSuppliers';
 import SupplierDetailDrawer from '../components/SupplierDetailDrawer';
 import {
@@ -22,20 +21,7 @@ import { SUPPLIER_CSV_COLUMNS } from '../../../shared/utils/csvExport';
 import { usePermissions } from '../../../shared/hooks/usePermissions';
 import { formatDate } from '../../../shared/utils/formatDate';
 import { COUNTRIES } from '../../../shared/data/countries';
-
-/* ─── Zod validation ────────────────────────────────────────────────────── */
-const schema = z.object({
-  supp_name:         z.string().min(1, 'Supplier name is required'),
-  supp_phone:        z.string().optional().or(z.literal('')),
-  supp_email:        z.union([
-                       z.string().email('Invalid email address'),
-                       z.literal(''),
-                     ]).optional(),
-  supp_address:      z.string().optional().or(z.literal('')),
-  supp_country_code: z.string().optional().or(z.literal('')),
-  supp_state:        z.string().optional().or(z.literal('')),
-  supp_tax_number:   z.string().optional().or(z.literal('')),
-});
+import { supplierSchema } from '../schemas/supplierSchema';
 
 const EMPTY_FORM = {
   supp_name: '', supp_phone: '', supp_email: '',
@@ -68,13 +54,13 @@ export default function SuppliersPage() {
 
   /* ── Add form ─────────────────────────────────────────────────────────── */
   const addForm = useForm({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(supplierSchema),
     defaultValues: EMPTY_FORM,
   });
 
   /* ── Edit form ────────────────────────────────────────────────────────── */
   const editForm = useForm({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(supplierSchema),
     defaultValues: EMPTY_FORM,
   });
 

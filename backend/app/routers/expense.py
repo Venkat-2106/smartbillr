@@ -228,7 +228,7 @@ def update_expense(
     if data.expense_notes is not None:
         expense.expense_notes = data.expense_notes
 
-    # updated_by is auto-set by DB trigger trg_expenses_updated_by
+    expense.updated_by = current_user["user_id"]
 
     db.commit()
     db.refresh(expense)

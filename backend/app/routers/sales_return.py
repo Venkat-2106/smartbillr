@@ -25,11 +25,13 @@ router = APIRouter(prefix="/v1/sales-returns", tags=["Sales Returns"])
 def fetch_return_items(db: Session, return_id: str):
     return db.execute(
         text("""
-            SELECT return_item_id, product_id,
-                   return_qty, unit_price AS refund_amount,
-                   (return_qty * unit_price) AS return_item_subtotal
-            FROM sales_return_items
-            WHERE return_id = CAST(:rid AS uuid)
+            SELECT sri.return_item_id, sri.product_id,
+                   p.prod_name AS product_name,
+                   sri.return_qty, sri.unit_price AS refund_amount,
+                   (sri.return_qty * sri.unit_price) AS return_item_subtotal
+            FROM sales_return_items sri
+            LEFT JOIN products p ON p.prod_id = sri.product_id
+            WHERE sri.return_id = CAST(:rid AS uuid)
         """),
         {"rid": return_id}
     ).fetchall()
@@ -67,6 +69,7 @@ def return_item_to_dict(row):
     return {
         "return_item_id": str(row.return_item_id),
         "product_id": str(row.product_id),
+        "product_name": row.product_name,
         "return_qty": float(row.return_qty),
         "refund_amount": float(row.refund_amount),
         "return_item_subtotal": float(row.return_item_subtotal) if row.return_item_subtotal else None

@@ -31,6 +31,7 @@ from app.middleware.rbac import require_permission, get_current_user_with_permis
 from app.utils.response import success_response, error_response
 from app.utils.mv_refresh import refresh_dashboard_mvs
 from datetime import datetime, timedelta, timezone
+import calendar
 
 router = APIRouter(prefix="/v1/dashboard", tags=["Dashboard"])
 
@@ -180,7 +181,7 @@ def get_dashboard_trend(
     if period == "weekly":
         user_start = user_today - timedelta(days=6)
         date_from = datetime.combine(user_start, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
-        date_to = datetime.combine(user_today + timedelta(days=1), datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
+        date_to = datetime.combine(user_today, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
 
         rows = db.execute(
             text("""
@@ -192,7 +193,7 @@ def get_dashboard_trend(
                     WHERE s.business_id = CAST(:bid AS uuid)
                       AND s.is_deleted  = false
                       AND s.sales_created_at >= CAST(:date_from AS timestamp)
-                      AND s.sales_created_at <  CAST(:date_to   AS timestamp)
+                      AND s.sales_created_at <  CAST(:date_to AS timestamp) + INTERVAL '1 day'
                     GROUP BY (s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date
                 )
                 SELECT
@@ -228,10 +229,8 @@ def get_dashboard_trend(
         else:
             user_start_month = user_today_month.replace(year=user_today_month.year - 1, month=user_today_month.month + 7)
 
-        if user_today_month.month == 12:
-            user_end_month = user_today_month.replace(year=user_today_month.year + 1, month=1)
-        else:
-            user_end_month = user_today_month.replace(month=user_today_month.month + 1)
+        last_day = calendar.monthrange(user_today_month.year, user_today_month.month)[1]
+        user_end_month = user_today_month.replace(day=last_day)
 
         date_from = datetime.combine(user_start_month, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
         date_to = datetime.combine(user_end_month, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
@@ -246,7 +245,7 @@ def get_dashboard_trend(
                     WHERE s.business_id = CAST(:bid AS uuid)
                       AND s.is_deleted  = false
                       AND s.sales_created_at >= CAST(:date_from AS timestamp)
-                      AND s.sales_created_at <  CAST(:date_to   AS timestamp)
+                      AND s.sales_created_at <  CAST(:date_to AS timestamp) + INTERVAL '1 day'
                     GROUP BY date_trunc('month', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))
                 )
                 SELECT
@@ -278,7 +277,7 @@ def get_dashboard_trend(
 
     else:  # yearly
         user_start_year = user_today.replace(year=user_today.year - 4, month=1, day=1)
-        user_end_year = user_today.replace(year=user_today.year + 1, month=1, day=1)
+        user_end_year = user_today.replace(year=user_today.year, month=12, day=31)
 
         date_from = datetime.combine(user_start_year, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
         date_to = datetime.combine(user_end_year, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
@@ -293,7 +292,7 @@ def get_dashboard_trend(
                     WHERE s.business_id = CAST(:bid AS uuid)
                       AND s.is_deleted  = false
                       AND s.sales_created_at >= CAST(:date_from AS timestamp)
-                      AND s.sales_created_at <  CAST(:date_to   AS timestamp)
+                      AND s.sales_created_at <  CAST(:date_to AS timestamp) + INTERVAL '1 day'
                     GROUP BY date_trunc('year', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))
                 )
                 SELECT

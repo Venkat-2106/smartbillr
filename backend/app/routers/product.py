@@ -651,6 +651,7 @@ def get_product(
             "sale":             "Sold to customer",
             "purchase":         "Received from supplier",
             "adjustment":       "Manual stock adjustment",
+            "stock_override":   "System-generated stock increase to allow a sale exceeding available inventory",
             "sales_return":     "Customer return — stock added back",
             "purchase_return":  "Returned to supplier — stock removed",
         }

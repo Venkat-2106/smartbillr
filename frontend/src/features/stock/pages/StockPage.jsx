@@ -95,10 +95,13 @@ function StockStatusBadge({ status }) {
 // ── Movement type badge ────────────────────────────────────────────────────────
 function MoveTypeBadge({ type }) {
   const map = {
-    sale:       { variant: 'danger',  label: 'Sale'       },
-    purchase:   { variant: 'success', label: 'Purchase'   },
-    adjustment: { variant: 'info',    label: 'Adjustment' },
-    return:     { variant: 'warning', label: 'Return'     },
+    sale:              { variant: 'danger',  label: 'Sale'           },
+    purchase:          { variant: 'success', label: 'Purchase'       },
+    adjustment:        { variant: 'info',    label: 'Adjustment'     },
+    stock_override:    { variant: 'warning', label: 'Stock Override' },
+    return:            { variant: 'warning', label: 'Return'         },
+    sales_return:      { variant: 'warning', label: 'Sales Return'   },
+    purchase_return:   { variant: 'warning', label: 'Purchase Return'},
   }
   const cfg = map[type] ?? { variant: 'neutral', label: type }
   return <Badge variant={cfg.variant} label={cfg.label} dot />
@@ -623,6 +626,7 @@ function StockMovementsTab({ active }) {
             <option value="sale">Sale</option>
             <option value="purchase">Purchase</option>
             <option value="adjustment">Adjustment</option>
+            <option value="stock_override">Stock Override</option>
             <option value="return">Return</option>
           </select>
           <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>

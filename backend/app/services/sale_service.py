@@ -117,7 +117,7 @@ def handle_stock_overrides(db: Session, business_id: str, user_id: str, new_sale
                 ) VALUES (
                     CAST(:business_id AS uuid),
                     CAST(:product_id AS uuid),
-                    'adjustment',
+                    'stock_override',
                     :move_qty,
                     :move_prev_stock,
                     CAST(:sale_ref AS uuid),
@@ -132,8 +132,8 @@ def handle_stock_overrides(db: Session, business_id: str, user_id: str, new_sale
                 "move_prev_stock": avail,
                 "sale_ref": new_sale_id,
                 "move_notes": (
-                    f"Manual stock adjustment during sale override — {shortfall} unit(s) added to fulfil order "
-                    f"(stock was {avail}, needed {ov['requested_qty']})"
+                    f"System-generated stock increase to allow a sale exceeding available inventory — "
+                    f"{shortfall} unit(s) added (stock was {avail}, needed {ov['requested_qty']})"
                 ),
                 "created_by": user_id,
             }

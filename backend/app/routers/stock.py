@@ -103,7 +103,7 @@ current_user: dict          = Depends(require_permission("stock.view")),
 db:           Session       = Depends(get_db),
 pagination:   dict          = Depends(paginate),
 search:       Optional[str] = Query(default=None, description="Search by product name"),
-move_type:    Optional[str] = Query(default=None, description="sale | purchase | adjustment | return"),
+move_type:    Optional[str] = Query(default=None, description="sale | purchase | adjustment | stock_override | return"),
 date_from:    Optional[str] = Query(default=None, description="ISO datetime — move_created_at >="),
 date_to:      Optional[str] = Query(default=None, description="ISO datetime — move_created_at <="),
 sort_by:      Optional[str] = Query(default="move_created_at"),
@@ -176,7 +176,7 @@ sort_dir:     Optional[str] = Query(default="desc"),
 
     data = []
     for r in rows:
-        adjusted_by = r.created_by_name if r.move_type == "adjustment" and r.created_by_name else None
+        adjusted_by = r.created_by_name if r.move_type in ("adjustment", "stock_override") and r.created_by_name else None
         data.append({
             "move_id":               str(r.move_id),
             "business_id":           str(r.business_id),

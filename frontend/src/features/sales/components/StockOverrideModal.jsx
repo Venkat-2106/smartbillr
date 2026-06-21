@@ -44,9 +44,9 @@ export default function StockOverrideModal({
             Requested quantity exceeds available stock
           </div>
           <div style={{ fontSize: 13, color: '#B45309', lineHeight: 1.5 }}>
-            You can override and proceed — a <strong>manual adjustment</strong> record
-            will be created automatically in stock movements with the note
-            "Manual adjustment during sale".
+            You can override and proceed — a <strong>stock override</strong> record
+            will be created automatically in stock movements to temporarily
+            increase stock for this sale.
           </div>
         </div>
       </div>

@@ -269,7 +269,8 @@ def create_purchase_return(
 
                 result = db.execute(text("""
                     UPDATE products
-                    SET prod_stock_qty = prod_stock_qty - :qty
+                    SET prod_stock_qty = prod_stock_qty - :qty,
+                        updated_by = CAST(:uid AS uuid)
                     WHERE prod_id      = CAST(:pid AS uuid)
                       AND business_id  = CAST(:bid AS uuid)
                       AND prod_stock_qty >= :qty
@@ -278,6 +279,7 @@ def create_purchase_return(
                     "pid": product_id,
                     "bid": str(business_id),
                     "qty": return_qty,
+                    "uid": str(user_id),
                 }).fetchone()
 
                 if not result:
@@ -292,23 +294,28 @@ def create_purchase_return(
 
                 db.execute(text("""
                     INSERT INTO stock_movements
-                        (product_id, business_id, move_type,
+                        (move_id, product_id, business_id, move_type,
                          move_qty, move_prev_stock,
-                         reference_type, reference_id)
+                         purchase_reference_id, move_notes, move_created_by)
                     VALUES (
+                        CAST(:move_id AS uuid),
                         CAST(:product_id AS uuid),
                         CAST(:business_id AS uuid),
                         'purchase_return',
                         :move_qty, :prev_stock,
-                        'purchase_return',
-                        CAST(:return_id AS uuid)
+                        CAST(:return_id AS uuid),
+                        :move_notes,
+                        CAST(:created_by AS uuid)
                     )
                 """), {
+                    "move_id":     str(uuid.uuid4()),
                     "product_id":  product_id,
                     "business_id": str(business_id),
                     "move_qty":    -return_qty,
                     "prev_stock":  prev_stock,
-                    "return_id":   new_return_id
+                    "return_id":   new_return_id,
+                    "move_notes":  f"Stock reduced from purchase return {new_return_id}",
+                    "created_by":  str(user_id),
                 })
 
             # Mark stock_updated = true on the header
@@ -540,7 +547,8 @@ def update_purchase_return(
 
                     result = db.execute(text("""
                         UPDATE products
-                        SET prod_stock_qty = prod_stock_qty - :qty
+                        SET prod_stock_qty = prod_stock_qty - :qty,
+                            updated_by = CAST(:uid AS uuid)
                         WHERE prod_id      = CAST(:pid AS uuid)
                           AND business_id  = CAST(:bid AS uuid)
                           AND prod_stock_qty >= :qty
@@ -549,6 +557,7 @@ def update_purchase_return(
                         "pid": product_id,
                         "bid": str(business_id),
                         "qty": return_qty,
+                        "uid": str(user_id),
                     }).fetchone()
 
                     if not result:
@@ -565,23 +574,28 @@ def update_purchase_return(
                     # move_qty is negative → stock going OUT to supplier
                     db.execute(text("""
                         INSERT INTO stock_movements
-                            (product_id, business_id, move_type,
+                            (move_id, product_id, business_id, move_type,
                              move_qty, move_prev_stock,
-                             reference_type, reference_id)
+                             purchase_reference_id, move_notes, move_created_by)
                         VALUES (
+                            CAST(:move_id AS uuid),
                             CAST(:product_id AS uuid),
                             CAST(:business_id AS uuid),
                             'purchase_return',
                             :move_qty, :prev_stock,
-                            'purchase_return',
-                            CAST(:return_id AS uuid)
+                            CAST(:return_id AS uuid),
+                            :move_notes,
+                            CAST(:created_by AS uuid)
                         )
                     """), {
+                        "move_id":     str(uuid.uuid4()),
                         "product_id":  product_id,
                         "business_id": str(business_id),
                         "move_qty":    -return_qty,
                         "prev_stock":  prev_stock,
-                        "return_id":   return_id
+                        "return_id":   return_id,
+                        "move_notes":  f"Stock reduced from purchase return {return_id}",
+                        "created_by":  str(user_id),
                     })
 
         # Update the return header

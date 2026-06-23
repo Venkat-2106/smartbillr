@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { selectStyle } from '../../../shared/components/FormField';
-
-const dropItemStyle = {
-  padding: '9px 14px',
-  cursor: 'pointer',
-  borderBottom: '1px solid var(--border)',
-};
+import {
+  DropdownMenu,
+  DropdownMenuScroll,
+  DropdownMenuItem,
+  DropdownMenuEmpty,
+} from '../../../shared/components/DropdownMenu';
 
 export default function CustomerCombobox({ customers = [], customerId, onChange, onAddNew }) {
   const [search, setSearch] = useState('');
@@ -147,71 +147,62 @@ export default function CustomerCombobox({ customers = [], customerId, onChange,
         {dropOpen && !customerId && (
           <div style={{
             position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-            background: 'var(--bg-card)',
-            border: '1.5px solid var(--border)',
-            borderRadius: 'var(--r-md)',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
             zIndex: 200,
-            maxHeight: 240,
-            overflowY: 'auto',
           }}>
-            <div
-              onMouseDown={handleWalkIn}
-              onMouseEnter={() => setHighlightedIndex(0)}
-              style={{
-                ...dropItemStyle,
-                background: highlightedIndex === 0 ? 'var(--bg-subtle)' : undefined,
-              }}
-            >
-              <span style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: 13 }}>
-                Walk-in Customer (no account)
-              </span>
-            </div>
-            <div
-              onMouseDown={handleOpenAddNew}
-              onMouseEnter={() => setHighlightedIndex(1)}
-              style={{
-                ...dropItemStyle,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                color: 'var(--accent-600)',
-                fontWeight: 600,
-                fontSize: 13,
-                borderBottom: '1px solid var(--border)',
-                background: highlightedIndex === 1 ? 'var(--bg-subtle)' : undefined,
-              }}
-            >
-              <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
-              Add New Customer
-            </div>
-
-            {filtered.length === 0 ? (
-              <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
-                No customers match &quot;{search}&quot;
-              </div>
-            ) : (
-              filtered.map((c, idx) => (
-                <div
-                  key={c.cust_id}
-                  onMouseDown={() => handleSelect(c)}
-                  onMouseEnter={() => setHighlightedIndex(idx + 2)}
-                  style={{
-                    ...dropItemStyle,
-                    background: highlightedIndex === idx + 2 ? 'var(--bg-subtle)' : undefined,
-                  }}
+            <DropdownMenu>
+              <DropdownMenuScroll maxHeight={240}>
+                <DropdownMenuItem
+                  highlighted={highlightedIndex === 0}
+                  onMouseDown={handleWalkIn}
+                  onMouseEnter={() => setHighlightedIndex(0)}
                 >
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {c.cust_name}
-                  </div>
-                  {c.cust_phone && (
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>
-                      {c.cust_phone}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
+                  <span style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 600 }}>
+                    Walk-in Customer
+                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    no account
+                  </span>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  highlighted={highlightedIndex === 1}
+                  onMouseDown={handleOpenAddNew}
+                  onMouseEnter={() => setHighlightedIndex(1)}
+                  style={{ color: 'var(--accent-600)', fontWeight: 600, fontSize: 13 }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
+                    Add New Customer
+                  </span>
+                </DropdownMenuItem>
+
+                {filtered.length === 0 ? (
+                  <DropdownMenuEmpty>
+                    No customers match &quot;{search}&quot;
+                  </DropdownMenuEmpty>
+                ) : (
+                  filtered.map((c, idx) => (
+                    <DropdownMenuItem
+                      key={c.cust_id}
+                      highlighted={highlightedIndex === idx + 2}
+                      onMouseDown={() => handleSelect(c)}
+                      onMouseEnter={() => setHighlightedIndex(idx + 2)}
+                    >
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {c.cust_name}
+                        </div>
+                        {c.cust_phone && (
+                          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
+                            {c.cust_phone}
+                          </div>
+                        )}
+                      </div>
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuScroll>
+            </DropdownMenu>
           </div>
         )}
       </div>

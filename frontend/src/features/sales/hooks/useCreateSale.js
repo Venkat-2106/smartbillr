@@ -151,13 +151,35 @@ export default function useCreateSale() {
     try {
       const product = await fetchProductByBarcode(code);
 
-      const existing = itemsRef.current.find(i => i.product_id === product.prod_id);
-      if (existing) {
-        setItems(prev => prev.map(i =>
-          i._id === existing._id ? { ...i, quantity: i.quantity + qty } : i
-        ));
-      } else {
-        setItems(prev => [...prev, {
+      setItems(prev => {
+        const emptyIdx = prev.findIndex(i => !i.product_id);
+        const existingIdx = prev.findIndex(i => i.product_id === product.prod_id);
+
+        if (existingIdx >= 0) {
+          return prev.map(i =>
+            i._id === prev[existingIdx]._id ? { ...i, quantity: i.quantity + qty } : i
+          );
+        }
+
+        if (emptyIdx >= 0) {
+          const filled = prev.map((i, idx) =>
+            idx === emptyIdx
+              ? {
+                  ...i,
+                  product_id:     product.prod_id,
+                  prod_name:      product.prod_name,
+                  mrp:            Number(product.prod_mrp) || 0,
+                  unit_price:     Number(product.prod_sell_price) || 0,
+                  quantity:       qty,
+                  tax_rate:       Number(product.tax_rate) || 0,
+                  prod_stock_qty: Number(product.prod_stock_qty) ?? null,
+                }
+              : i
+          );
+          return emptyIdx === prev.length - 1 ? [...filled, newItem()] : filled;
+        }
+
+        return [...prev, {
           _id:        `${Date.now()}-${Math.random()}`,
           product_id: product.prod_id,
           prod_name:  product.prod_name,
@@ -166,8 +188,8 @@ export default function useCreateSale() {
           quantity:   qty,
           tax_rate:   Number(product.tax_rate) || 0,
           prod_stock_qty: Number(product.prod_stock_qty) ?? null,
-        }]);
-      }
+        }, newItem()];
+      });
       toast.success(`Added: ${product.prod_name}`, { duration: 1500 });
     } catch (err) {
       const status = err?.response?.status;
@@ -252,18 +274,22 @@ export default function useCreateSale() {
   }, []);
 
   const handleProductSelect = useCallback((itemId, product) => {
-    setItems(prev => prev.map(item => {
-      if (item._id !== itemId) return item;
-      return {
-        ...item,
-        product_id:     product.prod_id,
-        prod_name:      product.prod_name,
-        mrp:            Number(product.prod_mrp) || 0,
-        unit_price:     Number(product.prod_sell_price) || 0,
-        tax_rate:       Number(product.tax_rate) || 0,
-        prod_stock_qty: Number(product.prod_stock_qty) ?? null,
-      };
-    }));
+    setItems(prev => {
+      const isLast = prev[prev.length - 1]._id === itemId;
+      const updated = prev.map(item => {
+        if (item._id !== itemId) return item;
+        return {
+          ...item,
+          product_id:     product.prod_id,
+          prod_name:      product.prod_name,
+          mrp:            Number(product.prod_mrp) || 0,
+          unit_price:     Number(product.prod_sell_price) || 0,
+          tax_rate:       Number(product.tax_rate) || 0,
+          prod_stock_qty: Number(product.prod_stock_qty) ?? null,
+        };
+      });
+      return isLast ? [...updated, newItem()] : updated;
+    });
     setSearchMap(prev   => ({ ...prev, [itemId]: '' }));
     setOpenDropMap(prev  => ({ ...prev, [itemId]: false }));
     setActiveItemSearch('');

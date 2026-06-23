@@ -18,6 +18,13 @@ import { memo, useCallback, useRef, useState } from 'react';
 import { formatCurrency } from '../../../shared/utils/formatCurrency';
 import { selectStyle } from '../../../shared/components/FormField';
 import { NUM_INPUT_STYLE } from '../../../shared/constants/styles';
+import {
+  DropdownMenu,
+  DropdownMenuScroll,
+  DropdownMenuItem,
+  DropdownMenuEmpty,
+  DropdownMenuHint,
+} from '../../../shared/components/DropdownMenu';
 import ProductSearchDropdownPortal from './ProductSearchDropdownPortal';
 
 const SaleLineItemRow = memo(function SaleLineItemRow({
@@ -112,67 +119,54 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
             />
             {isOpen && searchText.length >= 2 && (
               <ProductSearchDropdownPortal anchorRef={comboRef}>
-              <div style={{
-                background: 'var(--bg-card)',
-                border: '1.5px solid var(--border)',
-                borderRadius: 'var(--r-md)',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-                maxHeight: 220, overflowY: 'auto',
-              }}>
+              <DropdownMenu>
+                <DropdownMenuScroll>
                 {searchResults.length === 0 ? (
-                  <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
-                    No products found for "{searchText}"
-                  </div>
+                  <DropdownMenuEmpty>
+                    No products found for &quot;{searchText}&quot;
+                  </DropdownMenuEmpty>
                 ) : (
                   searchResults.map((p, idx) => (
-                    <div
+                    <DropdownMenuItem
                       key={p.prod_id}
+                      highlighted={idx === highlightedIndex}
                       onMouseDown={() => onProductSelect(item._id, p)}
                       onMouseEnter={() => setHighlightedIndex(idx)}
-                      style={{
-                        padding: '9px 14px', cursor: 'pointer',
-                        borderBottom: '1px solid var(--border)',
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        transition: 'background 0.1s',
-                        background: idx === highlightedIndex ? 'var(--bg-subtle)' : undefined,
-                      }}
-                      className="search-result-item"
                     >
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                           {p.prod_name}
                         </div>
                         {p.barcode && (
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                             {p.barcode}
                           </div>
                         )}
                       </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 10 }}>
+                      <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
                           {formatCurrency(p.prod_sell_price)}
                         </div>
                         {p.prod_stock_qty != null && (
-                          <div style={{ fontSize: 11, color: p.prod_stock_qty > 0 ? '#059669' : '#ef4444' }}>
+                          <div style={{ fontSize: 11, color: p.prod_stock_qty > 0 ? '#059669' : '#ef4444', marginTop: 1 }}>
                             {p.prod_stock_qty} left
                           </div>
                         )}
                       </div>
-                    </div>
+                    </DropdownMenuItem>
                   ))
                 )}
-              </div>
+                </DropdownMenuScroll>
+              </DropdownMenu>
               </ProductSearchDropdownPortal>
             )}
             {isOpen && searchText.length > 0 && searchText.length < 2 && (
               <ProductSearchDropdownPortal anchorRef={comboRef}>
-              <div style={{
-                background: 'var(--bg-card)', border: '1.5px solid var(--border)',
-                borderRadius: 'var(--r-md)', padding: '10px 14px',
-                fontSize: 13, color: 'var(--text-muted)',
-              }}>
-                Type at least 2 characters to search
-              </div>
+              <DropdownMenu>
+                <DropdownMenuHint>
+                  Type at least 2 characters to search
+                </DropdownMenuHint>
+              </DropdownMenu>
               </ProductSearchDropdownPortal>
             )}
           </>

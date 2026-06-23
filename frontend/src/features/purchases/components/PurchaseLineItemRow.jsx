@@ -18,10 +18,17 @@
 //
 // Extracted from CreatePurchasePage.jsx (Step 5.16 refactor) — zero behaviour change.
 
-import { memo, useCallback, useRef, useState } from 'react'
+import { memo, useCallback, useState } from 'react'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { selectStyle }    from '../../../shared/components/FormField'
 import { NUM_INPUT_STYLE } from '../../../shared/constants/styles'
+import {
+  DropdownMenu,
+  DropdownMenuScroll,
+  DropdownMenuItem,
+  DropdownMenuEmpty,
+  DropdownMenuHint,
+} from '../../../shared/components/DropdownMenu'
 
 const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
   item,
@@ -41,7 +48,6 @@ const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
 }) {
   const [hoveredProd, setHoveredProd] = useState(null)
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
-  const comboRef = useRef(null)
 
   const onSearchKeyDown = useCallback((e) => {
     if (!isOpen || searchResults.length === 0) return
@@ -108,62 +114,58 @@ const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
             {isOpen && searchText.length >= 2 && (
               <div style={{
                 position: 'absolute', top: 'calc(100% + 3px)', left: 0, right: 0,
-                background: 'var(--bg-card)',
-                border: '1.5px solid var(--border)',
-                borderRadius: 'var(--r-md)',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
                 zIndex: 300,
-                maxHeight: 220, overflowY: 'auto',
               }}>
-                {searchResults.length === 0 ? (
-                  <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
-                    No products found for "{searchText}"
-                  </div>
-                ) : (
-                  searchResults.map((p, idx) => (
-                    <div
-                      key={p.prod_id}
-                      onMouseDown={() => onProductSelect(item._id, p)}
-                      onMouseEnter={() => { setHoveredProd(p.prod_id); setHighlightedIndex(idx); }}
-                      onMouseLeave={() => setHoveredProd(null)}
-                      style={{
-                        padding: '9px 14px', cursor: 'pointer',
-                        borderBottom: '1px solid var(--border)',
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        background: idx === highlightedIndex || hoveredProd === p.prod_id ? 'var(--bg-subtle)' : 'transparent',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {p.prod_name}
-                        </div>
-                        {p.barcode && (
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
-                            {p.barcode}
+                <DropdownMenu>
+                  <DropdownMenuScroll>
+                  {searchResults.length === 0 ? (
+                    <DropdownMenuEmpty>
+                      No products found for &quot;{searchText}&quot;
+                    </DropdownMenuEmpty>
+                  ) : (
+                    searchResults.map((p, idx) => (
+                      <DropdownMenuItem
+                        key={p.prod_id}
+                        highlighted={idx === highlightedIndex || hoveredProd === p.prod_id}
+                        onMouseDown={() => onProductSelect(item._id, p)}
+                        onMouseEnter={() => { setHoveredProd(p.prod_id); setHighlightedIndex(idx); }}
+                        onMouseLeave={() => setHoveredProd(null)}
+                      >
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {p.prod_name}
                           </div>
-                        )}
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 10 }}>
-                        <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-                          Cost: {formatCurrency(p.prod_cost_price || 0)}
+                          {p.barcode && (
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                              {p.barcode}
+                            </div>
+                          )}
                         </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                          Stock: {p.prod_stock_qty ?? '—'}
+                        <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
+                          <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                            Cost: {formatCurrency(p.prod_cost_price || 0)}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                            Stock: {p.prod_stock_qty ?? '—'}
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  ))
-                )}
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                  </DropdownMenuScroll>
+                </DropdownMenu>
               </div>
             )}
             {isOpen && searchText.length > 0 && searchText.length < 2 && (
               <div style={{
                 position: 'absolute', top: 'calc(100% + 3px)', left: 0, right: 0,
-                background: 'var(--bg-card)', border: '1.5px solid var(--border)',
-                borderRadius: 'var(--r-md)', padding: '10px 14px',
-                fontSize: 13, color: 'var(--text-muted)', zIndex: 300,
+                zIndex: 300,
               }}>
-                Type at least 2 characters to search
+                <DropdownMenu>
+                  <DropdownMenuHint>
+                    Type at least 2 characters to search
+                  </DropdownMenuHint>
+                </DropdownMenu>
               </div>
             )}
           </>

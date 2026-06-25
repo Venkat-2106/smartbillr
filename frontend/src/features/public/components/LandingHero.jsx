@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 export default function LandingHero() {
+  const navigate = useNavigate()
   const [ctaHovered, setCtaHovered] = useState(false)
   const [loginHovered, setLoginHovered] = useState(false)
 
@@ -101,7 +103,7 @@ export default function LandingHero() {
 
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <button
-              onClick={() => scrollToContact()}
+              onClick={() => navigate('/signup')}
               onMouseEnter={() => setCtaHovered(true)}
               onMouseLeave={() => setCtaHovered(false)}
               style={{

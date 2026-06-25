@@ -31,7 +31,7 @@ def upgrade() -> None:
             SELECT expense_id,
                    ROW_NUMBER() OVER (
                        PARTITION BY business_id, source_type, source_id
-                       ORDER BY expense_created_at ASC
+                       ORDER BY created_at ASC
                    ) AS rn
             FROM expenses
             WHERE source_type IS NOT NULL AND is_deleted = false

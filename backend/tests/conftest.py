@@ -3,6 +3,7 @@ import re
 import uuid
 import base64
 import time
+from datetime import datetime
 
 os.environ.setdefault("ENVIRONMENT", "development")
 os.environ.setdefault("SUPABASE_JWT_SECRET", "dGVzdC1zZWNyZXQ=")  # "test-secret" base64
@@ -42,6 +43,7 @@ import app.models.business
 import app.models.business_counters
 import app.models.customer
 import app.models.rbac
+import app.models.super_admin
 from app.main import app
 from app.database import Base, get_db
 
@@ -126,6 +128,7 @@ TEST_TABLES = [
     "businesses", "business_counters",
     "roles", "permissions", "role_permissions",
     "profiles", "customers", "sales", "payments",
+    "super_admins",
 ]
 
 # Materialized view table definitions (created as regular tables in SQLite)
@@ -240,8 +243,23 @@ def seed_data(db):
 
     # Business
     db.execute(
-        sa_text("INSERT INTO businesses (business_id, business_name) VALUES (:bid, :name)"),
-        {"bid": bid, "name": "Test Business"},
+        sa_text("""
+            INSERT INTO businesses (
+                business_id, business_name,
+                payment_status, subscription_type,
+                trial_start_at, trial_end_at, is_active
+            ) VALUES (
+                :bid, :name,
+                'pending', 'trial',
+                :trial_start, :trial_end, 1
+            )
+        """),
+        {
+            "bid": bid,
+            "name": "Test Business",
+            "trial_start": datetime(2026, 6, 1, 0, 0, 0),
+            "trial_end": datetime(2026, 7, 1, 0, 0, 0),
+        },
     )
     db.execute(
         sa_text("INSERT INTO business_counters (business_id, invoice_counter) VALUES (:bid, 1)"),
@@ -300,6 +318,23 @@ def seed_data(db):
             VALUES (:bid, 0, 0, 0, 0, 0, 0, 0, 0)
         """),
         {"bid": bid},
+    )
+
+    # Super admin for platform-level management tests
+    admin_uid = "00000000-0000-4000-a000-000000000001"
+    db.execute(
+        sa_text("""
+            INSERT INTO super_admins (user_id)
+            VALUES (:uid)
+        """),
+        {"uid": admin_uid},
+    )
+    db.execute(
+        sa_text("""
+            INSERT INTO profiles (id, business_id, full_name, email, role, is_active)
+            VALUES (:uid, :bid, 'Super Admin', 'admin@example.com', 'super_admin', 1)
+        """),
+        {"uid": admin_uid, "bid": bid},
     )
 
     db.commit()

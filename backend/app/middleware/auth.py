@@ -359,3 +359,33 @@ def verify_token(
     _cache_set(user_id, user_data)
 
     return user_data
+
+
+def verify_super_admin(
+    current_user: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    FastAPI dependency — checks that the authenticated user is a super admin.
+
+    Super admins are platform-level administrators stored in the super_admins
+    table. They have no business_id — they manage the entire platform.
+
+    Usage:
+        @router.patch("/admin/businesses/{bid}/subscription")
+        def update_subscription(
+            current_user: dict = Depends(verify_super_admin),
+            ...
+        ):
+    """
+    user_id = current_user["user_id"]
+    row = db.execute(
+        text("SELECT 1 FROM super_admins WHERE user_id = :uid LIMIT 1"),
+        {"uid": user_id},
+    ).fetchone()
+    if not row:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied. Super admin privileges required.",
+        )
+    return current_user

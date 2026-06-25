@@ -9,7 +9,6 @@ class Business(Base):
 
     business_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     business_name = Column(String, nullable=False)
-    # FIX: DB has is_nullable=YES for business_email — was incorrectly nullable=False
     business_email = Column(String, nullable=True)
     business_phone = Column(String, nullable=True)
     business_address = Column(Text, nullable=True)
@@ -18,5 +17,12 @@ class Business(Base):
     is_gst_registered = Column(Boolean, default=False)
     is_deleted = Column(Boolean, default=False)
     created_at = Column(DateTime, nullable=True)
-    # FIX: Added missing column — purchase router reads this via raw SQL but model was missing it
     business_country_code = Column(String(5), nullable=True)
+
+    payment_status = Column(String(20), nullable=False, default="pending")
+    subscription_type = Column(String(20), nullable=False, default="trial")
+    subscription_start_at = Column(DateTime, nullable=True)
+    subscription_end_at = Column(DateTime, nullable=True)
+    trial_start_at = Column(DateTime, nullable=True)
+    trial_end_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)

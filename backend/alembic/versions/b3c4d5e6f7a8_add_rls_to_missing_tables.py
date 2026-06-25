@@ -19,7 +19,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 _TENANT_TABLES = [
     "audit_logs",
-    "business_settings",
     "purchase_items",
     "sales_return_items",
 ]

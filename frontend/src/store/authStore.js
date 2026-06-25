@@ -1,24 +1,16 @@
-// src/store/authStore.js
-//
-// CHANGE FROM EXISTING:
-//   - setProfile() already stores permissions from profile.permissions ✅ (keep)
-//   - Added setPermissions() as an explicit setter for useAuth.js to call directly
-//   - Added hasAnyPermission() helper
-//   - Added canAll() helper
-//   Everything else unchanged.
-
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 const useAuthStore = create(
   persist(
     (set, get) => ({
-      token:        null,
-      refreshToken: null,
-      user:         null,
-      business:     null,
-      profile:      null,
-      permissions:  [],
+      token:         null,
+      refreshToken:  null,
+      user:          null,
+      business:      null,
+      profile:       null,
+      permissions:   [],
+      subscription:  null,
 
       setAuth: (token, user, refreshToken) =>
         set({ token, user, refreshToken }),
@@ -29,17 +21,14 @@ const useAuthStore = create(
       setProfile: (profile) =>
         set({
           profile,
-          // Auto-extract permissions when profile is set
           permissions: profile?.permissions || [],
         }),
 
-      // Explicit setter — called by useAuth.js after /profiles/me
       setPermissions: (permissions) =>
         set({ permissions: Array.isArray(permissions) ? permissions : [] }),
 
-      // ── Permission helpers ──────────────────────────────────────────────
-      // Use these anywhere in frontend instead of checking role directly.
-      // Same logic as require_permission() on the backend.
+      setSubscription: (subscription) =>
+        set({ subscription }),
 
       hasPermission: (code) => {
         const perms = get().permissions
@@ -56,14 +45,21 @@ const useAuthStore = create(
         return Array.isArray(perms) && codes.every(code => perms.includes(code))
       },
 
+      isSubscriptionExpired: () => {
+        const sub = get().subscription
+        if (!sub) return false
+        return sub.is_expired === true
+      },
+
       clearAuth: () =>
         set({
-          token:        null,
-          refreshToken: null,
-          user:         null,
-          business:     null,
-          profile:      null,
-          permissions:  [],
+          token:         null,
+          refreshToken:  null,
+          user:          null,
+          business:      null,
+          profile:       null,
+          permissions:   [],
+          subscription:  null,
         }),
     }),
     {
@@ -75,6 +71,7 @@ const useAuthStore = create(
         business:     state.business,
         profile:      state.profile,
         permissions:  state.permissions,
+        subscription: state.subscription,
       }),
     }
   )

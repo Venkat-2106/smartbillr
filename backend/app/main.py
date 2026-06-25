@@ -2,16 +2,18 @@ from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
 from app.middleware.auth import verify_token
 from app.middleware.security import SecurityHeadersMiddleware
 from app.middleware.ratelimit import RateLimitMiddleware
 from app.middleware.request_size_limit import RequestSizeLimitMiddleware
+from app.middleware.subscription import SubscriptionMiddleware
 from app.utils.response import success_response, error_response
 from app.routers import (
     business, category, customer, supplier,
     product, sale, payment, purchase, staff,
     stock, expense, sales_return, purchase_return, profiles,
-    dashboard, reports, auth
+    dashboard, reports, auth, subscription,
 )
 import logging
 import os
@@ -21,10 +23,56 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
+logger = logging.getLogger(__name__)
+
+
+# ── Background scheduler for subscription expiry ──────────────────────────────
+_scheduler = None
+
+
+def _start_scheduler():
+    global _scheduler
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from app.services.subscription_expiry import expire_subscriptions
+
+        _scheduler = BackgroundScheduler()
+        # Run daily at 2:00 AM
+        _scheduler.add_job(
+            expire_subscriptions,
+            "cron",
+            hour=2,
+            minute=0,
+            id="subscription_expiry",
+            replace_existing=True,
+        )
+        _scheduler.start()
+        logger.info("Subscription expiry scheduler started (daily at 02:00)")
+    except ImportError:
+        logger.warning("APScheduler not installed. Subscription expiry job disabled.")
+    except Exception as e:
+        logger.warning("Failed to start scheduler: %s", e)
+
+
+def _stop_scheduler():
+    global _scheduler
+    if _scheduler:
+        _scheduler.shutdown(wait=False)
+        _scheduler = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _start_scheduler()
+    yield
+    _stop_scheduler()
+
+
 app = FastAPI(
     title="SmartBillr API",
     description="Backend API for SmartBillr Billing Application",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # ── Rate Limiting ─────────────────────────────────────────────────────────────
@@ -56,6 +104,12 @@ app.add_middleware(
 # Returns 413 Payload Too Large with consistent error format.
 app.add_middleware(RequestSizeLimitMiddleware)
 
+# ── Subscription Access Control ────────────────────────────────────────────────
+# Validates tenant subscription on every authenticated request.
+# Returns 402 Payment Required if trial expired / subscription invalid.
+# Excludes: registration, subscription check, auth, health, admin.
+app.add_middleware(SubscriptionMiddleware)
+
 # ── Global exception handler ──────────────────────────────────────────────
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -82,6 +136,8 @@ app.include_router(staff.router)
 app.include_router(dashboard.router)
 app.include_router(reports.router)
 app.include_router(auth.router)
+for _r in subscription.routers:
+    app.include_router(_r)
 
 
 @app.get("/")
@@ -100,7 +156,7 @@ def health_check():
 
 # ── /test-auth is ONLY available in development ───────────────────────────────
 # In production (ENVIRONMENT=production) this route does not exist.
-# It is never registered — it cannot be called, discovered, or abused.
+# It is never registered — it cannot be discovered or abused.
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
 if ENVIRONMENT == "development":

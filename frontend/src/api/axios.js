@@ -48,14 +48,6 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers['Authorization'] = `Bearer ${token}`
   }
-
-  if (config.url && !config.url.endsWith('/')) {
-    const [path, query] = config.url.split('?')
-    if (!path.endsWith('/')) {
-      config.url = query ? `${path}/?${query}` : `${path}/`
-    }
-  }
-
   return config
 })
 
@@ -65,6 +57,14 @@ api.interceptors.response.use(
 
   async (error) => {
     const originalRequest = error.config
+
+    // 402 Payment Required — subscription expired
+    if (error.response?.status === 402) {
+      if (!window.location.pathname.includes('/subscription')) {
+        window.location.href = '/subscription'
+      }
+      return Promise.reject(error)
+    }
 
     if (error.response?.status !== 401 || originalRequest._retry) {
       return Promise.reject(error)

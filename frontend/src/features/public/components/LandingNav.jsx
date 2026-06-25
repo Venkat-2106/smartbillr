@@ -156,7 +156,7 @@ export default function LandingNav() {
             Login
           </button>
           <button
-            onClick={() => goToContact()}
+            onClick={() => navigate('/signup')}
             onMouseEnter={() => setSignupHovered(true)}
             onMouseLeave={() => setSignupHovered(false)}
             style={{
@@ -246,7 +246,7 @@ export default function LandingNav() {
               Login
             </button>
             <button
-              onClick={() => goToContact()}
+              onClick={() => navigate('/signup')}
               style={{
                 flex: 1,
                 padding: '10px 0',

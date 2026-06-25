@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Spinner } from '../shared/components'
 import DashboardLayout from './layouts/DashboardLayout'
 import LoginPage from '../features/auth/pages/LoginPage'
+import SignupPage from '../features/auth/pages/SignupPage'
 import ResetPasswordPage from '../features/auth/pages/ResetPasswordPage'
 import UnauthorizedPage from '../features/auth/pages/UnauthorizedPage'
 import ProtectedRoute from '../features/auth/components/ProtectedRoute'
@@ -23,6 +24,7 @@ const ExpensesPage = React.lazy(() => import('../features/expenses/pages/Expense
 const SalesReturnsPage = React.lazy(() => import('../features/salesReturns/pages/SalesReturnsPage'))
 const PurchaseReturnsPage = React.lazy(() => import('../features/purchaseReturns/pages/PurchaseReturnsPage'))
 const SettingsPage = React.lazy(() => import('../features/settings/pages/SettingsPage'))
+const SubscriptionPage = React.lazy(() => import('../features/subscription/pages/SubscriptionPage'))
 const StaffPage = React.lazy(() => import('../features/staff/pages/StaffPage'))
 const ReportsPage = React.lazy(() => import('../features/reports/pages/ReportsPage'))
 
@@ -40,8 +42,10 @@ export default function AppRouter() {
         {/* Public routes — no auth needed */}
         <Route path="/"               element={<LandingPage />} />
         <Route path="/login"          element={<LoginPage />} />
+        <Route path="/signup"         element={<SignupPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/unauthorized"   element={<UnauthorizedPage />} />
+        <Route path="/subscription"   element={<SubscriptionPage />} />
 
         {/* Protected routes — all inside DashboardLayout */}
         <Route

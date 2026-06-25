@@ -1,0 +1,202 @@
+from fastapi import Request, HTTPException
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from app.database import SessionLocal
+import re
+from cachetools import TTLCache
+
+
+_subscription_cache: TTLCache | None = TTLCache(maxsize=10000, ttl=60)
+
+
+EXCLUDED_PATHS = [
+    re.compile(r"^/v1/business$"),  # POST registration (no auth)
+    re.compile(r"^/v1/businesses/me/subscription$"),  # subscription status check
+    re.compile(r"^/v1/businesses/([a-f0-9-]+)/subscription$"),  # super admin
+    re.compile(r"^/v1/admin/"),  # all admin endpoints
+    re.compile(r"^/v1/auth/"),
+    re.compile(r"^/v1/profiles/check-email"),
+    re.compile(r"^/$"),
+    re.compile(r"^/health$"),
+    re.compile(r"^/test-auth"),
+]
+
+
+def _is_excluded(path: str) -> bool:
+    for pattern in EXCLUDED_PATHS:
+        if pattern.match(path):
+            return True
+    return False
+
+
+def _extract_business_id_from_db(user_id: str) -> str | None:
+    db = SessionLocal()
+    try:
+        row = db.execute(
+            text("""
+                SELECT business_id FROM profiles
+                WHERE id = :user_id AND is_active = true
+                LIMIT 1
+            """),
+            {"user_id": user_id},
+        ).fetchone()
+        return str(row.business_id) if row else None
+    except Exception:
+        return None
+    finally:
+        db.close()
+
+
+def _check_subscription(business_id: str) -> dict | None:
+    """
+    Returns None if subscription is valid, or a dict with error details if invalid.
+    Results are cached in-memory for 60 seconds.
+    """
+    from datetime import datetime, timezone
+
+    cache_key = f"sub:{business_id}"
+    if _subscription_cache is not None:
+        cached = _subscription_cache.get(cache_key)
+        if cached is not None:
+            return cached if cached is False else cached
+
+    db = SessionLocal()
+    try:
+        row = db.execute(
+            text("""
+                SELECT
+                    payment_status,
+                    subscription_type,
+                    subscription_end_at,
+                    trial_end_at,
+                    is_active
+                FROM businesses
+                WHERE business_id = :bid
+                LIMIT 1
+            """),
+            {"bid": business_id},
+        ).fetchone()
+
+        if not row:
+            result = {
+                "error_code": "INACTIVE",
+                "status": "not_found",
+                "message": "Business not found",
+            }
+            if _subscription_cache is not None:
+                _subscription_cache[cache_key] = result
+            return result
+
+        now = datetime.now(timezone.utc)
+        result = None
+
+        if not row.is_active:
+            result = {
+                "error_code": "SUSPENDED",
+                "status": "suspended",
+                "message": "Business account is suspended",
+            }
+
+        trial_end = row.trial_end_at
+        sub_end = row.subscription_end_at
+
+        if result is None and row.payment_status == "pending":
+            if trial_end and now > trial_end:
+                result = {
+                    "error_code": "TRIAL_EXPIRED",
+                    "status": "trial_expired",
+                    "message": "Trial period has expired. Please complete payment to continue.",
+                    "payment_status": row.payment_status,
+                    "subscription_type": row.subscription_type,
+                    "trial_end_at": trial_end.isoformat() if trial_end else None,
+                    "subscription_end_at": sub_end.isoformat() if sub_end else None,
+                }
+
+        if result is None and row.payment_status in ("paid", "suspended"):
+            expired = now > sub_end if sub_end else False
+            if expired or row.payment_status == "suspended":
+                result = {
+                    "error_code": "SUBSCRIPTION_EXPIRED",
+                    "status": "subscription_expired",
+                    "message": "Subscription has expired. Please renew to continue.",
+                    "payment_status": row.payment_status,
+                    "subscription_type": row.subscription_type,
+                    "trial_end_at": trial_end.isoformat() if trial_end else None,
+                    "subscription_end_at": sub_end.isoformat() if sub_end else None,
+                }
+
+        if _subscription_cache is not None:
+            _subscription_cache[cache_key] = result if result else False
+
+        return result
+
+    except Exception:
+        return None
+    finally:
+        db.close()
+
+
+class SubscriptionMiddleware:
+    """
+    ASGI middleware that validates tenant subscription status on every
+    authenticated API request. Excluded paths are defined in EXCLUDED_PATHS.
+    Returns 402 Payment Required when subscription is invalid.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope, receive)
+        path = request.url.path
+
+        if _is_excluded(path):
+            await self.app(scope, receive, send)
+            return
+
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            await self.app(scope, receive, send)
+            return
+
+        token = auth_header.removeprefix("Bearer ")
+
+        try:
+            from app.middleware.auth import decode_token_payload
+            payload = decode_token_payload(token)
+            user_id = payload.get("sub")
+        except HTTPException:
+            await self.app(scope, receive, send)
+            return
+        except Exception:
+            await self.app(scope, receive, send)
+            return
+
+        if not user_id:
+            await self.app(scope, receive, send)
+            return
+
+        business_id = _extract_business_id_from_db(user_id)
+        if not business_id:
+            await self.app(scope, receive, send)
+            return
+
+        error = _check_subscription(business_id)
+        if error is not None:
+            response = JSONResponse(
+                status_code=402,
+                content={
+                    "success": False,
+                    "error": "subscription_required",
+                    "message": error["message"],
+                    "subscription": error,
+                },
+            )
+            await response(scope, receive, send)
+            return
+
+        await self.app(scope, receive, send)

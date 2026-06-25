@@ -14,10 +14,9 @@ import useAuthStore from '../../../store/authStore'
 import api from '../../../api/axios'
 import supabase from '../../../lib/supabaseClient'
 
-// ─── useLogin ─────────────────────────────────────────────────────────────────
 export function useLogin() {
   const [isLoading, setIsLoading] = useState(false)
-  const { setAuth, setBusiness, setProfile, setPermissions } = useAuthStore()
+  const { setAuth, setBusiness, setProfile, setPermissions, setSubscription } = useAuthStore()
   const navigate = useNavigate()
 
   async function login(email, password) {
@@ -30,17 +29,15 @@ export function useLogin() {
 
       setAuth(token, user, refreshToken)
 
-      // FIX 3: fetch business + profile in parallel — saves ~200ms on every login
-      const [bizResult, profileResult] = await Promise.allSettled([
+      const [bizResult, profileResult, subResult] = await Promise.allSettled([
         api.get('/businesses/me'),
         api.get('/profiles/me'),
+        api.get('/businesses/me/subscription'),
       ])
 
       if (bizResult.status === 'fulfilled') {
         const biz = bizResult.value.data
         if (biz) setBusiness(biz)
-      } else {
-        console.warn('Could not load business profile:', bizResult.reason?.message)
       }
 
       if (profileResult.status === 'fulfilled') {
@@ -49,8 +46,18 @@ export function useLogin() {
           setProfile(profile)
           setPermissions(profile.permissions ?? [])
         }
-      } else {
-        console.warn('Could not load user profile:', profileResult.reason?.message)
+      }
+
+      if (subResult.status === 'fulfilled') {
+        const sub = subResult.value.data
+        if (sub) {
+          setSubscription(sub)
+          if (sub.is_expired) {
+            toast.error('Your subscription has expired. Please renew to continue.')
+            navigate('/subscription', { replace: true })
+            return
+          }
+        }
       }
 
       toast.success('Welcome back!')

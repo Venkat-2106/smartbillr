@@ -7,7 +7,10 @@ import jwt as pyjwt
 import logging
 
 # Paths treated as auth endpoints — stricter IP-based rate limit.
-AUTH_PATHS = ["/auth/", "/profiles/check-email"]
+# Exact paths (matched via ==) and prefix paths (matched via startswith) are separate
+# to avoid /v1/business accidentally matching /v1/businesses/*.
+AUTH_EXACT_PATHS = ["/v1/business"]
+AUTH_PREFIX_PATHS = ["/auth/", "/profiles/check-email"]
 
 # Skip rate limiting entirely for these paths.
 SKIP_PATHS = ["/", "/health"]
@@ -68,7 +71,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if any(path.startswith(s) for s in SKIP_PATHS):
             return await call_next(request)
 
-        is_auth = any(path.startswith(p) for p in AUTH_PATHS)
+        is_auth = (
+            any(path == p for p in AUTH_EXACT_PATHS) or
+            any(path.startswith(p) for p in AUTH_PREFIX_PATHS)
+        )
 
         if is_auth:
             ip = _client_ip(request)

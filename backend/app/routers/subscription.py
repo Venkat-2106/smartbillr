@@ -162,10 +162,13 @@ def register_business(
             },
         )
 
+        # NOTE: purchase_counter / customer_counter are set by server_default
+        # in migration f2g3h4i5j6k7. Deliberately omitted here to avoid
+        # PostgreSQL 42703 errors if the migration hasn't been applied.
         db.execute(
             text("""
-                INSERT INTO business_counters (business_id, invoice_counter, purchase_counter)
-                VALUES (:bid, 0, 0)
+                INSERT INTO business_counters (business_id, invoice_counter)
+                VALUES (:bid, 0)
             """),
             {"bid": business_id},
         )

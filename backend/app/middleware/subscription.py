@@ -58,7 +58,7 @@ def _check_subscription(business_id: str) -> dict | None:
     if _subscription_cache is not None:
         cached = _subscription_cache.get(cache_key)
         if cached is not None:
-            return cached if cached is False else cached
+            return None if cached is False else cached
 
     db = SessionLocal()
     try:

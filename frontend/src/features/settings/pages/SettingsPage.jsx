@@ -30,6 +30,7 @@ export default function SettingsPage() {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isDirty },
   } = useForm({
     resolver: zodResolver(businessSchema),
@@ -44,6 +45,8 @@ export default function SettingsPage() {
       is_gst_registered: false,
     },
   })
+
+  const isGstRegistered = watch('is_gst_registered')
 
   useEffect(() => {
     if (business) {
@@ -63,11 +66,8 @@ export default function SettingsPage() {
   function onSubmit(formData) {
     const payload = {}
     if (formData.business_name) payload.business_name = formData.business_name
-    if (formData.business_email) payload.business_email = formData.business_email
     if (formData.business_phone) payload.business_phone = formData.business_phone
     if (formData.business_address) payload.business_address = formData.business_address
-    if (formData.business_state) payload.business_state = formData.business_state
-    if (formData.business_country_code) payload.business_country_code = formData.business_country_code
     if (formData.gstin) payload.gstin = formData.gstin
     payload.is_gst_registered = formData.is_gst_registered
     save(payload)
@@ -146,7 +146,7 @@ export default function SettingsPage() {
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
                     <FormField label="Email Address" error={errors.business_email?.message}>
-                      <Input {...register('business_email')} placeholder="e.g. hello@abc.com" type="email" />
+                      <Input {...register('business_email')} disabled placeholder="e.g. hello@abc.com" type="email" />
                     </FormField>
                     <FormField label="Phone Number" error={errors.business_phone?.message}>
                       <Input {...register('business_phone')} placeholder="e.g. +91 98765 43210" type="tel" />
@@ -168,10 +168,10 @@ export default function SettingsPage() {
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
                     <FormField label="State / Province" error={errors.business_state?.message}>
-                      <Input {...register('business_state')} placeholder="e.g. Tamil Nadu" />
+                      <Input {...register('business_state')} disabled placeholder="e.g. Tamil Nadu" />
                     </FormField>
                     <FormField label="Country" error={errors.business_country_code?.message}>
-                      <select {...register('business_country_code')} style={selectStyle} aria-label="Business country">
+                      <select {...register('business_country_code')} disabled style={selectStyle} aria-label="Business country">
                         <option value="">— Select Country —</option>
                         {COUNTRIES.map((c) => (
                           <option
@@ -227,15 +227,16 @@ export default function SettingsPage() {
                       />
                       <span style={{
                         position: 'absolute', inset: 0,
-                        background: 'var(--bg-card)',
+                        background: isGstRegistered ? 'var(--accent-600)' : 'var(--bg-card)',
                         border: '1px solid var(--border)',
                         borderRadius: 24,
                         transition: '0.2s',
                       }}>
                         <span style={{
-                          position: 'absolute', top: 2, left: 2,
+                          position: 'absolute', top: 2,
+                          left: isGstRegistered ? 24 : 2,
                           width: 18, height: 18, borderRadius: '50%',
-                          background: 'var(--text-muted)',
+                          background: isGstRegistered ? '#fff' : 'var(--text-muted)',
                           transition: '0.2s',
                         }} />
                       </span>

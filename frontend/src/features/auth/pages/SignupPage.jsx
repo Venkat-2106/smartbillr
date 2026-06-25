@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AuthLayout from '../../../app/layouts/AuthLayout'
 import { registerBusiness } from '../../subscription/api/subscriptionApi'
+import toast from 'react-hot-toast'
 
 const COUNTRIES = [
   { code: 'IN', name: 'India' },
@@ -124,12 +125,21 @@ export default function SignupPage() {
       if (!payload.business_address) payload.business_address = null
       const res = await registerBusiness(payload)
       if (res && res.business_id) {
+        toast.success('Business created successfully! Check your email to sign in.')
         navigate('/login')
       } else {
-        setServerError(res?.message || 'Registration failed')
+        setServerError(res?.message || 'Registration failed. Please try again.')
       }
     } catch (err) {
-      const msg = err?.response?.data?.message || ''
+      const data = err?.response?.data
+      let msg = ''
+      if (data?.message) {
+        msg = data.message
+      } else if (data?.detail) {
+        msg = typeof data.detail === 'string' ? data.detail : Array.isArray(data.detail) ? data.detail.map(d => d.msg).filter(Boolean).join('; ') : ''
+      } else if (err?.message) {
+        msg = err.message
+      }
       if (msg.toLowerCase().includes('already registered')) {
         setErrors(p => ({ ...p, owner_email: msg }))
       } else {

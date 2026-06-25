@@ -7,6 +7,7 @@ import useMediaQuery from '../../shared/hooks/useMediaQuery'
 import { useShortcutContext } from '../../shared/hooks/useShortcut'
 import CommandPalette from '../../shared/components/CommandPalette'
 import ShortcutHelp from '../../shared/components/ShortcutHelp'
+import SubscriptionBanner from '../../features/subscription/components/SubscriptionBanner'
 
 const THEME_KEY  = 'sb-theme'
 const ACCENT_KEY = 'sb-accent'
@@ -760,6 +761,8 @@ export default function DashboardLayout() {
 
           </div>
         </header>
+
+        <SubscriptionBanner />
 
         <main style={{
           flex: 1,

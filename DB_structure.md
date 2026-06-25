@@ -24,6 +24,7 @@
 | public | sales\_return\_items |
 | public | sales\_returns |
 | public | stock\_movements |
+| public | super\_admins |
 | public | suppliers |
 
 ## columns
@@ -146,7 +147,7 @@
 | profiles | created\_at | timestamp without time zone | YES | now() |
 | profiles | updated\_at | timestamp without time zone | YES | now() |
 | profiles | email | text | YES | NaN |
-| profiles | role\_id | integer | YES | NaN |
+| profiles | role\_id | integer | NO | NaN |
 | profiles | last\_logout\_at | timestamp with time zone | YES | NaN |
 | purchase\_items | item\_id | uuid | NO | gen\_random\_uuid() |
 | purchase\_items | business\_id | uuid | YES | NaN |
@@ -279,6 +280,9 @@
 | stock\_movements | move\_created\_by | uuid | YES | NaN |
 | stock\_movements | reference\_type | text | YES | NaN |
 | stock\_movements | reference\_id | uuid | YES | NaN |
+| super\_admins | id | integer | NO | nextval('super\_admins\_id\_seq'::regclass) |
+| super\_admins | user\_id | character varying | NO | NaN |
+| super\_admins | created\_at | timestamp without time zone | YES | now() |
 | suppliers | supp\_id | uuid | NO | gen\_random\_uuid() |
 | suppliers | business\_id | uuid | YES | NaN |
 | suppliers | supp\_name | character varying | NO | NaN |
@@ -312,14 +316,15 @@
 | purchase\_return\_items | return\_item\_id |
 | purchase\_returns | return\_id |
 | purchases | pur\_id |
-| role\_permissions | role\_id |
 | role\_permissions | permission\_id |
+| role\_permissions | role\_id |
 | roles | id |
 | sale\_items | sale\_item\_id |
 | sales | sales\_id |
 | sales\_return\_items | return\_item\_id |
 | sales\_returns | return\_id |
 | stock\_movements | move\_id |
+| super\_admins | id |
 | suppliers | supp\_id |
 
 ## foregin key
@@ -336,14 +341,15 @@
 | expenses | created\_by | profiles | id |
 | expenses | business\_id | businesses | business\_id |
 | expenses | updated\_by | profiles | id |
-| low\_stock\_alerts | product\_id | products | prod\_id |
 | low\_stock\_alerts | business\_id | businesses | business\_id |
+| low\_stock\_alerts | product\_id | products | prod\_id |
 | payments | business\_id | businesses | business\_id |
 | payments | sale\_id | sales | sales\_id |
 | products | business\_id | businesses | business\_id |
 | products | created\_by | profiles | id |
 | products | updated\_by | profiles | id |
 | products | category\_id | categories | category\_id |
+| profiles | business\_id | businesses | business\_id |
 | profiles | business\_id | businesses | business\_id |
 | profiles | role\_id | roles | id |
 | purchase\_items | pur\_id | purchases | pur\_id |
@@ -387,96 +393,97 @@
 | table\_name | constraint\_name | constraint\_type | definition |
 | --- | --- | --- | --- |
 | businesses | businesses\_pkey | p | PRIMARY KEY (business\_id) |
-| profiles | profiles\_email\_unique | u | UNIQUE (email) |
+| profiles | profiles\_role\_id\_fkey | f | FOREIGN KEY (role\_id) REFERENCES roles(id) |
 | profiles | profiles\_role\_check | c | CHECK ((role = ANY (ARRAY['admin'::text, 'staff'::text, 'manager'::text]))) |
 | profiles | profiles\_pkey | p | PRIMARY KEY (id) |
 | profiles | profiles\_id\_fkey | f | FOREIGN KEY (id) REFERENCES auth.users(id) |
+| profiles | profiles\_email\_unique | u | UNIQUE (email) |
 | profiles | profiles\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
-| profiles | profiles\_role\_id\_fkey | f | FOREIGN KEY (role\_id) REFERENCES roles(id) |
+| profiles | fk\_profiles\_business\_id | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
 | business\_counters | business\_counters\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
 | business\_counters | business\_counters\_pkey | p | PRIMARY KEY (business\_id) |
-| categories | categories\_updated\_by\_fkey | f | FOREIGN KEY (updated\_by) REFERENCES profiles(id) ON DELETE SET NULL |
-| categories | categories\_created\_by\_fkey | f | FOREIGN KEY (created\_by) REFERENCES profiles(id) ON DELETE SET NULL |
-| categories | categories\_pkey | p | PRIMARY KEY (category\_id) |
 | categories | categories\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
-| customers | customers\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
-| customers | customers\_pkey | p | PRIMARY KEY (cust\_id) |
+| categories | categories\_updated\_by\_fkey | f | FOREIGN KEY (updated\_by) REFERENCES profiles(id) ON DELETE SET NULL |
+| categories | categories\_pkey | p | PRIMARY KEY (category\_id) |
+| categories | categories\_created\_by\_fkey | f | FOREIGN KEY (created\_by) REFERENCES profiles(id) ON DELETE SET NULL |
 | customers | customers\_updated\_by\_fkey | f | FOREIGN KEY (updated\_by) REFERENCES profiles(id) ON DELETE SET NULL |
+| customers | customers\_pkey | p | PRIMARY KEY (cust\_id) |
+| customers | customers\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
 | suppliers | suppliers\_pkey | p | PRIMARY KEY (supp\_id) |
 | suppliers | suppliers\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
 | suppliers | suppliers\_updated\_by\_fkey | f | FOREIGN KEY (updated\_by) REFERENCES profiles(id) ON DELETE SET NULL |
-| products | products\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
+| products | products\_created\_by\_fkey | f | FOREIGN KEY (created\_by) REFERENCES profiles(id) ON DELETE SET NULL |
 | products | products\_pkey | p | PRIMARY KEY (prod\_id) |
 | products | products\_category\_id\_fkey | f | FOREIGN KEY (category\_id) REFERENCES categories(category\_id) |
-| products | products\_created\_by\_fkey | f | FOREIGN KEY (created\_by) REFERENCES profiles(id) ON DELETE SET NULL |
+| products | products\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
 | products | products\_updated\_by\_fkey | f | FOREIGN KEY (updated\_by) REFERENCES profiles(id) ON DELETE SET NULL |
-| sales | sales\_sales\_payment\_status\_check | c | CHECK (((sales\_payment\_status)::text = ANY ((ARRAY['pending'::character varying, 'paid'::character varying, 'partial'::character varying])::text[]))) |
-| sales | sales\_pkey | p | PRIMARY KEY (sales\_id) |
 | sales | sales\_invoice\_no\_key | u | UNIQUE (invoice\_no) |
 | sales | sales\_sales\_payment\_method\_check | c | CHECK (((sales\_payment\_method)::text = ANY ((ARRAY['cash'::character varying, 'upi'::character varying, 'card'::character varying, 'bank'::character varying, 'split'::character varying])::text[]))) |
+| sales | sales\_sales\_payment\_status\_check | c | CHECK (((sales\_payment\_status)::text = ANY ((ARRAY['pending'::character varying, 'paid'::character varying, 'partial'::character varying])::text[]))) |
+| sales | sales\_pkey | p | PRIMARY KEY (sales\_id) |
 | sales | sales\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
 | sales | sales\_customer\_id\_fkey | f | FOREIGN KEY (customer\_id) REFERENCES customers(cust\_id) |
 | sales | sales\_created\_by\_fkey | f | FOREIGN KEY (created\_by) REFERENCES profiles(id) |
 | sale\_items | sale\_items\_product\_id\_fkey | f | FOREIGN KEY (product\_id) REFERENCES products(prod\_id) |
 | sale\_items | sale\_items\_pkey | p | PRIMARY KEY (sale\_item\_id) |
-| sale\_items | sale\_items\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
 | sale\_items | sale\_items\_sale\_id\_fkey | f | FOREIGN KEY (sale\_id) REFERENCES sales(sales\_id) ON DELETE CASCADE |
+| sale\_items | sale\_items\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
 | payments | payments\_pkey | p | PRIMARY KEY (payment\_id) |
-| payments | payments\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
 | payments | payments\_sale\_id\_fkey | f | FOREIGN KEY (sale\_id) REFERENCES sales(sales\_id) ON DELETE CASCADE |
 | payments | payments\_payment\_method\_check | c | CHECK (((payment\_method)::text = ANY (ARRAY['cash'::text, 'upi'::text, 'card'::text, 'bank'::text, 'split'::text, 'adjustment'::text]))) |
-| purchases | purchases\_updated\_by\_fkey | f | FOREIGN KEY (updated\_by) REFERENCES profiles(id) ON DELETE SET NULL |
-| purchases | purchases\_pkey | p | PRIMARY KEY (pur\_id) |
-| purchases | purchases\_created\_by\_fkey | f | FOREIGN KEY (created\_by) REFERENCES profiles(id) |
+| payments | payments\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
 | purchases | purchases\_supp\_id\_fkey | f | FOREIGN KEY (supp\_id) REFERENCES suppliers(supp\_id) |
+| purchases | purchases\_pkey | p | PRIMARY KEY (pur\_id) |
 | purchases | purchases\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
 | purchases | purchases\_pur\_payment\_status\_check | c | CHECK (((pur\_payment\_status)::text = ANY ((ARRAY['pending'::character varying, 'paid'::character varying, 'partial'::character varying])::text[]))) |
-| purchase\_items | purchase\_items\_pkey | p | PRIMARY KEY (item\_id) |
+| purchases | purchases\_updated\_by\_fkey | f | FOREIGN KEY (updated\_by) REFERENCES profiles(id) ON DELETE SET NULL |
+| purchases | purchases\_created\_by\_fkey | f | FOREIGN KEY (created\_by) REFERENCES profiles(id) |
 | purchase\_items | purchase\_items\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
 | purchase\_items | purchase\_items\_pur\_id\_fkey | f | FOREIGN KEY (pur\_id) REFERENCES purchases(pur\_id) ON DELETE CASCADE |
 | purchase\_items | purchase\_items\_product\_id\_fkey | f | FOREIGN KEY (product\_id) REFERENCES products(prod\_id) |
+| purchase\_items | purchase\_items\_pkey | p | PRIMARY KEY (item\_id) |
 | low\_stock\_alerts | low\_stock\_alerts\_product\_id\_fkey | f | FOREIGN KEY (product\_id) REFERENCES products(prod\_id) |
 | low\_stock\_alerts | low\_stock\_alerts\_alert\_status\_check | c | CHECK (((alert\_status)::text = ANY ((ARRAY['unread'::character varying, 'read'::character varying, 'resolved'::character varying])::text[]))) |
 | low\_stock\_alerts | low\_stock\_alerts\_pkey | p | PRIMARY KEY (alert\_id) |
 | low\_stock\_alerts | low\_stock\_alerts\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
-| stock\_movements | stock\_movements\_pkey | p | PRIMARY KEY (move\_id) |
-| stock\_movements | stock\_movements\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
 | stock\_movements | stock\_movements\_sale\_reference\_id\_fkey | f | FOREIGN KEY (sale\_reference\_id) REFERENCES sales(sales\_id) |
-| stock\_movements | stock\_movements\_product\_id\_fkey | f | FOREIGN KEY (product\_id) REFERENCES products(prod\_id) |
 | stock\_movements | stock\_movements\_move\_type\_check | c | CHECK (((move\_type)::text = ANY ((ARRAY['sale'::character varying, 'purchase'::character varying, 'adjustment'::character varying, 'sales\_return'::character varying, 'sales\_return\_reversal'::character varying, 'purchase\_return'::character varying, 'purchase\_return\_reversal'::character varying, 'damage'::character varying])::text[]))) |
 | stock\_movements | stock\_movements\_purchase\_reference\_id\_fkey | f | FOREIGN KEY (purchase\_reference\_id) REFERENCES purchases(pur\_id) |
 | stock\_movements | stock\_movements\_move\_created\_by\_fkey | f | FOREIGN KEY (move\_created\_by) REFERENCES profiles(id) |
+| stock\_movements | stock\_movements\_pkey | p | PRIMARY KEY (move\_id) |
+| stock\_movements | stock\_movements\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
+| stock\_movements | stock\_movements\_product\_id\_fkey | f | FOREIGN KEY (product\_id) REFERENCES products(prod\_id) |
+| sales\_returns | sales\_returns\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
 | sales\_returns | sales\_returns\_sale\_id\_fkey | f | FOREIGN KEY (sale\_id) REFERENCES sales(sales\_id) |
+| sales\_returns | sales\_returns\_created\_by\_fkey | f | FOREIGN KEY (created\_by) REFERENCES profiles(id) |
 | sales\_returns | sales\_returns\_return\_status\_check | c | CHECK (((return\_status)::text = ANY ((ARRAY['pending'::character varying, 'approved'::character varying, 'rejected'::character varying])::text[]))) |
 | sales\_returns | sales\_returns\_pkey | p | PRIMARY KEY (return\_id) |
-| sales\_returns | sales\_returns\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
-| sales\_returns | sales\_returns\_created\_by\_fkey | f | FOREIGN KEY (created\_by) REFERENCES profiles(id) |
-| expenses | expenses\_created\_by\_fkey | f | FOREIGN KEY (created\_by) REFERENCES profiles(id) |
-| expenses | expenses\_expense\_category\_check | c | CHECK (((expense\_category)::text = ANY (ARRAY['rent'::text, 'salary'::text, 'electricity'::text, 'internet'::text, 'maintenance'::text, 'marketing'::text, 'other'::text, 'purchase'::text]))) |
-| expenses | expenses\_updated\_by\_fkey | f | FOREIGN KEY (updated\_by) REFERENCES profiles(id) |
-| expenses | expenses\_pkey | p | PRIMARY KEY (expense\_id) |
 | expenses | expenses\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
-| audit\_logs | audit\_logs\_pkey | p | PRIMARY KEY (audit\_id) |
+| expenses | expenses\_updated\_by\_fkey | f | FOREIGN KEY (updated\_by) REFERENCES profiles(id) |
+| expenses | expenses\_expense\_category\_check | c | CHECK (((expense\_category)::text = ANY (ARRAY['rent'::text, 'salary'::text, 'electricity'::text, 'internet'::text, 'maintenance'::text, 'marketing'::text, 'other'::text, 'purchase'::text]))) |
+| expenses | expenses\_pkey | p | PRIMARY KEY (expense\_id) |
+| expenses | expenses\_created\_by\_fkey | f | FOREIGN KEY (created\_by) REFERENCES profiles(id) |
 | audit\_logs | audit\_logs\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
-| audit\_logs | audit\_logs\_user\_id\_fkey | f | FOREIGN KEY (user\_id) REFERENCES profiles(id) |
 | audit\_logs | audit\_logs\_action\_type\_check | c | CHECK (((action\_type)::text = ANY ((ARRAY['insert'::character varying, 'update'::character varying, 'delete'::character varying, 'login'::character varying, 'export'::character varying])::text[]))) |
-| purchase\_returns | purchase\_returns\_pur\_id\_fkey | f | FOREIGN KEY (pur\_id) REFERENCES purchases(pur\_id) |
-| purchase\_returns | purchase\_returns\_approved\_by\_fkey | f | FOREIGN KEY (approved\_by) REFERENCES profiles(id) |
-| purchase\_returns | purchase\_returns\_return\_status\_check | c | CHECK (((return\_status)::text = ANY ((ARRAY['pending'::character varying, 'approved'::character varying, 'rejected'::character varying])::text[]))) |
+| audit\_logs | audit\_logs\_pkey | p | PRIMARY KEY (audit\_id) |
+| audit\_logs | audit\_logs\_user\_id\_fkey | f | FOREIGN KEY (user\_id) REFERENCES profiles(id) |
 | purchase\_returns | purchase\_returns\_pkey | p | PRIMARY KEY (return\_id) |
-| purchase\_returns | purchase\_returns\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
+| purchase\_returns | purchase\_returns\_approved\_by\_fkey | f | FOREIGN KEY (approved\_by) REFERENCES profiles(id) |
 | purchase\_returns | purchase\_returns\_created\_by\_fkey | f | FOREIGN KEY (created\_by) REFERENCES profiles(id) |
-| purchase\_return\_items | purchase\_return\_items\_return\_id\_fkey | f | FOREIGN KEY (return\_id) REFERENCES purchase\_returns(return\_id) ON DELETE CASCADE |
-| purchase\_return\_items | purchase\_return\_items\_pkey | p | PRIMARY KEY (return\_item\_id) |
-| purchase\_return\_items | purchase\_return\_items\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
+| purchase\_returns | purchase\_returns\_pur\_id\_fkey | f | FOREIGN KEY (pur\_id) REFERENCES purchases(pur\_id) |
+| purchase\_returns | purchase\_returns\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
+| purchase\_returns | purchase\_returns\_return\_status\_check | c | CHECK (((return\_status)::text = ANY ((ARRAY['pending'::character varying, 'approved'::character varying, 'rejected'::character varying])::text[]))) |
 | purchase\_return\_items | purchase\_return\_items\_product\_id\_fkey | f | FOREIGN KEY (product\_id) REFERENCES products(prod\_id) |
+| purchase\_return\_items | purchase\_return\_items\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
+| purchase\_return\_items | purchase\_return\_items\_pkey | p | PRIMARY KEY (return\_item\_id) |
+| purchase\_return\_items | purchase\_return\_items\_return\_id\_fkey | f | FOREIGN KEY (return\_id) REFERENCES purchase\_returns(return\_id) ON DELETE CASCADE |
 | sales\_return\_items | sales\_return\_items\_return\_qty\_check | c | CHECK ((return\_qty > (0)::numeric)) |
 | sales\_return\_items | sales\_return\_items\_business\_id\_fkey | f | FOREIGN KEY (business\_id) REFERENCES businesses(business\_id) |
 | sales\_return\_items | sales\_return\_items\_product\_id\_fkey | f | FOREIGN KEY (product\_id) REFERENCES products(prod\_id) |
-| sales\_return\_items | sales\_return\_items\_unit\_price\_check | c | CHECK ((unit\_price >= (0)::numeric)) |
-| sales\_return\_items | sales\_return\_items\_pkey | p | PRIMARY KEY (return\_item\_id) |
-| sales\_return\_items | sales\_return\_items\_return\_id\_fkey | f | FOREIGN KEY (return\_id) REFERENCES sales\_returns(return\_id) ON DELETE CASCADE |
 | sales\_return\_items | sales\_return\_items\_sale\_item\_id\_fkey | f | FOREIGN KEY (sale\_item\_id) REFERENCES sale\_items(sale\_item\_id) |
+| sales\_return\_items | sales\_return\_items\_return\_id\_fkey | f | FOREIGN KEY (return\_id) REFERENCES sales\_returns(return\_id) ON DELETE CASCADE |
+| sales\_return\_items | sales\_return\_items\_pkey | p | PRIMARY KEY (return\_item\_id) |
+| sales\_return\_items | sales\_return\_items\_unit\_price\_check | c | CHECK ((unit\_price >= (0)::numeric)) |
 | roles | roles\_name\_key | u | UNIQUE (name) |
 | roles | roles\_pkey | p | PRIMARY KEY (id) |
 | permissions | permissions\_pkey | p | PRIMARY KEY (id) |
@@ -485,21 +492,23 @@
 | role\_permissions | role\_permissions\_permission\_id\_fkey | f | FOREIGN KEY (permission\_id) REFERENCES permissions(id) ON DELETE CASCADE |
 | role\_permissions | role\_permissions\_role\_id\_fkey | f | FOREIGN KEY (role\_id) REFERENCES roles(id) ON DELETE CASCADE |
 | alembic\_version | alembic\_version\_pkc | p | PRIMARY KEY (version\_num) |
+| super\_admins | super\_admins\_user\_id\_key | u | UNIQUE (user\_id) |
+| super\_admins | super\_admins\_pkey | p | PRIMARY KEY (id) |
 
 ## index
 | schemaname | tablename | indexname | indexdef |
 | --- | --- | --- | --- |
 | public | alembic\_version | alembic\_version\_pkc | CREATE UNIQUE INDEX alembic\_version\_pkc ON public.alembic\_version USING btree (version\_num) |
-| public | audit\_logs | idx\_audit\_logs\_business | CREATE INDEX idx\_audit\_logs\_business ON public.audit\_logs USING btree (business\_id) |
 | public | audit\_logs | idx\_audit\_logs\_business\_action | CREATE INDEX idx\_audit\_logs\_business\_action ON public.audit\_logs USING btree (business\_id, action\_type, created\_at DESC) |
+| public | audit\_logs | idx\_audit\_logs\_business | CREATE INDEX idx\_audit\_logs\_business ON public.audit\_logs USING btree (business\_id) |
 | public | audit\_logs | audit\_logs\_pkey | CREATE UNIQUE INDEX audit\_logs\_pkey ON public.audit\_logs USING btree (audit\_id) |
 | public | business\_counters | business\_counters\_pkey | CREATE UNIQUE INDEX business\_counters\_pkey ON public.business\_counters USING btree (business\_id) |
+| public | businesses | ix\_businesses\_payment\_status\_sub\_end | CREATE INDEX ix\_businesses\_payment\_status\_sub\_end ON public.businesses USING btree (payment\_status, subscription\_end\_at) WHERE ((payment\_status)::text = 'paid'::text) |
 | public | businesses | businesses\_pkey | CREATE UNIQUE INDEX businesses\_pkey ON public.businesses USING btree (business\_id) |
 | public | categories | idx\_categories\_name\_trgm | CREATE INDEX idx\_categories\_name\_trgm ON public.categories USING gin (category\_name gin\_trgm\_ops) WHERE (is\_deleted = false) |
 | public | categories | idx\_categories\_business\_updated | CREATE INDEX idx\_categories\_business\_updated ON public.categories USING btree (business\_id, updated\_at DESC) WHERE (is\_deleted = false) |
-| public | categories | idx\_categories\_business\_deleted | CREATE INDEX idx\_categories\_business\_deleted ON public.categories USING btree (business\_id, is\_deleted) |
 | public | categories | categories\_pkey | CREATE UNIQUE INDEX categories\_pkey ON public.categories USING btree (category\_id) |
-| public | customers | idx\_customers\_business\_deleted | CREATE INDEX idx\_customers\_business\_deleted ON public.customers USING btree (business\_id, is\_deleted) |
+| public | categories | idx\_categories\_business\_deleted | CREATE INDEX idx\_categories\_business\_deleted ON public.categories USING btree (business\_id, is\_deleted) |
 | public | customers | idx\_customers\_phone\_trgm | CREATE INDEX idx\_customers\_phone\_trgm ON public.customers USING gin (cust\_phone gin\_trgm\_ops) |
 | public | customers | idx\_customers\_email\_trgm | CREATE INDEX idx\_customers\_email\_trgm ON public.customers USING gin (cust\_email gin\_trgm\_ops) |
 | public | customers | idx\_customers\_cust\_name | CREATE INDEX idx\_customers\_cust\_name ON public.customers USING btree (cust\_name) |
@@ -509,22 +518,23 @@
 | public | customers | idx\_customers\_business\_lower\_trim\_name | CREATE INDEX idx\_customers\_business\_lower\_trim\_name ON public.customers USING btree (business\_id, lower(TRIM(BOTH FROM cust\_name))) WHERE (is\_deleted = false) |
 | public | customers | idx\_customers\_updated | CREATE INDEX idx\_customers\_updated ON public.customers USING btree (business\_id, updated\_at DESC) WHERE (is\_deleted = false) |
 | public | customers | customers\_pkey | CREATE UNIQUE INDEX customers\_pkey ON public.customers USING btree (cust\_id) |
+| public | customers | idx\_customers\_business\_deleted | CREATE INDEX idx\_customers\_business\_deleted ON public.customers USING btree (business\_id, is\_deleted) |
 | public | customers | idx\_customers\_name\_trgm | CREATE INDEX idx\_customers\_name\_trgm ON public.customers USING gin (cust\_name gin\_trgm\_ops) |
-| public | expenses | idx\_expenses\_date | CREATE INDEX idx\_expenses\_date ON public.expenses USING btree (business\_id, expense\_date DESC) |
 | public | expenses | expenses\_pkey | CREATE UNIQUE INDEX expenses\_pkey ON public.expenses USING btree (expense\_id) |
 | public | expenses | uix\_expenses\_source | CREATE UNIQUE INDEX uix\_expenses\_source ON public.expenses USING btree (business\_id, source\_type, source\_id) WHERE ((is\_deleted = false) AND (source\_type IS NOT NULL)) |
+| public | expenses | idx\_expenses\_date | CREATE INDEX idx\_expenses\_date ON public.expenses USING btree (business\_id, expense\_date DESC) |
 | public | expenses | idx\_expenses\_business\_deleted | CREATE INDEX idx\_expenses\_business\_deleted ON public.expenses USING btree (business\_id, is\_deleted) |
 | public | low\_stock\_alerts | low\_stock\_alerts\_pkey | CREATE UNIQUE INDEX low\_stock\_alerts\_pkey ON public.low\_stock\_alerts USING btree (alert\_id) |
 | public | low\_stock\_alerts | idx\_low\_stock\_alerts\_business | CREATE INDEX idx\_low\_stock\_alerts\_business ON public.low\_stock\_alerts USING btree (business\_id, alert\_status) |
 | public | mv\_dashboard\_summary | idx\_mv\_dashboard\_summary\_pk | CREATE UNIQUE INDEX idx\_mv\_dashboard\_summary\_pk ON public.mv\_dashboard\_summary USING btree (business\_id) |
 | public | mv\_sales\_trend\_monthly | idx\_mv\_sales\_trend\_monthly\_pk | CREATE UNIQUE INDEX idx\_mv\_sales\_trend\_monthly\_pk ON public.mv\_sales\_trend\_monthly USING btree (business\_id, year\_month) |
-| public | payments | idx\_payments\_sale\_active | CREATE INDEX idx\_payments\_sale\_active ON public.payments USING btree (sale\_id, is\_active) |
+| public | payments | payments\_pkey | CREATE UNIQUE INDEX payments\_pkey ON public.payments USING btree (payment\_id) |
 | public | payments | idx\_payments\_sale | CREATE INDEX idx\_payments\_sale ON public.payments USING btree (business\_id, sale\_id) |
 | public | payments | idx\_payments\_business\_active\_paid\_at | CREATE INDEX idx\_payments\_business\_active\_paid\_at ON public.payments USING btree (business\_id, is\_active, payment\_paid\_at DESC) |
 | public | payments | idx\_payments\_business\_method\_date | CREATE INDEX idx\_payments\_business\_method\_date ON public.payments USING btree (business\_id, payment\_method, payment\_paid\_at DESC) WHERE (is\_active = true) |
+| public | payments | idx\_payments\_sale\_active | CREATE INDEX idx\_payments\_sale\_active ON public.payments USING btree (sale\_id, is\_active) |
 | public | payments | idx\_payments\_business\_active | CREATE INDEX idx\_payments\_business\_active ON public.payments USING btree (business\_id, is\_active) |
 | public | payments | idx\_payments\_sale\_id | CREATE INDEX idx\_payments\_sale\_id ON public.payments USING btree (sale\_id) |
-| public | payments | payments\_pkey | CREATE UNIQUE INDEX payments\_pkey ON public.payments USING btree (payment\_id) |
 | public | permissions | permissions\_code\_key | CREATE UNIQUE INDEX permissions\_code\_key ON public.permissions USING btree (code) |
 | public | permissions | permissions\_pkey | CREATE UNIQUE INDEX permissions\_pkey ON public.permissions USING btree (id) |
 | public | products | idx\_products\_business\_barcode\_active | CREATE INDEX idx\_products\_business\_barcode\_active ON public.products USING btree (business\_id, barcode) WHERE ((is\_deleted = false) AND (barcode IS NOT NULL)) |
@@ -541,45 +551,45 @@
 | public | products | idx\_products\_barcode\_trgm | CREATE INDEX idx\_products\_barcode\_trgm ON public.products USING gin (barcode gin\_trgm\_ops) WHERE ((barcode IS NOT NULL) AND (is\_deleted = false)) |
 | public | products | idx\_products\_business\_category\_active | CREATE INDEX idx\_products\_business\_category\_active ON public.products USING btree (business\_id, category\_id) WHERE (is\_deleted = false) |
 | public | profiles | ix\_profiles\_last\_logout\_at | CREATE INDEX ix\_profiles\_last\_logout\_at ON public.profiles USING btree (last\_logout\_at) |
-| public | profiles | idx\_profiles\_id\_active | CREATE INDEX idx\_profiles\_id\_active ON public.profiles USING btree (id) WHERE (is\_active = true) |
-| public | profiles | profiles\_email\_unique | CREATE UNIQUE INDEX profiles\_email\_unique ON public.profiles USING btree (email) |
 | public | profiles | profiles\_pkey | CREATE UNIQUE INDEX profiles\_pkey ON public.profiles USING btree (id) |
+| public | profiles | profiles\_email\_unique | CREATE UNIQUE INDEX profiles\_email\_unique ON public.profiles USING btree (email) |
+| public | profiles | idx\_profiles\_id\_active | CREATE INDEX idx\_profiles\_id\_active ON public.profiles USING btree (id) WHERE (is\_active = true) |
 | public | profiles | idx\_profiles\_business\_id | CREATE INDEX idx\_profiles\_business\_id ON public.profiles USING btree (business\_id) |
-| public | purchase\_items | idx\_purchase\_items\_purchase\_id | CREATE INDEX idx\_purchase\_items\_purchase\_id ON public.purchase\_items USING btree (pur\_id) |
 | public | purchase\_items | idx\_purchase\_items\_product\_id | CREATE INDEX idx\_purchase\_items\_product\_id ON public.purchase\_items USING btree (product\_id) |
 | public | purchase\_items | idx\_purchase\_items\_business\_product | CREATE INDEX idx\_purchase\_items\_business\_product ON public.purchase\_items USING btree (business\_id, product\_id) |
 | public | purchase\_items | idx\_purchase\_items\_business\_purchase | CREATE INDEX idx\_purchase\_items\_business\_purchase ON public.purchase\_items USING btree (business\_id, pur\_id) |
 | public | purchase\_items | purchase\_items\_pkey | CREATE UNIQUE INDEX purchase\_items\_pkey ON public.purchase\_items USING btree (item\_id) |
-| public | purchase\_return\_items | idx\_purchase\_return\_items\_return | CREATE INDEX idx\_purchase\_return\_items\_return ON public.purchase\_return\_items USING btree (return\_id) |
+| public | purchase\_items | idx\_purchase\_items\_purchase\_id | CREATE INDEX idx\_purchase\_items\_purchase\_id ON public.purchase\_items USING btree (pur\_id) |
 | public | purchase\_return\_items | idx\_pur\_return\_items\_business | CREATE INDEX idx\_pur\_return\_items\_business ON public.purchase\_return\_items USING btree (business\_id) |
 | public | purchase\_return\_items | purchase\_return\_items\_pkey | CREATE UNIQUE INDEX purchase\_return\_items\_pkey ON public.purchase\_return\_items USING btree (return\_item\_id) |
-| public | purchase\_returns | idx\_purchase\_returns\_business\_status\_date | CREATE INDEX idx\_purchase\_returns\_business\_status\_date ON public.purchase\_returns USING btree (business\_id, return\_status, return\_created\_at DESC) |
-| public | purchase\_returns | idx\_purchase\_returns\_status | CREATE INDEX idx\_purchase\_returns\_status ON public.purchase\_returns USING btree (business\_id, return\_status) |
-| public | purchase\_returns | idx\_purchase\_returns\_pur | CREATE INDEX idx\_purchase\_returns\_pur ON public.purchase\_returns USING btree (pur\_id) |
-| public | purchase\_returns | purchase\_returns\_pkey | CREATE UNIQUE INDEX purchase\_returns\_pkey ON public.purchase\_returns USING btree (return\_id) |
+| public | purchase\_return\_items | idx\_purchase\_return\_items\_return | CREATE INDEX idx\_purchase\_return\_items\_return ON public.purchase\_return\_items USING btree (return\_id) |
 | public | purchase\_returns | idx\_purchase\_returns\_business | CREATE INDEX idx\_purchase\_returns\_business ON public.purchase\_returns USING btree (business\_id) |
+| public | purchase\_returns | idx\_purchase\_returns\_pur | CREATE INDEX idx\_purchase\_returns\_pur ON public.purchase\_returns USING btree (pur\_id) |
+| public | purchase\_returns | idx\_purchase\_returns\_status | CREATE INDEX idx\_purchase\_returns\_status ON public.purchase\_returns USING btree (business\_id, return\_status) |
+| public | purchase\_returns | idx\_purchase\_returns\_business\_date | CREATE INDEX idx\_purchase\_returns\_business\_date ON public.purchase\_returns USING btree (business\_id, return\_created\_at DESC) |
+| public | purchase\_returns | idx\_purchase\_returns\_business\_status\_date | CREATE INDEX idx\_purchase\_returns\_business\_status\_date ON public.purchase\_returns USING btree (business\_id, return\_status, return\_created\_at DESC) |
 | public | purchase\_returns | idx\_purchase\_returns\_purchase | CREATE INDEX idx\_purchase\_returns\_purchase ON public.purchase\_returns USING btree (business\_id, pur\_id) |
 | public | purchase\_returns | idx\_purchase\_returns\_purchase\_id | CREATE INDEX idx\_purchase\_returns\_purchase\_id ON public.purchase\_returns USING btree (pur\_id) |
-| public | purchase\_returns | idx\_purchase\_returns\_business\_date | CREATE INDEX idx\_purchase\_returns\_business\_date ON public.purchase\_returns USING btree (business\_id, return\_created\_at DESC) |
+| public | purchase\_returns | purchase\_returns\_pkey | CREATE UNIQUE INDEX purchase\_returns\_pkey ON public.purchase\_returns USING btree (return\_id) |
+| public | purchases | idx\_purchases\_created\_at | CREATE INDEX idx\_purchases\_created\_at ON public.purchases USING btree (business\_id, pur\_created\_at DESC) |
 | public | purchases | idx\_purchases\_payment\_status | CREATE INDEX idx\_purchases\_payment\_status ON public.purchases USING btree (business\_id, pur\_payment\_status) WHERE (is\_deleted = false) |
+| public | purchases | idx\_purchases\_business\_deleted | CREATE INDEX idx\_purchases\_business\_deleted ON public.purchases USING btree (business\_id, is\_deleted) |
 | public | purchases | purchases\_pkey | CREATE UNIQUE INDEX purchases\_pkey ON public.purchases USING btree (pur\_id) |
 | public | purchases | idx\_purchases\_supplier | CREATE INDEX idx\_purchases\_supplier ON public.purchases USING btree (supp\_id) WHERE (supp\_id IS NOT NULL) |
-| public | purchases | idx\_purchases\_created\_at | CREATE INDEX idx\_purchases\_created\_at ON public.purchases USING btree (business\_id, pur\_created\_at DESC) |
-| public | purchases | idx\_purchases\_business\_deleted | CREATE INDEX idx\_purchases\_business\_deleted ON public.purchases USING btree (business\_id, is\_deleted) |
 | public | role\_permissions | idx\_role\_permissions\_role\_id | CREATE INDEX idx\_role\_permissions\_role\_id ON public.role\_permissions USING btree (role\_id) |
 | public | role\_permissions | role\_permissions\_pkey | CREATE UNIQUE INDEX role\_permissions\_pkey ON public.role\_permissions USING btree (role\_id, permission\_id) |
-| public | roles | roles\_pkey | CREATE UNIQUE INDEX roles\_pkey ON public.roles USING btree (id) |
 | public | roles | roles\_name\_key | CREATE UNIQUE INDEX roles\_name\_key ON public.roles USING btree (name) |
-| public | sale\_items | idx\_sale\_items\_sale\_id | CREATE INDEX idx\_sale\_items\_sale\_id ON public.sale\_items USING btree (sale\_id) |
+| public | roles | roles\_pkey | CREATE UNIQUE INDEX roles\_pkey ON public.roles USING btree (id) |
 | public | sale\_items | idx\_sale\_items\_business | CREATE INDEX idx\_sale\_items\_business ON public.sale\_items USING btree (business\_id) |
 | public | sale\_items | idx\_sale\_items\_product\_id | CREATE INDEX idx\_sale\_items\_product\_id ON public.sale\_items USING btree (product\_id) |
 | public | sale\_items | idx\_sale\_items\_business\_sale | CREATE INDEX idx\_sale\_items\_business\_sale ON public.sale\_items USING btree (business\_id, sale\_id) |
 | public | sale\_items | idx\_sale\_items\_business\_product | CREATE INDEX idx\_sale\_items\_business\_product ON public.sale\_items USING btree (business\_id, product\_id) |
-| public | sale\_items | idx\_sale\_items\_sale\_biz | CREATE INDEX idx\_sale\_items\_sale\_biz ON public.sale\_items USING btree (sale\_id, business\_id) |
 | public | sale\_items | sale\_items\_pkey | CREATE UNIQUE INDEX sale\_items\_pkey ON public.sale\_items USING btree (sale\_item\_id) |
-| public | sales | idx\_sales\_invoice\_no | CREATE INDEX idx\_sales\_invoice\_no ON public.sales USING btree (invoice\_no) |
+| public | sale\_items | idx\_sale\_items\_sale\_biz | CREATE INDEX idx\_sale\_items\_sale\_biz ON public.sale\_items USING btree (sale\_id, business\_id) |
+| public | sale\_items | idx\_sale\_items\_sale\_id | CREATE INDEX idx\_sale\_items\_sale\_id ON public.sale\_items USING btree (sale\_id) |
 | public | sales | idx\_sales\_business\_status\_date | CREATE INDEX idx\_sales\_business\_status\_date ON public.sales USING btree (business\_id, sales\_payment\_status, sales\_created\_at DESC) WHERE (is\_deleted = false) |
 | public | sales | idx\_sales\_customer\_payment | CREATE INDEX idx\_sales\_customer\_payment ON public.sales USING btree (business\_id, customer\_id, sales\_payment\_status) WHERE (is\_deleted = false) |
+| public | sales | idx\_sales\_invoice\_no | CREATE INDEX idx\_sales\_invoice\_no ON public.sales USING btree (invoice\_no) |
 | public | sales | idx\_sales\_invoice\_trgm | CREATE INDEX idx\_sales\_invoice\_trgm ON public.sales USING gin (invoice\_no gin\_trgm\_ops) WHERE (is\_deleted = false) |
 | public | sales | idx\_sales\_payment\_status | CREATE INDEX idx\_sales\_payment\_status ON public.sales USING btree (business\_id, sales\_payment\_status) WHERE (is\_deleted = false) |
 | public | sales | idx\_sales\_customer | CREATE INDEX idx\_sales\_customer ON public.sales USING btree (customer\_id) WHERE (customer\_id IS NOT NULL) |
@@ -600,97 +610,97 @@
 | public | sales\_returns | sales\_returns\_pkey | CREATE UNIQUE INDEX sales\_returns\_pkey ON public.sales\_returns USING btree (return\_id) |
 | public | sales\_returns | idx\_sales\_returns\_business\_date | CREATE INDEX idx\_sales\_returns\_business\_date ON public.sales\_returns USING btree (business\_id, return\_created\_at DESC) |
 | public | sales\_returns | idx\_sales\_returns\_status | CREATE INDEX idx\_sales\_returns\_status ON public.sales\_returns USING btree (business\_id, return\_status) |
-| public | sales\_returns | idx\_sales\_returns\_sale\_id | CREATE INDEX idx\_sales\_returns\_sale\_id ON public.sales\_returns USING btree (sale\_id) |
 | public | sales\_returns | idx\_sales\_returns\_business | CREATE INDEX idx\_sales\_returns\_business ON public.sales\_returns USING btree (business\_id) |
-| public | stock\_movements | idx\_stock\_movements\_business\_created | CREATE INDEX idx\_stock\_movements\_business\_created ON public.stock\_movements USING btree (business\_id, move\_created\_at DESC) |
+| public | sales\_returns | idx\_sales\_returns\_sale\_id | CREATE INDEX idx\_sales\_returns\_sale\_id ON public.sales\_returns USING btree (sale\_id) |
+| public | stock\_movements | idx\_stock\_movements\_sale\_ref | CREATE INDEX idx\_stock\_movements\_sale\_ref ON public.stock\_movements USING btree (sale\_reference\_id) WHERE (sale\_reference\_id IS NOT NULL) |
 | public | stock\_movements | idx\_stock\_movements\_product\_id | CREATE INDEX idx\_stock\_movements\_product\_id ON public.stock\_movements USING btree (product\_id) |
 | public | stock\_movements | idx\_stock\_movements\_biz\_product\_type | CREATE INDEX idx\_stock\_movements\_biz\_product\_type ON public.stock\_movements USING btree (business\_id, product\_id, move\_type) |
 | public | stock\_movements | idx\_stock\_movements\_biz\_type\_date | CREATE INDEX idx\_stock\_movements\_biz\_type\_date ON public.stock\_movements USING btree (business\_id, move\_type, move\_created\_at DESC) |
-| public | stock\_movements | idx\_stock\_movements\_sale\_ref | CREATE INDEX idx\_stock\_movements\_sale\_ref ON public.stock\_movements USING btree (sale\_reference\_id) WHERE (sale\_reference\_id IS NOT NULL) |
+| public | stock\_movements | idx\_stock\_movements\_business\_created | CREATE INDEX idx\_stock\_movements\_business\_created ON public.stock\_movements USING btree (business\_id, move\_created\_at DESC) |
 | public | stock\_movements | idx\_stock\_movements\_product\_biz | CREATE INDEX idx\_stock\_movements\_product\_biz ON public.stock\_movements USING btree (business\_id, product\_id, move\_created\_at DESC) |
 | public | stock\_movements | idx\_stock\_movements\_created | CREATE INDEX idx\_stock\_movements\_created ON public.stock\_movements USING btree (product\_id, move\_created\_at DESC) |
 | public | stock\_movements | idx\_stock\_movements\_business | CREATE INDEX idx\_stock\_movements\_business ON public.stock\_movements USING btree (business\_id) |
 | public | stock\_movements | idx\_stock\_movements\_product | CREATE INDEX idx\_stock\_movements\_product ON public.stock\_movements USING btree (product\_id) |
 | public | stock\_movements | stock\_movements\_pkey | CREATE UNIQUE INDEX stock\_movements\_pkey ON public.stock\_movements USING btree (move\_id) |
 | public | stock\_movements | idx\_stock\_movements\_biz\_created | CREATE INDEX idx\_stock\_movements\_biz\_created ON public.stock\_movements USING btree (business\_id, move\_created\_at) |
-| public | suppliers | idx\_suppliers\_business\_deleted | CREATE INDEX idx\_suppliers\_business\_deleted ON public.suppliers USING btree (business\_id, is\_deleted) |
+| public | super\_admins | super\_admins\_user\_id\_key | CREATE UNIQUE INDEX super\_admins\_user\_id\_key ON public.super\_admins USING btree (user\_id) |
+| public | super\_admins | super\_admins\_pkey | CREATE UNIQUE INDEX super\_admins\_pkey ON public.super\_admins USING btree (id) |
 | public | suppliers | idx\_suppliers\_updated | CREATE INDEX idx\_suppliers\_updated ON public.suppliers USING btree (business\_id, updated\_at DESC) WHERE (is\_deleted = false) |
-| public | suppliers | suppliers\_pkey | CREATE UNIQUE INDEX suppliers\_pkey ON public.suppliers USING btree (supp\_id) |
 | public | suppliers | idx\_suppliers\_phone\_trgm | CREATE INDEX idx\_suppliers\_phone\_trgm ON public.suppliers USING gin (supp\_phone gin\_trgm\_ops) WHERE (supp\_phone IS NOT NULL) |
 | public | suppliers | idx\_suppliers\_business\_updated | CREATE INDEX idx\_suppliers\_business\_updated ON public.suppliers USING btree (business\_id, updated\_at DESC) WHERE (is\_deleted = false) |
 | public | suppliers | idx\_suppliers\_email\_trgm | CREATE INDEX idx\_suppliers\_email\_trgm ON public.suppliers USING gin (supp\_email gin\_trgm\_ops) |
 | public | suppliers | idx\_suppliers\_name\_trgm | CREATE INDEX idx\_suppliers\_name\_trgm ON public.suppliers USING gin (supp\_name gin\_trgm\_ops) |
+| public | suppliers | idx\_suppliers\_business\_deleted | CREATE INDEX idx\_suppliers\_business\_deleted ON public.suppliers USING btree (business\_id, is\_deleted) |
 | public | suppliers | idx\_suppliers\_phone | CREATE INDEX idx\_suppliers\_phone ON public.suppliers USING btree (supp\_phone) WHERE (supp\_phone IS NOT NULL) |
+| public | suppliers | suppliers\_pkey | CREATE UNIQUE INDEX suppliers\_pkey ON public.suppliers USING btree (supp\_id) |
 
 ## triggers
 | table\_name | trigger\_name | event\_manipulation | action\_timing | action\_statement |
 | --- | --- | --- | --- | --- |
-| businesses | trg\_init\_business\_counters | INSERT | AFTER | EXECUTE FUNCTION fn\_init\_business\_counters() |
 | businesses | trg\_businesses\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
-| categories | trg\_audit\_categories | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| categories | trg\_audit\_categories | UPDATE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| categories | trg\_categories\_updated\_by | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_by() |
-| categories | trg\_categories\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
 | categories | trg\_audit\_categories | INSERT | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| customers | trg\_audit\_customers | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| customers | trg\_audit\_customers | UPDATE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| customers | trg\_customers\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
+| categories | trg\_categories\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
+| categories | trg\_categories\_updated\_by | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_by() |
+| categories | trg\_audit\_categories | UPDATE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
+| categories | trg\_audit\_categories | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | customers | trg\_audit\_customers | INSERT | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
+| customers | trg\_audit\_customers | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
+| customers | trg\_customers\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
+| customers | trg\_audit\_customers | UPDATE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | expenses | trg\_audit\_expenses | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | expenses | trg\_expenses\_updated\_by | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_by() |
 | expenses | trg\_expenses\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
-| expenses | trg\_audit\_expenses | INSERT | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | expenses | trg\_audit\_expenses | UPDATE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
+| expenses | trg\_audit\_expenses | INSERT | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | low\_stock\_alerts | trg\_low\_stock\_alerts\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
+| payments | trg\_payments\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
+| payments | trg\_audit\_payments | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | payments | trg\_audit\_payments | UPDATE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | payments | trg\_audit\_payments | INSERT | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| payments | trg\_audit\_payments | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| payments | trg\_payments\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
+| products | trg\_products\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
 | products | trg\_audit\_products | UPDATE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | products | trg\_audit\_products | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| products | trg\_low\_stock\_alert | UPDATE | AFTER | EXECUTE FUNCTION fn\_low\_stock\_alert() |
 | products | trg\_audit\_products | INSERT | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| products | trg\_products\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
+| products | trg\_low\_stock\_alert | UPDATE | AFTER | EXECUTE FUNCTION fn\_low\_stock\_alert() |
 | profiles | trg\_profiles\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
-| purchase\_items | trg\_audit\_purchase\_items | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| purchase\_items | trg\_purchase\_stock\_movement | INSERT | AFTER | EXECUTE FUNCTION fn\_purchase\_stock\_movement() |
-| purchase\_items | trg\_audit\_purchase\_items | INSERT | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | purchase\_items | trg\_audit\_purchase\_items | UPDATE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
+| purchase\_items | trg\_purchase\_stock\_movement | INSERT | AFTER | EXECUTE FUNCTION fn\_purchase\_stock\_movement() |
+| purchase\_items | trg\_audit\_purchase\_items | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
+| purchase\_items | trg\_audit\_purchase\_items | INSERT | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | purchase\_returns | trg\_purchase\_returns\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
 | purchases | trg\_audit\_purchases | UPDATE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| purchases | trg\_audit\_purchases | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | purchases | trg\_audit\_purchases | INSERT | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | purchases | trg\_purchases\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
-| sale\_items | trg\_audit\_sale\_items | UPDATE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| sale\_items | trg\_sale\_stock\_movement | INSERT | AFTER | EXECUTE FUNCTION fn\_sale\_stock\_movement() |
+| purchases | trg\_audit\_purchases | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | sale\_items | trg\_audit\_sale\_items | INSERT | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
+| sale\_items | trg\_sale\_stock\_movement | INSERT | AFTER | EXECUTE FUNCTION fn\_sale\_stock\_movement() |
+| sale\_items | trg\_audit\_sale\_items | UPDATE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | sale\_items | trg\_audit\_sale\_items | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| sales | trg\_audit\_sales | INSERT | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
+| sales | trg\_sales\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
 | sales | trg\_audit\_sales | UPDATE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | sales | trg\_audit\_sales | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| sales | trg\_sales\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
+| sales | trg\_audit\_sales | INSERT | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
+| sales\_return\_items | trg\_recalculate\_return\_total | UPDATE | AFTER | EXECUTE FUNCTION fn\_recalculate\_return\_total() |
 | sales\_return\_items | trg\_validate\_sales\_return\_items | INSERT | BEFORE | EXECUTE FUNCTION fn\_validate\_sales\_return\_items() |
 | sales\_return\_items | trg\_validate\_sales\_return\_items | UPDATE | BEFORE | EXECUTE FUNCTION fn\_validate\_sales\_return\_items() |
-| sales\_return\_items | trg\_recalculate\_return\_total | DELETE | AFTER | EXECUTE FUNCTION fn\_recalculate\_return\_total() |
-| sales\_return\_items | trg\_recalculate\_return\_total | UPDATE | AFTER | EXECUTE FUNCTION fn\_recalculate\_return\_total() |
 | sales\_return\_items | trg\_recalculate\_return\_total | INSERT | AFTER | EXECUTE FUNCTION fn\_recalculate\_return\_total() |
+| sales\_return\_items | trg\_recalculate\_return\_total | DELETE | AFTER | EXECUTE FUNCTION fn\_recalculate\_return\_total() |
 | sales\_returns | trg\_sales\_return\_stock | UPDATE | AFTER | EXECUTE FUNCTION fn\_sales\_return\_stock() |
-| sales\_returns | trg\_audit\_sales\_returns | UPDATE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| sales\_returns | trg\_audit\_sales\_returns | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| sales\_returns | trg\_sales\_returns\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
-| sales\_returns | trg\_audit\_sales\_returns | INSERT | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | sales\_returns | trg\_sales\_return\_stock | INSERT | AFTER | EXECUTE FUNCTION fn\_sales\_return\_stock() |
+| sales\_returns | trg\_audit\_sales\_returns | UPDATE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
+| sales\_returns | trg\_audit\_sales\_returns | INSERT | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
+| sales\_returns | trg\_sales\_returns\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
+| sales\_returns | trg\_audit\_sales\_returns | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | suppliers | trg\_suppliers\_updated\_by | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_by() |
-| suppliers | trg\_suppliers\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
-| suppliers | trg\_audit\_suppliers | INSERT | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
-| suppliers | trg\_audit\_suppliers | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
 | suppliers | trg\_audit\_suppliers | UPDATE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
+| suppliers | trg\_audit\_suppliers | DELETE | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
+| suppliers | trg\_audit\_suppliers | INSERT | AFTER | EXECUTE FUNCTION fn\_audit\_log() |
+| suppliers | trg\_suppliers\_updated\_at | UPDATE | BEFORE | EXECUTE FUNCTION fn\_set\_updated\_at() |
 
 ## triggers_function
 | function\_name | function\_definition |
 | --- | --- |
 | fn\_audit\_log | CREATE OR REPLACE FUNCTION public.fn\_audit\_log()\_x000D\_\n RETURNS trigger\_x000D\_\n LANGUAGE plpgsql\_x000D\_\nAS $function$\_x000D\_\nDECLARE\_x000D\_\n v\_business\_id UUID;\_x000D\_\n v\_user\_id UUID;\_x000D\_\n v\_record\_id UUID;\_x000D\_\n v\_old\_data JSONB;\_x000D\_\n v\_new\_data JSONB;\_x000D\_\n v\_pk\_name TEXT;\_x000D\_\n v\_row\_data JSONB;\_x000D\_\nBEGIN\_x000D\_\n -- Build JSONB representation of the affected row\_x000D\_\n IF TG\_OP IN ('INSERT', 'UPDATE') THEN\_x000D\_\n v\_new\_data := to\_jsonb(NEW.\*);\_x000D\_\n v\_row\_data := v\_new\_data;\_x000D\_\n END IF;\_x000D\_\n\_x000D\_\n IF TG\_OP IN ('DELETE', 'UPDATE') THEN\_x000D\_\n v\_old\_data := to\_jsonb(OLD.\*);\_x000D\_\n IF TG\_OP = 'DELETE' THEN\_x000D\_\n v\_row\_data := v\_old\_data;\_x000D\_\n END IF;\_x000D\_\n END IF;\_x000D\_\n\_x000D\_\n -- Dynamically resolve the primary key column name from system catalogs\_x000D\_\n SELECT a.attname INTO v\_pk\_name\_x000D\_\n FROM pg\_index i\_x000D\_\n JOIN pg\_attribute a ON a.attrelid = i.indrelid\_x000D\_\n AND a.attnum = ANY(i.indkey)\_x000D\_\n WHERE i.indrelid = TG\_RELID\_x000D\_\n AND i.indisprimary\_x000D\_\n LIMIT 1;\_x000D\_\n\_x000D\_\n -- Extract the primary key value from the row's JSONB representation\_x000D\_\n v\_record\_id := (v\_row\_data ->> v\_pk\_name)::uuid;\_x000D\_\n\_x000D\_\n -- Determine business\_id\_x000D\_\n v\_business\_id := (v\_row\_data ->> 'business\_id')::uuid;\_x000D\_\n\_x000D\_\n -- Use the user\_id set by the application via SET LOCAL app.current\_user\_id.\_x000D\_\n -- Falls back to NULL if the setting was not set (e.g. direct SQL queries).\_x000D\_\n v\_user\_id := current\_setting('app.current\_user\_id', true)::uuid;\_x000D\_\n\_x000D\_\n INSERT INTO audit\_logs (\_x000D\_\n business\_id, user\_id, action\_type, table\_name,\_x000D\_\n record\_id, old\_data, new\_data\_x000D\_\n ) VALUES (\_x000D\_\n v\_business\_id,\_x000D\_\n v\_user\_id,\_x000D\_\n LOWER(TG\_OP),\_x000D\_\n TG\_TABLE\_NAME,\_x000D\_\n v\_record\_id,\_x000D\_\n v\_old\_data,\_x000D\_\n v\_new\_data\_x000D\_\n );\_x000D\_\n\_x000D\_\n RETURN NEW;\_x000D\_\nEND;\_x000D\_\n$function$\_x000D\_\n |
-| fn\_init\_business\_counters | CREATE OR REPLACE FUNCTION public.fn\_init\_business\_counters()\_x000D\_\n RETURNS trigger\_x000D\_\n LANGUAGE plpgsql\_x000D\_\nAS $function$\_x000D\_\nBEGIN\_x000D\_\n INSERT INTO business\_counters (business\_id, invoice\_counter, purchase\_counter, customer\_counter, updated\_at)\_x000D\_\n VALUES (NEW.business\_id, 0, 0, 0, now())\_x000D\_\n ON CONFLICT (business\_id) DO NOTHING;\_x000D\_\n\_x000D\_\n INSERT INTO business\_settings (business\_id)\_x000D\_\n VALUES (NEW.business\_id)\_x000D\_\n ON CONFLICT (business\_id) DO NOTHING;\_x000D\_\n\_x000D\_\n RETURN NEW;\_x000D\_\nEND;\_x000D\_\n$function$\_x000D\_\n |
 | fn\_low\_stock\_alert | CREATE OR REPLACE FUNCTION public.fn\_low\_stock\_alert()\_x000D\_\n RETURNS trigger\_x000D\_\n LANGUAGE plpgsql\_x000D\_\nAS $function$\_x000D\_\nBEGIN\_x000D\_\n IF NEW.prod\_stock\_qty <= NEW.prod\_low\_stock\_alert THEN\_x000D\_\n INSERT INTO low\_stock\_alerts (\_x000D\_\n business\_id,\_x000D\_\n product\_id,\_x000D\_\n alert\_stock\_qty,\_x000D\_\n alert\_threshold\_x000D\_\n ) VALUES (\_x000D\_\n NEW.business\_id,\_x000D\_\n NEW.prod\_id,\_x000D\_\n NEW.prod\_stock\_qty,\_x000D\_\n NEW.prod\_low\_stock\_alert\_x000D\_\n );\_x000D\_\n END IF;\_x000D\_\n RETURN NEW;\_x000D\_\nEND;\_x000D\_\n$function$\_x000D\_\n |
 | fn\_purchase\_stock\_movement | CREATE OR REPLACE FUNCTION public.fn\_purchase\_stock\_movement()\_x000D\_\n RETURNS trigger\_x000D\_\n LANGUAGE plpgsql\_x000D\_\nAS $function$\_x000D\_\nDECLARE\_x000D\_\n v\_prev\_stock INT;\_x000D\_\nBEGIN\_x000D\_\n SELECT prod\_stock\_qty INTO v\_prev\_stock\_x000D\_\n FROM products\_x000D\_\n WHERE prod\_id = NEW.product\_id;\_x000D\_\n\_x000D\_\n INSERT INTO stock\_movements (\_x000D\_\n business\_id,\_x000D\_\n product\_id,\_x000D\_\n move\_type,\_x000D\_\n move\_qty,\_x000D\_\n move\_prev\_stock,\_x000D\_\n purchase\_reference\_id,\_x000D\_\n move\_notes\_x000D\_\n ) VALUES (\_x000D\_\n NEW.business\_id,\_x000D\_\n NEW.product\_id,\_x000D\_\n 'purchase',\_x000D\_\n +NEW.pur\_item\_qty,\_x000D\_\n v\_prev\_stock,\_x000D\_\n NEW.pur\_id,\_x000D\_\n 'Auto entry from purchase'\_x000D\_\n );\_x000D\_\n\_x000D\_\n UPDATE products\_x000D\_\n SET prod\_stock\_qty = prod\_stock\_qty + NEW.pur\_item\_qty,\_x000D\_\n updated\_at = NOW()\_x000D\_\n WHERE prod\_id = NEW.product\_id;\_x000D\_\n\_x000D\_\n RETURN NEW;\_x000D\_\nEND;\_x000D\_\n$function$\_x000D\_\n |
 | fn\_recalculate\_return\_total | CREATE OR REPLACE FUNCTION public.fn\_recalculate\_return\_total()\_x000D\_\n RETURNS trigger\_x000D\_\n LANGUAGE plpgsql\_x000D\_\nAS $function$\_x000D\_\nDECLARE\_x000D\_\n v\_return\_id UUID;\_x000D\_\nBEGIN\_x000D\_\n -- Detect affected return\_id\_x000D\_\n IF TG\_OP = 'DELETE' THEN\_x000D\_\n v\_return\_id := OLD.return\_id;\_x000D\_\n ELSE\_x000D\_\n v\_return\_id := NEW.return\_id;\_x000D\_\n END IF;\_x000D\_\n\_x000D\_\n -- Recalculate total refund amount\_x000D\_\n UPDATE sales\_returns sr\_x000D\_\n SET return\_amount = COALESCE((\_x000D\_\n SELECT SUM(\_x000D\_\n (return\_qty \* unit\_price) + COALESCE(tax\_amount,0)\_x000D\_\n )\_x000D\_\n FROM sales\_return\_items\_x000D\_\n WHERE return\_id = v\_return\_id\_x000D\_\n ),0)\_x000D\_\n WHERE sr.return\_id = v\_return\_id;\_x000D\_\n\_x000D\_\n RETURN NULL;\_x000D\_\nEND;\_x000D\_\n$function$\_x000D\_\n |
@@ -758,6 +768,7 @@
 | public | sales\_return\_items | True |
 | public | sales\_returns | True |
 | public | stock\_movements | True |
+| public | super\_admins | False |
 | public | suppliers | True |
 
 ## Complete ER Relationship Mappin
@@ -774,14 +785,15 @@
 | expenses | created\_by | profiles | id |
 | expenses | business\_id | businesses | business\_id |
 | expenses | updated\_by | profiles | id |
-| low\_stock\_alerts | product\_id | products | prod\_id |
 | low\_stock\_alerts | business\_id | businesses | business\_id |
+| low\_stock\_alerts | product\_id | products | prod\_id |
 | payments | business\_id | businesses | business\_id |
 | payments | sale\_id | sales | sales\_id |
 | products | business\_id | businesses | business\_id |
 | products | created\_by | profiles | id |
 | products | updated\_by | profiles | id |
 | products | category\_id | categories | category\_id |
+| profiles | business\_id | businesses | business\_id |
 | profiles | business\_id | businesses | business\_id |
 | profiles | role\_id | roles | id |
 | purchase\_items | pur\_id | purchases | pur\_id |
@@ -872,6 +884,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | postgres | public | roles\_id\_seq | integer | 32 | 2 | 0 | 1 | 1 | 2147483647 | 1 | NO |
 | postgres | public | permissions\_id\_seq | integer | 32 | 2 | 0 | 1 | 1 | 2147483647 | 1 | NO |
+| postgres | public | super\_admins\_id\_seq | integer | 32 | 2 | 0 | 1 | 1 | 2147483647 | 1 | NO |
 
 ## Extensions
 | oid | extname | extowner | extnamespace | extrelocatable | extversion | extconfig | extcondition |

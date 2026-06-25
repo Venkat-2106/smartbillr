@@ -7,6 +7,8 @@ from datetime import datetime
 
 os.environ.setdefault("ENVIRONMENT", "development")
 os.environ.setdefault("SUPABASE_JWT_SECRET", "dGVzdC1zZWNyZXQ=")  # "test-secret" base64
+os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 import pytest
 from fastapi.testclient import TestClient

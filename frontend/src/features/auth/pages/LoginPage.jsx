@@ -3,7 +3,7 @@ import AuthLayout from '../../../app/layouts/AuthLayout'
 import { useLogin, useForgotPassword } from '../hooks/useAuth'
 
 export default function LoginPage() {
-  const { login, isLoading }                        = useLogin()
+  const { login, isLoading, pendingSession, confirmSession, cancelSession } = useLogin()
   const { sendResetEmail, isLoading: resetLoading } = useForgotPassword()
 
   const [email,        setEmail]        = useState('')
@@ -162,6 +162,59 @@ export default function LoginPage() {
         </button>
 
       </form>
+
+      {pendingSession && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(2px)',
+        }}>
+          <div style={{
+            background: 'white', borderRadius: 16, padding: 32, maxWidth: 400, width: '90%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.2)', textAlign: 'center',
+          }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: '50%',
+              background: '#FEF3C7', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', margin: '0 auto 16px',
+            }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+            </div>
+            <h3 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 600, color: '#111' }}>
+              Active session detected
+            </h3>
+            <p style={{ margin: '0 0 24px', fontSize: 14, color: '#6B7280', lineHeight: 1.5 }}>
+              You&rsquo;re already signed in on another device. Signing in here will log out the other session.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={cancelSession}
+                style={{
+                  flex: 1, padding: '10px', borderRadius: 10, border: '1px solid #D1D5DB',
+                  background: 'white', color: '#374151', fontSize: 14, fontWeight: 500,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmSession}
+                style={{
+                  flex: 1, padding: '10px', borderRadius: 10, border: 'none',
+                  background: 'linear-gradient(135deg, #2563EB, #4F46E5)',
+                  color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                Sign in anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{
         marginTop: '1.5rem', paddingTop: '1.25rem',

@@ -5,6 +5,24 @@ from cachetools import TTLCache
 import time
 import jwt as pyjwt
 import logging
+import os
+
+_redis_rate = None
+
+
+def _get_redis_rate():
+    global _redis_rate
+    if _redis_rate is not None:
+        return _redis_rate
+    redis_url = os.getenv("REDIS_URL")
+    if not redis_url:
+        return None
+    try:
+        import redis
+        _redis_rate = redis.from_url(redis_url, decode_responses=True)
+        return _redis_rate
+    except Exception:
+        return None
 
 # Paths treated as auth endpoints — stricter IP-based rate limit.
 # Exact paths (matched via ==) and prefix paths (matched via startswith) are separate
@@ -47,6 +65,21 @@ def _jwt_user_id(request: Request) -> str | None:
 
 
 def _check(cache: TTLCache, key: str, limit: int, window: int) -> tuple[bool, int]:
+    r = _get_redis_rate()
+    if r:
+        try:
+            pipe = r.pipeline()
+            rkey = f"rl:{key}"
+            pipe.incr(rkey)
+            pipe.expire(rkey, window)
+            count, _ = pipe.execute()
+            if count > limit:
+                ttl = r.ttl(rkey)
+                return True, max(1, ttl)
+            return False, 0
+        except Exception:
+            pass
+
     now = time.time()
     cutoff = now - window
 

@@ -48,6 +48,7 @@ import {
   Table,
   Badge,
   ConfirmDialog,
+  UpgradePrompt,
   EmptyState,
   Pagination,
   SearchBar,
@@ -275,6 +276,8 @@ export default function ProductsPage() {
   const { mutate: deleteProduct, isPending: isDeleting } = useDeleteProduct()
 
   // ── Modal open/close state ────────────────────────────────────────────────
+  const subscription    = useAuthStore(s => s.subscription)
+  const [showUpgradeBanner, setShowUpgradeBanner] = useState(true)
   const [showAdd,        setShowAdd]        = useState(false)
   const [editTarget,     setEditTarget]     = useState(null)
   const [deleteTarget,   setDeleteTarget]   = useState(null)
@@ -727,6 +730,15 @@ export default function ProductsPage() {
           )}
         </div>
       </div>
+
+      {showUpgradeBanner && subscription?.subscription_type === 'trial' && (
+        <UpgradePrompt
+          variant="banner"
+          feature="products"
+          onDismiss={() => setShowUpgradeBanner(false)}
+          style={{ marginBottom: 24 }}
+        />
+      )}
 
       {/* METRIC CARDS */}
       <div style={{

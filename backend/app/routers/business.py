@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from typing import Optional
 from app.database import get_db
 from app.middleware.rbac import require_permission
 from app.utils.response import success_response, error_response
+from app.utils.pagination import paginate, pagination_response
 from app.schemas.business import BusinessCreate, BusinessUpdate, BusinessResponse
 from app.models.business import Business
 from app.utils.timestamp import fmt_ts
@@ -61,26 +63,39 @@ def update_my_business(
 @router.get("/staff")
 def get_staff(
     current_user: dict = Depends(require_permission("settings.manage")),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    pagination: dict = Depends(paginate),
+    search: Optional[str] = Query(default=None),
+    is_active: Optional[bool] = Query(default=None),
 ):
-    result = db.execute(
-        text("""
-            SELECT id, full_name, role, is_active, created_at
-            FROM profiles
-            WHERE business_id = :business_id
-        """),
-        {"business_id": current_user["business_id"]}
-    ).fetchall()
+    business_id = current_user["business_id"]
 
-    staff_list = [
-        {
-            "id": str(row.id),
-            "full_name": row.full_name,
-            "role": row.role,
-            "is_active": row.is_active,
-            "created_at": fmt_ts(row.created_at)
-        }
-        for row in result
-    ]
+    extra_where = ""
+    params = {"business_id": business_id}
 
-    return success_response(staff_list)
+    if search and search.strip():
+        extra_where += " AND (full_name ILIKE :search OR email ILIKE :search)"
+        params["search"] = f"%{search.strip()}%"
+
+    if is_active is not None:
+        extra_where += " AND is_active = :is_active"
+        params["is_active"] = is_active
+
+    count_sql = f"SELECT COUNT(*) FROM profiles WHERE business_id = :business_id {extra_where}"
+    total = db.execute(text(count_sql), params).scalar() or 0
+
+    params["offset"] = pagination["offset"]
+    params["limit"] = pagination["limit"]
+
+    list_sql = f"""
+        SELECT id, full_name, email, role, is_active, created_at
+        FROM profiles
+        WHERE business_id = :business_id {extra_where}
+        ORDER BY created_at ASC
+        OFFSET :offset LIMIT :limit
+    """
+    rows = db.execute(text(list_sql), params).fetchall()
+    staff_list = [{"id": str(r.id), "full_name": r.full_name, "role": r.role,
+                   "is_active": r.is_active, "created_at": fmt_ts(r.created_at)} for r in rows]
+
+    return success_response(pagination_response(staff_list, total, pagination["page"], pagination["limit"], capped=pagination["_capped"]))

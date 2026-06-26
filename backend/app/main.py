@@ -116,7 +116,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     logging.exception(exc)
     return JSONResponse(
         status_code=500,
-        content={"success": False, "error": "Internal Server Error"},
+        content={"success": False, "message": "Internal Server Error"},
     )
 
 app.include_router(business.router)

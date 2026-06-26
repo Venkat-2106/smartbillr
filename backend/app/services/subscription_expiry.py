@@ -37,6 +37,14 @@ def expire_subscriptions(db_session=None):
     db = db_session or SessionLocal()
     own_session = db_session is None
     try:
+        acquired = db.execute(
+            text("SELECT pg_try_advisory_xact_lock(12345)")
+        ).scalar()
+
+        if not acquired:
+            logger.info("Subscription expiry: another instance is running, skipping.")
+            return
+
         # Log expired trials — middleware handles access blocking
         expired_trials = db.execute(
             text("""

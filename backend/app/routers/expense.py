@@ -163,7 +163,8 @@ def get_all_expenses(
             [expense_to_dict_list(e) for e in rows],
             total,
             pagination["page"],
-            pagination["limit"]
+            pagination["limit"],
+            capped=pagination["_capped"]
         )
     )
 

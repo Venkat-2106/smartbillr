@@ -198,7 +198,7 @@ sort_dir:     Optional[str] = Query(default="desc"),
         })
 
     return success_response(
-        pagination_response(data, total, pagination["page"], pagination["limit"])
+        pagination_response(data, total, pagination["page"], pagination["limit"], capped=pagination["_capped"])
     )
 
 
@@ -353,7 +353,7 @@ def get_current_stock(
         })
 
     return success_response(
-        pagination_response(data, total, pagination["page"], pagination["limit"])
+        pagination_response(data, total, pagination["page"], pagination["limit"], capped=pagination["_capped"])
     )
 
 
@@ -602,7 +602,7 @@ def get_low_stock_alerts(
         })
 
     return success_response(
-        pagination_response(data, total, pagination["page"], pagination["limit"])
+        pagination_response(data, total, pagination["page"], pagination["limit"], capped=pagination["_capped"])
     )
 
 

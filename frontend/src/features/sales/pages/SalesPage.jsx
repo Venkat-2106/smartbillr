@@ -8,6 +8,7 @@ import {
   Table, Button, Badge, SearchBar,
   Pagination, DateRangeFilter, ExportButton,
   ConfirmDialog, EmptyState, BentoCard, MetricCard,
+  UpgradePrompt,
 } from '../../../shared/components';
 import { selectStyle }       from '../../../shared/components/FormField';
 import { SALES_CSV_COLUMNS } from '../../../shared/utils/csvExport';
@@ -29,8 +30,10 @@ function SvgIcon({ path, size = 18 }) {
 export default function SalesPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const business = useAuthStore(s => s.business);
-  const country = business?.business_country_code || 'IN';
+  const business       = useAuthStore(s => s.business);
+  const country        = business?.business_country_code || 'IN';
+  const subscription   = useAuthStore(s => s.subscription);
+  const [showUpgradeBanner, setShowUpgradeBanner] = useState(true);
 
   const {
     sales, isLoading, hasData, isError,
@@ -223,6 +226,15 @@ export default function SalesPage() {
           </Button>
         </div>
       </div>
+
+      {showUpgradeBanner && subscription?.subscription_type === 'trial' && (
+        <UpgradePrompt
+          variant="banner"
+          feature="sales"
+          onDismiss={() => setShowUpgradeBanner(false)}
+          style={{ marginBottom: 24 }}
+        />
+      )}
 
       <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>
         <MetricCard

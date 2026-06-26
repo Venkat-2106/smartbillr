@@ -263,20 +263,17 @@ def get_my_subscription(
             days_remaining = 0
 
     return success_response(
-        {
-            "success": True,
-            "data": SubscriptionResponse(
-                payment_status=row.payment_status,
-                subscription_type=row.subscription_type,
-                subscription_start_at=_parse_dt(row.subscription_start_at),
-                subscription_end_at=_parse_dt(row.subscription_end_at),
-                trial_start_at=_parse_dt(row.trial_start_at),
-                trial_end_at=_parse_dt(row.trial_end_at),
-                is_active=bool(row.is_active),
-                days_remaining=days_remaining,
-                is_expired=is_expired,
-            ).model_dump(),
-        }
+        SubscriptionResponse(
+            payment_status=row.payment_status,
+            subscription_type=row.subscription_type,
+            subscription_start_at=_parse_dt(row.subscription_start_at),
+            subscription_end_at=_parse_dt(row.subscription_end_at),
+            trial_start_at=_parse_dt(row.trial_start_at),
+            trial_end_at=_parse_dt(row.trial_end_at),
+            is_active=bool(row.is_active),
+            days_remaining=days_remaining,
+            is_expired=is_expired,
+        ).model_dump()
     )
 
 
@@ -315,7 +312,7 @@ def update_subscription(
         logging.exception(e)
         return error_response("Failed to update subscription", 500)
 
-    return success_response({"success": True, "data": {"message": "Subscription updated successfully"}})
+    return success_response({"message": "Subscription updated successfully"})
 
 
 # ─── GET /v1/admin/businesses — List all businesses (Super Admin) ───────────

@@ -10,7 +10,7 @@ import {
   Table, Badge, SearchBar, Button,
   Pagination, DateRangeFilter, ExportButton,
   EmptyState, BentoCard, MetricCard,
-  ConfirmDialog,
+  ConfirmDialog, UpgradePrompt,
 } from '../../../shared/components'
 import { selectStyle } from '../../../shared/components/FormField'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
@@ -97,6 +97,7 @@ export default function PurchasesPage() {
   const hasPermission = useAuthStore(s => s.hasPermission)
   const canEdit = hasPermission('purchases.edit')
   const canCreate = hasPermission('purchases.view')
+  const subscription = useAuthStore(s => s.subscription)
 
   const {
     purchases,
@@ -114,6 +115,7 @@ export default function PurchasesPage() {
     isDeleting,
   } = usePurchases()
 
+  const [showUpgradeBanner, setShowUpgradeBanner] = useState(true)
   const [selectedPurId, setSelectedPurId] = useState(null)
   const [showDelete,    setShowDelete]    = useState(false)
   const [deletingPur,   setDeletingPur]   = useState(null)
@@ -198,6 +200,15 @@ export default function PurchasesPage() {
           )}
         </div>
       </div>
+
+      {showUpgradeBanner && subscription?.subscription_type === 'trial' && (
+        <UpgradePrompt
+          variant="banner"
+          feature="purchases"
+          onDismiss={() => setShowUpgradeBanner(false)}
+          style={{ marginBottom: 24 }}
+        />
+      )}
 
       {/* METRIC CARDS */}
       <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>

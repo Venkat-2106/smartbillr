@@ -22,6 +22,7 @@ from app.schemas.customer import CustomerCreate, CustomerUpdate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts
+from app.utils.usage_limits import check_create_allowed, fetch_subscription_type
 from typing import Optional
 
 router = APIRouter(prefix="/v1/customers", tags=["Customers"])
@@ -60,6 +61,12 @@ def create_customer(
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
+
+    # ── Subscription tier limit check ─────────────────────────────────────────
+    sub_type = fetch_subscription_type(db, business_id)
+    allowed, msg = check_create_allowed(db, business_id, sub_type, "max_customers", "customers")
+    if not allowed:
+        return error_response(msg, status_code=403)
 
     if data.cust_phone:
         existing = db.query(Customer).filter(
@@ -211,7 +218,7 @@ def get_all_customers(
     ]
 
     return success_response(
-        pagination_response(data, total, pagination["page"], pagination["limit"])
+        pagination_response(data, total, pagination["page"], pagination["limit"], capped=pagination["_capped"])
     )
 
 

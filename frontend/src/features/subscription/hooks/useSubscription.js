@@ -8,7 +8,7 @@ export function useSubscription() {
     queryKey: ['subscription'],
     queryFn: async () => {
       const res = await fetchSubscription()
-      return res.data
+      return res
     },
     enabled: !!token,
     staleTime: 60 * 1000,

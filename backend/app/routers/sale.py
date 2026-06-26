@@ -33,6 +33,7 @@ from app.services.sale_service import (
 )
 from app.utils.payment_helpers import record_payment_and_sync, calculate_payment_status
 from app.utils.currency import get_currency_symbol
+from app.utils.usage_limits import check_create_allowed, fetch_subscription_type
 import uuid
 
 router = APIRouter(prefix="/v1/sales", tags=["Sales"])
@@ -58,6 +59,15 @@ def create_sale(
 ):
     business_id = current_user["business_id"]
     user_id = current_user["user_id"]
+
+    # ── Subscription tier limit check ─────────────────────────────────────────
+    sub_type = fetch_subscription_type(db, business_id)
+    allowed, msg = check_create_allowed(
+        db, business_id, sub_type, "max_sales_per_month",
+        "sales", date_column="sales_created_at"
+    )
+    if not allowed:
+        return error_response(msg, status_code=403)
 
     try:
         product_cache, override_items, stock_errors = validate_and_cache_products(
@@ -126,7 +136,7 @@ def get_sales(
         search, status, date_from, date_to, sort_by, sort_dir
     )
     return success_response(
-        pagination_response(result, total, pagination["page"], pagination["limit"])
+        pagination_response(result, total, pagination["page"], pagination["limit"], capped=pagination["_capped"])
     )
 
 
@@ -141,18 +151,15 @@ def get_sales_summary(
 
     row = db.execute(text("""
         SELECT
-            COALESCE(SUM(sales_final_amount)
-                FILTER (WHERE sales_created_at::date = CURRENT_DATE), 0) AS today_revenue,
-            COALESCE(SUM(sales_final_amount)
-                FILTER (WHERE sales_created_at >= CURRENT_DATE - INTERVAL '7 days'), 0) AS weekly_revenue,
-            COALESCE(SUM(sales_final_amount)
-                FILTER (WHERE date_trunc('month', sales_created_at) = date_trunc('month', CURRENT_DATE)), 0) AS monthly_revenue,
-            COALESCE(SUM(sales_final_amount - COALESCE((
-                SELECT cumulative_paid FROM payments
-                WHERE sale_id = s.sales_id AND is_active = true
-                LIMIT 1
-            ), 0)), 0) AS outstanding_receivables
+            COALESCE(SUM(s.sales_final_amount) FILTER (WHERE s.sales_created_at::date = CURRENT_DATE), 0) AS today_revenue,
+            COALESCE(SUM(s.sales_final_amount) FILTER (WHERE s.sales_created_at >= CURRENT_DATE - INTERVAL '7 days'), 0) AS weekly_revenue,
+            COALESCE(SUM(s.sales_final_amount) FILTER (WHERE date_trunc('month', s.sales_created_at) = date_trunc('month', CURRENT_DATE)), 0) AS monthly_revenue,
+            COALESCE(SUM(s.sales_final_amount - COALESCE(p.cumulative_paid, 0)), 0) AS outstanding_receivables
         FROM sales s
+        LEFT JOIN payments p
+            ON p.sale_id = s.sales_id
+           AND p.business_id = s.business_id
+           AND p.is_active = true
         WHERE s.business_id = CAST(:bid AS uuid)
           AND s.is_deleted = false
     """), {"bid": business_id}).fetchone()

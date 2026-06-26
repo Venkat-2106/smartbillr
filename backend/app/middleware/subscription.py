@@ -3,10 +3,39 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from app.database import SessionLocal
 import re
+import logging
 from cachetools import TTLCache
 
 
 _subscription_cache: TTLCache | None = TTLCache(maxsize=10000, ttl=60)
+_user_business_cache: TTLCache = TTLCache(maxsize=10000, ttl=60)
+
+
+def _extract_business_id_from_db(user_id: str) -> str | None:
+    cached = _user_business_cache.get(user_id)
+    if cached is not None:
+        return cached
+
+    db = SessionLocal()
+    try:
+        row = db.execute(
+            text("SELECT business_id FROM profiles WHERE id = :user_id AND is_active = true LIMIT 1"),
+            {"user_id": user_id},
+        ).fetchone()
+        result = str(row.business_id) if row else None
+        if result:
+            _user_business_cache[user_id] = result
+        return result
+    except Exception:
+        return None
+    finally:
+        db.close()
+
+
+def clear_subscription_user_cache(user_id: str):
+    _user_business_cache.pop(user_id, None)
+    if _subscription_cache is not None:
+        _subscription_cache.pop(f"sub_user:{user_id}", None)
 
 
 EXCLUDED_PATHS = [
@@ -29,32 +58,15 @@ def _is_excluded(path: str) -> bool:
     return False
 
 
-def _extract_business_id_from_db(user_id: str) -> str | None:
-    db = SessionLocal()
-    try:
-        row = db.execute(
-            text("""
-                SELECT business_id FROM profiles
-                WHERE id = :user_id AND is_active = true
-                LIMIT 1
-            """),
-            {"user_id": user_id},
-        ).fetchone()
-        return str(row.business_id) if row else None
-    except Exception:
-        return None
-    finally:
-        db.close()
-
-
-def _check_subscription(business_id: str) -> dict | None:
+def _check_subscription_for_user(user_id: str) -> dict | None:
     """
-    Returns None if subscription is valid, or a dict with error details if invalid.
-    Results are cached in-memory for 60 seconds.
+    Fetch subscription status for a user in one query.
+    Returns None if valid, error dict if invalid.
+    Caches result by user_id for 60 seconds.
     """
     from datetime import datetime, timezone
 
-    cache_key = f"sub:{business_id}"
+    cache_key = f"sub_user:{user_id}"
     if _subscription_cache is not None:
         cached = _subscription_cache.get(cache_key)
         if cached is not None:
@@ -65,23 +77,27 @@ def _check_subscription(business_id: str) -> dict | None:
         row = db.execute(
             text("""
                 SELECT
-                    payment_status,
-                    subscription_type,
-                    subscription_end_at,
-                    trial_end_at,
-                    is_active
-                FROM businesses
-                WHERE business_id = :bid
+                    b.business_id,
+                    b.payment_status,
+                    b.subscription_type,
+                    b.subscription_end_at,
+                    b.trial_end_at,
+                    b.is_active
+                FROM profiles p
+                JOIN businesses b ON b.business_id = p.business_id
+                WHERE p.id = :user_id
+                  AND p.is_active = true
+                  AND (b.is_deleted = false OR b.is_deleted IS NULL)
                 LIMIT 1
             """),
-            {"bid": business_id},
+            {"user_id": user_id},
         ).fetchone()
 
         if not row:
             result = {
                 "error_code": "INACTIVE",
                 "status": "not_found",
-                "message": "Business not found",
+                "message": "User or business not found",
             }
             if _subscription_cache is not None:
                 _subscription_cache[cache_key] = result
@@ -124,6 +140,17 @@ def _check_subscription(business_id: str) -> dict | None:
                     "trial_end_at": trial_end.isoformat() if trial_end else None,
                     "subscription_end_at": sub_end.isoformat() if sub_end else None,
                 }
+
+        if result is None and row.payment_status not in ("pending", "paid", "suspended"):
+            logging.warning(
+                "Unknown payment_status '%s' for business %s — treating as suspended",
+                row.payment_status, row.business_id
+            )
+            result = {
+                "error_code": "INVALID_STATE",
+                "status": "invalid",
+                "message": "Account subscription status is invalid. Please contact support.",
+            }
 
         if _subscription_cache is not None:
             _subscription_cache[cache_key] = result if result else False
@@ -180,12 +207,7 @@ class SubscriptionMiddleware:
             await self.app(scope, receive, send)
             return
 
-        business_id = _extract_business_id_from_db(user_id)
-        if not business_id:
-            await self.app(scope, receive, send)
-            return
-
-        error = _check_subscription(business_id)
+        error = _check_subscription_for_user(user_id)
         if error is not None:
             response = JSONResponse(
                 status_code=402,

@@ -5,6 +5,7 @@ import useAuthStore                               from '../../../store/authStore
 import {
   fetchStaff,
   fetchAllStaffForExport,
+  fetchStaffSummary,
   createStaff,
   updateStaff,
   deactivateStaff,
@@ -44,6 +45,24 @@ export function useStaff() {
     enabled:         !!user,
   })
 
+  const { data: summary } = useQuery({
+    queryKey: ['staff-summary'],
+    queryFn: fetchStaffSummary,
+    staleTime: 60_000,
+    enabled: !!user,
+  })
+
+  const staffLimit   = summary?.limits?.staff
+  const managerLimit = summary?.limits?.manager
+
+  const canAddStaff = staffLimit === null
+    || (staffLimit > 0 && (summary?.staff_count ?? 0) < staffLimit)
+
+  const canAddManager = managerLimit === null
+    || (managerLimit > 0 && (summary?.manager_count ?? 0) < managerLimit)
+
+  const canAddAnyRole = canAddStaff || canAddManager
+
   const items      = serverData?.items      ?? []
   const pagination = serverData?.pagination ?? {}
   const totalItems = pagination.total       ?? 0
@@ -61,10 +80,15 @@ export function useStaff() {
     }
   }
 
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['staff'] })
+    queryClient.invalidateQueries({ queryKey: ['staff-summary'] })
+  }
+
   const createMutation = useMutation({
     mutationFn: createStaff,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff'] })
+      invalidateAll()
       toast.success('Staff member added')
     },
     onError: (err) => {
@@ -75,7 +99,7 @@ export function useStaff() {
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }) => updateStaff(id, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff'] })
+      invalidateAll()
       toast.success('Staff member updated')
     },
     onError: (err) => {
@@ -86,7 +110,7 @@ export function useStaff() {
   const deactivateMutation = useMutation({
     mutationFn: deactivateStaff,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff'] })
+      invalidateAll()
       toast.success('Staff account deactivated')
     },
     onError: (err) => {
@@ -108,5 +132,9 @@ export function useStaff() {
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeactivating: deactivateMutation.isPending,
+    summary,
+    canAddStaff,
+    canAddManager,
+    canAddAnyRole,
   }
 }

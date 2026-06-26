@@ -13,6 +13,13 @@ class ExpenseCreate(BaseModel):
     expense_date: Optional[date] = None
     expense_notes: Optional[str] = None
 
+    @field_validator("expense_amount")
+    @classmethod
+    def amount_must_be_positive(cls, v):
+        if v <= 0:
+            raise ValueError("Expense amount must be greater than zero")
+        return v
+
     @field_validator("expense_category")
     @classmethod
     def valid_category(cls, v):
@@ -30,6 +37,13 @@ class ExpenseUpdate(BaseModel):
     expense_amount: Optional[Decimal] = None
     expense_date: Optional[date] = None
     expense_notes: Optional[str] = None
+
+    @field_validator("expense_amount")
+    @classmethod
+    def amount_must_be_positive(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError("Expense amount must be greater than zero")
+        return v
 
     @field_validator("expense_category")
     @classmethod

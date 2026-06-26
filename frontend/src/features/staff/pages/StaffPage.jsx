@@ -1,14 +1,12 @@
 ﻿import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { fetchStaffSummary } from '../api/staffApi'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from 'react-router-dom'
 
 import {
   Button, Input, Modal, Table, Badge, SearchBar,
   Pagination, BentoCard, MetricCard, FormField, ExportButton,
-  ConfirmDialog, EmptyState,
+  ConfirmDialog, EmptyState, UpgradePrompt,
 } from '../../../shared/components'
 import { selectStyle } from '../../../shared/components/FormField'
 import { usePermissions } from '../../../shared/hooks/usePermissions'
@@ -119,18 +117,17 @@ export default function StaffPage() {
     handleExport,
     createStaff, updateStaff, deactivateStaff,
     isCreating, isUpdating, isDeactivating,
+    summary: staffSummary,
+    canAddStaff,
+    canAddManager,
+    canAddAnyRole,
   } = useStaff()
-
-  const { data: staffSummary, isLoading: summaryLoading } = useQuery({
-    queryKey: ['staff-summary'],
-    queryFn: fetchStaffSummary,
-    staleTime: 60_000,
-  })
 
   const [showAdd, setShowAdd] = useState(false)
   const [editingStaff, setEditingStaff] = useState(null)
   const [deactivatingStaff, setDeactivatingStaff] = useState(null)
   const [showDeactivate, setShowDeactivate] = useState(false)
+  const [showUpgradeBanner, setShowUpgradeBanner] = useState(true)
 
   const addForm = useForm({
     resolver: zodResolver(addStaffSchema),
@@ -185,6 +182,15 @@ export default function StaffPage() {
         </p>
       </div>
 
+      {showUpgradeBanner && staffSummary?.subscription_type === 'trial' && (
+        <UpgradePrompt
+          variant="banner"
+          feature="team members"
+          onDismiss={() => setShowUpgradeBanner(false)}
+          style={{ marginBottom: 24 }}
+        />
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 16, marginBottom: 24 }}>
         <MetricCard
           colSpan={6}
@@ -212,7 +218,7 @@ export default function StaffPage() {
           label="Active Staff"
           value={staffSummary?.active_count ?? (isLoading ? '—' : staffList.filter(s => s.is_active).length)}
           subtitle={String(staffSummary?.total_count ?? totalItems) + ' total'}
-          loading={isLoading || summaryLoading}
+          loading={isLoading}
         />
       </div>
 
@@ -258,6 +264,8 @@ export default function StaffPage() {
                 </svg>
               }
               onClick={handleOpenAdd}
+              disabled={!canAddAnyRole}
+              title={!canAddAnyRole ? 'Upgrade your plan to add team members' : 'Add Staff Member'}
               data-shortcut="new"
             >
               Add Staff
@@ -343,12 +351,29 @@ export default function StaffPage() {
             </FormField>
           </div>
 
+          {!canAddAnyRole && (
+            <UpgradePrompt
+              variant="inline"
+              feature="team members"
+              currentTier={staffSummary?.subscription_type}
+              style={{ marginBottom: 16 }}
+            />
+          )}
+
           <FormField label="Role" error={addForm.formState.errors.role?.message} required style={{ marginBottom: 8 }}>
             <select {...addForm.register('role')} style={selectStyle} aria-label="Role">
               <option value="">— Select Role —</option>
-              {ROLES.map((r) => (
-                <option key={r.value} value={r.value}>{r.label}</option>
-              ))}
+              {ROLES.map((r) => {
+                const canAdd = r.value === 'staff' ? canAddStaff : canAddManager
+                const limit = r.value === 'staff' ? staffSummary?.limits?.staff : staffSummary?.limits?.manager
+                const used = r.value === 'staff' ? (staffSummary?.staff_count ?? 0) : (staffSummary?.manager_count ?? 0)
+                const suffix = limit !== null ? ` (${used}/${limit} used)` : ''
+                return (
+                  <option key={r.value} value={r.value} disabled={!canAdd}>
+                    {r.label}{suffix}
+                  </option>
+                )
+              })}
             </select>
           </FormField>
 

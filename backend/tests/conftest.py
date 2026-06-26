@@ -17,27 +17,29 @@ from sqlalchemy.orm import Session as SASession, sessionmaker
 from sqlalchemy.pool import StaticPool
 import sqlalchemy.types as SATypes
 
-# Patch postgresql.UUID bind_processor to output str() (hyphenated) instead
-# of .hex (no hyphens).  The app passes string UUIDs with hyphens everywhere,
-# so the DB must store them in the same format for WHERE comparisons to match.
-_orig_uuid_bind = SATypes.Uuid.bind_processor
+if os.getenv("DATABASE_URL", "").startswith("sqlite") or not os.getenv("DATABASE_URL"):
+    # Patch postgresql.UUID bind_processor for SQLite compatibility
+    _orig_uuid_bind = SATypes.Uuid.bind_processor
 
-def _patched_uuid_bind(self, dialect):
-    process = _orig_uuid_bind(self, dialect)
-    if self.as_uuid:
-        def _wrapped(value):
-            if value is not None:
-                if isinstance(value, uuid.UUID):
-                    return str(value)
-                try:
-                    return str(uuid.UUID(str(value)))
-                except (ValueError, AttributeError):
-                    return str(value)
-            return None
-        return _wrapped
-    return process
+    def _patched_uuid_bind(self, dialect):
+        process = _orig_uuid_bind(self, dialect)
+        if self.as_uuid:
+            def _wrapped(value):
+                if value is not None:
+                    if isinstance(value, uuid.UUID):
+                        return str(value)
+                    try:
+                        return str(uuid.UUID(str(value)))
+                    except (ValueError, AttributeError):
+                        return str(value)
+                return None
+            return _wrapped
+        return process
 
-SATypes.Uuid.bind_processor = _patched_uuid_bind
+    SATypes.Uuid.bind_processor = _patched_uuid_bind
+else:
+    # Don't patch UUID bind processor — PostgreSQL handles it natively
+    pass
 import app.models.profile   # ensure Profile is in Base.metadata.tables
 import app.models.sale
 import app.models.payment

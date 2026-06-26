@@ -290,7 +290,7 @@ def get_all_payments(
         })
 
     return success_response(
-        pagination_response(items, total, pagination["page"], pagination["limit"])
+        pagination_response(items, total, pagination["page"], pagination["limit"], capped=pagination["_capped"])
     )
 
 

@@ -18,6 +18,7 @@ export { default as StateDropdown }  from './StateDropdown';
 export { default as ExportButton }   from './ExportButton';
 export { default as SkeletonTable }  from './SkeletonTable';
 export { default as ErrorBoundary }  from './ErrorBoundary';
+export { default as UpgradePrompt }  from './UpgradePrompt';
 export { default as CommandPalette } from './CommandPalette';
 export { default as ShortcutHelp }   from './ShortcutHelp';
 export { default as LineChart }      from './LineChart';

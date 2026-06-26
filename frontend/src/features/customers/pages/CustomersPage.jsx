@@ -28,7 +28,7 @@ import {
   Pagination, ConfirmDialog,
   FormField, StateDropdown, ExportButton,
   DateRangeFilter, EmptyState,
-  MetricCard, BentoCard,
+  MetricCard, BentoCard, UpgradePrompt,
 } from '../../../shared/components'
 
 import { selectStyle, textareaStyle } from '../../../shared/components/FormField'
@@ -179,6 +179,7 @@ export default function CustomersPage() {
   const navigate      = useNavigate()
   const hasPermission = useAuthStore(s => s.hasPermission)
   const canManage     = hasPermission('customers.manage')
+  const subscription  = useAuthStore(s => s.subscription)
 
   const {
     customers,
@@ -198,6 +199,8 @@ export default function CustomersPage() {
     queryFn: fetchCustomerSummary,
     staleTime: 60_000,
   })
+
+  const [showUpgradeBanner, setShowUpgradeBanner] = useState(true)
 
   // Modal state
   const [showModal,        setShowModal]        = useState(false)
@@ -357,6 +360,15 @@ export default function CustomersPage() {
           </Button>
         </div>
       </div>
+
+      {showUpgradeBanner && subscription?.subscription_type === 'trial' && (
+        <UpgradePrompt
+          variant="banner"
+          feature="customers"
+          onDismiss={() => setShowUpgradeBanner(false)}
+          style={{ marginBottom: 24 }}
+        />
+      )}
 
       {/* METRIC CARDS */}
       <div style={{

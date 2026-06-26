@@ -5,7 +5,7 @@
 // which sends the current active filters to the backend and returns all
 // matching records — not limited to the 20 rows visible on screen.
 
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,8 +14,9 @@ import SupplierDetailDrawer from '../components/SupplierDetailDrawer';
 import {
   Button, Modal, Table, EmptyState, SearchBar,
   Pagination, ConfirmDialog, PageHeader, FormField,
-  DateRangeFilter, ExportButton, StateDropdown,
+  DateRangeFilter, ExportButton, StateDropdown, UpgradePrompt,
 } from '../../../shared/components';
+import useAuthStore from '../../../store/authStore';
 import { selectStyle, textareaStyle } from '../../../shared/components/FormField';
 import { SUPPLIER_CSV_COLUMNS } from '../../../shared/utils/csvExport';
 import { usePermissions } from '../../../shared/hooks/usePermissions';
@@ -31,9 +32,11 @@ const EMPTY_FORM = {
 
 /* ─── Page ──────────────────────────────────────────────────────────────── */
 export default function SuppliersPage() {
-  const navigate  = useNavigate();
-  const { can }   = usePermissions();
-  const canManage = can('suppliers.manage');
+  const navigate      = useNavigate();
+  const { can }       = usePermissions();
+  const canManage     = can('suppliers.manage');
+  const subscription  = useAuthStore(s => s.subscription);
+  const [showUpgradeBanner, setShowUpgradeBanner] = useState(true);
 
   // handleExport() lazily fetches all filtered records from the backend on click.
 
@@ -236,6 +239,15 @@ export default function SuppliersPage() {
           </div>
         }
       />
+
+      {showUpgradeBanner && subscription?.subscription_type === 'trial' && (
+        <UpgradePrompt
+          variant="banner"
+          feature="suppliers"
+          onDismiss={() => setShowUpgradeBanner(false)}
+          style={{ marginBottom: 24 }}
+        />
+      )}
 
       {/* Toolbar */}
       <div style={{

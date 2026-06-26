@@ -387,7 +387,7 @@ def get_all_sales_returns(
         result.append(return_to_dict(r, items))
 
     return success_response(
-        pagination_response(result, total, pagination["page"], pagination["limit"])
+        pagination_response(result, total, pagination["page"], pagination["limit"], capped=pagination["_capped"])
     )
 
 

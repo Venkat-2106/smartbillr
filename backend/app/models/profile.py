@@ -15,3 +15,4 @@ class Profile(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, nullable=True)
     last_logout_at = Column(DateTime, nullable=True)
+    last_login_at = Column(DateTime, nullable=True)

@@ -2,37 +2,50 @@
 #
 # ARCHITECTURE RULE:
 #   - Normal UI requests: page=N, limit=15 or 20 → backend returns one page only
-#   - Export requests:    page=1, limit=10000    → backend returns all matching rows
-#   - The 10 000 cap is a hard guard. The `truncated` field in pagination_response
-#     tells the frontend when a result was silently capped so it can show a warning.
-#
-# Usage in every router:
-#   pagination: dict = Depends(paginate)
-#   ...
-#   return success_response(
-#       pagination_response(data, total, pagination["page"], pagination["limit"])
-#   )
+#   - Export requests:    page=1, limit=max     → backend returns all matching rows
+#   - The 10 000 cap is a hard FastAPI guard. The `truncated` field in
+#     pagination_response tells the frontend when the result was silently capped.
+#   - Tier export limits (e.g., trial = 500) are applied inside paginate() by
+#     reading the business's subscription_type. No endpoint changes needed.
 
-from fastapi import Query
+from fastapi import Depends, Query
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.middleware.auth import verify_token
+from app.utils.usage_limits import fetch_subscription_type
+from app.utils.subscription_features import get_feature_limits
 
 
 def paginate(
     page:  int = Query(default=1,  ge=1,          description="Page number"),
-    limit: int = Query(default=20, ge=1, le=10000, description="Items per page (max 10000)")
+    limit: int = Query(default=20, ge=1, le=10000, description="Items per page (max 10000)"),
+    current_user: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
 ):
+    # Apply tier-based export row cap
+    business_id = current_user["business_id"]
+    sub_type = fetch_subscription_type(db, business_id)
+    tier_limits = get_feature_limits(sub_type)
+    max_rows = tier_limits.get("max_export_rows")
+    capped = False
+    if max_rows is not None and limit > max_rows:
+        limit = max_rows
+        capped = True
+
     offset = (page - 1) * limit
     return {
-        "page":   page,
-        "limit":  limit,
-        "offset": offset,
+        "page":        page,
+        "limit":       limit,
+        "offset":      offset,
+        "_capped":     capped,
     }
 
 
-def pagination_response(data: list, total: int, page: int, limit: int):
+def pagination_response(data: list, total: int, page: int, limit: int, capped: bool = False):
     total_pages = (total + limit - 1) // limit
-    # truncated = True when a bulk/export request hit the 10 000 cap.
+    # truncated = True when a bulk/export request was capped by the tier or system limit.
     # The frontend should show a warning toast when this is True.
-    truncated = limit >= 10000 and total > 10000
+    truncated = capped or (limit >= 10000 and total > limit)
     return {
         "items": data,
         "pagination": {

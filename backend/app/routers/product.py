@@ -74,6 +74,7 @@ from app.schemas.product import ProductCreate, ProductUpdate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts
+from app.utils.usage_limits import check_create_allowed, fetch_subscription_type
 from sqlalchemy.exc import IntegrityError
 from typing import Optional
 
@@ -238,6 +239,12 @@ def create_product(
 ):
     business_id = current_user["business_id"]
     show_profit = PROFIT_PERMISSION in current_user.get("permissions", set())
+
+    # ── 0. Subscription tier limit check ──────────────────────────────────────
+    sub_type = fetch_subscription_type(db, business_id)
+    allowed, msg = check_create_allowed(db, business_id, sub_type, "max_products", "products")
+    if not allowed:
+        return error_response(msg, status_code=403)
 
     # ── 1. Validate category belongs to this business ─────────────────────────
     if data.category_id:
@@ -416,7 +423,8 @@ def get_all_products(
             [row_to_dict_list(r, show_profit=show_profit) for r in rows],
             total,
             pagination["page"],
-            pagination["limit"]
+            pagination["limit"],
+            capped=pagination["_capped"]
         )
     )
 

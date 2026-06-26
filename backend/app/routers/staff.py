@@ -27,6 +27,7 @@ from app.middleware.auth import clear_user_cache
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts
+from app.utils.staff_limits import get_staff_limits
 import logging
 
 router = APIRouter(prefix="/v1/staff", tags=["Staff"])
@@ -159,6 +160,55 @@ def create_staff(
     if existing:
         return error_response("This email is already registered in your business", 400)
 
+    # ── Subscription tier limit check ────────────────────────────────────
+    if body.role in ("staff", "manager"):
+        biz_row = db.execute(
+            text("""
+                SELECT subscription_type
+                FROM businesses
+                WHERE business_id = CAST(:bid AS uuid)
+                  AND (is_deleted = false OR is_deleted IS NULL)
+                LIMIT 1
+            """),
+            {"bid": str(business_id)}
+        ).fetchone()
+
+        if not biz_row:
+            return error_response("Business not found", 404)
+
+        subscription_type = biz_row.subscription_type
+        limits = get_staff_limits(subscription_type)
+        role_limit = limits.get(body.role)
+
+        if role_limit is not None and role_limit == 0:
+            return error_response(
+                f"Your {subscription_type.capitalize()} plan does not allow creating {body.role} accounts. "
+                f"Upgrade your subscription to add team members.",
+                status_code=403,
+            )
+
+        if role_limit is not None:
+            current_count = db.execute(
+                text("""
+                    SELECT COUNT(*) FROM profiles
+                    WHERE business_id = CAST(:bid AS uuid)
+                      AND role = :role
+                      AND is_active = true
+                """),
+                {"bid": str(business_id), "role": body.role}
+            ).scalar() or 0
+
+            if current_count >= role_limit:
+                upgrade_tier = "Pro" if subscription_type == "monthly" else "a higher plan"
+                return error_response(
+                    f"Your {subscription_type.capitalize()} plan allows a maximum of {role_limit} "
+                    f"{'staff member' if role_limit == 1 else 'staff members'} "
+                    f"with the role '{body.role}'. "
+                    f"Upgrade to {upgrade_tier} for unlimited team members.",
+                    status_code=403,
+                )
+    # ── End of tier limit check ──────────────────────────────────────────
+
     # Step 1: Create Supabase Auth user
     try:
         auth_user = create_supabase_auth_user(body.email, body.password, body.full_name)
@@ -277,7 +327,7 @@ def list_staff(
     ]
 
     return success_response(
-        pagination_response(staff_list, total, pagination["page"], pagination["limit"])
+        pagination_response(staff_list, total, pagination["page"], pagination["limit"], capped=pagination["_capped"])
     )
 
 
@@ -288,17 +338,35 @@ def get_staff_summary_kpi(
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
-    row = db.execute(text("""
+
+    biz_row = db.execute(
+        text("SELECT subscription_type FROM businesses WHERE business_id = CAST(:bid AS uuid) LIMIT 1"),
+        {"bid": bid}
+    ).fetchone()
+
+    subscription_type = biz_row.subscription_type if biz_row else "trial"
+    limits = get_staff_limits(subscription_type)
+
+    counts = db.execute(text("""
         SELECT
-            COUNT(*)                                AS total_count,
-            COUNT(*) FILTER (WHERE is_active = true) AS active_count
+            COUNT(*)                                    AS total_count,
+            COUNT(*) FILTER (WHERE is_active = true)   AS active_count,
+            COUNT(*) FILTER (WHERE role = 'staff'  AND is_active = true) AS staff_count,
+            COUNT(*) FILTER (WHERE role = 'manager' AND is_active = true) AS manager_count
         FROM profiles
         WHERE business_id = CAST(:bid AS uuid)
     """), {"bid": bid}).fetchone()
 
     return success_response({
-        "total_count":  int(row.total_count),
-        "active_count": int(row.active_count),
+        "total_count":     int(counts.total_count),
+        "active_count":    int(counts.active_count),
+        "staff_count":     int(counts.staff_count),
+        "manager_count":   int(counts.manager_count),
+        "subscription_type": subscription_type,
+        "limits": {
+            "staff":   limits["staff"],
+            "manager": limits["manager"],
+        },
     })
 
 
@@ -353,15 +421,16 @@ def update_staff(
     updates["id"] = staff_id
 
     try:
+        updates["business_id"] = business_id
         db.execute(
-            text(f"UPDATE profiles SET {set_clause} WHERE id = :id"),
+            text(f"UPDATE profiles SET {set_clause} WHERE id = :id AND business_id = :business_id"),
             updates
         )
         db.commit()
 
-        # Invalidate the in-memory cache so role/is_active changes take effect
-        # immediately on this instance instead of waiting for TTL expiry.
         clear_user_cache(staff_id)
+        from app.middleware.subscription import clear_subscription_user_cache
+        clear_subscription_user_cache(staff_id)
     except Exception as e:
         db.rollback()
         logging.exception(e)
@@ -396,14 +465,14 @@ def deactivate_staff(
 
     try:
         db.execute(
-            text("UPDATE profiles SET is_active = false WHERE id = :id"),
-            {"id": staff_id}
+            text("UPDATE profiles SET is_active = false WHERE id = :id AND business_id = :business_id"),
+            {"id": staff_id, "business_id": business_id}
         )
         db.commit()
 
-        # Invalidate in-memory cache so the deactivated user cannot make API
-        # calls for the remaining TTL window (up to 10s).
         clear_user_cache(staff_id)
+        from app.middleware.subscription import clear_subscription_user_cache
+        clear_subscription_user_cache(staff_id)
     except Exception as e:
         db.rollback()
         logging.exception(e)

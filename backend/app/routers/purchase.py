@@ -14,6 +14,7 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.tax_engine import calculate_item_tax
+from app.utils.usage_limits import check_create_allowed, fetch_subscription_type
 import logging
 from decimal import Decimal
 import uuid
@@ -150,6 +151,15 @@ def create_purchase(
 ):
     business_id = current_user["business_id"]
     user_id     = current_user["user_id"]
+
+    # ── Subscription tier limit check ─────────────────────────────────────────
+    sub_type = fetch_subscription_type(db, business_id)
+    allowed, msg = check_create_allowed(
+        db, business_id, sub_type, "max_purchases_per_month",
+        "purchases", date_column="pur_created_at"
+    )
+    if not allowed:
+        return error_response(msg, status_code=403)
 
     try:
         # Step 1 → Get business country and state for tax engine
@@ -472,7 +482,7 @@ def get_all_purchases(
         result.append(purchase_row_to_dict_list(row))
 
     return success_response(
-        pagination_response(result, total, pagination["page"], pagination["limit"])
+        pagination_response(result, total, pagination["page"], pagination["limit"], capped=pagination["_capped"])
     )
 
 

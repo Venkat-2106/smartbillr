@@ -154,7 +154,8 @@ def get_categories(
             data=data,
             total=total,
             page=pagination["page"],
-            limit=pagination["limit"]
+            limit=pagination["limit"],
+            capped=pagination["_capped"]
         )
     )
 

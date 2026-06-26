@@ -16,6 +16,7 @@ import supabase from '../../../lib/supabaseClient'
 
 export function useLogin() {
   const [isLoading, setIsLoading] = useState(false)
+  const [pendingSession, setPendingSession] = useState(null)
   const { setAuth, setBusiness, setProfile, setPermissions, setSubscription } = useAuthStore()
   const navigate = useNavigate()
 
@@ -29,6 +30,32 @@ export function useLogin() {
 
       setAuth(token, user, refreshToken)
 
+      // Check for existing active session
+      const sessionRes = await api.post('/auth/record-login')
+      const hasExisting = sessionRes?.data?.has_existing_session
+
+      if (hasExisting) {
+        setPendingSession({ token, user, refreshToken })
+        return
+      }
+
+      await completeLogin(token, user, refreshToken)
+
+    } catch (err) {
+      const message =
+        err.response?.data?.error_description ||
+        err.response?.data?.message           ||
+        err.response?.data?.msg               ||
+        err.message                           ||
+        'Login failed. Check your email and password.'
+
+      toast.error(message)
+      setIsLoading(false)
+    }
+  }
+
+  async function completeLogin(token, user, refreshToken) {
+    try {
       const [bizResult, profileResult, subResult] = await Promise.allSettled([
         api.get('/businesses/me'),
         api.get('/profiles/me'),
@@ -62,22 +89,39 @@ export function useLogin() {
 
       toast.success('Welcome back!')
       navigate('/dashboard')
-
     } catch (err) {
-      const message =
-        err.response?.data?.error_description ||
-        err.response?.data?.message           ||
-        err.response?.data?.msg               ||
-        err.message                           ||
-        'Login failed. Check your email and password.'
-
-      toast.error(message)
+      toast.error('Failed to load profile. Please try again.')
     } finally {
       setIsLoading(false)
     }
   }
 
-  return { login, isLoading }
+  async function confirmSession() {
+    if (!pendingSession) return
+    try {
+      await api.post('/auth/confirm-session')
+    } catch {
+      // Proceed even if confirm fails
+    }
+    setPendingSession(null)
+    await completeLogin(pendingSession.token, pendingSession.user, pendingSession.refreshToken)
+  }
+
+  async function cancelSession() {
+    if (!pendingSession) return
+    try {
+      await api.post('/auth/logout')
+    } catch {
+      // Clear locally even if backend call fails
+    }
+    useAuthStore.getState().clearAuth()
+    setPendingSession(null)
+    setIsLoading(false)
+    toast('Login cancelled. The new session has been logged out.')
+    navigate('/login', { replace: true })
+  }
+
+  return { login, isLoading, pendingSession, confirmSession, cancelSession }
 }
 
 // ─── useLogout ────────────────────────────────────────────────────────────────

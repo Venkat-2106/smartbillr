@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
@@ -30,5 +32,8 @@ def refresh_dashboard_mvs(db: Session, force: bool = False) -> None:
         db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_TREND}"))
         db.commit()
         _last_refresh = time()
-    except OperationalError:
+    except OperationalError as e:
+        logging.warning(
+            "Materialized view refresh failed (dashboard will serve stale data): %s", e
+        )
         db.rollback()

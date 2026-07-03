@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import AuthLayout from '../../../app/layouts/AuthLayout'
 import { registerBusiness } from '../../subscription/api/subscriptionApi'
 import toast from 'react-hot-toast'
+import FormField, { selectStyle } from '../../../shared/components/FormField'
 
 const COUNTRIES = [
   { code: 'IN', name: 'India' },
@@ -93,7 +94,6 @@ export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [serverError, setServerError] = useState('')
-  const [focused, setFocused] = useState('')
 
   const states = STATES_BY_COUNTRY[form.business_country_code] || []
 
@@ -162,7 +162,6 @@ export default function SignupPage() {
 
   return (
     <AuthLayout>
-      <style>{`.signup-input::placeholder { color: #94A3B8; opacity: 1; }`}</style>
       <p style={{ fontSize: '1.3rem', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '4px' }}>
         Create your business
       </p>
@@ -182,133 +181,92 @@ export default function SignupPage() {
       )}
 
       <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={labelStyle}>Business name</label>
+        <FormField label="Business name" error={errors.business_name} required style={{ marginBottom: 16 }}>
           <input
-            className="signup-input"
+            className={`input ${errors.business_name ? 'error' : ''}`}
             value={form.business_name}
             onChange={e => set('business_name', e.target.value)}
-            onFocus={() => setFocused('business_name')}
-            onBlur={() => setFocused('')}
             placeholder="Acme Corp"
-            style={inputStyle(focused === 'business_name', !!errors.business_name)}
           />
-          {errors.business_name && <p style={errorStyle}>{errors.business_name}</p>}
-        </div>
+        </FormField>
 
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={labelStyle}>Your name</label>
+        <FormField label="Your name" error={errors.owner_name} required style={{ marginBottom: 16 }}>
           <input
-            className="signup-input"
+            className={`input ${errors.owner_name ? 'error' : ''}`}
             value={form.owner_name}
             onChange={e => set('owner_name', e.target.value)}
-            onFocus={() => setFocused('owner_name')}
-            onBlur={() => setFocused('')}
             placeholder="John Doe"
-            style={inputStyle(focused === 'owner_name', !!errors.owner_name)}
           />
-          {errors.owner_name && <p style={errorStyle}>{errors.owner_name}</p>}
-        </div>
+        </FormField>
 
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={labelStyle}>Email address</label>
+        <FormField label="Email address" error={errors.owner_email} required style={{ marginBottom: 16 }}>
           <input
-            className="signup-input"
+            className={`input ${errors.owner_email ? 'error' : ''}`}
             type="email"
             value={form.owner_email}
             onChange={e => set('owner_email', e.target.value)}
-            onFocus={() => setFocused('owner_email')}
-            onBlur={() => setFocused('')}
             placeholder="you@company.com"
             autoComplete="email"
-            style={inputStyle(focused === 'owner_email', !!errors.owner_email)}
           />
-          {errors.owner_email && <p style={errorStyle}>{errors.owner_email}</p>}
-        </div>
+        </FormField>
 
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={labelStyle}>Password</label>
+        <FormField label="Password" error={errors.owner_password} required style={{ marginBottom: 16 }} helper="Min 8 characters, with uppercase, lowercase & a digit">
           <input
-            className="signup-input"
+            className={`input ${errors.owner_password ? 'error' : ''}`}
             type="password"
             value={form.owner_password}
             onChange={e => set('owner_password', e.target.value)}
-            onFocus={() => setFocused('owner_password')}
-            onBlur={() => setFocused('')}
             placeholder="At least 8 characters"
             autoComplete="new-password"
-            style={inputStyle(focused === 'owner_password', !!errors.owner_password)}
           />
-          <p style={{ marginTop: '0.2rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-            Min 8 characters, with uppercase, lowercase &amp; a digit
-          </p>
-          {errors.owner_password && <p style={errorStyle}>{errors.owner_password}</p>}
-        </div>
+        </FormField>
 
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={labelStyle}>Phone (optional)</label>
+        <FormField label="Phone (optional)" error={errors.business_phone} style={{ marginBottom: 16 }}>
           <input
-            className="signup-input"
+            className="input"
             value={form.business_phone}
             onChange={e => set('business_phone', e.target.value)}
-            onFocus={() => setFocused('business_phone')}
-            onBlur={() => setFocused('')}
             placeholder="+1 234 567 8900"
-            style={inputStyle(focused === 'business_phone', !!errors.business_phone)}
           />
-        </div>
+        </FormField>
 
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={{ ...labelStyle }}>
-            Country <span style={{ color: '#DC2626' }}>*</span>
-          </label>
+        <FormField label="Country" error={errors.business_country_code} required style={{ marginBottom: 16 }}>
           <select
+            className="sb-select"
+            style={selectStyle}
             value={form.business_country_code}
             onChange={e => set('business_country_code', e.target.value)}
-            onFocus={() => setFocused('business_country_code')}
-            onBlur={() => setFocused('')}
-            style={selectStyle(focused === 'business_country_code', !!errors.business_country_code)}
           >
             <option value="">Select country</option>
             {COUNTRIES.map(c => (
               <option key={c.code} value={c.code}>{c.name}</option>
             ))}
           </select>
-          {errors.business_country_code && <p style={errorStyle}>{errors.business_country_code}</p>}
-        </div>
+        </FormField>
 
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={{ ...labelStyle }}>
-            State <span style={{ color: '#DC2626' }}>*</span>
-          </label>
+        <FormField label="State" error={errors.business_state} required style={{ marginBottom: 16 }}>
           <select
+            className="sb-select"
+            style={selectStyle}
             value={form.business_state}
             onChange={e => set('business_state', e.target.value)}
-            onFocus={() => setFocused('business_state')}
-            onBlur={() => setFocused('')}
             disabled={!form.business_country_code}
-            style={selectStyle(focused === 'business_state', !!errors.business_state, !form.business_country_code)}
           >
             <option value="">Select state</option>
             {states.map(s => (
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
-          {errors.business_state && <p style={errorStyle}>{errors.business_state}</p>}
-        </div>
+        </FormField>
 
-        <div style={{ marginBottom: '1.25rem' }}>
-          <label style={labelStyle}>Address (optional)</label>
+        <FormField label="Address (optional)" error={errors.business_address} style={{ marginBottom: 20 }}>
           <input
-            className="signup-input"
+            className="input"
             value={form.business_address}
             onChange={e => set('business_address', e.target.value)}
-            onFocus={() => setFocused('business_address')}
-            onBlur={() => setFocused('')}
             placeholder="123 Main St, City"
-            style={inputStyle(focused === 'business_address', !!errors.business_address)}
           />
-        </div>
+        </FormField>
 
         <button
           type="submit"
@@ -358,54 +316,4 @@ export default function SignupPage() {
       </div>
     </AuthLayout>
   )
-}
-
-const labelStyle = {
-  display: 'block', fontSize: '0.74rem',
-  fontWeight: '600', color: 'var(--text-primary)', marginBottom: '5px',
-}
-const errorStyle = {
-  marginTop: '0.3rem', fontSize: '0.74rem',
-  color: '#DC2626', fontWeight: '500',
-}
-
-function inputStyle(isFocused, hasError) {
-  return {
-    width: '100%',
-    padding: '10px 12px',
-    background: isFocused ? '#FFFFFF' : '#F8FAFC',
-    border: `1px solid ${hasError ? '#DC2626' : isFocused ? '#3B82F6' : '#E2E8F0'}`,
-    borderRadius: '10px',
-    fontSize: '0.82rem',
-    fontFamily: 'Inter, sans-serif',
-    color: '#0F172A',
-    outline: 'none',
-    boxSizing: 'border-box',
-    boxShadow: hasError
-      ? '0 0 0 4px rgba(220,38,38,0.1)'
-      : isFocused
-        ? '0 0 0 4px rgba(59,130,246,0.15)'
-        : 'none',
-  }
-}
-
-function selectStyle(isFocused, hasError, disabled) {
-  return {
-    width: '100%',
-    padding: '10px 12px',
-    background: disabled ? '#F1F5F9' : isFocused ? '#FFFFFF' : '#F8FAFC',
-    border: `1px solid ${hasError ? '#DC2626' : isFocused ? '#3B82F6' : '#E2E8F0'}`,
-    borderRadius: '10px',
-    fontSize: '0.82rem',
-    fontFamily: 'Inter, sans-serif',
-    color: '#0F172A',
-    outline: 'none',
-    boxSizing: 'border-box',
-    boxShadow: hasError
-      ? '0 0 0 4px rgba(220,38,38,0.1)'
-      : isFocused
-        ? '0 0 0 4px rgba(59,130,246,0.15)'
-        : 'none',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-  }
 }

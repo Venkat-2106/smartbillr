@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, Request
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -110,7 +111,24 @@ app.add_middleware(RequestSizeLimitMiddleware)
 # Excludes: registration, subscription check, auth, health, admin.
 app.add_middleware(SubscriptionMiddleware)
 
-# ── Global exception handler ──────────────────────────────────────────────
+# ── Global exception handlers ──────────────────────────────────────────
+# Reshape auth/rbac HTTPExceptions (verify_token, require_permission) to
+# match the error_response() shape so frontend hooks always find .message.
+# Pydantic 422 validation errors (list detail) are passed through as-is
+# because SignupPage.jsx already parses data.detail as a list there.
+@app.exception_handler(StarletteHTTPException)
+async def http_shape_handler(request: Request, exc: StarletteHTTPException):
+    if isinstance(exc.detail, str):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"success": False, "message": exc.detail},
+        )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logging.exception(exc)

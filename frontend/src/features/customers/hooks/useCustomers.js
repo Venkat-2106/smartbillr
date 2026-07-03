@@ -157,6 +157,7 @@ export function useCustomers() {
     mutationFn: ({ id, data }) => updateCustomer(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] })
+      queryClient.invalidateQueries({ queryKey: ['customer'] })
       toast.success('Customer updated successfully')
     },
     onError: (err) => {
@@ -168,6 +169,7 @@ export function useCustomers() {
     mutationFn: deleteCustomer,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] })
+      queryClient.invalidateQueries({ queryKey: ['customer'] })
       toast.success('Customer removed')
     },
     onError: (err) => {

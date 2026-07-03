@@ -15,6 +15,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from app.database import get_db
 from app.middleware.rbac import require_permission
 from app.models.customer import Customer
@@ -90,7 +91,11 @@ def create_customer(
     )
 
     db.add(new_customer)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return error_response("Customer with this phone already exists", 400)
     db.refresh(new_customer)
 
     # Fetch the creator's name so the table shows it immediately after creation
@@ -645,7 +650,11 @@ def update_customer(
     # updated_at is set automatically by DB trigger trg_customers_updated_at
     customer.updated_by = current_user["user_id"]
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return error_response("Customer with this phone already exists", 400)
     db.refresh(customer)
 
     # Fetch the updater's name to return in response

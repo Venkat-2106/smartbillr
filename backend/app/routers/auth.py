@@ -53,10 +53,11 @@ def record_login(
             if last_logout is None or last_logout < last_login:
                 has_existing_session = True
 
-    db.execute(
-        text("UPDATE profiles SET last_login_at = :now WHERE id = :user_id"),
-        {"now": now, "user_id": user_id}
-    )
+    if not has_existing_session:
+        db.execute(
+            text("UPDATE profiles SET last_login_at = :now WHERE id = :user_id"),
+            {"now": now, "user_id": user_id}
+        )
     db.commit()
 
     return success_response({
@@ -73,7 +74,7 @@ def confirm_session(
     now = datetime.now(timezone.utc)
 
     db.execute(
-        text("UPDATE profiles SET last_logout_at = :now WHERE id = :user_id"),
+        text("UPDATE profiles SET last_logout_at = :now, last_login_at = :now WHERE id = :user_id"),
         {"now": now, "user_id": user_id}
     )
     db.commit()

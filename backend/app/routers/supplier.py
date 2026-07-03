@@ -21,6 +21,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from app.database import get_db
 from app.middleware.rbac import require_permission
 from app.models.supplier import Supplier
@@ -95,7 +96,11 @@ def create_supplier(
     )
 
     db.add(new_supplier)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return error_response("Supplier with this phone already exists", 400)
     db.refresh(new_supplier)
 
     creator_name = db.execute(
@@ -355,7 +360,11 @@ def update_supplier(
 
     # updated_by is auto-set by DB trigger trg_suppliers_updated_by
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return error_response("Supplier with this phone already exists", 400)
     db.refresh(supplier)
 
     updated_by_name = db.execute(

@@ -151,7 +151,6 @@ export function useLogout() {
 }
 
 // ─── useForgotPassword ────────────────────────────────────────────────────────
-// Unchanged from existing
 export function useForgotPassword() {
   const [isLoading, setIsLoading] = useState(false)
 
@@ -163,18 +162,20 @@ export function useForgotPassword() {
 
     setIsLoading(true)
     try {
-      await api.get('/profiles/check-email', { params: { email } })
-
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       })
 
       if (error) throw error
 
-      toast.success('Password reset link sent — check your inbox')
-
+      toast.success('If an account exists for this email, a reset link has been sent')
     } catch (err) {
-      toast.error(err.message || 'Could not send reset email. Try again.')
+      const msg = (err?.message || '').toLowerCase()
+      if (msg.includes('not found') || msg.includes('no user') || msg.includes('no account')) {
+        toast.success('If an account exists for this email, a reset link has been sent')
+      } else {
+        toast.error(err.message || 'Could not send reset email. Try again.')
+      }
     } finally {
       setIsLoading(false)
     }

@@ -4,6 +4,7 @@ import AuthLayout from '../../../app/layouts/AuthLayout'
 import { useResetPassword } from '../hooks/useAuth'
 import supabase from '../../../lib/supabaseClient'
 import toast from 'react-hot-toast'
+import FormField from '../../../shared/components/FormField'
 
 export default function ResetPasswordPage() {
   const { resetPassword, isLoading } = useResetPassword()
@@ -12,10 +13,7 @@ export default function ResetPasswordPage() {
   const [password,    setPassword]    = useState('')
   const [confirm,     setConfirm]     = useState('')
   const [showPass,    setShowPass]    = useState(false)
-  const [focused,     setFocused]     = useState('')
   const [errors,      setErrors]      = useState({})
-  const [submitHovered, setSubmitHovered] = useState(false)
-  const [linkHovered,   setLinkHovered]   = useState(false)
   const [sessionReady, setSessionReady] = useState(false)
   const [checking,    setChecking]    = useState(true)
 
@@ -67,27 +65,6 @@ export default function ResetPasswordPage() {
     await resetPassword(password)
   }
 
-  function inputStyle(name, hasError) {
-    const isFocused = focused === name
-    return {
-      width: '100%',
-      padding: '10px 12px 10px 36px',
-      background: isFocused ? 'var(--bg-card)' : 'var(--bg-subtle)',
-      border: `1px solid ${hasError ? 'var(--danger-text)' : isFocused ? 'var(--accent-500)' : 'var(--border)'}`,
-      borderRadius: '10px',
-      fontSize: '0.82rem',
-      fontFamily: 'inherit',
-      color: 'var(--text-primary)',
-      outline: 'none',
-      boxShadow: hasError
-        ? '0 0 0 3px var(--danger-bg)'
-        : isFocused
-          ? '0 0 0 3px color-mix(in srgb, var(--accent-500) 20%, transparent)'
-          : 'none',
-      transition: 'all 0.2s ease',
-    }
-  }
-
   // ── While checking the session ──
   if (checking) {
     return (
@@ -123,19 +100,15 @@ export default function ResetPasswordPage() {
 
       <form onSubmit={handleSubmit}>
 
-        {/* New password */}
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={labelStyle}>New password</label>
+        <FormField label="New password" error={errors.password} required style={{ marginBottom: 16 }}>
           <div style={{ position: 'relative' }}>
-            <span style={iconWrap}>🔒</span>
             <input
+              className={`input ${errors.password ? 'error' : ''}`}
               type={showPass ? 'text' : 'password'}
               value={password}
               onChange={e => { setPassword(e.target.value); setErrors(p => ({ ...p, password: '' })) }}
-              onFocus={() => setFocused('password')}
-              onBlur={() => setFocused('')}
               placeholder="Min. 6 characters"
-              style={{ ...inputStyle('password', !!errors.password), paddingRight: '3.5rem' }}
+              autoComplete="new-password"
             />
             <button
               type="button"
@@ -151,42 +124,32 @@ export default function ResetPasswordPage() {
               {showPass ? 'HIDE' : 'SHOW'}
             </button>
           </div>
-          {errors.password && <p style={errorStyle}>{errors.password}</p>}
-        </div>
+        </FormField>
 
-        {/* Confirm password */}
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={labelStyle}>Confirm password</label>
-          <div style={{ position: 'relative' }}>
-            <span style={iconWrap}>🔒</span>
-            <input
-              type={showPass ? 'text' : 'password'}
-              value={confirm}
-              onChange={e => { setConfirm(e.target.value); setErrors(p => ({ ...p, confirm: '' })) }}
-              onFocus={() => setFocused('confirm')}
-              onBlur={() => setFocused('')}
-              placeholder="Re-enter password"
-              style={inputStyle('confirm', !!errors.confirm)}
-            />
-          </div>
-          {errors.confirm && <p style={errorStyle}>{errors.confirm}</p>}
-        </div>
+        <FormField label="Confirm password" error={errors.confirm} required style={{ marginBottom: 24 }}>
+          <input
+            className={`input ${errors.confirm ? 'error' : ''}`}
+            type={showPass ? 'text' : 'password'}
+            value={confirm}
+            onChange={e => { setConfirm(e.target.value); setErrors(p => ({ ...p, confirm: '' })) }}
+            placeholder="Re-enter password"
+            autoComplete="new-password"
+          />
+        </FormField>
 
         {/* Submit */}
         <button
           type="submit"
           disabled={isLoading || !sessionReady}
-          onMouseEnter={() => !isLoading && setSubmitHovered(true)}
-          onMouseLeave={() => setSubmitHovered(false)}
+          onMouseEnter={e => { if (!isLoading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 28px color-mix(in srgb, var(--accent-600) 40%, transparent)' } }}
+          onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}
           style={{
             width: '100%', padding: '11px',
             background: isLoading ? 'var(--accent-300)' : 'linear-gradient(135deg, var(--accent-600), var(--accent-700))',
-            boxShadow: isLoading || !submitHovered ? 'none' : '0 12px 28px color-mix(in srgb, var(--accent-600) 40%, transparent)',
             color: '#fff', border: 'none', borderRadius: '12px',
             fontSize: '0.875rem', fontWeight: 600,
             fontFamily: 'inherit',
             cursor: isLoading ? 'not-allowed' : 'pointer',
-            transform: submitHovered ? 'translateY(-2px)' : 'translateY(0)',
             transition: 'transform 0.15s, box-shadow 0.15s',
           }}
         >
@@ -199,10 +162,10 @@ export default function ResetPasswordPage() {
       <div style={{ textAlign: 'center', marginTop: 20 }}>
         <span
           onClick={() => navigate('/login')}
-          onMouseEnter={() => setLinkHovered(true)}
-          onMouseLeave={() => setLinkHovered(false)}
+          onMouseEnter={e => e.currentTarget.style.color = 'var(--accent-700)'}
+          onMouseLeave={e => e.currentTarget.style.color = 'var(--accent-500)'}
           style={{
-            fontSize: '0.74rem', color: linkHovered ? 'var(--accent-700)' : 'var(--accent-500)',
+            fontSize: '0.74rem', color: 'var(--accent-500)',
             fontWeight: 500, cursor: 'pointer',
             transition: 'color 0.14s',
           }}
@@ -212,18 +175,4 @@ export default function ResetPasswordPage() {
       </div>
     </AuthLayout>
   )
-}
-
-const labelStyle = {
-  display: 'block', fontSize: '0.74rem',
-  fontWeight: 600, color: 'var(--text-primary)', marginBottom: 5,
-}
-const iconWrap = {
-  position: 'absolute', left: '10px',
-  top: '50%', transform: 'translateY(-50%)',
-  fontSize: '0.8rem', pointerEvents: 'none',
-}
-const errorStyle = {
-  marginTop: '0.3rem', fontSize: '0.74rem',
-  color: 'var(--danger-text)', fontWeight: 500,
 }

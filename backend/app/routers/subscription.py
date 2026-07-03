@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone, timedelta
 import uuid
 import os
@@ -195,6 +196,14 @@ def register_business(
         )
 
         db.commit()
+
+    except IntegrityError as e:
+        db.rollback()
+        _delete_supabase_auth_user(auth_user_id)
+        err_str = str(e.orig).lower()
+        if "idx_businesses_name_unique" in err_str:
+            return error_response("A business with this name already exists.", 409)
+        return error_response("Registration failed. Please try again.", 500)
 
     except Exception as e:
         db.rollback()

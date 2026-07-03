@@ -4,6 +4,7 @@ import useAuthStore from '../../store/authStore'
 import toast from 'react-hot-toast'
 import { ErrorBoundary } from '../../shared/components'
 import useMediaQuery from '../../shared/hooks/useMediaQuery'
+import { usePermissionsSync } from '../../shared/hooks/usePermissionsSync'
 import { useShortcutContext } from '../../shared/hooks/useShortcut'
 import CommandPalette from '../../shared/components/CommandPalette'
 import ShortcutHelp from '../../shared/components/ShortcutHelp'
@@ -350,6 +351,8 @@ export default function DashboardLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [showLogout, setShowLogout] = useState(false)
   const [showTheme,  setShowTheme]  = useState(false)
+
+  usePermissionsSync()
 
   const { theme, setTheme, accent, setAccent } = useTheme()
   const { user, business, profile, hasPermission } = useAuthStore()

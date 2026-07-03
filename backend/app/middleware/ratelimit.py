@@ -29,16 +29,20 @@ def _get_redis_rate():
 # to avoid /v1/business accidentally matching /v1/businesses/*.
 AUTH_EXACT_PATHS = ["/v1/business"]
 AUTH_PREFIX_PATHS = ["/auth/", "/profiles/check-email"]
+ADMIN_PREFIX_PATHS = ["/v1/admin/"]
 
 # Skip rate limiting entirely for these paths.
 SKIP_PATHS = ["/", "/health"]
 
 AUTH_LIMIT = 5
 AUTH_WINDOW = 60
+ADMIN_LIMIT = 20
+ADMIN_WINDOW = 60
 API_LIMIT = 100
 API_WINDOW = 60
 
 _ip_auth_cache = TTLCache(maxsize=10000, ttl=AUTH_WINDOW)
+_user_admin_cache = TTLCache(maxsize=10000, ttl=ADMIN_WINDOW)
 _user_api_cache = TTLCache(maxsize=10000, ttl=API_WINDOW)
 _ip_api_cache = TTLCache(maxsize=10000, ttl=API_WINDOW)
 
@@ -108,10 +112,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             any(path == p for p in AUTH_EXACT_PATHS) or
             any(path.startswith(p) for p in AUTH_PREFIX_PATHS)
         )
+        is_admin = any(path.startswith(p) for p in ADMIN_PREFIX_PATHS)
 
         if is_auth:
             ip = _client_ip(request)
             limited, retry_after = _check(_ip_auth_cache, ip, AUTH_LIMIT, AUTH_WINDOW)
+        elif is_admin:
+            uid = _jwt_user_id(request)
+            if uid:
+                limited, retry_after = _check(_user_admin_cache, uid, ADMIN_LIMIT, ADMIN_WINDOW)
+            else:
+                ip = _client_ip(request)
+                limited, retry_after = _check(_ip_api_cache, ip, ADMIN_LIMIT, ADMIN_WINDOW)
         else:
             uid = _jwt_user_id(request)
             if uid:

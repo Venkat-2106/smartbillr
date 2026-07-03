@@ -53,6 +53,11 @@ function getTokenExpiry(token) {
 api.interceptors.request.use(async (config) => {
   const token = useAuthStore.getState().token
   const refreshToken = useAuthStore.getState().refreshToken
+  // ── Auto-append trailing slash (FastAPI routes are registered as "/") ──────
+  const [path, query] = config.url.split('?')
+  const normalizedPath = path.endsWith('/') ? path : `${path}/`
+  config.url = query ? `${normalizedPath}?${query}` : normalizedPath
+
   if (token) {
     const exp = getTokenExpiry(token)
     if (exp && Date.now() + 60000 > exp && refreshToken && !isRefreshing) {

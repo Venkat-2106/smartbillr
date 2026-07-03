@@ -1,18 +1,121 @@
+import json
+import logging
+import os
+import re
+from datetime import datetime, timezone
+
+from cachetools import TTLCache
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
-from app.database import SessionLocal
-import re
-import logging
-from cachetools import TTLCache
 
+from app.database import SessionLocal
+
+# ── Redis client (lazy, same pattern as auth.py / ratelimit.py) ──────────────
+
+_redis_sub = None  # redis.Redis | None
+
+
+def _get_redis_sub():
+    global _redis_sub
+    if _redis_sub is not None:
+        return _redis_sub
+    redis_url = os.getenv("REDIS_URL")
+    if not redis_url:
+        return None
+    try:
+        import redis as _redis_mod
+
+        _redis_sub = _redis_mod.from_url(redis_url, decode_responses=True)
+    except Exception:
+        logging.warning(
+            "Redis unavailable for subscription cache — falling back to local cache only"
+        )
+    return _redis_sub
+
+
+# ── L1 in-process caches ────────────────────────────────────────────────────
 
 _subscription_cache: TTLCache | None = TTLCache(maxsize=10000, ttl=60)
 _user_business_cache: TTLCache = TTLCache(maxsize=10000, ttl=60)
 
 
+# ── Cache helpers ───────────────────────────────────────────────────────────
+
+KEY_BIZ = "sub_biz:{user_id}"
+KEY_SUB = "sub_cache:{user_id}"
+
+
+def _cache_biz_get(user_id: str) -> str | None:
+    """L1 → L2 → None."""
+    v = _user_business_cache.get(user_id)
+    if v is not None:
+        return v
+    try:
+        r = _get_redis_sub()
+        if r is not None:
+            v = r.get(KEY_BIZ.format(user_id=user_id))
+            if v is not None:
+                _user_business_cache[user_id] = v
+                return v
+    except Exception:
+        pass
+    return None
+
+
+def _cache_biz_set(user_id: str, value: str):
+    _user_business_cache[user_id] = value
+    try:
+        r = _get_redis_sub()
+        if r is not None:
+            r.setex(KEY_BIZ.format(user_id=user_id), 60, value)
+    except Exception:
+        pass
+
+
+def _cache_sub_get(user_id: str) -> dict | None | bool:
+    """
+    Check L1 first, then L2.
+    Returns False if valid (no error), dict if blocked, None if not cached.
+    """
+    if _subscription_cache is not None:
+        v = _subscription_cache.get(KEY_SUB.format(user_id=user_id))
+        if v is not None:
+            return v
+    try:
+        r = _get_redis_sub()
+        if r is not None:
+            raw = r.get(KEY_SUB.format(user_id=user_id))
+            if raw is not None:
+                val = json.loads(raw)
+                if _subscription_cache is not None:
+                    _subscription_cache[KEY_SUB.format(user_id=user_id)] = val
+                return val
+    except Exception:
+        pass
+    return None
+
+
+def _cache_sub_set(user_id: str, value: dict | None):
+    """False means valid (no error); a dict means blocked; None means skip caching."""
+    store = value if value else False
+    if _subscription_cache is not None:
+        _subscription_cache[KEY_SUB.format(user_id=user_id)] = store
+    try:
+        r = _get_redis_sub()
+        if r is not None:
+            r.setex(
+                KEY_SUB.format(user_id=user_id), 60, json.dumps(store)
+            )
+    except Exception:
+        pass
+
+
+# ── Public API ──────────────────────────────────────────────────────────────
+
+
 def _extract_business_id_from_db(user_id: str) -> str | None:
-    cached = _user_business_cache.get(user_id)
+    cached = _cache_biz_get(user_id)
     if cached is not None:
         return cached
 
@@ -24,7 +127,7 @@ def _extract_business_id_from_db(user_id: str) -> str | None:
         ).fetchone()
         result = str(row.business_id) if row else None
         if result:
-            _user_business_cache[user_id] = result
+            _cache_biz_set(user_id, result)
         return result
     except Exception:
         return None
@@ -35,7 +138,16 @@ def _extract_business_id_from_db(user_id: str) -> str | None:
 def clear_subscription_user_cache(user_id: str):
     _user_business_cache.pop(user_id, None)
     if _subscription_cache is not None:
-        _subscription_cache.pop(f"sub_user:{user_id}", None)
+        _subscription_cache.pop(KEY_SUB.format(user_id=user_id), None)
+    try:
+        r = _get_redis_sub()
+        if r is not None:
+            r.delete(
+                KEY_BIZ.format(user_id=user_id),
+                KEY_SUB.format(user_id=user_id),
+            )
+    except Exception:
+        pass
 
 
 EXCLUDED_PATHS = [
@@ -62,15 +174,11 @@ def _check_subscription_for_user(user_id: str) -> dict | None:
     """
     Fetch subscription status for a user in one query.
     Returns None if valid, error dict if invalid.
-    Caches result by user_id for 60 seconds.
+    Caches result by user_id for 60 seconds (L1 TTLCache + L2 Redis).
     """
-    from datetime import datetime, timezone
-
-    cache_key = f"sub_user:{user_id}"
-    if _subscription_cache is not None:
-        cached = _subscription_cache.get(cache_key)
-        if cached is not None:
-            return None if cached is False else cached
+    cached = _cache_sub_get(user_id)
+    if cached is not None:
+        return None if cached is False else cached
 
     db = SessionLocal()
     try:
@@ -99,8 +207,7 @@ def _check_subscription_for_user(user_id: str) -> dict | None:
                 "status": "not_found",
                 "message": "User or business not found",
             }
-            if _subscription_cache is not None:
-                _subscription_cache[cache_key] = result
+            _cache_sub_set(user_id, result)
             return result
 
         now = datetime.now(timezone.utc)
@@ -152,9 +259,7 @@ def _check_subscription_for_user(user_id: str) -> dict | None:
                 "message": "Account subscription status is invalid. Please contact support.",
             }
 
-        if _subscription_cache is not None:
-            _subscription_cache[cache_key] = result if result else False
-
+        _cache_sub_set(user_id, result)
         return result
 
     except Exception:
@@ -168,6 +273,10 @@ class SubscriptionMiddleware:
     ASGI middleware that validates tenant subscription status on every
     authenticated API request. Excluded paths are defined in EXCLUDED_PATHS.
     Returns 402 Payment Required when subscription is invalid.
+
+    Subscriptions are cached in-process (TTLCache, L1) and optionally in
+    Redis (L2) when REDIS_URL is configured, so that cache invalidation
+    from any instance propagates to all instances within ~60s.
     """
 
     def __init__(self, app):

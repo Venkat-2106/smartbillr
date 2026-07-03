@@ -19,9 +19,7 @@
 
 import axios from 'axios'
 import useAuthStore from '../store/authStore'
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+import { refreshAccessToken } from '../features/auth/api/authApi'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -42,10 +40,36 @@ function processQueue(error, token = null) {
   failedQueue = []
 }
 
+function getTokenExpiry(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return payload.exp * 1000
+  } catch {
+    return null
+  }
+}
+
 // ── Request interceptor ───────────────────────────────────────────────────────
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
   const token = useAuthStore.getState().token
+  const refreshToken = useAuthStore.getState().refreshToken
   if (token) {
+    const exp = getTokenExpiry(token)
+    if (exp && Date.now() + 60000 > exp && refreshToken && !isRefreshing) {
+      isRefreshing = true
+      try {
+        const data = await refreshAccessToken(refreshToken)
+        const { access_token, refresh_token: newRefreshToken } = data
+        useAuthStore.getState().setAuth(access_token, useAuthStore.getState().user, newRefreshToken)
+        processQueue(null, access_token)
+        config.headers['Authorization'] = `Bearer ${access_token}`
+        return config
+      } catch (err) {
+        processQueue(err, null)
+      } finally {
+        isRefreshing = false
+      }
+    }
     config.headers['Authorization'] = `Bearer ${token}`
   }
   return config
@@ -92,18 +116,8 @@ api.interceptors.response.use(
     isRefreshing = true
 
     try {
-      const response = await axios.post(
-        `${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,
-        { refresh_token: refreshToken },
-        {
-          headers: {
-            'apikey': SUPABASE_ANON_KEY,
-            'Content-Type': 'application/json',
-          },
-        }
-      )
-
-      const { access_token, refresh_token } = response.data
+      const data = await refreshAccessToken(refreshToken)
+      const { access_token, refresh_token } = data
       useAuthStore.getState().setAuth(access_token, useAuthStore.getState().user, refresh_token)
 
       processQueue(null, access_token)

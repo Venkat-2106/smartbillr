@@ -3,28 +3,34 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 from app.utils.subscription_features import get_feature_limits
 
+ALLOWED_COUNT_TABLES = {"products", "purchases", "suppliers", "sales", "customers"}
 
-def count_entities(db: Session, business_id: str, table: str, extra_where: str = "") -> int:
+
+def count_entities(db: Session, business_id: str, table: str) -> int:
+    if table not in ALLOWED_COUNT_TABLES:
+        raise ValueError(f"Invalid table for count query: {table}")
+
     row = db.execute(
         text(f"""
             SELECT COUNT(*) FROM {table}
             WHERE business_id = CAST(:bid AS uuid)
               AND (is_deleted = false OR is_deleted IS NULL)
-              {extra_where}
         """),
         {"bid": business_id}
     ).scalar()
     return row or 0
 
 
-def count_monthly(db: Session, business_id: str, table: str, date_column: str, extra_where: str = "") -> int:
+def count_monthly(db: Session, business_id: str, table: str, date_column: str) -> int:
+    if table not in ALLOWED_COUNT_TABLES:
+        raise ValueError(f"Invalid table for count query: {table}")
+
     row = db.execute(
         text(f"""
             SELECT COUNT(*) FROM {table}
             WHERE business_id = CAST(:bid AS uuid)
               AND {date_column} >= date_trunc('month', now())
               AND (is_deleted = false OR is_deleted IS NULL)
-              {extra_where}
         """),
         {"bid": business_id}
     ).scalar()

@@ -11,10 +11,14 @@ import { Spinner } from '../../../shared/components'
 import { COUNTRIES } from '../../../shared/data/countries'
 import { useBusiness, useUpdateBusiness } from '../hooks/useSettings'
 import { businessSchema } from '../schemas/businessSchema'
+import { useSubscription } from '../../subscription/hooks/useSubscription'
+import { SUBSCRIPTION_DISPLAY_NAMES as DISPLAY_NAMES } from '../../../shared/utils/subscriptionUtils'
+import { formatDate } from '../../../shared/utils/formatDate'
 
 const TABS = [
   { key: 'general', label: 'Business Info' },
   { key: 'tax', label: 'Tax Settings' },
+  { key: 'pricing', label: 'Pricing & Plans' },
 ]
 
 export default function SettingsPage() {
@@ -23,6 +27,7 @@ export default function SettingsPage() {
 
   const { data, isLoading, isError } = useBusiness()
   const { mutate: save, isPending: isSaving } = useUpdateBusiness()
+  const { data: sub, isLoading: subLoading } = useSubscription()
 
   const business = data?.data ?? data
 
@@ -123,6 +128,97 @@ export default function SettingsPage() {
               color: 'var(--danger-text)', fontWeight: 500,
             }}>
               Could not load business settings. Check that the backend is running and refresh.
+            </div>
+          ) : activeTab === 'pricing' ? (
+            <div>
+              {subLoading ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
+                  <Spinner size="md" />
+                </div>
+              ) : (
+                <>
+                  <p style={{
+                    fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase',
+                    letterSpacing: '0.08em', color: 'var(--text-muted)',
+                    margin: '0 0 20px',
+                  }}>
+                    Current Plan
+                  </p>
+
+                  <div style={{
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                    padding: 24,
+                    marginBottom: 20,
+                    textAlign: 'center',
+                  }}>
+                    <div style={{
+                      width: 56, height: 56, borderRadius: '50%',
+                      background: 'var(--accent-50)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      margin: '0 auto 16px',
+                    }}>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent-600)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                    </div>
+
+                    <h2 style={{ fontSize: 20, fontWeight: 600, margin: '0 0 4px', color: 'var(--text-primary)' }}>
+                      {sub ? (DISPLAY_NAMES[sub.subscription_type] || 'Trial') : 'Trial'}
+                    </h2>
+                    <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--text-secondary)' }}>
+                      {sub?.is_expired
+                        ? 'Your subscription has expired. Renew to continue using all features.'
+                        : 'Your plan is active.'}
+                    </p>
+
+                    <div style={{
+                      display: 'flex', justifyContent: 'center', gap: 28,
+                      flexWrap: 'wrap', marginBottom: 24,
+                    }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Status</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: sub?.is_expired ? 'var(--danger)' : 'var(--text-primary)' }}>
+                          {sub?.payment_status === 'paid' ? 'Active' : sub?.payment_status || '—'}
+                        </div>
+                      </div>
+                      {sub?.trial_end_at && (
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Trial Ends</div>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {formatDate(sub.trial_end_at)}
+                          </div>
+                        </div>
+                      )}
+                      {sub?.subscription_end_at && (
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Subscription Ends</div>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {formatDate(sub.subscription_end_at)}
+                          </div>
+                        </div>
+                      )}
+                      {sub?.days_remaining !== null && sub?.days_remaining !== undefined && (
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Days Remaining</div>
+                          <div style={{
+                            fontSize: 14, fontWeight: 600,
+                            color: sub.days_remaining <= 7 ? 'var(--danger)' : 'var(--text-primary)',
+                          }}>
+                            {sub.days_remaining}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <Button variant="primary" onClick={() => navigate('/subscription')}>
+                      View all plans
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <form onSubmit={handleSubmit(onSubmit)} noValidate>

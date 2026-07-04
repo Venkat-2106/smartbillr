@@ -42,6 +42,7 @@ export default function LandingNav() {
 
   const navLinks = [
     { label: 'Features', target: 'features' },
+    { label: 'Pricing', target: 'pricing' },
     { label: 'About', target: 'about' },
     { label: 'Contact', target: 'contact' },
   ]
@@ -121,7 +122,7 @@ export default function LandingNav() {
           {navLinks.map((link) => (
             <button
               key={link.target}
-              onClick={() => scrollTo(link.target)}
+              onClick={() => link.target === 'pricing' ? navigate('/subscription') : scrollTo(link.target)}
               onMouseEnter={() => setHoveredLink(link.target)}
               onMouseLeave={() => setHoveredLink(null)}
               style={{
@@ -221,7 +222,7 @@ export default function LandingNav() {
           {navLinks.map((link) => (
             <button
               key={link.target}
-              onClick={() => scrollTo(link.target)}
+              onClick={() => link.target === 'pricing' ? navigate('/subscription') : scrollTo(link.target)}
               style={mobileItemStyle}
             >
               {link.label}

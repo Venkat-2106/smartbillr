@@ -331,9 +331,17 @@ def get_customer_summary_kpi(
     can_financial = "dashboard.financial" in perms
 
     row = db.execute(text("""
+        WITH customer_counts AS (
+            SELECT
+                COUNT(*)                                                        AS total_count,
+                COUNT(*) FILTER (WHERE date_trunc('month', cust_created_at) = date_trunc('month', CURRENT_DATE)) AS new_this_month
+            FROM customers c
+            WHERE c.business_id = CAST(:bid AS uuid)
+              AND c.is_deleted  = false
+        )
         SELECT
-            COUNT(*)                                                              AS total_count,
-            COUNT(*) FILTER (WHERE date_trunc('month', cust_created_at) = date_trunc('month', CURRENT_DATE)) AS new_this_month,
+            cc.total_count,
+            cc.new_this_month,
             COALESCE((
                 SELECT SUM(s.sales_final_amount - COALESCE((
                     SELECT cumulative_paid FROM payments
@@ -341,14 +349,11 @@ def get_customer_summary_kpi(
                     LIMIT 1
                 ), 0))
                 FROM sales s
-                WHERE s.customer_id = c.cust_id
-                  AND s.business_id = c.business_id
+                WHERE s.business_id = CAST(:bid AS uuid)
                   AND s.is_deleted  = false
                   AND s.sales_payment_status IN ('pending', 'partial')
             ), 0) AS outstanding_balance
-        FROM customers c
-        WHERE c.business_id = CAST(:bid AS uuid)
-          AND c.is_deleted  = false
+        FROM customer_counts cc
     """), {"bid": bid}).fetchone()
 
     return success_response({

@@ -314,6 +314,20 @@ export default function SignupPage() {
           Sign in
         </span>
       </div>
+
+      <div style={{ marginTop: '0.75rem', textAlign: 'center' }}>
+        <span
+          onClick={() => navigate('/subscription')}
+          style={{
+            fontSize: '0.78rem', color: '#3B82F6', fontWeight: '600',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={e => e.currentTarget.style.color = '#1D4ED8'}
+          onMouseLeave={e => e.currentTarget.style.color = '#3B82F6'}
+        >
+          View pricing plans &rarr;
+        </span>
+      </div>
     </AuthLayout>
   )
 }

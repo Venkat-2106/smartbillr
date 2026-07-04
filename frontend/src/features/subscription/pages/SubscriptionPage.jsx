@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom'
-import { Spinner } from '../../../shared/components'
+import { Spinner, Button } from '../../../shared/components'
 import { useSubscription } from '../hooks/useSubscription'
 import useAuthStore from '../../../store/authStore'
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
+import { formatDate } from '../../../shared/utils/formatDate'
 import {
   SUBSCRIPTION_DISPLAY_NAMES as DISPLAY_NAMES,
   PLAN_ORDER, NEXT_TIER, getSubscriptionDisplayName,
@@ -61,33 +62,66 @@ const FEATURE_LIMITS_PLANS = {
   },
 }
 
+const PRICING = {
+  trial:   { inr: 'Free',               usd: 'Free' },
+  monthly: { inr: '₹499/month',         usd: '$9.99/month' },
+  annual:  { inr: '₹4,999/year',        usd: '$99/year',        inrSub: '≈₹416/month', usdSub: '≈$8.25/month' },
+  lifetime:{ inr: '₹14,999',            usd: '$299' },
+}
+
 function getPlanData(tier) {
   const s = STAFF_LIMITS_PLANS[tier] || STAFF_LIMITS_PLANS.trial
   const f = FEATURE_LIMITS_PLANS[tier] || FEATURE_LIMITS_PLANS.trial
   return { staff: s.staff, manager: s.manager, ...f }
 }
 
+function CheckIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-600)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  )
+}
+
+function FeatureValue({ val }) {
+  if (val === '✓') return <CheckIcon />
+  if (val === '—') return <span style={{ color: 'var(--text-muted)' }}>—</span>
+  return <>{val}</>
+}
+
 export default function SubscriptionPage() {
   const navigate = useNavigate()
   const { data: sub, isLoading } = useSubscription()
   const token = useAuthStore(s => s.token)
+  const business = useAuthStore(s => s.business)
+  const country = business?.business_country_code || 'IN'
 
-  useEffect(() => {
-    if (!token) {
-      navigate('/login', { replace: true })
-    }
-  }, [token, navigate])
-
+  const isLoggedIn = !!token
   const currentTier = sub?.subscription_type || 'trial'
-  const nextTier = NEXT_TIER[currentTier]
+  const nextTier = sub && NEXT_TIER[currentTier]
+
+  const isNativeINR = country === 'IN'
 
   const plans = useMemo(() => PLAN_ORDER.map((tier) => ({
     id: tier,
     name: DISPLAY_NAMES[tier],
-    isCurrent: tier === currentTier,
-    isUpgrade: tier === nextTier,
+    isCurrent: isLoggedIn && tier === currentTier,
+    isUpgrade: isLoggedIn && sub && tier === nextTier,
     data: getPlanData(tier),
-  })), [currentTier, nextTier])
+  })), [currentTier, nextTier, isLoggedIn, sub])
+
+  const pricingRow = useMemo(() => ({
+    label: 'Pricing',
+    values: plans.map(p => {
+      const price = PRICING[p.id]
+      if (!price) return { primary: '—', secondary: null, subtitle: null }
+      return {
+        primary: isNativeINR ? price.inr : price.usd,
+        secondary: isNativeINR ? price.usd : price.inr,
+        subtitle: isNativeINR ? (price.inrSub || null) : (price.usdSub || null),
+      }
+    }),
+  }), [plans, isNativeINR])
 
   const featureRows = useMemo(() => FEATURES.map((f) => {
     const planValues = plans.map((p) => {
@@ -109,18 +143,10 @@ export default function SubscriptionPage() {
     return { label: f.label, values: planValues }
   }), [plans])
 
-  if (isLoading) {
+  if (isLoading && isLoggedIn) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'var(--bg-page)' }}>
         <Spinner size={32} />
-      </div>
-    )
-  }
-
-  if (!sub) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <p>Unable to load subscription information.</p>
       </div>
     )
   }
@@ -131,73 +157,90 @@ export default function SubscriptionPage() {
     suspended: 'Suspended',
   }
 
+  const hasSubscription = isLoggedIn && sub
+
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#f5f5f5',
-      padding: 24,
-      fontFamily: 'system-ui, sans-serif',
+      background: 'var(--bg-page)',
+      padding: 'var(--page-padding-desktop, 2rem)',
+      fontFamily: 'var(--font-sans, "Inter", sans-serif)',
     }}>
       <div style={{ maxWidth: 960, margin: '0 auto' }}>
 
-        {/* ── Current subscription card ── */}
-        <div style={{
-          background: 'white',
-          borderRadius: 16,
-          padding: 32,
-          boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
-          marginBottom: 32,
-          textAlign: 'center',
-        }}>
-          <div style={{
-            width: 64, height: 64, borderRadius: '50%',
-            background: sub.is_expired ? '#FEE2E2' : '#DBEAFE',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 20px',
-          }}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={sub.is_expired ? '#DC2626' : '#2563EB'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-          </div>
-
-          <h1 style={{ fontSize: 24, fontWeight: 600, margin: '0 0 8px', color: '#111' }}>
-            {sub.is_expired ? 'Subscription Required' : `${DISPLAY_NAMES[currentTier] || 'Trial'} Plan`}
+        {/* ── Page header ── */}
+        <div style={{ textAlign: 'center', marginBottom: 32, paddingTop: 8 }}>
+          <h1 style={{ fontSize: 28, fontWeight: 700, margin: '0 0 6px', color: 'var(--text-primary)' }}>
+            {hasSubscription ? 'Plans & Pricing' : 'Pricing Plans'}
           </h1>
-
-          <p style={{ color: '#666', margin: '0 0 24px', lineHeight: 1.5 }}>
-            {sub.is_expired
-              ? 'Your access has been restricted. Please renew to continue.'
-              : 'Your subscription is active.'}
+          <p style={{ margin: 0, fontSize: 15, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            {hasSubscription
+              ? 'Compare features and find the right plan for your business.'
+              : 'Choose the perfect plan for your business. No hidden fees.'}
           </p>
-
-          <div style={{
-            display: 'flex', justifyContent: 'center', gap: 32,
-            flexWrap: 'wrap',
-          }}>
-            <InfoBadge label="Status" value={statusLabel[sub.payment_status] || sub.payment_status} />
-            {sub.trial_end_at && (
-              <InfoBadge label="Trial Ends" value={formatDate(sub.trial_end_at)} />
-            )}
-            {sub.subscription_end_at && (
-              <InfoBadge label="Subscription Ends" value={formatDate(sub.subscription_end_at)} />
-            )}
-            {sub.days_remaining !== null && sub.days_remaining !== undefined && (
-              <InfoBadge
-                label="Days Remaining"
-                value={String(sub.days_remaining)}
-                highlight={sub.days_remaining <= 7}
-              />
-            )}
-          </div>
         </div>
 
-        {/* ── Upgrade callout ── */}
-        {nextTier && !sub.is_expired && (
+        {/* ── Current subscription card (only for logged-in users) ── */}
+        {hasSubscription && (
           <div style={{
-            background: 'linear-gradient(135deg, #FFF7ED 0%, #FEF3C7 100%)',
-            border: '1px solid #FDE68A',
-            borderRadius: 16,
+            background: 'var(--bg-card)',
+            borderRadius: 'var(--r-xl, 16px)',
+            padding: 32,
+            boxShadow: 'var(--shadow-card)',
+            marginBottom: 32,
+            textAlign: 'center',
+            borderTop: '3px solid var(--accent-600)',
+          }}>
+            <div style={{
+              width: 64, height: 64, borderRadius: '50%',
+              background: sub.is_expired ? 'var(--danger-bg)' : 'var(--accent-50)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 20px',
+            }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={sub.is_expired ? 'var(--danger)' : 'var(--accent-600)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </div>
+
+            <h1 style={{ fontSize: 24, fontWeight: 600, margin: '0 0 8px', color: 'var(--text-primary)' }}>
+              {sub.is_expired ? 'Subscription Required' : `${DISPLAY_NAMES[currentTier] || 'Trial'} Plan`}
+            </h1>
+
+            <p style={{ color: 'var(--text-secondary)', margin: '0 0 24px', lineHeight: 1.5 }}>
+              {sub.is_expired
+                ? 'Your access has been restricted. Please renew to continue.'
+                : 'Your subscription is active.'}
+            </p>
+
+            <div style={{
+              display: 'flex', justifyContent: 'center', gap: 32,
+              flexWrap: 'wrap',
+            }}>
+              <InfoBadge label="Status" value={statusLabel[sub.payment_status] || sub.payment_status} />
+              {sub.trial_end_at && (
+                <InfoBadge label="Trial Ends" value={formatDate(sub.trial_end_at)} />
+              )}
+              {sub.subscription_end_at && (
+                <InfoBadge label="Subscription Ends" value={formatDate(sub.subscription_end_at)} />
+              )}
+              {sub.days_remaining !== null && sub.days_remaining !== undefined && (
+                <InfoBadge
+                  label="Days Remaining"
+                  value={String(sub.days_remaining)}
+                  highlight={sub.days_remaining <= 7}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Upgrade callout (only for logged-in users) ── */}
+        {hasSubscription && nextTier && !sub.is_expired && (
+          <div style={{
+            background: 'color-mix(in srgb, var(--accent-600) 8%, var(--bg-card))',
+            border: '1px solid color-mix(in srgb, var(--accent-600) 20%, transparent)',
+            borderRadius: 'var(--r-xl, 16px)',
             padding: 24,
             marginBottom: 32,
             display: 'flex',
@@ -207,58 +250,46 @@ export default function SubscriptionPage() {
             gap: 16,
           }}>
             <div>
-              <p style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 600, color: '#92400E' }}>
+              <p style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 600, color: 'var(--accent-700)' }}>
                 Upgrade to {DISPLAY_NAMES[nextTier]}
               </p>
-              <p style={{ margin: 0, fontSize: 14, color: '#B45309', lineHeight: 1.5 }}>
+              <p style={{ margin: 0, fontSize: 14, color: 'var(--accent-600)', lineHeight: 1.5 }}>
                 Unlock more features and higher limits for your business.
               </p>
             </div>
-            <button
-              type="button"
+            <Button
+              variant="primary"
               onClick={() => navigate('/upgrade')}
-              style={{
-                padding: '10px 24px',
-                background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-                color: 'white',
-                border: 'none',
-                borderRadius: 8,
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                boxShadow: '0 1px 3px rgba(217,119,6,0.3)',
-              }}
+              rightIcon={<span style={{ marginLeft: 2 }}>→</span>}
             >
-              Upgrade now →
-            </button>
+              Upgrade now
+            </Button>
           </div>
         )}
 
         {/* ── Plan comparison table ── */}
         <div style={{
-          background: 'white',
-          borderRadius: 16,
-          boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
-          overflow: 'hidden',
+          background: 'var(--bg-card)',
+          borderRadius: 'var(--r-xl, 16px)',
+          boxShadow: 'var(--shadow-card)',
         }}>
           <div style={{
             display: 'grid',
             gridTemplateColumns: `200px repeat(${plans.length}, 1fr)`,
-            borderBottom: '1px solid #E5E7EB',
+            borderBottom: '1px solid var(--border)',
           }}>
-            <div style={{ padding: 16, fontSize: 13, fontWeight: 600, color: '#6B7280' }}>Plan</div>
+            <div style={{ padding: '16px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Plan</div>
             {plans.map((p) => (
               <div key={p.id} style={{
-                padding: 16,
+                padding: '16px 16px',
                 textAlign: 'center',
-                background: p.isCurrent ? '#FFF7ED' : 'transparent',
+                background: p.isCurrent ? 'var(--accent-50)' : 'transparent',
                 position: 'relative',
               }}>
                 {p.isUpgrade && (
                   <span style={{
                     position: 'absolute', top: -8, left: '50%', transform: 'translateX(-50%)',
-                    background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+                    background: 'linear-gradient(135deg, var(--accent-600), var(--accent-500))',
                     color: 'white', fontSize: 10, fontWeight: 600,
                     padding: '2px 10px', borderRadius: 10,
                     whiteSpace: 'nowrap',
@@ -266,11 +297,44 @@ export default function SubscriptionPage() {
                     Recommended
                   </span>
                 )}
-                <div style={{ fontSize: 16, fontWeight: 600, color: p.isCurrent ? '#92400E' : '#111' }}>
+                <div style={{ fontSize: 16, fontWeight: 600, color: p.isCurrent ? 'var(--accent-700)' : 'var(--text-primary)' }}>
                   {p.name}
                 </div>
                 {p.isCurrent && (
-                  <div style={{ fontSize: 11, color: '#B45309', marginTop: 2 }}>Current</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent-600)', marginTop: 2 }}>Current</div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* ── Pricing row ── */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: `200px repeat(${plans.length}, 1fr)`,
+            borderBottom: '1px solid var(--border)',
+            background: 'var(--bg-subtle)',
+          }}>
+            <div style={{ padding: '12px 16px', fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+              Pricing
+            </div>
+            {pricingRow.values.map((price, j) => (
+              <div key={j} style={{
+                padding: '14px 16px',
+                textAlign: 'center',
+                background: plans[j].isCurrent ? 'var(--accent-50)' : 'transparent',
+              }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: plans[j].isCurrent ? 'var(--accent-700)' : 'var(--text-primary)' }}>
+                  {price.primary}
+                </div>
+                {price.secondary && (
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                    {price.secondary}
+                  </div>
+                )}
+                {price.subtitle && (
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                    {price.subtitle}
+                  </div>
                 )}
               </div>
             ))}
@@ -280,21 +344,22 @@ export default function SubscriptionPage() {
             <div key={i} style={{
               display: 'grid',
               gridTemplateColumns: `200px repeat(${plans.length}, 1fr)`,
-              borderBottom: i < featureRows.length - 1 ? '1px solid #F3F4F6' : 'none',
-              background: i % 2 === 0 ? '#FAFAFA' : 'white',
+              borderBottom: i < featureRows.length - 1 ? '1px solid var(--border)' : 'none',
+              background: i % 2 === 0 ? 'var(--bg-subtle)' : 'transparent',
             }}>
-              <div style={{ padding: '12px 16px', fontSize: 13.5, color: '#374151' }}>
+              <div style={{ padding: '12px 16px', fontSize: 13.5, color: 'var(--text-primary)' }}>
                 {row.label}
               </div>
               {row.values.map((val, j) => (
                 <div key={j} style={{
-                  padding: '12px 16px',
+                  padding: '14px 16px',
                   textAlign: 'center',
                   fontSize: 13,
                   fontWeight: plans[j].isCurrent ? 600 : 400,
-                  color: plans[j].isCurrent ? '#92400E' : '#6B7280',
+                  color: plans[j].isCurrent ? 'var(--accent-700)' : 'var(--text-secondary)',
+                  background: plans[j].isCurrent ? 'var(--accent-50)' : 'transparent',
                 }}>
-                  {val}
+                  <FeatureValue val={val} />
                 </div>
               ))}
             </div>
@@ -303,36 +368,21 @@ export default function SubscriptionPage() {
 
         {/* ── Contact support ── */}
         <div style={{
-          background: '#FFF7ED',
-          borderRadius: 12,
+          background: 'color-mix(in srgb, var(--accent-600) 8%, var(--bg-card))',
+          border: '1px solid color-mix(in srgb, var(--accent-600) 20%, transparent)',
+          borderRadius: 'var(--r-lg, 12px)',
           padding: 16,
           marginTop: 24,
           textAlign: 'center',
         }}>
-          <p style={{ margin: '0 0 4px', fontSize: 14, color: '#9A3412', fontWeight: 500 }}>
+          <p style={{ margin: '0 0 4px', fontSize: 14, color: 'var(--accent-700)', fontWeight: 500 }}>
             Need help choosing a plan or a custom solution?
           </p>
-          <p style={{ margin: 0, fontSize: 14, color: '#C2410C' }}>
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--accent-600)' }}>
             Email: support@smartbillr.com &nbsp;|&nbsp; WhatsApp: +91-XXXXXXXXXX
           </p>
         </div>
 
-        <div style={{ textAlign: 'center', marginTop: 24 }}>
-          <button
-            onClick={() => { useAuthStore.getState().clearAuth(); navigate('/login', { replace: true }) }}
-            style={{
-              padding: '10px 24px',
-              background: 'none',
-              color: '#6B7280',
-              border: '1px solid #D1D5DB',
-              borderRadius: 8,
-              fontSize: 14,
-              cursor: 'pointer',
-            }}
-          >
-            Sign Out
-          </button>
-        </div>
       </div>
     </div>
   )
@@ -341,19 +391,13 @@ export default function SubscriptionPage() {
 function InfoBadge({ label, value, highlight }) {
   return (
     <div style={{ textAlign: 'center' }}>
-      <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
       <div style={{
         fontSize: 15, fontWeight: 600,
-        color: highlight ? '#DC2626' : '#111',
+        color: highlight ? 'var(--danger)' : 'var(--text-primary)',
       }}>
         {value}
       </div>
     </div>
   )
-}
-
-function formatDate(iso) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  return d.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })
 }

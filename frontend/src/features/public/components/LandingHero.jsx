@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom'
 export default function LandingHero() {
   const navigate = useNavigate()
   const [ctaHovered, setCtaHovered] = useState(false)
-  const [loginHovered, setLoginHovered] = useState(false)
+  const [pricingHovered, setPricingHovered] = useState(false)
+  const [contactHovered, setContactHovered] = useState(false)
 
   function scrollToContact() {
     const el = document.getElementById('contact')
@@ -128,22 +129,43 @@ export default function LandingHero() {
               Get Started &rarr;
             </button>
             <button
-              onClick={() => scrollToContact()}
-              onMouseEnter={() => setLoginHovered(true)}
-              onMouseLeave={() => setLoginHovered(false)}
+              onClick={() => navigate('/subscription')}
+              onMouseEnter={() => setPricingHovered(true)}
+              onMouseLeave={() => setPricingHovered(false)}
               style={{
                 padding: '14px 28px',
                 borderRadius: 12,
                 border: '1px solid rgba(255,255,255,0.12)',
-                background: loginHovered ? 'rgba(255,255,255,0.06)' : 'transparent',
+                background: pricingHovered ? 'rgba(255,255,255,0.06)' : 'transparent',
                 color: '#E2E8F0',
                 fontSize: '0.9rem',
                 fontWeight: 600,
                 cursor: 'pointer',
                 fontFamily: 'inherit',
                 transition: 'all 0.2s cubic-bezier(0.16,1,0.3,1)',
-                transform: loginHovered ? 'translateY(-2px)' : 'translateY(0)',
-                boxShadow: loginHovered ? '0 4px 20px rgba(0,0,0,0.2)' : 'none',
+                transform: pricingHovered ? 'translateY(-2px)' : 'translateY(0)',
+                boxShadow: pricingHovered ? '0 4px 20px rgba(0,0,0,0.2)' : 'none',
+              }}
+            >
+              View Plans &rarr;
+            </button>
+            <button
+              onClick={() => scrollToContact()}
+              onMouseEnter={() => setContactHovered(true)}
+              onMouseLeave={() => setContactHovered(false)}
+              style={{
+                padding: '14px 28px',
+                borderRadius: 12,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: contactHovered ? 'rgba(255,255,255,0.06)' : 'transparent',
+                color: '#E2E8F0',
+                fontSize: '0.9rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                transition: 'all 0.2s cubic-bezier(0.16,1,0.3,1)',
+                transform: contactHovered ? 'translateY(-2px)' : 'translateY(0)',
+                boxShadow: contactHovered ? '0 4px 20px rgba(0,0,0,0.2)' : 'none',
               }}
             >
               Contact Us &rarr;

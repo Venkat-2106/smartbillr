@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone, timedelta
+import time
 import uuid
 import os
 import logging
@@ -74,16 +75,25 @@ def _create_supabase_auth_user(email: str, password: str, full_name: str) -> dic
     return response.json()
 
 
-def _delete_supabase_auth_user(auth_user_id: str):
+def _delete_supabase_auth_user(auth_user_id: str, email: str | None = None):
     import httpx
-    try:
-        httpx.delete(
-            f"{SUPABASE_URL}/auth/v1/admin/users/{auth_user_id}",
-            headers=_get_supabase_admin_headers(),
-            timeout=10,
-        )
-    except Exception as e:
-        logging.exception("Failed to delete Supabase auth user %s: %s", auth_user_id, e)
+    for attempt in range(2):
+        try:
+            httpx.delete(
+                f"{SUPABASE_URL}/auth/v1/admin/users/{auth_user_id}",
+                headers=_get_supabase_admin_headers(),
+                timeout=10,
+            )
+            return
+        except Exception as e:
+            if attempt == 0:
+                time.sleep(1)
+                continue
+            logging.critical(
+                "ORPHANED SUPABASE AUTH USER — manual cleanup required. "
+                "auth_user_id=%s email=%s error=%s",
+                auth_user_id, email, e
+            )
 
 
 # ─── POST /v1/business — Self-service tenant registration ──────────────────────
@@ -199,7 +209,7 @@ def register_business(
 
     except IntegrityError as e:
         db.rollback()
-        _delete_supabase_auth_user(auth_user_id)
+        _delete_supabase_auth_user(auth_user_id, payload.owner_email)
         err_str = str(e.orig).lower()
         if "idx_businesses_name_unique" in err_str:
             return error_response("A business with this name already exists.", 409)
@@ -207,7 +217,7 @@ def register_business(
 
     except Exception as e:
         db.rollback()
-        _delete_supabase_auth_user(auth_user_id)
+        _delete_supabase_auth_user(auth_user_id, payload.owner_email)
         logging.exception(e)
         return error_response("Registration failed. Please try again.", 500)
 

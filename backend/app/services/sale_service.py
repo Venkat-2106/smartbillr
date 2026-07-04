@@ -298,8 +298,7 @@ def get_sales_list(db: Session, business_id: str, pagination: dict, search: str,
                s.sales_payment_status, s.sales_payment_method,
                s.sales_created_at,
                COUNT(*) OVER() AS total_count,
-               pay.cumulative_paid,
-               pay.payment_status AS pay_status
+               pay.cumulative_paid
         FROM sales s
         LEFT JOIN customers c ON c.cust_id = s.customer_id
         LEFT JOIN LATERAL (
@@ -321,9 +320,9 @@ def get_sales_list(db: Session, business_id: str, pagination: dict, search: str,
 
     result = []
     for r in rows:
-        sale_final = float(r.sales_final_amount) if r.sales_final_amount else 0.0
-        total_paid = float(r.cumulative_paid) if r.cumulative_paid else 0.0
-        remaining = round(sale_final - total_paid, 2)
+        sale_final = Decimal(str(r.sales_final_amount)) if r.sales_final_amount else Decimal("0")
+        total_paid_dec = Decimal(str(r.cumulative_paid)) if r.cumulative_paid else Decimal("0")
+        remaining = sale_final - total_paid_dec
 
         result.append({
             "sales_id": str(r.sales_id),
@@ -338,8 +337,8 @@ def get_sales_list(db: Session, business_id: str, pagination: dict, search: str,
             "tax_total": str(r.tax_total) if r.tax_total else None,
             "sales_payment_status": r.sales_payment_status,
             "sales_payment_method": r.sales_payment_method,
-            "total_paid": round(total_paid, 2),
-            "remaining_balance": remaining if remaining > 0 else 0,
+            "total_paid": str(total_paid_dec),
+            "remaining_balance": str(remaining) if remaining > 0 else "0",
             "sales_created_at": fmt_ts(r.sales_created_at),
         })
 

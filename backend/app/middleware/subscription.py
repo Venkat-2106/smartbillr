@@ -309,6 +309,7 @@ class SubscriptionMiddleware:
             await self.app(scope, receive, send)
             return
         except Exception:
+            logging.warning("SubscriptionMiddleware: failed to decode token", exc_info=True)
             await self.app(scope, receive, send)
             return
 

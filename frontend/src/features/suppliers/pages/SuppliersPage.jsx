@@ -41,7 +41,7 @@ export default function SuppliersPage() {
   // handleExport() lazily fetches all filtered records from the backend on click.
 
   const {
-    suppliers, handleExport, isLoading,
+    suppliers, handleExport, isLoading, isError,
     totalItems, totalPages, pagination,
     search, setSearch,
     dateFrom, dateTo, handleDateChange,
@@ -290,7 +290,13 @@ export default function SuppliersPage() {
           />
         </div>
 
-      {!isLoading && suppliers.length === 0 ? (
+      {isError ? (
+        <EmptyState
+          icon="⚠️"
+          title="Failed to load suppliers"
+          description="We couldn't fetch your supplier list. Check your connection and try again."
+        />
+      ) : !isLoading && suppliers.length === 0 ? (
         <EmptyState
           icon={activeSearch || activeDateFilter ? '🔍' : '🏭'}
           title={activeSearch || activeDateFilter ? 'No results matching your filters' : 'Nothing here yet'}

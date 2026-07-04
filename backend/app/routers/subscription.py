@@ -295,6 +295,9 @@ def update_subscription(
     current_user: dict = Depends(verify_super_admin),
     db: Session = Depends(get_db),
 ):
+    ALLOWED_COLUMNS = {"payment_status", "subscription_type", "subscription_start_at",
+                       "subscription_end_at", "is_active"}
+
     existing = db.execute(
         text("SELECT business_id FROM businesses WHERE business_id = :bid LIMIT 1"),
         {"bid": business_id},
@@ -306,6 +309,10 @@ def update_subscription(
     update_data = payload.model_dump(exclude_unset=True)
     if not update_data:
         return error_response("No fields to update", 400)
+
+    invalid = set(update_data.keys()) - ALLOWED_COLUMNS
+    if invalid:
+        return error_response(f"Invalid fields: {invalid}", 400)
 
     set_clause = ", ".join(f"{k} = :{k}" for k in update_data)
     update_data["bid"] = business_id

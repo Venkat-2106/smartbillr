@@ -14,9 +14,9 @@ export function usePermissionsSync() {
       return res.data
     },
     enabled: !!token,
-    staleTime: 60_000,
-    refetchInterval: 60_000,
-    refetchOnWindowFocus: true,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+    refetchOnWindowFocus: false,
     retry: false,
     meta: { isBackgroundSync: true },
   })

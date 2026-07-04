@@ -34,6 +34,10 @@ export function usePermissionsSync() {
     if (changed) {
       current.setProfile(profile)
       toast.success('Your permissions were updated by an admin.', { id: 'perm-sync' })
+    } else if (JSON.stringify(current.profile) !== JSON.stringify(profile)) {
+      // Permissions unchanged, but other profile fields (e.g. full_name, email)
+      // may have changed — sync silently, no toast.
+      current.setProfile(profile)
     }
   }, [profile])
 

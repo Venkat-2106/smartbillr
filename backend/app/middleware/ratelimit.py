@@ -57,6 +57,21 @@ def _client_ip(request: Request) -> str:
 
 
 def _jwt_user_id(request: Request) -> str | None:
+    """
+    Extracts 'sub' from the JWT WITHOUT verifying the signature.
+
+    This is intentional: this value is only used to pick a per-user
+    rate-limit bucket key, never for authorization. Real auth happens
+    later via verify_token() (app/middleware/auth.py), which fully
+    verifies the signature via JWKS.
+
+    Tradeoff: a forged token with an arbitrary 'sub' could exhaust
+    another user's rate-limit quota (denial-of-service against rate
+    limiting only — not against their account or data, since the
+    forged token is rejected downstream by verify_token). Accepted
+    as low-risk since the alternative (verifying every token here too)
+    would double signature-verification cost on every request.
+    """
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         return None

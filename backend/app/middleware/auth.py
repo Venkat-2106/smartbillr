@@ -47,7 +47,7 @@
 #     Permissions change rarely (only when admin edits roles), so a 60s lag
 #     is acceptable and eliminates the auth DB query from ~99% of requests.
 
-from fastapi import HTTPException, Depends
+from fastapi import HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -258,6 +258,7 @@ def decode_token_payload(token: str) -> dict:
 
 
 def verify_token(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ) -> dict:
@@ -277,7 +278,9 @@ def verify_token(
     }
     """
     token   = credentials.credentials
-    payload = decode_token_payload(token)
+    payload = getattr(request.state, "verified_jwt_payload", None)
+    if payload is None:
+        payload = decode_token_payload(token)
 
     user_id: str = payload.get("sub")
     if not user_id:

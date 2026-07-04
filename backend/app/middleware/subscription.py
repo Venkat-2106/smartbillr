@@ -304,6 +304,7 @@ class SubscriptionMiddleware:
         try:
             from app.middleware.auth import decode_token_payload
             payload = decode_token_payload(token)
+            request.state.verified_jwt_payload = payload
             user_id = payload.get("sub")
         except HTTPException:
             await self.app(scope, receive, send)

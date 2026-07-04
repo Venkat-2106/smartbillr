@@ -168,6 +168,29 @@ export default function SubscriptionPage() {
     }}>
       <div style={{ maxWidth: 960, margin: '0 auto' }}>
 
+        {/* ── Back button ── */}
+        <button
+          onClick={() => navigate(-1)}
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 14,
+            color: 'var(--text-secondary)',
+            padding: '4px 0',
+            marginBottom: 8,
+            fontFamily: 'inherit',
+          }}
+        >
+          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5m7-7l-7 7 7 7"/>
+          </svg>
+          Back
+        </button>
+
         {/* ── Page header ── */}
         <div style={{ textAlign: 'center', marginBottom: 32, paddingTop: 8 }}>
           <h1 style={{ fontSize: 28, fontWeight: 700, margin: '0 0 6px', color: 'var(--text-primary)' }}>
@@ -379,7 +402,7 @@ export default function SubscriptionPage() {
             Need help choosing a plan or a custom solution?
           </p>
           <p style={{ margin: 0, fontSize: 14, color: 'var(--accent-600)' }}>
-            Email: support@smartbillr.com &nbsp;|&nbsp; WhatsApp: +91-XXXXXXXXXX
+            Email: support@smartbillr.com &nbsp;|&nbsp;             WhatsApp: +91 87541 20458
           </p>
         </div>
 

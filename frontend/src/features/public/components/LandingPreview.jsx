@@ -1,3 +1,5 @@
+import { useState, useRef } from 'react'
+
 const previews = [
   {
     label: 'Interactive Reports',
@@ -40,6 +42,54 @@ const previews = [
     features: ['PDF & Excel download', 'Print-optimized layouts', 'Live data snapshots', 'Cached for fast reloads'],
   },
 ]
+
+function TiltCard({ children, delay }) {
+  const cardRef = useRef(null)
+  const [tilt, setTilt] = useState({ rx: 0, ry: 0 })
+  const [hovered, setHovered] = useState(false)
+
+  function handleMouseMove(e) {
+    const rect = cardRef.current.getBoundingClientRect()
+    const x = (e.clientX - rect.left) / rect.width
+    const y = (e.clientY - rect.top) / rect.height
+    setTilt({
+      rx: (y - 0.5) * -7,
+      ry: (x - 0.5) * 7,
+    })
+  }
+
+  function handleMouseLeave() {
+    setTilt({ rx: 0, ry: 0 })
+    setHovered(false)
+  }
+
+  return (
+    <div
+      ref={cardRef}
+      onMouseMove={handleMouseMove}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={handleMouseLeave}
+      style={{
+        perspective: '1000px',
+        transform: `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)`,
+        transition: 'transform 0.15s ease-out, box-shadow 0.15s ease-out',
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderRadius: 18,
+        overflow: 'hidden',
+        animation: 'fadeUp 0.5s cubic-bezier(0.16,1,0.3,1) both',
+        animationDelay: `${delay}ms`,
+        boxShadow: hovered
+          ? `${
+              tilt.ry > 0 ? '4px' : '-4px'
+            } 8px 32px -8px rgba(0,0,0,0.18)`
+          : '0 2px 8px rgba(0,0,0,0.06)',
+      }}
+    >
+      {children}
+    </div>
+  )
+}
 
 export default function LandingPreview() {
   return (
@@ -94,26 +144,15 @@ export default function LandingPreview() {
         </div>
 
         <div
-          className="landing-preview-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(4, 1fr)',
             gap: 20,
+            perspective: '1200px',
           }}
         >
           {previews.map((item, i) => (
-            <div
-              key={item.label}
-              className="card-hover"
-              style={{
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border)',
-                borderRadius: 18,
-                overflow: 'hidden',
-                animation: 'fadeUp 0.5s cubic-bezier(0.16,1,0.3,1) both',
-                animationDelay: `${i * 80}ms`,
-              }}
-            >
+            <TiltCard key={item.label} delay={i * 80}>
               {/* Gradient header */}
               <div
                 style={{
@@ -173,7 +212,7 @@ export default function LandingPreview() {
                   ))}
                 </ul>
               </div>
-            </div>
+            </TiltCard>
           ))}
         </div>
       </div>

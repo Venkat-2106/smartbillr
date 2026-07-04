@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 export default function LandingHero() {
@@ -6,6 +6,22 @@ export default function LandingHero() {
   const [ctaHovered, setCtaHovered] = useState(false)
   const [pricingHovered, setPricingHovered] = useState(false)
   const [contactHovered, setContactHovered] = useState(false)
+  const [parallax, setParallax] = useState({ x: 0, y: 0 })
+  const heroRef = useRef(null)
+
+  function handleMouseMove(e) {
+    const rect = heroRef.current.getBoundingClientRect()
+    const cx = rect.left + rect.width / 2
+    const cy = rect.top + rect.height / 2
+    setParallax({
+      x: (e.clientX - cx) * -0.02,
+      y: (e.clientY - cy) * -0.02,
+    })
+  }
+
+  function handleMouseLeave() {
+    setParallax({ x: 0, y: 0 })
+  }
 
   function scrollToContact() {
     const el = document.getElementById('contact')
@@ -15,6 +31,9 @@ export default function LandingHero() {
   return (
     <section
       id="hero"
+      ref={heroRef}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
       style={{
         minHeight: '100vh',
         display: 'flex',
@@ -25,9 +44,9 @@ export default function LandingHero() {
       }}
     >
       {/* Glow blobs */}
-      <div style={{ position: 'absolute', width: '600px', height: '600px', background: 'radial-gradient(circle, rgba(79,70,229,0.2) 0%, transparent 65%)', filter: 'blur(100px)', top: '-15%', left: '-8%', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', width: '400px', height: '400px', background: 'radial-gradient(circle, rgba(99,102,241,0.14) 0%, transparent 65%)', filter: 'blur(80px)', bottom: '5%', right: '10%', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', width: '250px', height: '250px', background: 'radial-gradient(circle, rgba(129,140,248,0.08) 0%, transparent 65%)', filter: 'blur(60px)', top: '40%', right: '30%', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', width: '600px', height: '600px', background: 'radial-gradient(circle, rgba(79,70,229,0.2) 0%, transparent 65%)', filter: 'blur(100px)', top: '-15%', left: '-8%', pointerEvents: 'none', transform: `translate(${parallax.x * 0.6}px, ${parallax.y * 0.6}px)`, transition: 'transform 0.6s cubic-bezier(0.16,1,0.3,1)' }} />
+      <div style={{ position: 'absolute', width: '400px', height: '400px', background: 'radial-gradient(circle, rgba(99,102,241,0.14) 0%, transparent 65%)', filter: 'blur(80px)', bottom: '5%', right: '10%', pointerEvents: 'none', transform: `translate(${parallax.x * 1.0}px, ${parallax.y * 1.0}px)`, transition: 'transform 0.6s cubic-bezier(0.16,1,0.3,1)' }} />
+      <div style={{ position: 'absolute', width: '250px', height: '250px', background: 'radial-gradient(circle, rgba(129,140,248,0.08) 0%, transparent 65%)', filter: 'blur(60px)', top: '40%', right: '30%', pointerEvents: 'none', transform: `translate(${parallax.x * 1.4}px, ${parallax.y * 1.4}px)`, transition: 'transform 0.6s cubic-bezier(0.16,1,0.3,1)' }} />
 
       {/* Dot grid overlay */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', backgroundImage: 'radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)', backgroundSize: '30px 30px', maskImage: 'radial-gradient(ellipse 70% 70% at 50% 50%, black 35%, transparent 100%)', WebkitMaskImage: 'radial-gradient(ellipse 70% 70% at 50% 50%, black 35%, transparent 100%)' }} />

@@ -151,14 +151,14 @@ def clear_subscription_user_cache(user_id: str):
 
 
 EXCLUDED_PATHS = [
-    re.compile(r"^/v1/business$"),  # POST registration (no auth)
-    re.compile(r"^/v1/businesses/me/subscription$"),  # subscription status check
-    re.compile(r"^/v1/businesses/([a-f0-9-]+)/subscription$"),  # super admin
+    re.compile(r"^/v1/business/?$"),  # POST registration (no auth)
+    re.compile(r"^/v1/businesses/me/subscription/?$"),  # subscription status check
+    re.compile(r"^/v1/businesses/([a-f0-9-]+)/subscription/?$"),  # super admin
     re.compile(r"^/v1/admin/"),  # all admin endpoints
     re.compile(r"^/v1/auth/"),
     re.compile(r"^/v1/profiles/check-email"),
-    re.compile(r"^/$"),
-    re.compile(r"^/health$"),
+    re.compile(r"^/?$"),
+    re.compile(r"^/health/?$"),
     re.compile(r"^/test-auth"),
 ]
 

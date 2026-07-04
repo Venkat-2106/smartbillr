@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import useAuthStore from '../../store/authStore'
+import api from '../../api/axios'
 
 const EVENTS = ['mousedown', 'keydown', 'scroll', 'touchstart']
 
@@ -18,9 +19,15 @@ export function useIdleLogout(timeoutMs = 60 * 60_000) {
 
     function reset() {
       if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => {
-        useAuthStore.getState().clearAuth()
-        window.location.href = '/login'
+      timerRef.current = setTimeout(async () => {
+        try {
+          await api.post('/auth/logout')
+        } catch {
+          // Backend unreachable or token already invalid — still clear locally
+        } finally {
+          useAuthStore.getState().clearAuth()
+          window.location.href = '/login'
+        }
       }, timeoutMs)
     }
 

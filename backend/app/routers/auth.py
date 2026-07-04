@@ -79,6 +79,4 @@ def confirm_session(
     )
     db.commit()
 
-    clear_user_cache(user_id)
-
     return success_response({"message": "Previous session invalidated"})

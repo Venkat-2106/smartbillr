@@ -165,10 +165,10 @@ def get_sales_summary(
     """), {"bid": business_id}).fetchone()
 
     return success_response({
-        "today_revenue": float(row.today_revenue) if can_financial else None,
-        "weekly_revenue": float(row.weekly_revenue) if can_financial else None,
-        "monthly_revenue": float(row.monthly_revenue) if can_financial else None,
-        "outstanding_receivables": float(row.outstanding_receivables) if can_financial else None,
+        "today_revenue": str(row.today_revenue) if can_financial else None,
+        "weekly_revenue": str(row.weekly_revenue) if can_financial else None,
+        "monthly_revenue": str(row.monthly_revenue) if can_financial else None,
+        "outstanding_receivables": str(row.outstanding_receivables) if can_financial else None,
     })
 
 

@@ -359,7 +359,7 @@ def get_customer_summary_kpi(
     return success_response({
         "total_count":        int(row.total_count),
         "new_this_month":     int(row.new_this_month),
-        "outstanding_balance": float(row.outstanding_balance) if can_financial else None,
+        "outstanding_balance": str(row.outstanding_balance) if can_financial else None,
     })
 
 

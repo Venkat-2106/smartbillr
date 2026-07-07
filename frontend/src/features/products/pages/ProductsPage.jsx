@@ -39,7 +39,7 @@
 //   ✅ Profit permission gate (canViewProfit) for cost/profit columns + form
 //   ✅ Zod .trim() on prod_name (trimmed before schema min/max check)
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
@@ -674,6 +674,8 @@ export default function ProductsPage() {
 
   const csvColumns = canViewProfit ? PRODUCT_CSV_COLUMNS : PRODUCT_CSV_COLUMNS_NO_PROFIT
 
+  const handleRowClick = useCallback((row) => setDetailProduct(row), [])
+
   // ── Metric computations from server-side summary ────────────────────────────
   const lowStockCount    = productSummary?.low_stock_count ?? 0
   const outOfStockCount  = productSummary?.out_of_stock_count ?? 0
@@ -903,7 +905,7 @@ export default function ProductsPage() {
               rows={products}
               loading={isLoading}
               rowKey="prod_id"
-              onRowClick={(row) => setDetailProduct(row)}
+               onRowClick={handleRowClick}
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={handleSort}

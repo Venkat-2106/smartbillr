@@ -25,7 +25,7 @@
 //   by CreateSalePage's scanner) on Enter. The hook no longer exposes
 //   allProducts.
 
-import { useState }                               from 'react'
+import { useState, useCallback }                  from 'react'
 import { useQuery, useMutation, useQueryClient }  from '@tanstack/react-query'
 import toast                                      from 'react-hot-toast'
 import {
@@ -104,7 +104,7 @@ export function useProducts() {
     setPage(1)
   }
 
-  function handleSort(key) {
+  const handleSort = useCallback((key) => {
     if (sortKey === key) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     } else {
@@ -112,7 +112,7 @@ export function useProducts() {
       setSortDir('asc')
     }
     setPage(1)
-  }
+  }, [sortKey])
 
   function handleDateChange(field, value) {
     if (field === 'from') setDateFrom(value)

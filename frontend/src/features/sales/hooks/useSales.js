@@ -11,7 +11,7 @@
 //   after the user is confirmed — identical to every other hook.
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { fetchSales, updateSaleStatus, fetchAllSalesForExport, deleteSale as deleteSaleApi } from '../api/salesApi';
 import { localDayStartUTC, localDayEndUTC } from '../../../shared/utils/dateUtils';
@@ -96,11 +96,11 @@ export function useSales() {
   const sales = rawItems;
 
   // ── Sort handler ──────────────────────────────────────────────────────────
-  const handleSort = (key) => {
+  const handleSort = useCallback((key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortKey(key); setSortDir('asc'); }
     setPage(1);
-  };
+  }, [sortKey]);
 
   // ── Date handler ──────────────────────────────────────────────────────────
   const handleDateChange = (field, val) => {

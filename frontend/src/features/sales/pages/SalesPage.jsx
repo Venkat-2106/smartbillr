@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSales } from '../hooks/useSales';
@@ -187,6 +187,8 @@ export default function SalesPage() {
     },
   ], []);
 
+  const handleRowClick = useCallback((row) => setDrawerSale(row), [])
+
   const activeCount =
     (activeSearch ? 1 : 0) + (activeDateFilter ? 1 : 0) + (activeStatusFilter ? 1 : 0);
 
@@ -363,7 +365,7 @@ export default function SalesPage() {
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={handleSort}
-              onRowClick={(row) => setDrawerSale(row)}
+               onRowClick={handleRowClick}
             />
           </div>
         </BentoCard>

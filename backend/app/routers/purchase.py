@@ -295,24 +295,24 @@ def create_purchase(
         # Step 5 → Insert purchase items (DB trigger auto-increases stock)
         # GENERATED columns (item_subtotal, item_tax_total, item_total_with_tax)
         # are never inserted — DB computes them.
-        for calc in calculated_items:
-            db.execute(
-                text("""
-                    INSERT INTO purchase_items (
-                        item_id, business_id, pur_id, product_id,
-                        pur_item_qty, item_unit_price,
-                        gst_rate, cgst_amount, sgst_amount,
-                        igst_amount, pur_tax_total
-                    ) VALUES (
-                        CAST(:item_id AS uuid),
-                        CAST(:business_id AS uuid),
-                        CAST(:pur_id AS uuid),
-                        CAST(:product_id AS uuid),
-                        :quantity, :unit_price,
-                        :gst_rate, :cgst_amount, :sgst_amount,
-                        :igst_amount, :pur_tax_total
-                    )
-                """),
+        db.execute(
+            text("""
+                INSERT INTO purchase_items (
+                    item_id, business_id, pur_id, product_id,
+                    pur_item_qty, item_unit_price,
+                    gst_rate, cgst_amount, sgst_amount,
+                    igst_amount, pur_tax_total
+                ) VALUES (
+                    CAST(:item_id AS uuid),
+                    CAST(:business_id AS uuid),
+                    CAST(:pur_id AS uuid),
+                    CAST(:product_id AS uuid),
+                    :quantity, :unit_price,
+                    :gst_rate, :cgst_amount, :sgst_amount,
+                    :igst_amount, :pur_tax_total
+                )
+            """),
+            [
                 {
                     "item_id":      str(uuid.uuid4()),
                     "business_id":  business_id,
@@ -324,9 +324,11 @@ def create_purchase(
                     "cgst_amount":  calc["cgst_amount"],
                     "sgst_amount":  calc["sgst_amount"],
                     "igst_amount":  calc["igst_amount"],
-                    "pur_tax_total": calc["pur_tax_total"]
+                    "pur_tax_total": calc["pur_tax_total"],
                 }
-            )
+                for calc in calculated_items
+            ]
+        )
 
         # Step 6 → Auto-create expense record when purchase is paid immediately
         # WHY: Cash purchase = money leaves the business immediately.

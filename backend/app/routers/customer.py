@@ -343,12 +343,13 @@ def get_customer_summary_kpi(
             cc.total_count,
             cc.new_this_month,
             COALESCE((
-                SELECT SUM(s.sales_final_amount - COALESCE((
+                SELECT SUM(s.sales_final_amount - COALESCE(pay.cumulative_paid, 0))
+                FROM sales s
+                LEFT JOIN LATERAL (
                     SELECT cumulative_paid FROM payments
                     WHERE sale_id = s.sales_id AND is_active = true
                     LIMIT 1
-                ), 0))
-                FROM sales s
+                ) pay ON true
                 WHERE s.business_id = CAST(:bid AS uuid)
                   AND s.is_deleted  = false
                   AND s.sales_payment_status IN ('pending', 'partial')

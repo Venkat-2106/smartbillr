@@ -231,13 +231,11 @@ function LogoutDialog({ onConfirm, onCancel }) {
 }
 
 function IconButton({ onClick, children, style = {}, 'aria-label': ariaLabel }) {
-  const [hovered, setHovered] = useState(false)
   return (
     <button
       onClick={onClick}
       aria-label={ariaLabel}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      className="sb-icon-btn"
       style={{
         background: 'transparent',
         border: 'none',
@@ -245,8 +243,7 @@ function IconButton({ onClick, children, style = {}, 'aria-label': ariaLabel }) 
         borderRadius: 8,
         cursor: 'pointer',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: hovered ? 'var(--text-primary)' : 'var(--text-secondary)',
-        transition: 'all 0.13s',
+        color: 'var(--text-secondary)',
         ...style,
       }}
     >
@@ -256,14 +253,12 @@ function IconButton({ onClick, children, style = {}, 'aria-label': ariaLabel }) 
 }
 
 function NavItem({ item, collapsed, onNavClick }) {
-  const [hovered, setHovered] = useState(false)
   return (
     <NavLink
       to={item.path}
       title={collapsed ? item.label : undefined}
       onClick={onNavClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      className="sb-nav-item"
       style={({ isActive }) => ({
         display: 'flex',
         alignItems: 'center',
@@ -273,19 +268,10 @@ function NavItem({ item, collapsed, onNavClick }) {
         borderRadius: 8,
         marginBottom: 1,
         textDecoration: 'none',
-        color: isActive
-          ? 'var(--accent-sidebar-text)'
-          : hovered
-          ? 'var(--sb-hover-text)'
-          : 'var(--sb-text-muted)',
-        background: isActive
-          ? 'var(--accent-sidebar-active)'
-          : hovered
-          ? 'var(--sb-hover-bg)'
-          : 'transparent',
+        color: isActive ? 'var(--accent-sidebar-text)' : 'var(--sb-text-muted)',
+        background: isActive ? 'var(--accent-sidebar-active)' : 'transparent',
         border: 'none',
         borderLeft: isActive ? '2px solid var(--accent-500)' : '2px solid transparent',
-        transition: 'all 0.13s',
       })}
     >
       {({ isActive }) => (<>
@@ -448,6 +434,12 @@ export default function DashboardLayout() {
       fontFamily: "'Inter', -apple-system, sans-serif",
       background: 'var(--bg-page)',
     }}>
+      <style>{`
+        .sb-icon-btn { transition: background-color .13s, color .13s; }
+        .sb-icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .sb-nav-item { transition: background-color .13s, color .13s; }
+        .sb-nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+      `}</style>
 
       {isMobile && mobileOpen && (
         <div

@@ -251,6 +251,7 @@ def get_my_subscription(
                 trial_start_at, trial_end_at, is_active
             FROM businesses
             WHERE business_id = :bid
+              AND (is_deleted = false OR is_deleted IS NULL)
             LIMIT 1
         """),
         {"bid": bid},
@@ -309,7 +310,7 @@ def update_subscription(
                        "subscription_end_at", "is_active"}
 
     existing = db.execute(
-        text("SELECT business_id FROM businesses WHERE business_id = :bid LIMIT 1"),
+        text("SELECT business_id FROM businesses WHERE business_id = :bid AND (is_deleted = false OR is_deleted IS NULL) LIMIT 1"),
         {"bid": business_id},
     ).fetchone()
 
@@ -329,7 +330,7 @@ def update_subscription(
 
     try:
         db.execute(
-            text(f"UPDATE businesses SET {set_clause} WHERE business_id = :bid"),
+            text(f"UPDATE businesses SET {set_clause} WHERE business_id = :bid AND (is_deleted = false OR is_deleted IS NULL)"),
             update_data,
         )
         db.commit()

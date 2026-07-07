@@ -771,30 +771,75 @@ def delete_purchase(
             WHERE pur_id = CAST(:pur_id AS uuid) AND business_id = CAST(:bid AS uuid)
         """), {"pur_id": pur_id, "bid": business_id}).fetchall()
 
-        for item in items:
-            product = db.query(Product).filter(
-                Product.prod_id == item.product_id,
-                Product.business_id == business_id
-            ).first()
-            if not product:
-                continue
+        if items:
+            prod_ids = [str(item.product_id) for item in items]
 
-            prev_stock = product.prod_stock_qty
-            db.execute(text("""
-                UPDATE products SET prod_stock_qty = prod_stock_qty - :qty,
-                    updated_by = CAST(:user_id AS uuid)
-                WHERE prod_id = CAST(:pid AS uuid) AND business_id = CAST(:bid AS uuid)
-            """), {"qty": item.pur_item_qty, "user_id": user_id, "pid": str(item.product_id), "bid": business_id})
+            # 1. Bulk SELECT: fetch current stock for all products at once
+            product_rows = db.execute(
+                text("""
+                    SELECT prod_id, prod_stock_qty
+                    FROM products
+                    WHERE prod_id = ANY(CAST(:pids AS uuid[]))
+                      AND business_id = CAST(:business_id AS uuid)
+                """),
+                {"pids": "{" + ",".join(prod_ids) + "}", "business_id": business_id}
+            ).all()
 
-            db.execute(text("""
-                INSERT INTO stock_movements (move_id, business_id, product_id,
-                    move_type, move_qty, move_prev_stock, purchase_reference_id, move_notes, move_created_by)
-                VALUES (CAST(:mid AS uuid), CAST(:bid AS uuid), CAST(:pid AS uuid),
-                    'purchase_delete', :qty, :prev, CAST(:pur_id AS uuid),
-                    :notes, CAST(:uid AS uuid))
-            """), {"mid": str(uuid.uuid4()), "bid": business_id, "pid": str(item.product_id),
-                   "qty": -item.pur_item_qty, "prev": prev_stock, "pur_id": pur_id,
-                   "notes": f"Stock reduced from deleted purchase {purchase.pur_id}", "uid": user_id})
+            prod_stock_map = {str(row.prod_id): row.prod_stock_qty for row in product_rows}
+
+            valid_items = [
+                item for item in items
+                if str(item.product_id) in prod_stock_map
+            ]
+
+            if valid_items:
+                # 2. Bulk UPDATE products using FROM (VALUES ...) — subtraction
+                values_clause = ", ".join(
+                    f"(CAST(:pid_{i} AS uuid), :qty_{i})"
+                    for i in range(len(valid_items))
+                )
+                update_params = {"user_id": user_id, "business_id": business_id}
+                for i, item in enumerate(valid_items):
+                    update_params[f"pid_{i}"] = str(item.product_id)
+                    update_params[f"qty_{i}"] = item.pur_item_qty
+
+                db.execute(
+                    text(f"""
+                        UPDATE products
+                        SET prod_stock_qty = products.prod_stock_qty - v.reduce_qty,
+                            updated_by = CAST(:user_id AS uuid)
+                        FROM (VALUES {values_clause}) AS v(prod_id, reduce_qty)
+                        WHERE products.prod_id = v.prod_id
+                          AND products.business_id = CAST(:business_id AS uuid)
+                    """),
+                    update_params
+                )
+
+                # 3. Multi-row INSERT into stock_movements
+                insert_values = ", ".join(
+                    f"(CAST(:mid_{i} AS uuid), CAST(:bid AS uuid), CAST(:pid_{i} AS uuid), :mtype_{i}, :mqty_{i}, :mprev_{i}, CAST(:pref AS uuid), :mnotes_{i}, CAST(:cby AS uuid))"
+                    for i in range(len(valid_items))
+                )
+                insert_params = {"bid": business_id, "pref": pur_id, "cby": user_id}
+                for i, item in enumerate(valid_items):
+                    pid = str(item.product_id)
+                    insert_params[f"mid_{i}"] = str(uuid.uuid4())
+                    insert_params[f"pid_{i}"] = pid
+                    insert_params[f"mtype_{i}"] = "purchase_delete"
+                    insert_params[f"mqty_{i}"] = -item.pur_item_qty
+                    insert_params[f"mprev_{i}"] = prod_stock_map[pid]
+                    insert_params[f"mnotes_{i}"] = f"Stock reduced from deleted purchase {purchase.pur_id}"
+
+                db.execute(
+                    text(f"""
+                        INSERT INTO stock_movements (
+                            move_id, business_id, product_id,
+                            move_type, move_qty, move_prev_stock,
+                            purchase_reference_id, move_notes, move_created_by
+                        ) VALUES {insert_values}
+                    """),
+                    insert_params
+                )
 
     db.commit()
     return success_response({"message": "Purchase deleted successfully"})

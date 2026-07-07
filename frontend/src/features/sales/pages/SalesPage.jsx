@@ -53,7 +53,7 @@ export default function SalesPage() {
   const { data: salesSummary, isLoading: summaryLoading } = useQuery({
     queryKey: ['sales-summary'],
     queryFn: fetchSalesSummary,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
 
   const [showDelete,   setShowDelete]   = useState(false);

@@ -268,7 +268,7 @@ export default function ProductsPage() {
   const { data: productSummary } = useQuery({
     queryKey: ['product-summary'],
     queryFn: fetchProductSummary,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   })
 
   const { mutate: createProduct, isPending: isCreating } = useCreateProduct()

@@ -343,7 +343,8 @@ export default function DashboardLayout() {
   useIdleLogout()
 
   const { theme, setTheme, accent, setAccent } = useTheme()
-  const { user, business, profile, hasPermission } = useAuthStore()
+  const { user, business, profile } = useAuthStore()
+  const permissions = useAuthStore(s => s.permissions)
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -422,9 +423,9 @@ export default function DashboardLayout() {
 
   const visibleNav = useMemo(() =>
     NAV
-      .map(section => ({ ...section, items: section.items.filter(item => hasPermission(item.permission)) }))
+      .map(section => ({ ...section, items: section.items.filter(item => permissions.includes(item.permission)) }))
       .filter(section => section.items.length > 0),
-    [hasPermission]
+    [permissions]
   )
 
   const W = isMobile ? FULL : (collapsed ? SLIM : FULL)

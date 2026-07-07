@@ -81,7 +81,7 @@ def return_item_to_dict(row):
 # FIX: Now queries sales_return_items and uses sale_item_id for lookups,
 #      matching the DB trigger's validation logic exactly.
 # ─────────────────────────────────────────
-def validate_return_items(db: Session, sale_id: str, items, exclude_return_id: str = None):
+def validate_return_items(db: Session, sale_id: str, business_id: str, items, exclude_return_id: str = None):
     # Batch Step 1 → Fetch ALL sale items for this sale in one query
     prod_ids = [str(item.product_id) for item in items]
     sale_item_map = {}
@@ -95,9 +95,10 @@ def validate_return_items(db: Session, sale_id: str, items, exclude_return_id: s
                 FROM sale_items si
                 JOIN products p ON p.prod_id = si.product_id
                 WHERE si.sale_id = CAST(:sale_id AS uuid)
+                  AND si.business_id = CAST(:bid AS uuid)
                   AND si.product_id = ANY(CAST(:pids AS uuid[]))
             """),
-            {"sale_id": sale_id, "pids": "{" + ",".join(prod_ids) + "}"}
+            {"sale_id": sale_id, "bid": business_id, "pids": "{" + ",".join(prod_ids) + "}"}
         ).fetchall()
         sale_item_map = {str(r.product_id): r for r in rows}
 
@@ -171,7 +172,7 @@ def create_sales_return(
             return error_response("Sale not found", status_code=404)
 
         # Step 2 → Validate return items
-        error = validate_return_items(db=db, sale_id=str(data.sale_id), items=data.items)
+        error = validate_return_items(db=db, sale_id=str(data.sale_id), business_id=business_id, items=data.items)
         if error:
             return error_response(error, status_code=400)
 
@@ -458,6 +459,7 @@ def update_sales_return(
             error = validate_return_items(
                 db=db,
                 sale_id=str(sales_return.sale_id),
+                business_id=business_id,
                 items=items_to_validate,
                 exclude_return_id=return_id
             )

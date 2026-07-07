@@ -105,6 +105,7 @@ def get_product_with_profit(db: Session, prod_id, business_id: str):
             LEFT JOIN profiles   pr2 ON pr2.id = p.created_by
             WHERE p.prod_id = :prod_id
               AND p.business_id = CAST(:bid AS uuid)
+              AND p.is_deleted = false
         """),
         {"prod_id": str(prod_id), "bid": business_id}
     ).fetchone()

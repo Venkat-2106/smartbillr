@@ -345,6 +345,7 @@ export default function DashboardLayout() {
   const { theme, setTheme, accent, setAccent } = useTheme()
   const { user, business, profile } = useAuthStore()
   const permissions = useAuthStore(s => s.permissions)
+  const showBanner  = useAuthStore(s => s.subscription && !s.subscription.is_expired)
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -761,7 +762,7 @@ export default function DashboardLayout() {
           </div>
         </header>
 
-        <SubscriptionBanner />
+        {showBanner && <SubscriptionBanner />}
 
         <main style={{
           flex: 1,

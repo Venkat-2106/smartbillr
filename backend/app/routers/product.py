@@ -366,6 +366,9 @@ def get_all_products(
         "prod_created_at":      "p.prod_created_at",
         "category_name":        "c.category_name",
     }
+    if not show_profit:
+        SORTABLE.pop("prod_cost_price", None)
+        SORTABLE.pop("prod_profit", None)
     order_col = SORTABLE.get(sort_by, "p.prod_name")
     order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
 

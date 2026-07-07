@@ -370,6 +370,7 @@ export default function DashboardLayout() {
   }), [])
 
   const handleNav = useCallback((path) => { navigate(path) }, [navigate])
+  const handleThemeClose = useCallback(() => setShowTheme(false), [])
 
   useEffect(() => {
     const unregisters = Object.entries(navMap).map(([key, path]) =>
@@ -730,7 +731,7 @@ export default function DashboardLayout() {
                   <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
                 </svg>
               </IconButton>
-              {showTheme && <ThemePanel theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} onClose={() => setShowTheme(false)} />}
+              {showTheme && <ThemePanel theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} onClose={handleThemeClose} />}
             </div>
 
             <div style={{

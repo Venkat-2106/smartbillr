@@ -103,10 +103,21 @@ def create_payment(
 
     sale_final = float(sale_row.sales_final_amount) if sale_row and sale_row.sales_final_amount else 0
 
+    # ── Lock the sale row to serialize concurrent payments ────────────────────
+    # The payments FOR UPDATE below only locks existing payment rows. For a
+    # sale with zero payments (first payment), there's nothing to lock, so two
+    # concurrent requests both see already_paid=0 and double-charge the customer.
+    # Locking the sale row guarantees that only one payment request proceeds at
+    # a time, regardless of whether a payments row exists yet.
+    db.execute(
+        text("SELECT 1 FROM sales WHERE sales_id = CAST(:sid AS uuid) FOR UPDATE"),
+        {"sid": str(data.sale_id)}
+    )
+
     # ── Get total already paid by reading cumulative_paid from active row ─────
-    # FOR UPDATE locks the active payment row so a concurrent request cannot
-    # read the same cumulative_paid and double-record. Lock is released when
-    # db.commit() is called at the end of this route.
+    # FOR UPDATE on payments locks the active payment row (if one exists) so a
+    # concurrent request cannot read the same cumulative_paid and double-record.
+    # Lock is released when db.commit() is called at the end of this route.
     active_row = db.execute(
         text("""
             SELECT COALESCE(cumulative_paid, 0) AS already_paid

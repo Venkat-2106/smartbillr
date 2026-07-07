@@ -413,16 +413,21 @@ def adjust_stock(
     user_id = current_user["user_id"]
 
     try:
-        product = db.query(Product).filter(
-            Product.prod_id == data.product_id,
-            Product.business_id == business_id,
-            Product.is_deleted == False
-        ).first()
+        row = db.execute(
+            text("""
+                SELECT prod_stock_qty, prod_name FROM products
+                WHERE prod_id = CAST(:pid AS uuid)
+                  AND business_id = CAST(:bid AS uuid)
+                  AND is_deleted = false
+                FOR UPDATE
+            """),
+            {"pid": str(data.product_id), "bid": business_id}
+        ).fetchone()
 
-        if not product:
+        if not row:
             return error_response("Product not found", status_code=404)
 
-        prev_stock = product.prod_stock_qty
+        prev_stock = row.prod_stock_qty
 
         # ── Calculate new_stock and move_qty based on adjustment_type ───────
         if data.adjustment_type == "add":
@@ -435,7 +440,7 @@ def adjust_stock(
             if data.qty > prev_stock:
                 return error_response(
                     f"Cannot remove {data.qty} units — "
-                    f"current stock is only {prev_stock} units for '{product.prod_name}'",
+                    f"current stock is only {prev_stock} units for '{row.prod_name}'",
                     status_code=400
                 )
             new_stock = prev_stock - data.qty
@@ -517,7 +522,7 @@ def adjust_stock(
         return success_response({
             "message":         f"Stock '{data.adjustment_type}' applied successfully",
             "product_id":      str(data.product_id),
-            "product_name":    product.prod_name,
+            "product_name":    row.prod_name,
             "adjustment_type": data.adjustment_type,
             "previous_stock":  prev_stock,
             "adjusted_by":     data.qty,

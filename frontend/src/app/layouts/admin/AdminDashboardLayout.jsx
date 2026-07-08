@@ -12,7 +12,7 @@ export default function AdminDashboardLayout() {
 
   async function handleLogout() {
     try {
-      await api.post('/auth/logout')
+      await api.post('/superadmin/logout')
     } catch {}
     clearAuth()
     setSuperAdmin(false)

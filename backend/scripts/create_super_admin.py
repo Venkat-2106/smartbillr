@@ -2,7 +2,9 @@
 CLI script to create the single platform super admin.
 
 Usage:
-    python -m scripts.create_super_admin --email admin@example.com --password "S3cur3P@ss"
+    python -m scripts.create_super_admin --email admin@example.com
+
+Password is prompted interactively via getpass (never in shell history / ps).
 
 This script:
   1. Creates a Supabase Auth user via the Admin API (SUPABASE_SERVICE_ROLE_KEY)
@@ -13,6 +15,7 @@ Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.
 """
 
 import argparse
+import getpass
 import os
 import sys
 import httpx
@@ -100,11 +103,11 @@ def main():
         description="Create the single platform super admin for SmartBillr."
     )
     parser.add_argument("--email", required=True, help="Email for the super admin")
-    parser.add_argument("--password", required=True, help="Password for the super admin")
     parser.add_argument("--full-name", default="Super Admin", help="Display name (default: Super Admin)")
     args = parser.parse_args()
 
-    user_id = create_auth_user(args.email, args.password, args.full_name)
+    password = getpass.getpass("Password: ")
+    user_id = create_auth_user(args.email, password, args.full_name)
     insert_super_admin(user_id)
     print("Done. The super admin can log in at /admin/login.")
 

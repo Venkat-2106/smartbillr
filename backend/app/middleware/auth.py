@@ -180,6 +180,35 @@ def clear_user_cache(user_id: str) -> None:
     _cache_pop(user_id)
 
 
+def clear_business_users_cache(business_id: str) -> None:
+    """
+    Invalidate cache entries for all users belonging to a business.
+
+    Called when a business is suspended or reactivated so cached
+    entries don't bypass the suspension check for up to 10s.
+    """
+    r = _get_redis()
+    if r:
+        try:
+            keys = r.keys(f"perm:*")
+            import json
+            for key in keys:
+                data = r.get(key)
+                if data:
+                    entry = json.loads(data)
+                    if entry.get("business_id") == business_id:
+                        r.delete(key)
+            return
+        except Exception:
+            pass
+    if _permissions_cache is not None:
+        keys = list(_permissions_cache.keys())
+        for key in keys:
+            entry = _permissions_cache.get(key)
+            if entry and entry.get("business_id") == business_id:
+                _permissions_cache.pop(key, None)
+
+
 def decode_token_payload(token: str) -> dict:
     """
     Decode and VERIFY the JWT using Supabase JWKS keys.
@@ -304,6 +333,12 @@ def verify_token(
                 status_code=401,
                 detail="Session expired. Please log in again."
             )
+        # SECURITY: Reject if the business was suspended since caching.
+        if not cached_val.get("business_is_active", True):
+            raise HTTPException(
+                status_code=403,
+                detail="Your business account has been suspended. Contact support.",
+            )
         db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
         db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": cached_val["business_id"]})
         return cached_val
@@ -315,7 +350,8 @@ def verify_token(
                 p.business_id,
                 r.name                                      AS role,
                 STRING_AGG(perm.code, ',')                  AS permissions_csv,
-                p.last_logout_at
+                p.last_logout_at,
+                b.is_active                                 AS business_is_active
             FROM profiles p
             LEFT JOIN roles r
                 ON r.id = p.role_id
@@ -323,9 +359,11 @@ def verify_token(
                 ON rp.role_id = p.role_id
             LEFT JOIN permissions perm
                 ON perm.id = rp.permission_id
+            JOIN businesses b
+                ON b.id = p.business_id
             WHERE p.id        = :user_id
               AND p.is_active = true
-            GROUP BY p.business_id, r.name, p.last_logout_at
+            GROUP BY p.business_id, r.name, p.last_logout_at, b.is_active
             LIMIT 1
         """),
         {"user_id": user_id}
@@ -333,6 +371,13 @@ def verify_token(
 
     if result is None:
         raise HTTPException(status_code=403, detail="User not found or inactive")
+
+    # SECURITY: Reject if the business is suspended.
+    if not result.business_is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="Your business account has been suspended. Contact support.",
+        )
 
     # ── Token revocation check ────────────────────────────────────────────
     # If the user has logged out since this token was issued, reject it.
@@ -353,11 +398,12 @@ def verify_token(
     last_logout_epoch = int(result.last_logout_at.timestamp()) if result.last_logout_at else None
 
     user_data = {
-        "user_id":       user_id,
-        "business_id":   str(result.business_id),
-        "role":          result.role or "staff",
-        "permissions":   permissions,
-        "last_logout_at": last_logout_epoch,
+        "user_id":          user_id,
+        "business_id":      str(result.business_id),
+        "role":             result.role or "staff",
+        "permissions":      permissions,
+        "last_logout_at":   last_logout_epoch,
+        "business_is_active": True,
     }
 
     # Cache for 10s so subsequent requests skip the DB query.
@@ -372,11 +418,12 @@ def verify_super_admin_token(
     db: Session = Depends(get_db),
 ) -> dict:
     """
-    FastAPI dependency for super admin authentication.
+    FastAPI dependency for super admin authentication with revocation support.
 
     Unlike verify_token(), this does NOT query the profiles table — it only:
       1. Decodes + verifies the JWT signature via Supabase JWKS
       2. Checks the user_id exists in super_admins
+      3. Rejects tokens issued before last_logout_at (revoked sessions)
 
     Super admins have no business_id, no role, and no permissions.
     This dependency never passes require_permission() / require_any_permission()
@@ -394,8 +441,10 @@ def verify_super_admin_token(
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token: no user found")
 
+    token_iat = payload.get("iat")
+
     row = db.execute(
-        text("SELECT 1 FROM super_admins WHERE user_id = :uid LIMIT 1"),
+        text("SELECT last_logout_at FROM super_admins WHERE user_id = :uid LIMIT 1"),
         {"uid": user_id},
     ).fetchone()
     if not row:
@@ -403,6 +452,17 @@ def verify_super_admin_token(
             status_code=403,
             detail="Access denied. Super admin privileges required.",
         )
+
+    if row.last_logout_at and token_iat:
+        last_logout_ts = int(row.last_logout_at.timestamp())
+        if token_iat < last_logout_ts:
+            raise HTTPException(
+                status_code=401,
+                detail="Session expired. Please log in again.",
+            )
+
+    db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
+
     return {"user_id": user_id, "is_super_admin": True}
 
 

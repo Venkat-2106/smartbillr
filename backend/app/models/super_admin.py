@@ -8,3 +8,4 @@ class SuperAdmin(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String(255), nullable=False, unique=True)
     created_at = Column(DateTime, nullable=True)
+    last_logout_at = Column(DateTime, nullable=True)

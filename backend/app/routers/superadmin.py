@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from app.database import get_db
-from app.middleware.auth import verify_super_admin
+from app.middleware.auth import verify_super_admin, clear_user_cache, clear_business_users_cache
 from app.utils.response import success_response, error_response
 from app.schemas.business import SubscriptionUpdate, VALID_PAYMENT_STATUSES, VALID_SUBSCRIPTION_TYPES
 
@@ -45,6 +45,24 @@ def _parse_dt(val):
             except ValueError:
                 continue
     return val
+
+
+# ─── POST /superadmin/logout — Logout with revocation ───────────────────────
+
+@router.post("/logout")
+def super_admin_logout(
+    current_user: dict = Depends(verify_super_admin),
+    db: Session = Depends(get_db),
+):
+    user_id = current_user["user_id"]
+    now = datetime.now(timezone.utc)
+    db.execute(
+        text("UPDATE super_admins SET last_logout_at = :now WHERE user_id = :uid"),
+        {"now": now, "uid": user_id},
+    )
+    db.commit()
+    clear_user_cache(user_id)
+    return success_response({"message": "Logged out successfully"})
 
 
 # ─── GET /superadmin/businesses — List all businesses (paginated, sortable) ──
@@ -281,6 +299,8 @@ def update_business_status(
         import logging
         logging.exception(e)
         return error_response("Failed to update business status", 500)
+
+    clear_business_users_cache(business_id)
 
     action = "activated" if is_active else "suspended"
     return success_response({"message": f"Business {action} successfully"})

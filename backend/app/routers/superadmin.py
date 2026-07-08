@@ -9,7 +9,7 @@
 #   + super_admins table lookup. It does NOT query profiles, does NOT carry
 #   a business_id, and does NOT pass require_permission() checks.
 #
-#   SubscriptionMiddleware excludes /superadmin/* paths.
+#   SubscriptionMiddleware excludes /v1/superadmin/* paths.
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -22,7 +22,7 @@ from app.middleware.auth import verify_super_admin, clear_user_cache, clear_busi
 from app.utils.response import success_response, error_response
 from app.schemas.business import SubscriptionUpdate, VALID_PAYMENT_STATUSES, VALID_SUBSCRIPTION_TYPES
 
-router = APIRouter(prefix="/superadmin", tags=["Super Admin"])
+router = APIRouter(prefix="/v1/superadmin", tags=["Super Admin"])
 
 SORTABLE_WHITELIST = {
     "created_at",

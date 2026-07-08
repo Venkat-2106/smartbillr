@@ -154,7 +154,8 @@ EXCLUDED_PATHS = [
     re.compile(r"^/v1/business/?$"),  # POST registration (no auth)
     re.compile(r"^/v1/businesses/me/subscription/?$"),  # subscription status check
     re.compile(r"^/v1/businesses/([a-f0-9-]+)/subscription/?$"),  # super admin
-    re.compile(r"^/superadmin/"),  # platform super admin routes (no tenant)
+    re.compile(r"^/v1/superadmin/"),  # platform super admin routes (no tenant)
+    re.compile(r"^/superadmin/"),  # legacy, kept for backward compat
     re.compile(r"^/v1/admin/"),  # all admin endpoints
     re.compile(r"^/v1/auth/"),
     re.compile(r"^/v1/profiles/check-email"),

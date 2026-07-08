@@ -478,7 +478,7 @@ def verify_super_admin(
     Pass-through of the verify_super_admin_token result.
 
     Usage:
-        @router.get("/superadmin/businesses")
+        @router.get("/v1/superadmin/businesses")
         def list_businesses(
             current_user: dict = Depends(verify_super_admin),
             ...

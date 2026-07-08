@@ -208,6 +208,7 @@ def decode_token_payload(token: str) -> dict:
                 token,
                 signing_key.key,
                 algorithms=[algorithm],
+                leeway=10,
                 options={
                     "verify_exp": True,
                     "verify_aud": False,
@@ -225,6 +226,7 @@ def decode_token_payload(token: str) -> dict:
                 token,
                 jwt_secret,
                 algorithms=["HS256"],
+                leeway=10,
                 options={
                     "verify_exp": True,
                     "verify_aud": False,

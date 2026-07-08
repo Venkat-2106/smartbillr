@@ -11,6 +11,7 @@ const useAuthStore = create(
       profile:       null,
       permissions:   [],
       subscription:  null,
+      isSuperAdmin:  false,
 
       setAuth: (token, user, refreshToken) =>
         set({ token, user, refreshToken }),
@@ -29,6 +30,9 @@ const useAuthStore = create(
 
       setSubscription: (subscription) =>
         set({ subscription }),
+
+      setSuperAdmin: (val) =>
+        set({ isSuperAdmin: val }),
 
       hasPermission: (code) => {
         const perms = get().permissions
@@ -60,6 +64,7 @@ const useAuthStore = create(
           profile:       null,
           permissions:   [],
           subscription:  null,
+          isSuperAdmin:  false,
         }),
     }),
     {
@@ -72,6 +77,7 @@ const useAuthStore = create(
         profile:      state.profile,
         permissions:  state.permissions,
         subscription: state.subscription,
+        isSuperAdmin: state.isSuperAdmin,
       }),
     }
   )

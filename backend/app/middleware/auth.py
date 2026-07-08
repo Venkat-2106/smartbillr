@@ -366,24 +366,34 @@ def verify_token(
     return user_data
 
 
-def verify_super_admin(
-    current_user: dict = Depends(verify_token),
+def verify_super_admin_token(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
 ) -> dict:
     """
-    FastAPI dependency — checks that the authenticated user is a super admin.
+    FastAPI dependency for super admin authentication.
 
-    Super admins are platform-level administrators stored in the super_admins
-    table. They have no business_id — they manage the entire platform.
+    Unlike verify_token(), this does NOT query the profiles table — it only:
+      1. Decodes + verifies the JWT signature via Supabase JWKS
+      2. Checks the user_id exists in super_admins
 
-    Usage:
-        @router.patch("/admin/businesses/{bid}/subscription")
-        def update_subscription(
-            current_user: dict = Depends(verify_super_admin),
-            ...
-        ):
+    Super admins have no business_id, no role, and no permissions.
+    This dependency never passes require_permission() / require_any_permission()
+    checks that are meant for tenant roles.
+
+    Returns:
+        { "user_id": str, "is_super_admin": true }
     """
-    user_id = current_user["user_id"]
+    token = credentials.credentials
+    payload = getattr(request.state, "verified_jwt_payload", None)
+    if payload is None:
+        payload = decode_token_payload(token)
+
+    user_id: str = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token: no user found")
+
     row = db.execute(
         text("SELECT 1 FROM super_admins WHERE user_id = :uid LIMIT 1"),
         {"uid": user_id},
@@ -393,4 +403,25 @@ def verify_super_admin(
             status_code=403,
             detail="Access denied. Super admin privileges required.",
         )
+    return {"user_id": user_id, "is_super_admin": True}
+
+
+def verify_super_admin(
+    current_user: dict = Depends(verify_super_admin_token),
+) -> dict:
+    """
+    FastAPI dependency — checks that the authenticated user is a super admin.
+
+    Super admins are platform-level administrators stored in the super_admins
+    table. They have no business_id — they manage the entire platform.
+
+    Pass-through of the verify_super_admin_token result.
+
+    Usage:
+        @router.get("/superadmin/businesses")
+        def list_businesses(
+            current_user: dict = Depends(verify_super_admin),
+            ...
+        ):
+    """
     return current_user

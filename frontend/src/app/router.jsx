@@ -2,11 +2,16 @@ import React, { Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Spinner } from '../shared/components'
 import DashboardLayout from './layouts/DashboardLayout'
+import DashboardLayoutAdmin from './layouts/admin/AdminDashboardLayout'
 import LoginPage from '../features/auth/pages/LoginPage'
 import SignupPage from '../features/auth/pages/SignupPage'
 import ResetPasswordPage from '../features/auth/pages/ResetPasswordPage'
 import UnauthorizedPage from '../features/auth/pages/UnauthorizedPage'
 import ProtectedRoute from '../features/auth/components/ProtectedRoute'
+import AdminLoginPage from '../features/admin/pages/AdminLoginPage'
+import AdminBusinessesPage from '../features/admin/pages/AdminBusinessesPage'
+import AdminBusinessDetailPage from '../features/admin/pages/AdminBusinessDetailPage'
+import AdminProtectedRoute from '../features/admin/components/AdminProtectedRoute'
 import LandingPage from '../features/public/pages/LandingPage'
 
 const DashboardPage  = React.lazy(() => import('../features/dashboard/pages/DashboardPage'))
@@ -46,6 +51,19 @@ export default function AppRouter() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/unauthorized"   element={<UnauthorizedPage />} />
         <Route path="/subscription"   element={<SubscriptionPage />} />
+
+        {/* Super admin routes — separate from business tenant flow */}
+        <Route path="/admin/login" element={<AdminLoginPage />} />
+        <Route
+          element={
+            <AdminProtectedRoute>
+              <DashboardLayoutAdmin />
+            </AdminProtectedRoute>
+          }
+        >
+          <Route path="/admin/businesses" element={<AdminBusinessesPage />} />
+          <Route path="/admin/businesses/:id" element={<AdminBusinessDetailPage />} />
+        </Route>
 
         {/* Protected routes — all inside DashboardLayout */}
         <Route

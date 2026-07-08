@@ -14,7 +14,7 @@ from app.routers import (
     business, category, customer, supplier,
     product, sale, payment, purchase, staff,
     stock, expense, sales_return, purchase_return, profiles,
-    dashboard, reports, auth, subscription,
+    dashboard, reports, auth, subscription, superadmin,
 )
 import logging
 import os
@@ -156,6 +156,8 @@ app.include_router(reports.router)
 app.include_router(auth.router)
 for _r in subscription.routers:
     app.include_router(_r)
+
+app.include_router(superadmin.router)
 
 
 @app.get("/")

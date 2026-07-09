@@ -88,18 +88,6 @@ app.add_middleware(SecurityHeadersMiddleware)
 # ── GZip compression ──────────────────────────────────────────────────────────
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
-_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
-ALLOWED_ORIGINS = [origin.strip() for origin in _raw_origins.split(",")]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type"],
-)
-
 # ── Request Body Size Limit ────────────────────────────────────────────────────
 # JSON endpoints: 10 MB max.  Multipart uploads: 50 MB max.
 # Returns 413 Payload Too Large with consistent error format.
@@ -110,6 +98,20 @@ app.add_middleware(RequestSizeLimitMiddleware)
 # Returns 402 Payment Required if trial expired / subscription invalid.
 # Excludes: registration, subscription check, auth, health, admin.
 app.add_middleware(SubscriptionMiddleware)
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
+# Registered last (outermost) so CORS headers are attached even to short-circuit
+# responses from SubscriptionMiddleware (402) and RequestSizeLimitMiddleware (413).
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
+ALLOWED_ORIGINS = [origin.strip() for origin in _raw_origins.split(",")]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 # ── Global exception handlers ──────────────────────────────────────────
 # Reshape auth/rbac HTTPExceptions (verify_token, require_permission) to

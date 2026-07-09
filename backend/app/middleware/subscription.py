@@ -121,6 +121,7 @@ def _extract_business_id_from_db(user_id: str) -> str | None:
 
     db = SessionLocal()
     try:
+        db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
         row = db.execute(
             text("SELECT business_id FROM profiles WHERE id = :user_id AND is_active = true LIMIT 1"),
             {"user_id": user_id},
@@ -184,23 +185,52 @@ def _check_subscription_for_user(user_id: str) -> dict | None:
 
     db = SessionLocal()
     try:
-        row = db.execute(
+        # Step 1 — Set app.current_user_id so profiles' self_lookup_policy
+        # allows reading the user's own row, then fetch the business_id.
+        db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
+
+        profile_row = db.execute(
             text("""
-                SELECT
-                    b.business_id,
-                    b.payment_status,
-                    b.subscription_type,
-                    b.subscription_end_at,
-                    b.trial_end_at,
-                    b.is_active
-                FROM profiles p
-                JOIN businesses b ON b.business_id = p.business_id
-                WHERE p.id = :user_id
-                  AND p.is_active = true
-                  AND (b.is_deleted = false OR b.is_deleted IS NULL)
+                SELECT business_id
+                FROM profiles
+                WHERE id = :user_id
+                  AND is_active = true
                 LIMIT 1
             """),
             {"user_id": user_id},
+        ).fetchone()
+
+        if not profile_row:
+            result = {
+                "error_code": "INACTIVE",
+                "status": "not_found",
+                "message": "User or business not found",
+            }
+            _cache_sub_set(user_id, result)
+            return result
+
+        # Step 2 — Now that we have the business_id, set the GUC so
+        # businesses' tenant_access_policy allows the subscription query.
+        db.execute(
+            text("SET LOCAL app.current_business_id = :bid"),
+            {"bid": str(profile_row.business_id)},
+        )
+
+        row = db.execute(
+            text("""
+                SELECT
+                    business_id,
+                    payment_status,
+                    subscription_type,
+                    subscription_end_at,
+                    trial_end_at,
+                    is_active
+                FROM businesses
+                WHERE business_id = CAST(:bid AS uuid)
+                  AND (is_deleted = false OR is_deleted IS NULL)
+                LIMIT 1
+            """),
+            {"bid": str(profile_row.business_id)},
         ).fetchone()
 
         if not row:

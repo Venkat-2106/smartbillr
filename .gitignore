@@ -43,3 +43,4 @@ backend/dist/
 
 #e2e test login
 e2e/.env
+test-results/

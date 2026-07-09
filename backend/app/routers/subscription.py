@@ -140,6 +140,12 @@ def register_business(
         return error_response("Registration failed. Please try again.", 400)
 
     try:
+        # Set session GUCs so RLS policies allow the INSERTs below.
+        # The registering user is not yet authenticated via verify_token(),
+        # so we set the GUCs directly from the freshly created auth user.
+        db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": auth_user_id})
+        db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": business_id})
+
         db.execute(
             text("""
                 INSERT INTO businesses (

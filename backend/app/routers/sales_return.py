@@ -108,9 +108,10 @@ def validate_return_items(db: Session, sale_id: str, business_id: str, items, ex
             FROM sales_return_items sri
             JOIN sales_returns sr ON sr.return_id = sri.return_id
             WHERE sri.product_id = ANY(CAST(:pids AS uuid[]))
+              AND sr.business_id = CAST(:bid AS uuid)
               AND sr.return_status != 'rejected'
         """
-        params = {"pids": "{" + ",".join(prod_ids) + "}"}
+        params = {"pids": "{" + ",".join(prod_ids) + "}", "bid": business_id}
         if exclude_return_id:
             q += " AND sr.return_id != CAST(:return_id AS uuid)"
             params["return_id"] = exclude_return_id
@@ -534,9 +535,10 @@ def delete_sales_return(
         db.execute(
             text("""
                 DELETE FROM sales_return_items
-                WHERE return_id = CAST(:return_id AS uuid)
+                WHERE return_id   = CAST(:return_id AS uuid)
+                  AND business_id = CAST(:bid AS uuid)
             """),
-            {"return_id": return_id}
+            {"return_id": return_id, "bid": business_id}
         )
 
         # Step 4 → Delete the return header

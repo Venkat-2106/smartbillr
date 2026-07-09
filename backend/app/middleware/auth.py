@@ -344,14 +344,19 @@ def verify_token(
         return cached_val
 
     # ── Cache miss — single DB query fetches profile + role + permissions + last_logout_at ──
+    # Must set app.current_user_id BEFORE the profiles query so the
+    # self_lookup_policy (which checks id = app.current_user_id()) allows
+    # the user to read their own row.  The business_id GUC is unknown until
+    # after this query returns, so it cannot be set yet — we defer the
+    # businesses JOIN to a separate check below once both GUCs are set.
+    db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
     result = db.execute(
         text("""
             SELECT
                 p.business_id,
                 r.name                                      AS role,
                 STRING_AGG(perm.code, ',')                  AS permissions_csv,
-                p.last_logout_at,
-                b.is_active                                 AS business_is_active
+                p.last_logout_at
             FROM profiles p
             LEFT JOIN roles r
                 ON r.id = p.role_id
@@ -359,11 +364,9 @@ def verify_token(
                 ON rp.role_id = p.role_id
             LEFT JOIN permissions perm
                 ON perm.id = rp.permission_id
-            JOIN businesses b
-                ON b.business_id = p.business_id
             WHERE p.id        = :user_id
               AND p.is_active = true
-            GROUP BY p.business_id, r.name, p.last_logout_at, b.is_active
+            GROUP BY p.business_id, r.name, p.last_logout_at
             LIMIT 1
         """),
         {"user_id": user_id}
@@ -372,8 +375,15 @@ def verify_token(
     if result is None:
         raise HTTPException(status_code=403, detail="User not found or inactive")
 
-    # SECURITY: Reject if the business is suspended.
-    if not result.business_is_active:
+    # ── Now that we know the business_id, set the GUC and check suspension ──
+    db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": str(result.business_id)})
+
+    business_active = db.execute(
+        text("SELECT is_active FROM businesses WHERE business_id = CAST(:bid AS uuid) LIMIT 1"),
+        {"bid": str(result.business_id)}
+    ).scalar()
+
+    if not business_active:
         raise HTTPException(
             status_code=403,
             detail="Your business account has been suspended. Contact support.",
@@ -391,9 +401,6 @@ def verify_token(
 
     permissions_csv = result.permissions_csv or ""
     permissions = set(permissions_csv.split(",")) if permissions_csv else set()
-
-    db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
-    db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": str(result.business_id)})
 
     last_logout_epoch = int(result.last_logout_at.timestamp()) if result.last_logout_at else None
 
@@ -443,6 +450,11 @@ def verify_super_admin_token(
 
     token_iat = payload.get("iat")
 
+    # Must set app.current_user_id BEFORE the super_admins query so the
+    # self_lookup_policy (which checks user_id = app.current_user_id())
+    # allows the super admin to read their own row.
+    db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
+
     row = db.execute(
         text("SELECT last_logout_at FROM super_admins WHERE user_id = :uid LIMIT 1"),
         {"uid": user_id},
@@ -460,8 +472,6 @@ def verify_super_admin_token(
                 status_code=401,
                 detail="Session expired. Please log in again.",
             )
-
-    db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
 
     return {"user_id": user_id, "is_super_admin": True}
 

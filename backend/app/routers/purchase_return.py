@@ -325,9 +325,11 @@ def create_purchase_return(
                     approved_by   = CAST(:approved_by AS uuid),
                     approved_at   = NOW()
                 WHERE return_id   = CAST(:return_id AS uuid)
+                  AND business_id = CAST(:business_id AS uuid)
             """), {
-                "approved_by": str(user_id),
-                "return_id":   new_return_id
+                "approved_by":  str(user_id),
+                "return_id":    new_return_id,
+                "business_id":  str(business_id)
             })
 
         db.commit()
@@ -674,8 +676,12 @@ def delete_purchase_return(
         # Delete items first (FK constraint)
         db.execute(text("""
             DELETE FROM purchase_return_items
-            WHERE return_id = CAST(:return_id AS uuid)
-        """), {"return_id": return_id})
+            WHERE return_id   = CAST(:return_id AS uuid)
+              AND business_id = CAST(:business_id AS uuid)
+        """), {
+            "return_id":   return_id,
+            "business_id": str(business_id)
+        })
 
         # Delete header
         db.execute(text("""

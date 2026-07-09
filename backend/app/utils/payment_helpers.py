@@ -11,6 +11,7 @@
 
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from decimal import Decimal
 import uuid
 
 
@@ -25,7 +26,7 @@ import uuid
 # sale_final  = the final amount the customer owes (generated column
 #               from sales table — after discount + tax)
 # ─────────────────────────────────────────────────────────────────
-def calculate_payment_status(total_paid: float, sale_final: float) -> str:
+def calculate_payment_status(total_paid: Decimal, sale_final: Decimal) -> str:
     if total_paid <= 0:
         return "pending"
     elif total_paid >= sale_final:
@@ -57,11 +58,11 @@ def record_payment_and_sync(
     db:              Session,
     business_id:     str,
     sale_id:         str,
-    sale_final:      float,
-    payment_amount:  float,    # this installment only (NOT running total)
+    sale_final:      Decimal,
+    payment_amount:  Decimal,  # this installment only (NOT running total)
     payment_method:  str,
     new_status:      str,
-    cumulative_paid: float     # running total AFTER this payment is added
+    cumulative_paid: Decimal   # running total AFTER this payment is added
 ) -> str:
 
     # Step A — Deactivate all current active rows for this sale

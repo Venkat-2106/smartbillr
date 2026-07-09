@@ -206,9 +206,9 @@ def auto_record_payment(db: Session, business_id: str, new_sale_id: str, data: S
         {"sid": new_sale_id}
     ).fetchone()
     final_amount = (
-        float(sale_row.sales_final_amount)
+        Decimal(str(sale_row.sales_final_amount))
         if sale_row and sale_row.sales_final_amount
-        else float(total_amount)
+        else total_amount
     )
 
     if data.sales_payment_status == "paid":
@@ -222,8 +222,8 @@ def auto_record_payment(db: Session, business_id: str, new_sale_id: str, data: S
             new_status="paid",
             cumulative_paid=final_amount,
         )
-    elif data.sales_payment_status == "partial" and data.paid_amount and float(data.paid_amount) > 0:
-        paid = float(data.paid_amount)
+    elif data.sales_payment_status == "partial" and data.paid_amount and data.paid_amount > 0:
+        paid = data.paid_amount
         if paid >= final_amount:
             record_payment_and_sync(
                 db=db,
@@ -241,10 +241,10 @@ def auto_record_payment(db: Session, business_id: str, new_sale_id: str, data: S
                 business_id=business_id,
                 sale_id=new_sale_id,
                 sale_final=final_amount,
-                payment_amount=round(paid, 2),
+                payment_amount=paid.quantize(Decimal("0.01")),
                 payment_method=data.sales_payment_method or "cash",
                 new_status="partial",
-                cumulative_paid=round(paid, 2),
+                cumulative_paid=paid.quantize(Decimal("0.01")),
             )
 
 
@@ -395,9 +395,9 @@ def get_sale_detail(db: Session, business_id: str, sales_id: str):
         {"sid": sales_id, "bid": business_id}
     ).fetchone()
 
-    sale_final = float(sale.sales_final_amount) if sale.sales_final_amount else 0.0
-    total_paid = float(active_payment.total_paid) if active_payment else 0.0
-    remaining = round(sale_final - total_paid, 2)
+    sale_final = Decimal(str(sale.sales_final_amount)) if sale.sales_final_amount else Decimal("0")
+    total_paid = Decimal(str(active_payment.total_paid)) if active_payment else Decimal("0")
+    remaining = (sale_final - total_paid).quantize(Decimal("0.01"))
 
     items_data = []
     for i in items:
@@ -446,22 +446,22 @@ def get_sale_detail(db: Session, business_id: str, sales_id: str):
         "sales_final_amount": str(sale.sales_final_amount) if sale.sales_final_amount else None,
         "sales_payment_method": sale.sales_payment_method,
         "sales_payment_status": sale.sales_payment_status,
-        "total_paid": round(total_paid, 2),
-        "remaining_balance": remaining if remaining > 0 else 0,
+        "total_paid": str(total_paid),
+        "remaining_balance": str(remaining) if remaining > 0 else "0",
         "sales_created_at": fmt_ts(sale.sales_created_at),
         "items": items_data,
     }
 
 
-def get_sale_final_amount(db: Session, sales_id: str, business_id: str) -> float:
+def get_sale_final_amount(db: Session, sales_id: str, business_id: str) -> Decimal:
     sale_row = db.execute(
         text("SELECT sales_final_amount FROM sales WHERE sales_id = CAST(:sid AS uuid) AND business_id = CAST(:bid AS uuid)"),
         {"sid": sales_id, "bid": business_id}
     ).fetchone()
-    return float(sale_row.sales_final_amount) if sale_row and sale_row.sales_final_amount else 0.0
+    return Decimal(str(sale_row.sales_final_amount)) if sale_row and sale_row.sales_final_amount else Decimal("0")
 
 
-def get_sale_active_payment(db: Session, sales_id: str, business_id: str):
+def get_sale_active_payment(db: Session, sales_id: str, business_id: str) -> Decimal:
     row = db.execute(
         text("""
             SELECT COALESCE(cumulative_paid, 0) AS already_paid
@@ -472,7 +472,7 @@ def get_sale_active_payment(db: Session, sales_id: str, business_id: str):
         """),
         {"sid": sales_id, "bid": business_id}
     ).fetchone()
-    return float(row.already_paid) if row else 0.0
+    return Decimal(str(row.already_paid)) if row else Decimal("0")
 
 
 def update_sale_status(db: Session, sales_id: str, status: str, business_id: str):

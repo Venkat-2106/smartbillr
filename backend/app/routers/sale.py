@@ -214,7 +214,7 @@ def handle_sale_status_patch(
     old_status = sale.sales_payment_status
     sale_final = get_sale_final_amount(db, sales_id, business_id)
     already_paid = get_sale_active_payment(db, sales_id, business_id)
-    remaining = round(sale_final - already_paid, 2)
+    remaining = (sale_final - already_paid).quantize(Decimal("0.01"))
 
     if old_status == body.status and body.paid_amount is None:
         return success_response({"message": f"Sale is already '{body.status}'", "status": body.status})
@@ -225,7 +225,7 @@ def handle_sale_status_patch(
     new_remaining = remaining
 
     if body.paid_amount is not None:
-        paid_input = float(body.paid_amount)
+        paid_input = body.paid_amount
         if paid_input <= 0:
             return error_response("Paid amount must be greater than zero", 400)
         if paid_input > remaining:
@@ -235,7 +235,7 @@ def handle_sale_status_patch(
                 400
             )
 
-        total_paid = round(already_paid + paid_input, 2)
+        total_paid = (already_paid + paid_input).quantize(Decimal("0.01"))
         derived_status = calculate_payment_status(total_paid, sale_final)
 
         record_payment_and_sync(
@@ -250,9 +250,9 @@ def handle_sale_status_patch(
         )
         reconciliation_inserted = True
         new_total_paid = total_paid
-        new_remaining = round(sale_final - total_paid, 2)
+        new_remaining = (sale_final - total_paid).quantize(Decimal("0.01"))
         if new_remaining < 0:
-            new_remaining = 0
+            new_remaining = Decimal("0")
         response_note = f"Payment recorded: {currency_sym}{paid_input}. Total paid: {currency_sym}{total_paid}."
 
     elif body.status == "paid" and old_status != "paid":
@@ -265,11 +265,11 @@ def handle_sale_status_patch(
                 payment_amount=remaining,
                 payment_method="adjustment",
                 new_status="paid",
-                cumulative_paid=round(already_paid + remaining, 2),
+                cumulative_paid=(already_paid + remaining).quantize(Decimal("0.01")),
             )
             reconciliation_inserted = True
-            new_total_paid = round(already_paid + remaining, 2)
-            new_remaining = 0
+            new_total_paid = (already_paid + remaining).quantize(Decimal("0.01"))
+            new_remaining = Decimal("0")
             response_note = (
                 "A reconciliation payment row was automatically created "
                 "in the payments table to record the remaining balance as an adjustment."
@@ -278,7 +278,7 @@ def handle_sale_status_patch(
             update_payment_status(db, sales_id, "paid", business_id)
             update_sale_status(db, sales_id, "paid", business_id)
             new_total_paid = already_paid
-            new_remaining = 0
+            new_remaining = Decimal("0")
 
     elif body.status == "partial" and body.paid_amount is None:
         return error_response(
@@ -296,8 +296,8 @@ def handle_sale_status_patch(
     response_data = {
         "message": "Payment status updated",
         "status": body.status,
-        "total_paid": new_total_paid,
-        "remaining_balance": new_remaining,
+        "total_paid": str(new_total_paid),
+        "remaining_balance": str(new_remaining),
     }
     if response_note:
         response_data["note"] = response_note

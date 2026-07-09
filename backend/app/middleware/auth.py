@@ -360,7 +360,7 @@ def verify_token(
             LEFT JOIN permissions perm
                 ON perm.id = rp.permission_id
             JOIN businesses b
-                ON b.id = p.business_id
+                ON b.business_id = p.business_id
             WHERE p.id        = :user_id
               AND p.is_active = true
             GROUP BY p.business_id, r.name, p.last_logout_at, b.is_active

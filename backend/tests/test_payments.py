@@ -26,6 +26,10 @@ def _sqlite_record_payment_and_sync(
     db, business_id, sale_id, sale_final,
     payment_amount, payment_method, new_status, cumulative_paid,
 ):
+    # SQLite cannot bind Decimal natively; convert to float for the mock.
+    sale_final = float(sale_final)
+    payment_amount = float(payment_amount)
+    cumulative_paid = float(cumulative_paid)
     new_payment_id = str(uuid.uuid4())
 
     # Deactivate existing active rows for this sale

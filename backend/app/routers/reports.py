@@ -192,8 +192,12 @@ def refresh_materialized_views(
     """Refresh all report materialized views concurrently.
     Admin-only — requires staff.manage permission.
     Also called automatically by the dashboard endpoint when views are stale.
+    Force refresh is intentionally NOT exposed here: the materialized views
+    are global (span all tenants), and any business admin could otherwise
+    trigger an expensive full-database refresh at will. The auto-refresh
+    on the dashboard endpoint (5-min staleness check) is sufficient.
     """
-    refresh_dashboard_mvs(db, force=True)
+    refresh_dashboard_mvs(db, force=False)
     return success_response({"message": "Materialized views refreshed"})
 
 

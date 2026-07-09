@@ -11,6 +11,7 @@ from app.schemas.payment import PaymentCreate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.payment_helpers import record_payment_and_sync, calculate_payment_status
+from decimal import Decimal
 from datetime import datetime
 from app.utils.timestamp import fmt_ts
 
@@ -101,7 +102,7 @@ def create_payment(
         {"sid": str(data.sale_id)}
     ).fetchone()
 
-    sale_final = float(sale_row.sales_final_amount) if sale_row and sale_row.sales_final_amount else 0
+    sale_final = Decimal(str(sale_row.sales_final_amount)) if sale_row and sale_row.sales_final_amount else Decimal("0")
 
     # ── Lock the sale row to serialize concurrent payments ────────────────────
     # The payments FOR UPDATE below only locks existing payment rows. For a
@@ -130,8 +131,8 @@ def create_payment(
         {"sid": str(data.sale_id), "bid": business_id}
     ).fetchone()
 
-    already_paid  = float(active_row.already_paid) if active_row else 0.0
-    new_payment   = float(data.payment_amount)
+    already_paid  = Decimal(str(active_row.already_paid)) if active_row else Decimal("0")
+    new_payment   = data.payment_amount  # already Decimal from Pydantic schema
     total_after   = already_paid + new_payment
 
     # ── Block if already fully paid ───────────────────────────────────────────
@@ -142,7 +143,7 @@ def create_payment(
         )
 
     # ── Block overpayment ─────────────────────────────────────────────────────
-    remaining_balance = round(sale_final - already_paid, 2)
+    remaining_balance = (sale_final - already_paid).quantize(Decimal("0.01"))
     if new_payment > remaining_balance:
         return error_response(
             f"Payment of {new_payment} exceeds the remaining balance of "
@@ -162,25 +163,25 @@ def create_payment(
         payment_amount  = new_payment,
         payment_method  = data.payment_method or "cash",
         new_status      = new_status,
-        cumulative_paid = round(total_after, 2)
+        cumulative_paid = total_after.quantize(Decimal("0.01"))
     )
 
     db.commit()
 
-    new_remaining = round(sale_final - total_after, 2)
+    new_remaining = (sale_final - total_after).quantize(Decimal("0.01"))
 
     return success_response({
         "message":            "Payment recorded successfully",
         "payment_status":     new_status,
-        "this_payment":       round(new_payment, 2),
-        "total_paid":         round(total_after, 2),
-        "remaining_balance":  new_remaining if new_remaining > 0 else 0,
+        "this_payment":       float(new_payment.quantize(Decimal("0.01"))),
+        "total_paid":         float(total_after.quantize(Decimal("0.01"))),
+        "remaining_balance":  float(new_remaining) if new_remaining > 0 else 0,
         "payment": {
             "payment_id":      new_payment_id,
             "business_id":     business_id,
             "sale_id":         str(data.sale_id),
-            "payment_amount":  new_payment,
-            "cumulative_paid": round(total_after, 2),
+            "payment_amount":  float(new_payment.quantize(Decimal("0.01"))),
+            "cumulative_paid": float(total_after.quantize(Decimal("0.01"))),
             "payment_method":  data.payment_method or "cash",
             "payment_status":  new_status,
             "is_active":       True,
@@ -282,21 +283,21 @@ def get_all_payments(
 
     items = []
     for r in rows:
-        sale_final   = float(r.sales_final_amount) if r.sales_final_amount else 0.0
-        cumul        = float(r.cumulative_paid)    if r.cumulative_paid    else 0.0
-        remaining    = round(sale_final - cumul, 2)
+        sale_final   = Decimal(str(r.sales_final_amount)) if r.sales_final_amount else Decimal("0")
+        cumul        = Decimal(str(r.cumulative_paid))    if r.cumulative_paid    else Decimal("0")
+        remaining    = float((sale_final - cumul).quantize(Decimal("0.01")))
         items.append({
             "payment_id":         str(r.payment_id),
             "sale_id":            str(r.sale_id),
             "payment_amount":     float(r.payment_amount),
-            "cumulative_paid":    cumul,
+            "cumulative_paid":    float(cumul),
             "payment_method":     r.payment_method,
             "payment_status":     r.payment_status,
             "is_active":          r.is_active,
             "payment_paid_at":    fmt_ts(r.payment_paid_at),
             "invoice_no":         r.invoice_no         or "—",
             "customer_name":      r.customer_name      or "Walk-in",
-            "sales_final_amount": sale_final,
+            "sales_final_amount": float(sale_final),
             "remaining_balance":  remaining if remaining > 0 else 0.0,
         })
 
@@ -372,11 +373,11 @@ def get_payments_by_sale(
         {"sid": sale_id, "bid": business_id}
     ).fetchall()
 
-    sale_final = float(rows[0].sales_final_amount) if rows and rows[0].sales_final_amount else 0.0
+    sale_final = Decimal(str(rows[0].sales_final_amount)) if rows and rows[0].sales_final_amount else Decimal("0")
 
     # Active row is first (latest by date)
     active_row     = next((r for r in rows if r.is_active), None)
-    total_paid     = float(active_row.cumulative_paid) if active_row and active_row.cumulative_paid else 0.0
+    total_paid     = Decimal(str(active_row.cumulative_paid)) if active_row and active_row.cumulative_paid else Decimal("0")
     current_status = active_row.payment_status if active_row else "pending"
     invoice_no     = rows[0].invoice_no    if rows else "—"
     customer_name  = rows[0].customer_name if rows else "Walk-in"
@@ -397,9 +398,9 @@ def get_payments_by_sale(
         "sale_id":            sale_id,
         "invoice_no":         invoice_no,
         "customer_name":      customer_name,
-        "sale_final_amount":  sale_final,
-        "total_paid":         round(total_paid, 2),
-        "remaining_balance":  round(sale_final - total_paid, 2),
+        "sale_final_amount":  float(sale_final),
+        "total_paid":         float(total_paid.quantize(Decimal("0.01"))),
+        "remaining_balance":  float((sale_final - total_paid).quantize(Decimal("0.01"))),
         "current_status":     current_status,
         "payment_history":    history,
     })

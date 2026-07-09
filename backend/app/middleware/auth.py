@@ -473,6 +473,12 @@ def verify_super_admin_token(
                 detail="Session expired. Please log in again.",
             )
 
+    # Mark this session as a verified super admin so super_admin_access_policy
+    # (on businesses, and any future cross-tenant admin tables) grants access.
+    # Only reachable after the super_admins row lookup above succeeded, so a
+    # regular tenant user has no path to setting this GUC themselves.
+    db.execute(text("SET LOCAL app.is_super_admin = 'true'"))
+
     return {"user_id": user_id, "is_super_admin": True}
 
 

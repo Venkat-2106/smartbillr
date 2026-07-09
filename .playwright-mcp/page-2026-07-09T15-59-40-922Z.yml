@@ -1,0 +1,51 @@
+- generic [ref=e344]:
+  - generic [ref=e345]:
+    - generic [ref=e346]:
+      - generic [ref=e347]:
+        - img [ref=e349]
+        - generic [ref=e351]: SmartBillr
+      - paragraph [ref=e352]: Billing · Inventory · Growth
+    - generic [ref=e353]:
+      - heading "Everything you need to run your business." [level=2] [ref=e354]:
+        - text: Everything you need
+        - text: to run your business.
+      - paragraph [ref=e355]:
+        - text: Smart invoicing, inventory tracking, payments & analytics —
+        - text: all in one platform designed for modern businesses.
+    - generic [ref=e356]:
+      - generic [ref=e357]:
+        - img [ref=e359]
+        - generic [ref=e361]: GST / VAT ready invoicing
+      - generic [ref=e362]:
+        - img [ref=e364]
+        - generic [ref=e366]: Real-time inventory tracking
+      - generic [ref=e367]:
+        - img [ref=e369]
+        - generic [ref=e371]: Multi-mode payment collection
+      - generic [ref=e372]:
+        - img [ref=e374]
+        - generic [ref=e375]: Business analytics & reports
+      - generic [ref=e376]:
+        - img [ref=e378]
+        - generic [ref=e381]: Role-based access control
+    - generic [ref=e384]: Trusted across 10+ countries · Built for businesses like yours
+  - generic [ref=e386]:
+    - paragraph [ref=e387]: Welcome back
+    - paragraph [ref=e388]: Sign in to continue to SmartBillr
+    - generic [ref=e389]:
+      - generic [ref=e390]:
+        - generic [ref=e391]: Email address
+        - generic [ref=e392]:
+          - generic: ✉
+          - textbox "you@company.com" [ref=e393]: venkatrajan234@gmail.com
+      - generic [ref=e394]:
+        - generic [ref=e395]: Password
+        - generic [ref=e396]:
+          - generic: 🔒
+          - textbox "••••••••" [ref=e397]: Raviji@458
+          - button "SHOW" [ref=e398] [cursor=pointer]
+      - generic [ref=e399]: Forgot password?
+      - button "Signing in..." [disabled] [ref=e404]
+    - generic [ref=e401]:
+      - generic [ref=e402]: 🔐
+      - generic [ref=e403]: Secured by Supabase Auth · JWT encrypted

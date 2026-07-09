@@ -40,3 +40,6 @@ backend/dist/
 *.swp
 *.swo
 *~
+
+#e2e test login
+e2e/.env

@@ -1,10 +1,5 @@
 import { useSubscription } from '../hooks/useSubscription'
-
-function formatDate(iso) {
-  if (!iso) return null
-  const d = new Date(iso)
-  return d.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })
-}
+import { formatDate } from '../../../shared/utils/formatDate'
 
 export default function SubscriptionBanner() {
   const { data: sub } = useSubscription()

@@ -409,7 +409,7 @@ export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManag
                   <SaleCard key={sale.sales_id} sale={sale} />
                 ))}
               </div>
-              {pagination && pagination.total_pages > 1 && (
+              {pagination && (
                 <Pagination
                   pagination={{
                     page:        pagination.page,

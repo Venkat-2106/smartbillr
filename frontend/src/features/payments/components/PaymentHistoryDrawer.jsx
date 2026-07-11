@@ -13,6 +13,7 @@ import { useState }                 from 'react'
 import { useForm }                  from 'react-hook-form'
 import { zodResolver }              from '@hookform/resolvers/zod'
 import { XMarkIcon }                from '@heroicons/react/24/outline'
+import useAuthStore                 from '../../../store/authStore'
 import { usePaymentHistory }        from '../hooks/usePayments'
 import { Badge, Button, Spinner, FormField } from '../../../shared/components'
 import { selectStyle }              from '../../../shared/components/FormField'
@@ -56,8 +57,8 @@ function PaymentProgressBar({ paid, total }) {
         display: 'flex', justifyContent: 'space-between',
         fontSize: 12, color: 'var(--text-muted)', marginBottom: 6,
       }}>
-        <span>Paid: <strong style={{ color: 'var(--text-primary)' }}>{formatCurrency(paid)}</strong></span>
-        <span>Total: <strong style={{ color: 'var(--text-primary)' }}>{formatCurrency(total)}</strong></span>
+        <span>Paid: <strong style={{ color: 'var(--text-primary)' }}>{formatCurrency(paid, country)}</strong></span>
+        <span>Total: <strong style={{ color: 'var(--text-primary)' }}>{formatCurrency(total, country)}</strong></span>
       </div>
       <div style={{
         height: 8, borderRadius: 99,
@@ -89,6 +90,8 @@ function PaymentProgressBar({ paid, total }) {
 export default function PaymentHistoryDrawer({ saleId, onClose, onRecorded, isRecording }) {
   const { data, isLoading } = usePaymentHistory(saleId)
   const [showForm, setShowForm]   = useState(false)
+  const business  = useAuthStore(s => s.business)
+  const country   = business?.business_country_code || 'IN'
 
   const {
     register,
@@ -210,7 +213,7 @@ export default function PaymentHistoryDrawer({ saleId, onClose, onRecorded, isRe
                 }}>
                   <span style={{ color: 'var(--text-muted)' }}>Remaining Balance</span>
                   <span style={{ fontWeight: 700, color: 'var(--danger-text, #EF4444)' }}>
-                    {formatCurrency(data.remaining_balance)}
+                    {formatCurrency(data.remaining_balance, country)}
                   </span>
                 </div>
               )}
@@ -245,7 +248,7 @@ export default function PaymentHistoryDrawer({ saleId, onClose, onRecorded, isRe
                           step="0.01"
                           min="0.01"
                           max={data.remaining_balance}
-                          placeholder={`Max ${formatCurrency(data.remaining_balance)}`}
+                          placeholder={`Max ${formatCurrency(data.remaining_balance, country)}`}
                           style={{
                             width: '100%', padding: '9px 12px',
                             border: '1px solid var(--border)',
@@ -324,7 +327,7 @@ export default function PaymentHistoryDrawer({ saleId, onClose, onRecorded, isRe
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {formatCurrency(p.payment_amount)}
+                          {formatCurrency(p.payment_amount, country)}
                         </span>
                         {p.is_active && (
                           <span style={{
@@ -353,7 +356,7 @@ export default function PaymentHistoryDrawer({ saleId, onClose, onRecorded, isRe
                     </div>
 
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                      Cumulative paid: {formatCurrency(p.cumulative_paid)}
+                      Cumulative paid: {formatCurrency(p.cumulative_paid, country)}
                     </div>
                   </div>
                 ))}

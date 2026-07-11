@@ -39,7 +39,7 @@ function buildColumns() {
       width: 110,
       render: (row) => (
         <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-          {formatCurrency(row.pur_total_amount || 0)}
+          {formatCurrency(row.pur_total_amount || 0, country)}
         </span>
       ),
     },
@@ -50,7 +50,7 @@ function buildColumns() {
       width: 120,
       render: (row) => (
         <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 14 }}>
-          {formatCurrency(row.pur_final_amount || 0)}
+          {formatCurrency(row.pur_final_amount || 0, country)}
         </span>
       ),
     },
@@ -74,7 +74,7 @@ function buildColumns() {
       width: 100,
       render: (row) => (
         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          {(row.pur_discount || 0) > 0 ? formatCurrency(row.pur_discount) : '\u2014'}
+          {(row.pur_discount || 0) > 0 ? formatCurrency(row.pur_discount, country) : '\u2014'}
         </span>
       ),
     },
@@ -98,6 +98,8 @@ export default function PurchasesPage() {
   const canEdit = hasPermission('purchases.edit')
   const canCreate = hasPermission('purchases.view')
   const subscription = useAuthStore(s => s.subscription)
+  const business  = useAuthStore(s => s.business)
+  const country   = business?.business_country_code || 'IN'
 
   const {
     purchases,

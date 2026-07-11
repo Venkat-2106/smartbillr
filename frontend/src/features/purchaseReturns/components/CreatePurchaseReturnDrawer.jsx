@@ -9,6 +9,7 @@ import { Button, Spinner } from '../../../shared/components'
 import { selectStyle, textareaStyle } from '../../../shared/components/FormField'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate } from '../../../shared/utils/formatDate'
+import useAuthStore from '../../../store/authStore'
 
 export default function CreatePurchaseReturnDrawer({ purchaseId, onClose }) {
   const queryClient = useQueryClient()
@@ -16,6 +17,8 @@ export default function CreatePurchaseReturnDrawer({ purchaseId, onClose }) {
   const [restock, setRestock] = useState(true)
   const [items, setItems] = useState([])
   const [errors, setErrors] = useState({})
+  const business  = useAuthStore(s => s.business)
+  const country   = business?.business_country_code || 'IN'
 
   const { data: purchaseData, isLoading } = useQuery({
     queryKey: ['purchase', purchaseId],
@@ -265,11 +268,11 @@ export default function CreatePurchaseReturnDrawer({ purchaseId, onClose }) {
                       {item.product_name}
                     </div>
                     <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
-                      Max: {formatCurrency(maxPrice)} × {maxQty}
+                      Max: {formatCurrency(maxPrice, country)} × {maxQty}
                     </div>
                     {lineTotal > 0 && (
                       <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-600)', marginTop: 2 }}>
-                        {formatCurrency(lineTotal)}
+                        {formatCurrency(lineTotal, country)}
                       </div>
                     )}
                   </div>
@@ -325,7 +328,7 @@ export default function CreatePurchaseReturnDrawer({ purchaseId, onClose }) {
               fontSize: 14, fontWeight: 700, color: 'var(--text-primary)',
             }}>
               <span>Total Refund</span>
-              <span>{formatCurrency(totals.refundTotal)}</span>
+              <span>{formatCurrency(totals.refundTotal, country)}</span>
             </div>
           )}
         </div>

@@ -117,7 +117,7 @@ export default function SalesPage() {
       width: 130,
       render: (row) => (
         <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 14 }}>
-          {formatCurrency(row.sales_final_amount || 0)}
+          {formatCurrency(row.sales_final_amount || 0, country)}
         </span>
       ),
     },
@@ -128,7 +128,7 @@ export default function SalesPage() {
       width: 100,
       render: (row) => (
         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          {formatCurrency(row.tax_total || 0)}
+          {formatCurrency(row.tax_total || 0, country)}
         </span>
       ),
     },

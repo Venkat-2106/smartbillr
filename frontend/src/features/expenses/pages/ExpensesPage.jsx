@@ -16,6 +16,7 @@ import { EXPENSE_CSV_COLUMNS } from '../../../shared/utils/csvExport'
 import { usePermissions } from '../../../shared/hooks/usePermissions'
 import { formatDate, formatDateOnly } from '../../../shared/utils/formatDate'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
+import useAuthStore from '../../../store/authStore'
 
 import { useExpenses } from '../hooks/useExpenses'
 import ExpenseDetailDrawer from '../components/ExpenseDetailDrawer'
@@ -70,7 +71,7 @@ function buildColumns(canManage, onEdit, onDelete) {
       width: 130,
       render: (row) => (
         <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 14 }}>
-          {formatCurrency(row.expense_amount)}
+          {formatCurrency(row.expense_amount, country)}
         </span>
       ),
     },
@@ -139,6 +140,8 @@ export default function ExpensesPage() {
   const navigate = useNavigate()
   const { can } = usePermissions()
   const canManage = can('expenses.manage')
+  const business  = useAuthStore(s => s.business)
+  const country   = business?.business_country_code || 'IN'
 
   const {
     expenses, isLoading, isError,

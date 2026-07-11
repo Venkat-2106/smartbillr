@@ -12,11 +12,14 @@ import CustomerCombobox from '../components/CustomerCombobox';
 import BarcodeScanner from '../components/BarcodeScanner';
 import useCreateSale from '../hooks/useCreateSale';
 import { useShortcut } from '../../../shared/hooks/useShortcut';
+import useAuthStore from '../../../store/authStore';
 
 const EMPTY_ARRAY = [];
 
 export default function CreateSalePage() {
   const navigate = useNavigate();
+  const business  = useAuthStore(s => s.business);
+  const country   = business?.business_country_code || 'IN';
   const {
     customers, loadingCust,
     customerId, handleCustomerChange,
@@ -229,26 +232,26 @@ export default function CreateSalePage() {
                   Order Summary
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                  <OrderSummaryRow label="Subtotal"   value={formatCurrency(totals.subtotal)} />
+                  <OrderSummaryRow label="Subtotal"   value={formatCurrency(totals.subtotal, country)} />
                   {totals.autoDiscount > 0 && (
                     <OrderSummaryRow
                       label="You Saved (vs MRP)"
-                      value={<span style={{ color: 'var(--success-text)' }}>{formatCurrency(totals.autoDiscount)}</span>}
+                      value={<span style={{ color: 'var(--success-text)' }}>{formatCurrency(totals.autoDiscount, country)}</span>}
                       muted
                     />
                   )}
-                  <OrderSummaryRow label="Tax" value={formatCurrency(totals.taxTotal)} muted />
+                  <OrderSummaryRow label="Tax" value={formatCurrency(totals.taxTotal, country)} muted />
                   <div style={{ borderTop: '1.5px solid var(--border)', paddingTop: 10, marginTop: 2 }}>
-                    <OrderSummaryRow label="Grand Total" value={formatCurrency(totals.grandTotal)} bold />
+                    <OrderSummaryRow label="Grand Total" value={formatCurrency(totals.grandTotal, country)} bold />
                   </div>
                   {paymentStatus === 'partial' && parsedPaidAmount > 0 && (
                     <>
-                      <OrderSummaryRow label="Paid Now" value={formatCurrency(parsedPaidAmount)} />
+                      <OrderSummaryRow label="Paid Now" value={formatCurrency(parsedPaidAmount, country)} />
                       <OrderSummaryRow
                         label="Remaining Due"
                         value={
                           <span style={{ color: 'var(--danger-text)', fontWeight: 700 }}>
-                            {formatCurrency(Math.max(0, totals.grandTotal - parsedPaidAmount))}
+                            {formatCurrency(Math.max(0, totals.grandTotal - parsedPaidAmount), country)}
                           </span>
                         }
                       />
@@ -301,7 +304,7 @@ export default function CreateSalePage() {
                       type="number" min="0.01" step="0.01"
                       value={paidAmount}
                       onChange={e => setPaidAmount(e.target.value)}
-                      placeholder={`Max ${formatCurrency(totals.grandTotal - 0.01)}`}
+                      placeholder={`Max ${formatCurrency(totals.grandTotal - 0.01, country)}`}
                       style={{
                         ...NUM_INPUT_STYLE,
                         borderColor:
@@ -316,12 +319,12 @@ export default function CreateSalePage() {
                       <div style={{ fontSize: 12, color: 'var(--danger-text)', marginTop: 4 }}>
                         {Number(paidAmount) <= 0
                           ? 'Amount must be greater than 0'
-                          : `Cannot exceed total (${formatCurrency(totals.grandTotal)})`}
+                          : `Cannot exceed total (${formatCurrency(totals.grandTotal, country)})`}
                       </div>
                     )}
                     {Number(paidAmount) > 0 && (paymentStatus !== 'partial' || (Number(paidAmount) > 0 && Number(paidAmount) < totals.grandTotal)) && (
                       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                        Remaining: {formatCurrency(totals.grandTotal - Number(paidAmount))}
+                        Remaining: {formatCurrency(totals.grandTotal - Number(paidAmount), country)}
                       </div>
                     )}
                   </FormField>

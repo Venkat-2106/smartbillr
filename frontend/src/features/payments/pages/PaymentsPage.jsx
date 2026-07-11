@@ -74,7 +74,7 @@ function buildColumns(onRowClick) {
       width:    120,
       render:   (row) => (
         <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
-          {formatCurrency(row.sales_final_amount || 0)}
+          {formatCurrency(row.sales_final_amount || 0, country)}
         </span>
       ),
     },
@@ -85,7 +85,7 @@ function buildColumns(onRowClick) {
       width:    110,
       render:   (row) => (
         <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
-          {formatCurrency(row.cumulative_paid || 0)}
+          {formatCurrency(row.cumulative_paid || 0, country)}
         </span>
       ),
     },
@@ -100,7 +100,7 @@ function buildColumns(onRowClick) {
           fontSize: 13,
           color: row.remaining_balance > 0 ? 'var(--danger-text, #EF4444)' : 'var(--text-muted)',
         }}>
-          {row.remaining_balance > 0 ? formatCurrency(row.remaining_balance) : '—'}
+          {row.remaining_balance > 0 ? formatCurrency(row.remaining_balance, country) : '—'}
         </span>
       ),
     },

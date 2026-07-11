@@ -90,9 +90,9 @@ function buildInvoiceHTML(
   const totalSavings  = computeTotalSavings(items);
 
   const gstBreakdown = (cgst > 0 || sgst > 0 || igst > 0) ? `
-    <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">CGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(cgst)}</td></tr>
-    <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">SGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(sgst)}</td></tr>
-    ${igst > 0 ? `<tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">IGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(igst)}</td></tr>` : ''}
+    <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">CGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(cgst, country)}</td></tr>
+    <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">SGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(sgst, country)}</td></tr>
+    ${igst > 0 ? `<tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">IGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(igst, country)}</td></tr>` : ''}
   ` : '';
 
   // MRP FEATURE: build item rows with optional MRP + Discount columns
@@ -104,10 +104,10 @@ function buildInvoiceHTML(
                           ? (mrpVal - unitPrice) * qty
                           : null;
     const mrpCell     = showMRP
-      ? `<td style="padding:5px 5px;text-align:right;font-size:9.5px;color:#9ca3af;text-decoration:line-through;white-space:nowrap;">${mrpVal != null ? formatCurrency(mrpVal) : '—'}</td>`
+      ? `<td style="padding:5px 5px;text-align:right;font-size:9.5px;color:#9ca3af;text-decoration:line-through;white-space:nowrap;">${mrpVal != null ? formatCurrency(mrpVal, country) : '—'}</td>`
       : '';
     const discCell    = showMRP
-      ? `<td style="padding:5px 5px;text-align:right;font-size:9.5px;color:#059669;font-weight:600;white-space:nowrap;">${discAmt != null ? `−${formatCurrency(discAmt)}` : '—'}</td>`
+      ? `<td style="padding:5px 5px;text-align:right;font-size:9.5px;color:#059669;font-weight:600;white-space:nowrap;">${discAmt != null ? `−${formatCurrency(discAmt, country)}` : '—'}</td>`
       : '';
 
     return `
@@ -115,10 +115,10 @@ function buildInvoiceHTML(
         <td style="padding:5px 5px;font-size:10.5px;color:#111827;word-break:break-word;">${escapeHTML(item.product_name || 'Product')}</td>
         <td style="padding:5px 5px;text-align:center;font-size:10px;color:#374151;white-space:nowrap;">${qty}</td>
         ${mrpCell}
-        <td style="padding:5px 5px;text-align:right;font-size:10px;color:#374151;white-space:nowrap;">${formatCurrency(unitPrice)}</td>
-        <td style="padding:5px 5px;text-align:right;font-size:10px;color:#374151;white-space:nowrap;">${Number(item.item_tax_total) > 0 ? formatCurrency(item.item_tax_total) : '—'}</td>
+        <td style="padding:5px 5px;text-align:right;font-size:10px;color:#374151;white-space:nowrap;">${formatCurrency(unitPrice, country)}</td>
+        <td style="padding:5px 5px;text-align:right;font-size:10px;color:#374151;white-space:nowrap;">${Number(item.item_tax_total) > 0 ? formatCurrency(item.item_tax_total, country) : '—'}</td>
         ${discCell}
-        <td style="padding:5px 5px;text-align:right;font-size:10.5px;font-weight:700;color:#111827;white-space:nowrap;">${formatCurrency(item.item_total_with_tax)}</td>
+        <td style="padding:5px 5px;text-align:right;font-size:10.5px;font-weight:700;color:#111827;white-space:nowrap;">${formatCurrency(item.item_total_with_tax, country)}</td>
       </tr>
     `;
   }).join('');
@@ -148,7 +148,7 @@ function buildInvoiceHTML(
   const savingsBanner = (showMRP && totalSavings > 0) ? `
     <div style="background:#D1FAE5;border:1px solid #6EE7B7;border-radius:6px;padding:7px 12px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;">
       <span style="font-size:11px;font-weight:700;color:#065F46;">🎉 Customer Saved</span>
-      <span style="font-size:12px;font-weight:900;color:#059669;">${formatCurrency(totalSavings)}</span>
+      <span style="font-size:12px;font-weight:900;color:#059669;">${formatCurrency(totalSavings, country)}</span>
     </div>
   ` : '';
 
@@ -190,17 +190,17 @@ function buildInvoiceHTML(
     <!-- Totals block -->
     <div style="display:flex;justify-content:flex-end;margin-bottom:20px;">
       <table style="width:auto;min-width:180px;max-width:100%;">
-        <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">Subtotal</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(subtotal)}</td></tr>
-        ${discount > 0 ? `<tr><td style="padding:4px 0;color:#059669;font-size:10.5px;">Discount</td><td style="padding:4px 0;text-align:right;font-size:10.5px;color:#059669;">−${formatCurrency(discount)}</td></tr>` : ''}
+        <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">Subtotal</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(subtotal, country)}</td></tr>
+        ${discount > 0 ? `<tr><td style="padding:4px 0;color:#059669;font-size:10.5px;">Discount</td><td style="padding:4px 0;text-align:right;font-size:10.5px;color:#059669;">−${formatCurrency(discount, country)}</td></tr>` : ''}
         ${gstBreakdown}
-        <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">Tax Total</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(taxTotal)}</td></tr>
+        <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">Tax Total</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(taxTotal, country)}</td></tr>
         <tr style="border-top:2px solid #111827;">
           <td style="padding:8px 0 4px;font-size:14px;font-weight:900;color:#111827;">Grand Total</td>
-          <td style="padding:8px 0 4px;text-align:right;font-size:14px;font-weight:900;color:#111827;">${formatCurrency(finalAmount)}</td>
+          <td style="padding:8px 0 4px;text-align:right;font-size:14px;font-weight:900;color:#111827;">${formatCurrency(finalAmount, country)}</td>
         </tr>
-        ${totalPaid > 0 ? `<tr><td style="padding:3px 0;color:#10B981;font-size:10.5px;font-weight:600;">Amount Paid</td><td style="padding:3px 0;text-align:right;font-size:10.5px;color:#10B981;font-weight:600;">${formatCurrency(totalPaid)}</td></tr>` : ''}
-        ${remaining > 0 ? `<tr><td style="padding:3px 0;color:#EF4444;font-size:11px;font-weight:700;">Balance Due</td><td style="padding:3px 0;text-align:right;font-size:11px;color:#EF4444;font-weight:700;">${formatCurrency(remaining)}</td></tr>` : ''}
-        ${(showMRP && totalSavings > 0) ? `<tr><td style="padding:5px 0 0;color:#059669;font-size:10.5px;font-weight:700;">You Saved</td><td style="padding:5px 0 0;text-align:right;font-size:10.5px;color:#059669;font-weight:700;">${formatCurrency(totalSavings)}</td></tr>` : ''}
+        ${totalPaid > 0 ? `<tr><td style="padding:3px 0;color:#10B981;font-size:10.5px;font-weight:600;">Amount Paid</td><td style="padding:3px 0;text-align:right;font-size:10.5px;color:#10B981;font-weight:600;">${formatCurrency(totalPaid, country)}</td></tr>` : ''}
+        ${remaining > 0 ? `<tr><td style="padding:3px 0;color:#EF4444;font-size:11px;font-weight:700;">Balance Due</td><td style="padding:3px 0;text-align:right;font-size:11px;color:#EF4444;font-weight:700;">${formatCurrency(remaining, country)}</td></tr>` : ''}
+        ${(showMRP && totalSavings > 0) ? `<tr><td style="padding:5px 0 0;color:#059669;font-size:10.5px;font-weight:700;">You Saved</td><td style="padding:5px 0 0;text-align:right;font-size:10.5px;color:#059669;font-weight:700;">${formatCurrency(totalSavings, country)}</td></tr>` : ''}
       </table>
     </div>
 
@@ -221,6 +221,8 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
   const [partialError,  setPartialError]  = useState('');
   const [printHovered,  setPrintHovered]  = useState(false);
   const [showReturnDrawer, setShowReturnDrawer] = useState(false);
+  const business  = useAuthStore(s => s.business);
+  const country   = business?.business_country_code || 'IN';
 
   const { can } = usePermissions();
 
@@ -282,7 +284,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
       const outstanding = detail?.remaining_balance ?? remaining;
       if (amt > outstanding) {
         setPartialError(
-          `Amount received (${formatCurrency(amt)}) exceeds outstanding balance (${formatCurrency(outstanding)})`
+          `Amount received (${formatCurrency(amt, country)}) exceeds outstanding balance (${formatCurrency(outstanding, country)})`
         );
         return;
       }
@@ -514,7 +516,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                             }}>
                               <span>Invoice Total</span>
                               <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                                {formatCurrency(finalAmount)}
+                                {formatCurrency(finalAmount, country)}
                               </span>
                             </div>
                             <div style={{
@@ -524,7 +526,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                             }}>
                               <span>Already Paid</span>
                               <span style={{ fontWeight: 600, color: '#059669' }}>
-                                {formatCurrency(totalPaid)}
+                                {formatCurrency(totalPaid, country)}
                               </span>
                             </div>
                             <div style={{
@@ -536,7 +538,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                             }}>
                               <span>Outstanding</span>
                               <span style={{ fontWeight: 700, color: '#ef4444' }}>
-                                {formatCurrency(remaining)}
+                                {formatCurrency(remaining, country)}
                               </span>
                             </div>
 
@@ -608,7 +610,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                                   fontSize: 11, color: 'var(--text-muted)',
                                   textDecoration: 'line-through',
                                 }}>
-                                  MRP {formatCurrency(mrpVal)}
+                                  MRP {formatCurrency(mrpVal, country)}
                                 </span>
                                 {hasDiscount && (
                                   <span style={{
@@ -626,9 +628,9 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
 
                             {/* Qty × rate + tax line */}
                             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                              {qty} × {formatCurrency(unitPrice)}
+                              {qty} × {formatCurrency(unitPrice, country)}
                               {Number(item.item_tax_total) > 0 &&
-                                ` + ${formatCurrency(item.item_tax_total)} tax`}
+                                ` + ${formatCurrency(item.item_tax_total, country)} tax`}
                             </div>
 
                             {/* MRP FEATURE: "You save ₹X" per line */}
@@ -637,7 +639,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                                 fontSize: 11.5, fontWeight: 600,
                                 color: '#059669', marginTop: 3,
                               }}>
-                                You save {formatCurrency(discAmt)} on this item
+                                You save {formatCurrency(discAmt, country)} on this item
                               </div>
                             )}
                           </div>
@@ -646,7 +648,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                             fontSize: 13, fontWeight: 700,
                             color: 'var(--text-primary)', flexShrink: 0,
                           }}>
-                            {formatCurrency(item.item_total_with_tax)}
+                            {formatCurrency(item.item_total_with_tax, country)}
                           </span>
                         </div>
                       </div>
@@ -657,39 +659,39 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
 
               {(cgst > 0 || sgst > 0 || igst > 0) && (
                 <DrawerSection title="Tax Breakdown">
-                  {cgst > 0 && <InfoRow label="CGST" value={formatCurrency(cgst)} />}
-                  {sgst > 0 && <InfoRow label="SGST" value={formatCurrency(sgst)} />}
-                  {igst > 0 && <InfoRow label="IGST" value={formatCurrency(igst)} isLast />}
+                  {cgst > 0 && <InfoRow label="CGST" value={formatCurrency(cgst, country)} />}
+                  {sgst > 0 && <InfoRow label="SGST" value={formatCurrency(sgst, country)} />}
+                  {igst > 0 && <InfoRow label="IGST" value={formatCurrency(igst, country)} isLast />}
                 </DrawerSection>
               )}
 
               <DrawerSection title="Summary">
-                <InfoRow label="Subtotal"   value={formatCurrency(subtotal)} />
+                <InfoRow label="Subtotal"   value={formatCurrency(subtotal, country)} />
                 {discount > 0 && (
                   <InfoRow label="Discount"
                     value={
                       <span style={{ color: '#059669', fontWeight: 600 }}>
-                        −{formatCurrency(discount)}
+                        −{formatCurrency(discount, country)}
                       </span>
                     }
                   />
                 )}
-                <InfoRow label="Tax Total"  value={formatCurrency(taxTotal)} />
+                <InfoRow label="Tax Total"  value={formatCurrency(taxTotal, country)} />
                 <InfoRow label="Total"
                   value={
                     <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>
-                      {formatCurrency(finalAmount)}
+                      {formatCurrency(finalAmount, country)}
                     </span>
                   }
                 />
                 {totalPaid > 0 && (
-                  <InfoRow label="Amount Paid" value={formatCurrency(totalPaid)} />
+                  <InfoRow label="Amount Paid" value={formatCurrency(totalPaid, country)} />
                 )}
                 {remaining > 0 && (
                   <InfoRow label="Remaining"
                     value={
                       <span style={{ color: '#ef4444', fontWeight: 600 }}>
-                        {formatCurrency(remaining)}
+                        {formatCurrency(remaining, country)}
                       </span>
                     }
                   />
@@ -699,7 +701,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                   <InfoRow label="🎉 Total Savings" isLast
                     value={
                       <span style={{ color: '#059669', fontWeight: 700 }}>
-                        {formatCurrency(totalSavings)}
+                        {formatCurrency(totalSavings, country)}
                       </span>
                     }
                   />

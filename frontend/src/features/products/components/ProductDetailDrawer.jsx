@@ -120,7 +120,7 @@ function buildProductPrintHTML(business, product, detail, summary, stockHistory,
   const mrpCard = mrpVal != null
     ? `<div style="${cardStyle}">
         <div style="${labelStyle}">MRP</div>
-        <div style="font-size:15px;font-weight:800;color:#9ca3af;text-decoration:line-through;word-break:break-all;">${formatCurrency(mrpVal)}</div>
+        <div style="font-size:15px;font-weight:800;color:#9ca3af;text-decoration:line-through;word-break:break-all;">${formatCurrency(mrpVal, country)}</div>
       </div>`
     : ''
 
@@ -130,16 +130,16 @@ function buildProductPrintHTML(business, product, detail, summary, stockHistory,
     ? `<div style="${wrapStyle}">
         <div style="${cardStyle}">
           <div style="${labelStyle}">Selling Price</div>
-          <div style="font-size:15px;font-weight:800;color:#4F46E5;word-break:break-all;">${formatCurrency(p.prod_sell_price ?? product.prod_sell_price)}</div>
+          <div style="font-size:15px;font-weight:800;color:#4F46E5;word-break:break-all;">${formatCurrency(p.prod_sell_price ?? product.prod_sell_price, country)}</div>
         </div>
         ${mrpCard}
         <div style="${cardStyle}">
           <div style="${labelStyle}">Cost Price</div>
-          <div style="font-size:15px;font-weight:800;color:#374151;word-break:break-all;">${formatCurrency(p.prod_cost_price ?? product.prod_cost_price)}</div>
+          <div style="font-size:15px;font-weight:800;color:#374151;word-break:break-all;">${formatCurrency(p.prod_cost_price ?? product.prod_cost_price, country)}</div>
         </div>
         <div style="${cardStyle}">
           <div style="${labelStyle}">Profit</div>
-          <div style="font-size:15px;font-weight:800;color:#10B981;word-break:break-all;">${formatCurrency(p.prod_profit ?? product.prod_profit ?? 0)}</div>
+          <div style="font-size:15px;font-weight:800;color:#10B981;word-break:break-all;">${formatCurrency(p.prod_profit ?? product.prod_profit ?? 0, country)}</div>
         </div>
         <div style="${cardStyle}">
           <div style="${labelStyle}">Current Stock</div>
@@ -149,7 +149,7 @@ function buildProductPrintHTML(business, product, detail, summary, stockHistory,
     : `<div style="${wrapStyle}">
         <div style="${cardStyle}">
           <div style="${labelStyle}">Selling Price</div>
-          <div style="font-size:15px;font-weight:800;color:#4F46E5;word-break:break-all;">${formatCurrency(p.prod_sell_price ?? product.prod_sell_price)}</div>
+          <div style="font-size:15px;font-weight:800;color:#4F46E5;word-break:break-all;">${formatCurrency(p.prod_sell_price ?? product.prod_sell_price, country)}</div>
         </div>
         ${mrpCard}
         <div style="${cardStyle}">
@@ -299,6 +299,8 @@ function AuditGrid({ createdAt, createdBy, updatedAt, updatedBy }) {
 // ── Main drawer ───────────────────────────────────────────────────────────────
 export default function ProductDetailDrawer({ product, onClose }) {
   const [printHovered, setPrintHovered] = useState(false)
+  const business  = useAuthStore(s => s.business)
+  const country   = business?.business_country_code || 'IN'
   // ── Permission check ─────────────────────────────────────────────────────
   // We get this from two sources and use whichever is available:
   //   1. The frontend permission store (immediate, available before API call)
@@ -463,29 +465,29 @@ export default function ProductDetailDrawer({ product, onClose }) {
               {/* user lacks view_product_profit — so even if this UI check  */}
               {/* were bypassed, the values would display as '—'.            */}
               <Section title="Product Details">
-                <InfoRow label="Selling Price"  value={formatCurrency(detail?.prod_sell_price ?? product.prod_sell_price)} />
+                <InfoRow label="Selling Price"  value={formatCurrency(detail?.prod_sell_price ?? product.prod_sell_price, country)} />
                 <InfoRow label="MRP" value={
                   (detail?.prod_mrp != null)
-                    ? formatCurrency(detail.prod_mrp)
+                    ? formatCurrency(detail.prod_mrp, country)
                     : (product.prod_mrp != null)
-                      ? formatCurrency(product.prod_mrp)
+                      ? formatCurrency(product.prod_mrp, country)
                       : '—'
                 } />
                 {canViewProfit && (
                   <InfoRow label="Cost Price"   value={
                     detail?.prod_cost_price != null
-                      ? formatCurrency(detail.prod_cost_price)
+                      ? formatCurrency(detail.prod_cost_price, country)
                       : product.prod_cost_price != null
-                        ? formatCurrency(product.prod_cost_price)
+                        ? formatCurrency(product.prod_cost_price, country)
                         : '—'
                   } />
                 )}
                 {canViewProfit && (
                   <InfoRow label="Profit Margin" value={
                     detail?.prod_profit != null
-                      ? formatCurrency(detail.prod_profit)
+                      ? formatCurrency(detail.prod_profit, country)
                       : product.prod_profit != null
-                        ? formatCurrency(product.prod_profit)
+                        ? formatCurrency(product.prod_profit, country)
                         : '—'
                   } />
                 )}
@@ -581,12 +583,12 @@ export default function ProductDetailDrawer({ product, onClose }) {
                         }}>
                           <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{ch.label}</span>
                           <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>
-                            {formatCurrency(ch.old_value)} → {formatCurrency(ch.new_value)}
+                            {formatCurrency(ch.old_value, country)} → {formatCurrency(ch.new_value, country)}
                             <span style={{
                               marginLeft: 6, fontSize: 11.5,
                               color: ch.difference > 0 ? '#10B981' : '#EF4444',
                             }}>
-                              ({ch.difference > 0 ? '+' : ''}{formatCurrency(ch.difference)})
+                              ({ch.difference > 0 ? '+' : ''}{formatCurrency(ch.difference, country)})
                             </span>
                           </span>
                         </div>

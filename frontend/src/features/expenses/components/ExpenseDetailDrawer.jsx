@@ -30,7 +30,7 @@ const CATEGORY_LABELS = {
 function buildExpensePrintHTML(business, expense) {
   const metaFields = [
     { label: 'Category', value: CATEGORY_LABELS[expense.expense_category] || expense.expense_category || '—' },
-    { label: 'Amount', value: formatCurrency(expense.expense_amount) },
+    { label: 'Amount', value: formatCurrency(expense.expense_amount, country) },
     { label: 'Date', value: expense.expense_date ? formatDateOnly(expense.expense_date) : '—' },
     { label: 'Created On', value: expense.created_at ? formatDate(expense.created_at) : '—' },
   ]
@@ -60,6 +60,8 @@ function buildExpensePrintHTML(business, expense) {
 
 export default function ExpenseDetailDrawer({ expenseId, onClose, onEdit, canManage }) {
   const [printHovered, setPrintHovered] = useState(false)
+  const business  = useAuthStore(s => s.business)
+  const country   = business?.business_country_code || 'IN'
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['expense', expenseId],
@@ -117,7 +119,7 @@ export default function ExpenseDetailDrawer({ expenseId, onClose, onEdit, canMan
                 {detail ? (CATEGORY_LABELS[detail.expense_category] || detail.expense_category) : 'Expense'}
               </h2>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0' }}>
-                {detail ? formatCurrency(detail.expense_amount) : 'Loading\u2026'}
+                {detail ? formatCurrency(detail.expense_amount, country) : 'Loading\u2026'}
               </p>
             </div>
           </div>
@@ -197,7 +199,7 @@ export default function ExpenseDetailDrawer({ expenseId, onClose, onEdit, canMan
                     Amount
                   </div>
                   <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--accent-600)' }}>
-                    {formatCurrency(detail.expense_amount)}
+                    {formatCurrency(detail.expense_amount, country)}
                   </div>
                 </div>
                 <div>

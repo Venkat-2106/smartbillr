@@ -18,6 +18,7 @@ import { memo, useCallback, useRef, useState } from 'react';
 import { formatCurrency } from '../../../shared/utils/formatCurrency';
 import { selectStyle } from '../../../shared/components/FormField';
 import { NUM_INPUT_STYLE } from '../../../shared/constants/styles';
+import useAuthStore from '../../../store/authStore';
 import {
   DropdownMenu,
   DropdownMenuScroll,
@@ -50,6 +51,8 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
   const overStock = availableQty !== null && Number(item.quantity) > availableQty;
   const comboRef = useRef(null);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const business  = useAuthStore(s => s.business);
+  const country   = business?.business_country_code || 'IN';
 
   const onSearchKeyDown = useCallback((e) => {
     if (!isOpen || searchResults.length === 0) return;
@@ -145,7 +148,7 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {formatCurrency(p.prod_sell_price)}
+                          {formatCurrency(p.prod_sell_price, country)}
                         </div>
                         {p.prod_stock_qty != null && (
                           <div style={{ fontSize: 11, color: p.prod_stock_qty > 0 ? '#059669' : '#ef4444', marginTop: 1 }}>
@@ -211,7 +214,7 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
         fontSize: 13, fontWeight: 700,
         color: 'var(--text-primary)', textAlign: 'right',
       }}>
-        {formatCurrency(s + t)}
+        {formatCurrency(s + t, country)}
       </span>
       <button
         type="button"

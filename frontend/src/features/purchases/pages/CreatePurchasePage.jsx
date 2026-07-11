@@ -55,6 +55,8 @@ const newItem = () => ({
 export default function CreatePurchasePage() {
   const navigate    = useNavigate()
   const queryClient = useQueryClient()
+  const business  = useAuthStore(s => s.business)
+  const country   = business?.business_country_code || 'IN'
 
   // ── Form state ───────────────────────────────────────────────────────────
   const [suppId,        setSuppId]        = useState('')
@@ -419,19 +421,19 @@ export default function CreatePurchasePage() {
           }}>
             <PurchaseSectionCard title="Order Summary">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <PurchaseOrderSummaryRow label="Subtotal" value={formatCurrency(totals.subtotal)} />
+                <PurchaseOrderSummaryRow label="Subtotal" value={formatCurrency(totals.subtotal, country)} />
                 {totals.taxTotal > 0 && (
-                  <PurchaseOrderSummaryRow label="Tax" value={formatCurrency(totals.taxTotal)} muted />
+                  <PurchaseOrderSummaryRow label="Tax" value={formatCurrency(totals.taxTotal, country)} muted />
                 )}
                 {totals.discountAmt > 0 && (
                   <PurchaseOrderSummaryRow
                     label="Discount"
-                    value={<span style={{ color: 'var(--success-text)' }}>−{formatCurrency(totals.discountAmt)}</span>}
+                    value={<span style={{ color: 'var(--success-text)' }}>−{formatCurrency(totals.discountAmt, country)}</span>}
                     muted
                   />
                 )}
                 <div style={{ borderTop: '1.5px solid var(--border)', paddingTop: 12, marginTop: 2 }}>
-                  <PurchaseOrderSummaryRow label="Grand Total" value={formatCurrency(totals.grandTotal)} bold />
+                  <PurchaseOrderSummaryRow label="Grand Total" value={formatCurrency(totals.grandTotal, country)} bold />
                 </div>
               </div>
             </PurchaseSectionCard>

@@ -63,7 +63,7 @@ function StatCard({ label, value, color }) {
 function buildCategoryPrintHTML(business, category, detail, summary, products) {
   const metaFields = [
     { label: 'Total Products', value: String(summary.total_products ?? 0) },
-    { label: 'Stock Value',    value: formatCurrency(summary.total_stock_value ?? 0) },
+    { label: 'Stock Value',    value: formatCurrency(summary.total_stock_value ?? 0, country) },
     { label: 'Low Stock',      value: String(summary.low_stock_count ?? 0) },
     { label: 'Out of Stock',   value: String(summary.out_of_stock_count ?? 0) },
   ]
@@ -78,8 +78,8 @@ function buildCategoryPrintHTML(business, category, detail, summary, products) {
 
   const prodCols = [
     { label: 'Product Name',   key: 'prod_name',         align: 'left' },
-    { label: 'Sell Price',     key: 'prod_sell_price',   align: 'right', format: v => formatCurrency(v) },
-    { label: 'Cost Price',     key: 'prod_cost_price',   align: 'right', format: v => formatCurrency(v) },
+    { label: 'Sell Price',     key: 'prod_sell_price',   align: 'right', format: v => formatCurrency(v, country) },
+    { label: 'Cost Price',     key: 'prod_cost_price',   align: 'right', format: v => formatCurrency(v, country) },
     { label: 'Stock',          key: 'prod_stock_qty',    align: 'center' },
     { label: 'Unit',           key: 'unit',              align: 'center' },
     { label: 'Status',         key: '_status',           align: 'center', format: (_, row) => {
@@ -117,6 +117,8 @@ function buildCategoryPrintHTML(business, category, detail, summary, products) {
 
 export default function CategoryDetailDrawer({ category, onClose }) {
   const [printHovered, setPrintHovered] = useState(false)
+  const business  = useAuthStore(s => s.business)
+  const country   = business?.business_country_code || 'IN'
   const { data, isLoading, isError } = useQuery({
     queryKey: ['category', category?.category_id],
     queryFn:  () => fetchCategory(category.category_id),
@@ -293,7 +295,7 @@ export default function CategoryDetailDrawer({ category, onClose }) {
               {/* Summary stats */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
                 <StatCard label="Total Products"   value={summary.total_products     ?? 0} />
-                <StatCard label="Stock Value"      value={formatCurrency(summary.total_stock_value ?? 0)} color="var(--accent-600)" />
+                <StatCard label="Stock Value"      value={formatCurrency(summary.total_stock_value ?? 0, country)} color="var(--accent-600)" />
                 <StatCard label="Low Stock Items"  value={summary.low_stock_count    ?? 0} color={summary.low_stock_count > 0 ? '#F59E0B' : 'var(--text-primary)'} />
                 <StatCard label="Out of Stock"     value={summary.out_of_stock_count ?? 0} color={summary.out_of_stock_count > 0 ? '#EF4444' : 'var(--text-primary)'} />
               </div>
@@ -332,12 +334,12 @@ export default function CategoryDetailDrawer({ category, onClose }) {
                             {prod.prod_name}
                           </div>
                           <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-                            {formatCurrency(prod.prod_sell_price)} · Stock: {prod.prod_stock_qty} {prod.unit || 'pcs'}
+                            {formatCurrency(prod.prod_sell_price, country)} · Stock: {prod.prod_stock_qty} {prod.unit || 'pcs'}
                           </div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
                           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                            {formatCurrency(prod.prod_sell_price)}
+                            {formatCurrency(prod.prod_sell_price, country)}
                           </span>
                           <StockBadge qty={prod.prod_stock_qty} lowAlert={prod.prod_low_stock_alert} />
                         </div>

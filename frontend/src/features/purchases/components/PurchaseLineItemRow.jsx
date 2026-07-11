@@ -22,6 +22,7 @@ import { memo, useCallback, useState } from 'react'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { selectStyle }    from '../../../shared/components/FormField'
 import { NUM_INPUT_STYLE } from '../../../shared/constants/styles'
+import useAuthStore from '../../../store/authStore'
 import {
   DropdownMenu,
   DropdownMenuScroll,
@@ -48,6 +49,8 @@ const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
 }) {
   const [hoveredProd, setHoveredProd] = useState(null)
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
+  const business  = useAuthStore(s => s.business)
+  const country   = business?.business_country_code || 'IN'
 
   const onSearchKeyDown = useCallback((e) => {
     if (!isOpen || searchResults.length === 0) return
@@ -143,7 +146,7 @@ const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
                           <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-                            Cost: {formatCurrency(p.prod_cost_price || 0)}
+                            Cost: {formatCurrency(p.prod_cost_price || 0, country)}
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
                             Stock: {p.prod_stock_qty ?? '—'}
@@ -198,7 +201,7 @@ const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
 
       {/* Line total */}
       <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', textAlign: 'right' }}>
-        {formatCurrency(s + t)}
+        {formatCurrency(s + t, country)}
       </span>
 
       {/* Remove */}

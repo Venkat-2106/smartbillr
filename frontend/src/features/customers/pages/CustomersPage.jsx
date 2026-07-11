@@ -180,6 +180,8 @@ export default function CustomersPage() {
   const hasPermission = useAuthStore(s => s.hasPermission)
   const canManage     = hasPermission('customers.manage')
   const subscription  = useAuthStore(s => s.subscription)
+  const business  = useAuthStore(s => s.business)
+  const country   = business?.business_country_code || 'IN'
 
   const {
     customers,
@@ -413,7 +415,7 @@ export default function CustomersPage() {
             </svg>
           }
           label="Outstanding Balance"
-          value={customerSummary?.outstanding_balance != null ? formatCurrency(customerSummary.outstanding_balance) : '\u2014'}
+          value={customerSummary?.outstanding_balance != null ? formatCurrency(customerSummary.outstanding_balance, country) : '\u2014'}
         />
         <MetricCard
           colSpan={3}

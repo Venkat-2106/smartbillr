@@ -96,11 +96,11 @@ const SaleCard = memo(function SaleCard({ sale }) {
       <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
         <span>{formatDate(sale.sales_created_at)}</span>
         <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-          {formatCurrency(sale.sales_final_amount)}
+          {formatCurrency(sale.sales_final_amount, currencyCountry)}
         </span>
         {sale.payment_summary?.remaining_balance > 0 && (
           <span style={{ color: '#EF4444' }}>
-            Due: {formatCurrency(sale.payment_summary.remaining_balance)}
+            Due: {formatCurrency(sale.payment_summary.remaining_balance, currencyCountry)}
           </span>
         )}
       </div>
@@ -142,6 +142,7 @@ export function DrawerOverlay({ open, onClick }) {
 
 function buildCustomerPrintHTML(business, customer, summary, salesHistory) {
   const country = COUNTRY_MAP[customer.cust_country_code] || customer.cust_country_code || '—'
+  const currencyCountry = business?.business_country_code || 'IN'
 
   const metaFields = [
     { label: 'Phone',           value: customer.cust_phone || '—' },
@@ -170,15 +171,15 @@ function buildCustomerPrintHTML(business, customer, summary, salesHistory) {
       </div>
       <div style="border:1.5px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center;">
         <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Total Spent</div>
-        <div style="font-size:22px;font-weight:800;color:#4F46E5;">${formatCurrency(totalSpent)}</div>
+        <div style="font-size:22px;font-weight:800;color:#4F46E5;">${formatCurrency(totalSpent, currencyCountry)}</div>
       </div>
       <div style="border:1.5px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center;">
         <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Total Paid</div>
-        <div style="font-size:22px;font-weight:800;color:#10B981;">${formatCurrency(totalPaid)}</div>
+        <div style="font-size:22px;font-weight:800;color:#10B981;">${formatCurrency(totalPaid, currencyCountry)}</div>
       </div>
       <div style="border:1.5px solid #e5e7eb;border-radius:8px;padding:12px;text-align:center;">
         <div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Outstanding</div>
-        <div style="font-size:22px;font-weight:800;color:${outColor};">${formatCurrency(outstanding)}</div>
+        <div style="font-size:22px;font-weight:800;color:${outColor};">${formatCurrency(outstanding, currencyCountry)}</div>
       </div>
     </div>
   ` : ''
@@ -196,9 +197,9 @@ function buildCustomerPrintHTML(business, customer, summary, salesHistory) {
     return `<tr style="background:${bg};">
       <td style="padding:7px 8px;font-size:12px;color:#111827;text-align:left;">${invNo}</td>
       <td style="padding:7px 8px;font-size:12px;color:#374151;text-align:left;">${dateStr}</td>
-      <td style="padding:7px 8px;font-size:12px;color:#111827;text-align:right;font-weight:600;">${formatCurrency(row.sales_final_amount)}</td>
-      <td style="padding:7px 8px;font-size:12px;color:#10B981;text-align:right;">${formatCurrency(paid)}</td>
-      <td style="padding:7px 8px;font-size:12px;color:#EF4444;text-align:right;">${formatCurrency(due)}</td>
+      <td style="padding:7px 8px;font-size:12px;color:#111827;text-align:right;font-weight:600;">${formatCurrency(row.sales_final_amount, currencyCountry)}</td>
+      <td style="padding:7px 8px;font-size:12px;color:#10B981;text-align:right;">${formatCurrency(paid, currencyCountry)}</td>
+      <td style="padding:7px 8px;font-size:12px;color:#EF4444;text-align:right;">${formatCurrency(due, currencyCountry)}</td>
       <td style="padding:7px 8px;text-align:center;"><span style="font-size:10px;font-weight:700;text-transform:capitalize;color:${sColor};background:${sColor}18;padding:2px 8px;border-radius:4px;">${status}</span></td>
     </tr>`
   }).join('')
@@ -253,6 +254,8 @@ export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManag
   }
 
   const [printHovered, setPrintHovered] = useState(false)
+  const business  = useAuthStore(s => s.business)
+  const currencyCountry = business?.business_country_code || 'IN'
 
   const customer     = data
   const summary      = data?.summary
@@ -384,11 +387,11 @@ export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManag
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <StatCard label="Total Sales"  value={summary.total_sales} />
-                <StatCard label="Total Spent"  value={formatCurrency(summary.total_spent)}  color="var(--accent-600)" />
-                <StatCard label="Total Paid"   value={formatCurrency(summary.total_paid)}   color="#10B981" />
+                <StatCard label="Total Spent"  value={formatCurrency(summary.total_spent, currencyCountry)}  color="var(--accent-600)" />
+                <StatCard label="Total Paid"   value={formatCurrency(summary.total_paid, currencyCountry)}   color="#10B981" />
                 <StatCard
                   label="Outstanding"
-                  value={formatCurrency(summary.outstanding_balance)}
+                  value={formatCurrency(summary.outstanding_balance, currencyCountry)}
                   color={summary.outstanding_balance > 0 ? '#EF4444' : '#10B981'}
                 />
               </div>

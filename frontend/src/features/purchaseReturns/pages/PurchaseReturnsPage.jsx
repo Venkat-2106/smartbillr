@@ -8,6 +8,7 @@ import {
 } from '../../../shared/components'
 import { usePermissions } from '../../../shared/hooks/usePermissions'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
+import useAuthStore from '../../../store/authStore'
 
 import { formatDate, formatDateCSV } from '../../../shared/utils/formatDate'
 import { usePurchaseReturns } from '../hooks/usePurchaseReturns'
@@ -46,7 +47,7 @@ function buildColumns(canManage, onDelete) {
       width: 120,
       render: (row) => (
         <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 14 }}>
-          {formatCurrency(row.return_amount)}
+          {formatCurrency(row.return_amount, country)}
         </span>
       ),
     },
@@ -111,6 +112,8 @@ export default function PurchaseReturnsPage() {
   const navigate = useNavigate()
   const { can } = usePermissions()
   const canManage = can('purchase_returns.manage')
+  const business  = useAuthStore(s => s.business)
+  const country   = business?.business_country_code || 'IN'
 
   const {
     returns, isLoading, isError,
@@ -167,7 +170,7 @@ export default function PurchaseReturnsPage() {
               filename="purchase-returns"
               columns={[
                 { key: 'return_created_at', label: 'Return Date', format: (v) => formatDateCSV(v) },
-                { key: 'return_amount', label: 'Amount', format: (v) => formatCurrency(v) },
+                { key: 'return_amount', label: 'Amount', format: (v) => formatCurrency(v, country) },
                 { key: 'return_status', label: 'Status' },
                 { key: 'return_reason', label: 'Reason' },
               ]}

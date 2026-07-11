@@ -10,14 +10,15 @@
 // Status update calls updateStatus from parent hook.
 
 import { useState }               from 'react'
-import { XMarkIcon }              from '@heroicons/react/24/outline'
-import { usePurchaseDetail }      from '../hooks/usePurchases'
-import { Badge, Button, Spinner } from '../../../shared/components'
-import { selectStyle }            from '../../../shared/components/FormField'
-import { formatCurrency }         from '../../../shared/utils/formatCurrency'
-import { formatDate }             from '../../../shared/utils/formatDate'
-import { usePermissions }         from '../../../shared/hooks/usePermissions'
-import CreatePurchaseReturnDrawer from '../../purchaseReturns/components/CreatePurchaseReturnDrawer'
+import { XMarkIcon }               from '@heroicons/react/24/outline'
+import { usePurchaseDetail }       from '../hooks/usePurchases'
+import { Badge, Button, Spinner }  from '../../../shared/components'
+import { selectStyle }             from '../../../shared/components/FormField'
+import { formatCurrency }          from '../../../shared/utils/formatCurrency'
+import { formatDate }              from '../../../shared/utils/formatDate'
+import { usePermissions }          from '../../../shared/hooks/usePermissions'
+import useAuthStore                from '../../../store/authStore'
+import CreatePurchaseReturnDrawer  from '../../purchaseReturns/components/CreatePurchaseReturnDrawer'
 
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' }
 const STATUS_LABEL   = { paid: 'Paid',    partial: 'Partial', pending: 'Unpaid' }
@@ -77,6 +78,8 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
   const [editingStatus, setEditingStatus] = useState(false)
   const [newStatus,     setNewStatus]     = useState('')
   const [showReturnDrawer, setShowReturnDrawer] = useState(false)
+  const business  = useAuthStore(s => s.business)
+  const country   = business?.business_country_code || 'IN'
 
   const { can } = usePermissions()
 
@@ -265,23 +268,23 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
               border: '1px solid var(--border)',
               borderRadius: 12, padding: '14px 16px',
             }}>
-              <SummaryRow label="Subtotal"         value={formatCurrency(data.pur_total_amount || 0)} />
+              <SummaryRow label="Subtotal"         value={formatCurrency(data.pur_total_amount || 0, country)} />
               {(data.pur_discount || 0) > 0 && (
-                <SummaryRow label="Discount"       value={`− ${formatCurrency(data.pur_discount)}`} danger />
+                <SummaryRow label="Discount"       value={`− ${formatCurrency(data.pur_discount, country)}`} danger />
               )}
               {hasTax && (data.pur_cgst_total || 0) > 0 && (
-                <SummaryRow label="CGST"           value={formatCurrency(data.pur_cgst_total)} />
+                <SummaryRow label="CGST"           value={formatCurrency(data.pur_cgst_total, country)} />
               )}
               {hasTax && (data.pur_sgst_total || 0) > 0 && (
-                <SummaryRow label="SGST"           value={formatCurrency(data.pur_sgst_total)} />
+                <SummaryRow label="SGST"           value={formatCurrency(data.pur_sgst_total, country)} />
               )}
               {hasTax && (data.pur_igst_total || 0) > 0 && (
-                <SummaryRow label="IGST"           value={formatCurrency(data.pur_igst_total)} />
+                <SummaryRow label="IGST"           value={formatCurrency(data.pur_igst_total, country)} />
               )}
               {hasTax && (data.pur_tax_total || 0) > 0 && (
-                <SummaryRow label="Tax"            value={formatCurrency(data.pur_tax_total)} />
+                <SummaryRow label="Tax"            value={formatCurrency(data.pur_tax_total, country)} />
               )}
-              <SummaryRow label="Total"            value={formatCurrency(data.pur_final_amount || 0)} bold />
+              <SummaryRow label="Total"            value={formatCurrency(data.pur_final_amount || 0, country)} bold />
             </div>
 
             {/* Line Items */}
@@ -338,10 +341,10 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
                     {item.pur_item_qty}
                   </div>
                   <div style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
-                    {formatCurrency(item.item_unit_price)}
+                    {formatCurrency(item.item_unit_price, country)}
                   </div>
                   <div style={{ textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {formatCurrency(item.item_total_with_tax || item.item_subtotal || 0)}
+                    {formatCurrency(item.item_total_with_tax || item.item_subtotal || 0, country)}
                   </div>
                 </div>
               ))}
@@ -363,7 +366,7 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                          Return — {formatCurrency(ret.total_refund_amount)}
+                          Return — {formatCurrency(ret.total_refund_amount, country)}
                         </span>
                         <Badge
                           variant={

@@ -41,7 +41,7 @@ function StatusBadge({ status }) {
 function buildReturnPrintHTML(business, detail) {
   const metaFields = [
     { label: 'Supplier', value: detail.supp_name || '—' },
-    { label: 'Amount', value: formatCurrency(detail.return_amount) },
+    { label: 'Amount', value: formatCurrency(detail.return_amount, country) },
     { label: 'Status', value: STATUS_LABEL[detail.return_status] || detail.return_status },
     { label: 'Restock', value: detail.restock ? 'Yes' : 'No' },
     { label: 'Reason', value: detail.return_reason || '—' },
@@ -51,8 +51,8 @@ function buildReturnPrintHTML(business, detail) {
   const itemCols = [
     { label: 'Product', key: 'product_name', align: 'left' },
     { label: 'Qty', key: 'return_qty', align: 'center' },
-    { label: 'Refund', key: 'refund_amount', align: 'right', format: v => formatCurrency(v) },
-    { label: 'Subtotal', key: 'return_item_subtotal', align: 'right', format: v => formatCurrency(v) },
+    { label: 'Refund', key: 'refund_amount', align: 'right', format: v => formatCurrency(v, country) },
+    { label: 'Subtotal', key: 'return_item_subtotal', align: 'right', format: v => formatCurrency(v, country) },
   ]
 
   const items = (detail.items || []).map(i => ({
@@ -87,6 +87,8 @@ export default function PurchaseReturnDetailDrawer({ returnId, onClose, onStatus
   const [actionLoading, setActionLoading] = useState(false)
   const [printHovered, setPrintHovered] = useState(false)
   const queryClient = useQueryClient()
+  const business  = useAuthStore(s => s.business)
+  const country   = business?.business_country_code || 'IN'
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['purchaseReturn', returnId],
@@ -293,7 +295,7 @@ export default function PurchaseReturnDetailDrawer({ returnId, onClose, onStatus
                     Amount
                   </div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: '#D97706' }}>
-                    {formatCurrency(detail.return_amount)}
+                    {formatCurrency(detail.return_amount, country)}
                   </div>
                 </div>
                 <div>
@@ -367,11 +369,11 @@ export default function PurchaseReturnDetailDrawer({ returnId, onClose, onStatus
                             {item.product_name || `Product ${String(item.product_id).slice(0, 8)}...`}
                           </div>
                           <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-                            Qty: {item.return_qty} {'\u00D7'} {formatCurrency(item.refund_amount)}
+                            Qty: {item.return_qty} {'\u00D7'} {formatCurrency(item.refund_amount, country)}
                           </div>
                         </div>
                         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {formatCurrency(item.return_item_subtotal ?? (item.return_qty * item.refund_amount))}
+                          {formatCurrency(item.return_item_subtotal ?? (item.return_qty * item.refund_amount), country)}
                         </div>
                       </div>
                     ))}

@@ -21,6 +21,14 @@
 //   Example for IST (UTC+5:30) user selecting "2026-06-08":
 //     localDayStartUTC("2026-06-08") → "2026-06-07T18:30:00.000Z"
 //     localDayEndUTC("2026-06-08")   → "2026-06-08T18:29:59.999Z"
+//
+//   Example for US Pacific (UTC-7 in June) user selecting "2026-06-08":
+//     localDayStartUTC("2026-06-08") → "2026-06-08T07:00:00.000Z"
+//     localDayEndUTC("2026-06-08")   → "2026-06-09T06:59:59.999Z"
+//
+//   BUG FIX (2026-07-11): new Date("YYYY-MM-DD") is parsed as UTC midnight,
+//   then setHours() operates in local time — shifting the date by one day
+//   for negative-UTC-offset timezones. Parse via year/month/day args instead.
 
 /**
  * Returns the UTC ISO string for the very start (00:00:00.000) of the given
@@ -29,9 +37,14 @@
  * @param {string} dateStr - "YYYY-MM-DD" from an <input type="date">
  * @returns {string} Full UTC ISO timestamp string, e.g. "2026-06-07T18:30:00.000Z"
  */
+function parseLocalDateOnly(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
 export function localDayStartUTC(dateStr) {
-  const d = new Date(dateStr)
-  d.setHours(0, 0, 0, 0)       // shift to local midnight
+  const d = parseLocalDateOnly(dateStr)
+  d.setHours(0, 0, 0, 0)
   return d.toISOString()
 }
 
@@ -43,7 +56,7 @@ export function localDayStartUTC(dateStr) {
  * @returns {string} Full UTC ISO timestamp string, e.g. "2026-06-08T18:29:59.999Z"
  */
 export function localDayEndUTC(dateStr) {
-  const d = new Date(dateStr)
-  d.setHours(23, 59, 59, 999)  // shift to local end-of-day
+  const d = parseLocalDateOnly(dateStr)
+  d.setHours(23, 59, 59, 999)
   return d.toISOString()
 }

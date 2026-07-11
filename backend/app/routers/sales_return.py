@@ -209,9 +209,9 @@ def create_sales_return(
                 "sale_item_id": str(sale_item.sale_item_id),
                 "product_id": str(item.product_id),
                 "return_qty": item.return_qty,
-                "refund_amount": float(item.refund_amount),
+                "refund_amount": item.refund_amount,
                 "original_qty": sale_item.sale_item_quantity,
-                "original_unit_price": float(sale_item.sale_item_unit_price)
+                "original_unit_price": sale_item.sale_item_unit_price
             })
 
         # Step 4 → Insert sales return header
@@ -236,7 +236,7 @@ def create_sales_return(
                 "return_id": new_return_id,
                 "business_id": business_id,
                 "sale_id": str(data.sale_id),
-                "return_amount": float(total_refund),
+                "return_amount": str(total_refund),
                 "return_reason": data.return_reason,
                 "return_status": data.return_status or "pending",
                 "restock": data.restock,
@@ -270,9 +270,9 @@ def create_sales_return(
                     "sale_item_id": calc["sale_item_id"],
                     "product_id": calc["product_id"],
                     "return_qty": calc["return_qty"],
-                    "unit_price": calc["refund_amount"],
+                    "unit_price": str(calc["refund_amount"]),
                     "original_qty": calc["original_qty"],
-                    "original_unit_price": calc["original_unit_price"],
+                    "original_unit_price": str(calc["original_unit_price"]),
                     "business_id": business_id
                 }
             )
@@ -430,6 +430,7 @@ def update_sales_return(
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
+    user_id     = current_user["user_id"]
 
     sales_return = db.query(SalesReturn).filter(
         SalesReturn.return_id == return_id,
@@ -467,20 +468,23 @@ def update_sales_return(
             if error:
                 return error_response(error, status_code=400)
 
-        # Update status and restock flag — DB trigger fires automatically
+        # Update status, restock, and approval fields — DB triggers fire automatically
         db.execute(
             text("""
                 UPDATE sales_returns
                 SET return_status = :status,
-                    restock = :restock
+                    restock = :restock,
+                    approved_by = CASE WHEN :status = 'approved' THEN CAST(:approved_by AS uuid) ELSE approved_by END,
+                    approved_at = CASE WHEN :status = 'approved' THEN NOW() ELSE approved_at END
                 WHERE return_id = CAST(:return_id AS uuid)
                   AND business_id = CAST(:bid AS uuid)
             """),
             {
-                "status": data.return_status,
-                "restock": data.restock,
-                "return_id": return_id,
-                "bid": business_id
+                "status":      data.return_status,
+                "restock":     data.restock,
+                "approved_by": str(user_id),
+                "return_id":   return_id,
+                "bid":         business_id
             }
         )
 

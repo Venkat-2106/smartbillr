@@ -330,6 +330,27 @@ def create_purchase(
             ]
         )
 
+        # ── Update prod_cost_price for each purchased product ─────────────────
+        # Last-purchase-cost accounting: set cost price to the unit price from
+        # this purchase.  prod_profit is a generated column — DB recomputes it.
+        if calculated_items:
+            db.execute(
+                text("""
+                    UPDATE products p
+                    SET prod_cost_price = v.unit_price::numeric,
+                        updated_by = CAST(:updated_by AS uuid)
+                    FROM (VALUES {values}) AS v(product_id, unit_price)
+                    WHERE p.prod_id = v.product_id::uuid
+                      AND p.business_id = CAST(:bid AS uuid)
+                """.format(values=",".join(f"(:pid_{i}, :price_{i})" for i in range(len(calculated_items))))),
+                {
+                    **{f"pid_{i}": calc["product_id"] for i, calc in enumerate(calculated_items)},
+                    **{f"price_{i}": calc["unit_price"] for i, calc in enumerate(calculated_items)},
+                    "bid": business_id,
+                    "updated_by": user_id,
+                }
+            )
+
         # Step 6 → Auto-create expense record when purchase is paid immediately
         # WHY: Cash purchase = money leaves the business immediately.
         # Without this, the accountant must manually add an expense for every
@@ -338,7 +359,7 @@ def create_purchase(
         # when PATCH /status is called concurrently with "paid".
         if data.pur_payment_status == "paid":
             pur_row      = fetch_full_purchase(db, new_pur_id, business_id)
-            final_amount = float(pur_row.pur_final_amount) if pur_row and pur_row.pur_final_amount else float(total_amount)
+            final_amount = Decimal(str(pur_row.pur_final_amount)) if pur_row and pur_row.pur_final_amount else Decimal("0")
 
             db.execute(
                 text("""
@@ -368,7 +389,7 @@ def create_purchase(
                     "expense_id":       str(uuid.uuid4()),
                     "business_id":      business_id,
                     "expense_category": "purchase",
-                    "expense_amount":   final_amount,
+                    "expense_amount":   str(final_amount),
                     "expense_notes":    f"Auto-recorded from purchase {new_pur_id}",
                     "created_by":       user_id,
                     "source_type":      "purchase",
@@ -683,7 +704,7 @@ def update_purchase_status(
             text("SELECT pur_final_amount FROM purchases WHERE pur_id = CAST(:pid AS uuid)"),
             {"pid": pur_id}
         ).fetchone()
-        final_amount = float(pur_row.pur_final_amount) if pur_row and pur_row.pur_final_amount else 0
+        final_amount = Decimal(str(pur_row.pur_final_amount)) if pur_row and pur_row.pur_final_amount else Decimal("0")
 
         # Race-safe insert: the WHERE NOT EXISTS check runs inside the same
         # statement as the INSERT, so it sees the latest committed (or even
@@ -719,7 +740,7 @@ def update_purchase_status(
                 "expense_id":       str(uuid.uuid4()),
                 "business_id":      business_id,
                 "expense_category": "purchase",
-                "expense_amount":   final_amount,
+                "expense_amount":   str(final_amount),
                 "expense_notes":    f"Auto-recorded from purchase {pur_id}",
                 "created_by":       user_id,
                 "source_type":      "purchase",

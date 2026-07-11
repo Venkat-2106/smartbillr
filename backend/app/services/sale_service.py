@@ -401,14 +401,14 @@ def get_sale_detail(db: Session, business_id: str, sales_id: str):
 
     items_data = []
     for i in items:
-        item_mrp_val = float(i.item_mrp) if i.item_mrp is not None else None
-        unit_price = float(i.sale_item_unit_price)
+        item_mrp_val = Decimal(str(i.item_mrp)) if i.item_mrp is not None else None
+        unit_price = Decimal(str(i.sale_item_unit_price))
         qty = i.sale_item_quantity
 
         if item_mrp_val is not None and item_mrp_val > unit_price:
-            discount_per_unit = round(item_mrp_val - unit_price, 2)
-            discount_amount = round(discount_per_unit * qty, 2)
-            discount_pct = round((discount_per_unit / item_mrp_val) * 100, 1)
+            discount_per_unit = (item_mrp_val - unit_price).quantize(Decimal("0.01"))
+            discount_amount = (discount_per_unit * qty).quantize(Decimal("0.01"))
+            discount_pct = ((discount_per_unit / item_mrp_val) * 100).quantize(Decimal("0.1"))
         else:
             discount_per_unit = None
             discount_amount = None

@@ -9,6 +9,7 @@ from app.schemas.purchase_return import PurchaseReturnCreate, PurchaseReturnUpda
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts
+from decimal import Decimal
 import uuid
 import logging
 
@@ -194,8 +195,8 @@ def create_purchase_return(
 
         # Step 3 → Calculate total return amount
         total_return_amount = sum(
-            float(item.refund_amount) * item.return_qty
-            for item in data.items
+            (item.refund_amount * item.return_qty for item in data.items),
+            Decimal("0")
         )
 
         # Step 4 → Insert purchase_return header
@@ -231,7 +232,7 @@ def create_purchase_return(
             "return_status": data.return_status,
             "restock":       data.restock,
             "refund_method": data.refund_method,
-            "return_amount": total_return_amount,
+            "return_amount": str(total_return_amount),
             "created_by":    str(user_id)
         })
 
@@ -254,7 +255,7 @@ def create_purchase_return(
                 "return_id":      new_return_id,
                 "product_id":     str(item.product_id),
                 "return_qty":     item.return_qty,
-                "refund_amount":  float(item.refund_amount),
+                "refund_amount":  str(item.refund_amount),
                 "business_id":    str(business_id)
             })
 

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import { usePlans, useCheckout } from '../hooks/useCheckout'
 import useAuthStore from '../../../store/authStore'
 import { Button, Spinner } from '../../../shared/components'
@@ -106,7 +107,9 @@ export default function PricingPage() {
         navigate(`/billing/success?payment_id=${data.payment_id}`)
       },
       modal: {
-        ondismiss: () => {},
+        ondismiss: () => {
+          toast.error('Checkout cancelled. You can try again anytime.')
+        },
       },
     }
     const rzp = new window.Razorpay(options)

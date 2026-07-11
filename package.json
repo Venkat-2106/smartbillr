@@ -20,6 +20,9 @@
   "homepage": "https://github.com/Venkat-2106/smartbillr#readme",
   "devDependencies": {
     "@playwright/test": "^1.61.1",
-    "dotenv": "^17.4.2"
+    "@types/pg": "^8.20.0",
+    "dotenv": "^17.4.2",
+    "pg": "^8.22.0",
+    "tsx": "^4.23.0"
   }
 }

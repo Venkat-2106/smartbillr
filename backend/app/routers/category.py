@@ -47,8 +47,26 @@ def create_category(
     )
 
     db.add(new_category)
+
+    cat_id = str(new_category.category_id)
+    biz_id = str(new_category.business_id)
     db.commit()
-    db.refresh(new_category)
+
+    # Refresh timestamps via raw SQL with explicit business_id filter (RLS bypass).
+    # SQLAlchemy ORM's refresh() fails because RLS policies block the implicit SELECT.
+    row = db.execute(
+        text("""
+            SELECT created_at, updated_at
+            FROM categories
+            WHERE category_id = CAST(:cid AS uuid)
+              AND business_id  = CAST(:bid AS uuid)
+        """),
+        {"cid": cat_id, "bid": biz_id}
+    ).fetchone()
+
+    if row:
+        new_category.created_at = row.created_at
+        new_category.updated_at = row.updated_at
 
     # Fetch the creator's name so the table shows it immediately after creation
     creator_name = db.execute(
@@ -298,8 +316,25 @@ def update_category(
     # updated_at and updated_by are set automatically by DB triggers
     # trg_categories_updated_at / trg_categories_updated_by
 
+    cat_id = str(category.category_id)
+    biz_id = str(category.business_id)
     db.commit()
-    db.refresh(category)
+
+    # Refresh timestamps via raw SQL with explicit business_id filter (RLS bypass).
+    row = db.execute(
+        text("""
+            SELECT created_at, updated_at, updated_by
+            FROM categories
+            WHERE category_id = CAST(:cid AS uuid)
+              AND business_id  = CAST(:bid AS uuid)
+        """),
+        {"cid": cat_id, "bid": biz_id}
+    ).fetchone()
+
+    if row:
+        category.created_at = row.created_at
+        category.updated_at = row.updated_at
+        category.updated_by = row.updated_by
 
     # Fetch the updater's name to return in response
     updated_by_name = db.execute(

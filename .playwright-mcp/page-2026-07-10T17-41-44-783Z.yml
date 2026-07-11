@@ -1,0 +1,35 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: SmartBillr
+      - paragraph [ref=e11]: Billing · Inventory · Growth
+    - generic [ref=e12]:
+      - heading "Everything you need to run your business." [level=2] [ref=e13]: Everything you needto run your business.
+      - paragraph [ref=e14]: Smart invoicing, inventory tracking, payments & analytics —all in one platform designed for modern businesses.
+    - generic [ref=e15]:
+      - generic [ref=e16]: GST / VAT ready invoicing
+      - generic [ref=e21]: Real-time inventory tracking
+      - generic [ref=e26]: Multi-mode payment collection
+      - generic [ref=e31]: Business analytics & reports
+      - generic [ref=e35]: Role-based access control
+    - generic [ref=e41]: Trusted across 10+ countries · Built for businesses like yours
+  - generic [ref=e45]:
+    - paragraph [ref=e46]: Welcome back
+    - paragraph [ref=e47]: Sign in to continue to SmartBillr
+    - generic [ref=e48]:
+      - generic [ref=e49]:
+        - generic [ref=e50]: Email address
+        - generic [ref=e51]:
+          - generic: ✉
+          - textbox "you@company.com" [ref=e52]: e2e_1783657799814@test.smartbillr.dev
+      - generic [ref=e53]:
+        - generic [ref=e54]: Password
+        - generic [ref=e55]:
+          - generic: 🔒
+          - textbox "••••••••" [ref=e56]: TestPass123!
+          - button "SHOW" [ref=e57] [cursor=pointer]
+      - generic [ref=e58]: Forgot password?
+      - button "Signing in..." [disabled] [ref=e63]
+    - generic [ref=e60]:
+      - generic [ref=e61]: 🔐
+      - generic [ref=e62]: Secured by Supabase Auth · JWT encrypted

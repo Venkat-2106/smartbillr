@@ -41,6 +41,7 @@ backend/dist/
 *.swo
 *~
 
-#e2e test login
+#test login
 e2e/.env
 test-results/
+e2e/.auth/

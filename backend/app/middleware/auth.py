@@ -341,7 +341,7 @@ def verify_token(
             )
         db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
         db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": cached_val["business_id"]})
-        return cached_val
+        return {**cached_val, "token_iat": token_iat}
 
     # ── Cache miss — single DB query fetches profile + role + permissions + last_logout_at ──
     # Must set app.current_user_id BEFORE the profiles query so the
@@ -411,6 +411,7 @@ def verify_token(
         "permissions":      permissions,
         "last_logout_at":   last_logout_epoch,
         "business_is_active": True,
+        "token_iat":        token_iat,
     }
 
     # Cache for 10s so subsequent requests skip the DB query.

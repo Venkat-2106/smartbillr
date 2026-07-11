@@ -72,10 +72,12 @@ def confirm_session(
 ):
     user_id = current_user["user_id"]
     now = datetime.now(timezone.utc)
+    token_iat = current_user.get("token_iat")
+    cutoff = datetime.fromtimestamp(token_iat, tz=timezone.utc) if token_iat else now
 
     db.execute(
-        text("UPDATE profiles SET last_login_at = :now WHERE id = :user_id"),
-        {"now": now, "user_id": user_id}
+        text("UPDATE profiles SET last_logout_at = :cutoff, last_login_at = :now WHERE id = :user_id"),
+        {"cutoff": cutoff, "now": now, "user_id": user_id}
     )
     db.commit()
 

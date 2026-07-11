@@ -33,6 +33,8 @@ export default function SalesPage() {
   const business       = useAuthStore(s => s.business);
   const country        = business?.business_country_code || 'IN';
   const subscription   = useAuthStore(s => s.subscription);
+  const hasPermission  = useAuthStore(s => s.hasPermission);
+  const canCreate      = hasPermission('sales.create');
   const [showUpgradeBanner, setShowUpgradeBanner] = useState(true);
 
   const {
@@ -249,9 +251,11 @@ export default function SalesPage() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Button variant="primary" onClick={() => navigate('/sales/new')} data-shortcut="new">
-            + New Invoice
-          </Button>
+          {canCreate && (
+            <Button variant="primary" onClick={() => navigate('/sales/new')} data-shortcut="new">
+              + New Invoice
+            </Button>
+          )}
         </div>
       </div>
 
@@ -373,11 +377,11 @@ export default function SalesPage() {
               <Button variant="secondary" size="sm" onClick={() => { setSearch(''); setStatusFilter(''); handleDateChange('from', ''); handleDateChange('to', '') }}>
                 Clear filters
               </Button>
-            ) : (
+            ) : canCreate ? (
               <Button variant="primary" size="sm" onClick={() => navigate('/sales/new')}>
                 New Sale
               </Button>
-            )}
+            ) : undefined}
           />
         </BentoCard>
       ) : (

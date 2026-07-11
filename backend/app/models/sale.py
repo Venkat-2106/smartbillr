@@ -24,6 +24,7 @@ class Sale(Base):
     sales_payment_method = Column(String,       nullable=True)
     sales_payment_status = Column(String,       default="unpaid")
     created_by           = Column(UUID(as_uuid=True), nullable=True)
+    updated_by           = Column(UUID(as_uuid=True), nullable=True)
     is_deleted           = Column(Boolean,      default=False)
     sales_created_at     = Column(TIMESTAMP,    nullable=True, server_default=text("now()"))
     updated_at           = Column(TIMESTAMP,    nullable=True)

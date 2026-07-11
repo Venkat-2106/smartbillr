@@ -80,6 +80,7 @@ function buildInvoiceHTML(
   business, detail, sale, items,
   cgst, sgst, igst, subtotal, taxTotal, discount, finalAmount, totalPaid, remaining
 ) {
+  const country   = business?.business_country_code || 'IN';
   const payStatus = detail?.sales_payment_status || sale.sales_payment_status || 'pending';
   const payMethod = escapeHTML((detail?.sales_payment_method || sale.sales_payment_method || '—')
     .replace(/_/g, ' ').toUpperCase());

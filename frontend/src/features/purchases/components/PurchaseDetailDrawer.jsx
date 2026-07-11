@@ -17,7 +17,7 @@ import { selectStyle }             from '../../../shared/components/FormField'
 import { formatCurrency }          from '../../../shared/utils/formatCurrency'
 import { formatDate }              from '../../../shared/utils/formatDate'
 import { usePermissions }          from '../../../shared/hooks/usePermissions'
-import { getTaxLabel }             from '../../../shared/utils/formatTax'
+import { getTaxLabel, detectTaxType } from '../../../shared/utils/formatTax'
 import useAuthStore                from '../../../store/authStore'
 import CreatePurchaseReturnDrawer  from '../../purchaseReturns/components/CreatePurchaseReturnDrawer'
 
@@ -273,18 +273,19 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
               {(data.pur_discount || 0) > 0 && (
                 <SummaryRow label="Discount"       value={`− ${formatCurrency(data.pur_discount, country)}`} danger />
               )}
-              {hasTax && (data.pur_cgst_total || 0) > 0 && (
-                <SummaryRow label="CGST"           value={formatCurrency(data.pur_cgst_total, country)} />
-              )}
-              {hasTax && (data.pur_sgst_total || 0) > 0 && (
-                <SummaryRow label="SGST"           value={formatCurrency(data.pur_sgst_total, country)} />
-              )}
-              {hasTax && (data.pur_igst_total || 0) > 0 && (
-                <SummaryRow label="IGST"           value={formatCurrency(data.pur_igst_total, country)} />
-              )}
-              {hasTax && (data.pur_tax_total || 0) > 0 && (
-                <SummaryRow label={getTaxLabel(country)}  value={formatCurrency(data.pur_tax_total, country)} />
-              )}
+              {hasTax && (() => {
+                const tt = detectTaxType(data)
+                if (tt === 'cgst_sgst') {
+                  return <>
+                    <SummaryRow label="CGST" value={formatCurrency(data.pur_cgst_total || 0, country)} />
+                    <SummaryRow label="SGST" value={formatCurrency(data.pur_sgst_total || 0, country)} />
+                  </>
+                }
+                if (tt === 'igst') {
+                  return <SummaryRow label="IGST" value={formatCurrency(data.pur_igst_total || 0, country)} />
+                }
+                return <SummaryRow label={getTaxLabel(country)} value={formatCurrency(data.pur_tax_total || 0, country)} />
+              })()}
               <SummaryRow label="Total"            value={formatCurrency(data.pur_final_amount || 0, country)} bold />
             </div>
 

@@ -139,7 +139,8 @@ def checkout_status(
         text("""
             SELECT payment_id, status, provider, provider_order_id
             FROM subscription_payments
-            WHERE payment_id = :pid AND business_id = CAST(:bid AS uuid)
+            WHERE (payment_id::text = :pid OR provider_order_id = :pid)
+              AND business_id = CAST(:bid AS uuid)
         """),
         {"pid": payment_id, "bid": current_user["business_id"]},
     ).fetchone()

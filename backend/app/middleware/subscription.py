@@ -103,6 +103,39 @@ def clear_subscription_user_cache(user_id: str):
         pass
 
 
+def clear_subscription_business_cache(business_id: str):
+    """
+    Invalidate subscription cache entries for ALL users belonging to a business.
+    Both _user_business_cache and _subscription_cache are keyed by user_id,
+    so we scan and match by business_id — same pattern as auth.py's
+    clear_business_users_cache.
+    """
+    user_ids_to_clear = []
+
+    for key, val in list(_user_business_cache.items()):
+        if val == business_id:
+            user_ids_to_clear.append(key)
+            _user_business_cache.pop(key, None)
+
+    if _subscription_cache is not None:
+        for uid in user_ids_to_clear:
+            _subscription_cache.pop(KEY_SUB.format(user_id=uid), None)
+
+    try:
+        r = _get_redis_sub()
+        if r is not None:
+            for key in r.scan_iter("sub_biz:*"):
+                raw = r.get(key)
+                if raw and raw == business_id:
+                    uid = key.split(":", 1)[1]
+                    r.delete(
+                        KEY_BIZ.format(user_id=uid),
+                        KEY_SUB.format(user_id=uid),
+                    )
+    except Exception:
+        pass
+
+
 EXCLUDED_PATHS = [
     re.compile(r"^/v1/business/?$"),  # POST registration (no auth)
     re.compile(r"^/v1/businesses/me/subscription/?$"),  # subscription status check

@@ -114,8 +114,8 @@ def activate_subscription(db: Session, provider_object: dict, provider: str):
         logger.warning("Failed to invalidate auth cache for business %s", payment_row.business_id)
 
     try:
-        from app.middleware.subscription import clear_subscription_user_cache
-        clear_subscription_user_cache(str(payment_row.business_id))
+        from app.middleware.subscription import clear_subscription_business_cache
+        clear_subscription_business_cache(str(payment_row.business_id))
     except Exception:
         logger.warning("Failed to invalidate subscription cache for business %s", payment_row.business_id)
 

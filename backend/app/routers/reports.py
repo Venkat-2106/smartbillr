@@ -283,26 +283,45 @@ def get_sales_trend(
         group_expr = date_trunc
         label_expr = "EXTRACT(YEAR FROM gs)"
 
-    rows = db.execute(text(f"""
-        WITH aggregated AS (
+    use_mv_trend = (
+        period == "monthly"
+        and tz_offset_minutes == 0
+        and not date_from
+        and not date_to
+    )
+
+    if use_mv_trend:
+        rows = db.execute(text("""
             SELECT
-                {group_expr} AS bucket,
-                COUNT(s.sales_id) AS invoice_count,
-                COALESCE(SUM(s.sales_final_amount), 0) AS revenue
-            FROM sales s
-            WHERE s.business_id = CAST(:bid AS uuid)
-              AND s.is_deleted = false
-              {date_where}
-            GROUP BY bucket
-        )
-        SELECT
-            gs AS bucket,
-            COALESCE(a.invoice_count, 0) AS invoice_count,
-            COALESCE(a.revenue, 0) AS revenue
-        FROM {fill_series}
-        LEFT JOIN aggregated a ON a.bucket = gs
-        ORDER BY gs
-    """), params).fetchall()
+                gs AS bucket,
+                COALESCE(m.invoice_count, 0) AS invoice_count,
+                COALESCE(m.revenue, 0) AS revenue
+            FROM generate_series(:user_start, :user_end, INTERVAL '1 month') AS gs
+            LEFT JOIN mv_sales_trend_monthly m
+              ON m.business_id = CAST(:bid AS uuid) AND m.year_month = gs
+            ORDER BY gs
+        """), {"bid": bid, "user_start": user_start_month, "user_end": user_end_month}).fetchall()
+    else:
+        rows = db.execute(text(f"""
+            WITH aggregated AS (
+                SELECT
+                    {group_expr} AS bucket,
+                    COUNT(s.sales_id) AS invoice_count,
+                    COALESCE(SUM(s.sales_final_amount), 0) AS revenue
+                FROM sales s
+                WHERE s.business_id = CAST(:bid AS uuid)
+                  AND s.is_deleted = false
+                  {date_where}
+                GROUP BY bucket
+            )
+            SELECT
+                gs AS bucket,
+                COALESCE(a.invoice_count, 0) AS invoice_count,
+                COALESCE(a.revenue, 0) AS revenue
+            FROM {fill_series}
+            LEFT JOIN aggregated a ON a.bucket = gs
+            ORDER BY gs
+        """), params).fetchall()
 
     result = []
     for r in rows:

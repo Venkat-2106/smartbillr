@@ -64,17 +64,22 @@ def create_category(
         {"cid": cat_id, "bid": biz_id}
     ).fetchone()
 
-    if row:
-        new_category.created_at = row.created_at
-        new_category.updated_at = row.updated_at
-
     # Fetch the creator's name so the table shows it immediately after creation
     creator_name = db.execute(
         text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
         {"uid": str(current_user["user_id"])}
     ).scalar()
 
-    return success_response(_category_to_dict(new_category, last_updated_by=creator_name), 201)
+    return success_response({
+        "category_id":     cat_id,
+        "business_id":     biz_id,
+        "category_name":   payload.category_name,
+        "is_deleted":      False,
+        "created_at":      fmt_ts(row.created_at) if row else None,
+        "updated_at":      fmt_ts(row.updated_at) if row else None,
+        "updated_by":      str(current_user["user_id"]),
+        "last_updated_by": creator_name,
+    }, 201)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -323,7 +328,7 @@ def update_category(
     # Refresh timestamps via raw SQL with explicit business_id filter (RLS bypass).
     row = db.execute(
         text("""
-            SELECT created_at, updated_at, updated_by
+            SELECT category_name, created_at, updated_at, updated_by
             FROM categories
             WHERE category_id = CAST(:cid AS uuid)
               AND business_id  = CAST(:bid AS uuid)
@@ -331,18 +336,27 @@ def update_category(
         {"cid": cat_id, "bid": biz_id}
     ).fetchone()
 
-    if row:
-        category.created_at = row.created_at
-        category.updated_at = row.updated_at
-        category.updated_by = row.updated_by
+    if not row:
+        return error_response("Category not found after update", 500)
 
     # Fetch the updater's name to return in response
-    updated_by_name = db.execute(
-        text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
-        {"uid": str(category.updated_by)}
-    ).scalar()
+    updated_by_name = None
+    if row.updated_by:
+        updated_by_name = db.execute(
+            text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
+            {"uid": str(row.updated_by)}
+        ).scalar()
 
-    return success_response(_category_to_dict(category, last_updated_by=updated_by_name))
+    return success_response({
+        "category_id":     cat_id,
+        "business_id":     biz_id,
+        "category_name":   row.category_name,
+        "is_deleted":      False,
+        "created_at":      fmt_ts(row.created_at),
+        "updated_at":      fmt_ts(row.updated_at),
+        "updated_by":      str(row.updated_by) if row.updated_by else None,
+        "last_updated_by": updated_by_name,
+    })
 
 
 # ══════════════════════════════════════════════════════════════════

@@ -23,7 +23,7 @@ export function useCheckoutStatus(paymentId, enabled = true) {
   return useQuery({
     queryKey: ['checkout-status', paymentId],
     queryFn: () => getCheckoutStatus(paymentId),
-    refetchInterval: (data) => data?.status === 'paid' ? false : 1500,
+    refetchInterval: (data) => data?.status === 'paid' || data?.status === 'failed' ? false : 1500,
     enabled: enabled && !!paymentId,
   })
 }

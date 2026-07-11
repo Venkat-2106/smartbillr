@@ -18,6 +18,9 @@ export default function BillingSuccessPage() {
       navigate('/dashboard')
       return
     }
+    if (status?.status === 'failed') {
+      return
+    }
     const timer = setInterval(() => setElapsed((e) => e + 1), 1000)
     return () => clearInterval(timer)
   }, [status, navigate])
@@ -28,6 +31,17 @@ export default function BillingSuccessPage() {
         <p style={{ fontSize: 16, color: 'var(--text-secondary)' }}>Invalid payment reference.</p>
         <button onClick={() => navigate('/dashboard')} style={{ marginTop: 16, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}>
           Go to Dashboard
+        </button>
+      </div>
+    )
+  }
+
+  if (status?.status === 'failed') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+        <p style={{ fontSize: 16, color: 'var(--text-secondary)' }}>Payment could not be verified. Please contact support or try again.</p>
+        <button onClick={() => navigate('/pricing')} style={{ marginTop: 16, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}>
+          Back to Pricing
         </button>
       </div>
     )

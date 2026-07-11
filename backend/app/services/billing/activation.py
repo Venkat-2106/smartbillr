@@ -59,6 +59,15 @@ def activate_subscription(db: Session, provider_object: dict, provider: str):
             "Amount mismatch on payment_id=%s: expected %s got %s",
             payment_row.payment_id, payment_row.amount, paid_amount,
         )
+        db.execute(
+            text("""
+                UPDATE subscription_payments
+                SET status = 'failed', failure_reason = 'amount_mismatch', updated_by_webhook_at = now()
+                WHERE payment_id = :pid
+            """),
+            {"pid": str(payment_row.payment_id)},
+        )
+        db.commit()
         return  # do NOT activate — flag for manual review
 
     now = datetime.now(timezone.utc)

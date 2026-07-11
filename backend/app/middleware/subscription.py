@@ -148,6 +148,11 @@ EXCLUDED_PATHS = [
     re.compile(r"^/?$"),
     re.compile(r"^/health/?$"),
     re.compile(r"^/test-auth"),
+    # Billing — expired/trial businesses must be able to view plans and pay
+    re.compile(r"^/v1/billing/plans/?$"),
+    re.compile(r"^/v1/billing/checkout/?$"),
+    re.compile(r"^/v1/billing/checkout/[^/]+/status/?$"),
+    re.compile(r"^/v1/billing/webhooks/"),  # defensive — webhooks send no Bearer token
 ]
 
 

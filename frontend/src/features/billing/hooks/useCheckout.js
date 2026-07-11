@@ -12,7 +12,7 @@ export function usePlans() {
 export function useCheckout() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (planCode) => createCheckout(planCode),
+    mutationFn: ({ planCode, billingCycle }) => createCheckout(planCode, billingCycle),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subscription'] })
     },

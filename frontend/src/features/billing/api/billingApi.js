@@ -5,8 +5,8 @@ export async function fetchPlans() {
   return res.data
 }
 
-export async function createCheckout(planCode) {
-  const res = await api.post('/billing/checkout', { plan_code: planCode })
+export async function createCheckout(planCode, billingCycle) {
+  const res = await api.post('/billing/checkout', { plan_code: planCode, billing_cycle: billingCycle })
   return res.data
 }
 

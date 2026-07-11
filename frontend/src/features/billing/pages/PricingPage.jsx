@@ -1,27 +1,70 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePlans, useCheckout } from '../hooks/useCheckout'
 import useAuthStore from '../../../store/authStore'
 import { Button, Spinner } from '../../../shared/components'
 
-const PRICING_PLANS = [
-  {
-    code: 'basic',
-    name: 'Basic',
-    description: 'For single-location shops',
-    monthly: { inr: 499, usd: 9.99 },
-    yearly: null,
-    features: ['500 products', '500 customers', '2,000 sales/mo', '2 staff members'],
-  },
-  {
-    code: 'pro',
-    name: 'Pro',
-    description: 'For growing businesses',
-    monthly: { inr: 999, usd: 19 },
-    yearly: { inr: 4999, usd: 99 },
-    features: ['Unlimited products', 'Unlimited customers', 'Unlimited sales', '10 staff members', 'Financial reports', 'Product profit view'],
-  },
-]
+const PLAN_DESCRIPTIONS = {
+  basic: 'For single-location shops',
+  pro: 'For growing businesses',
+}
+
+const FEATURE_LABELS = {
+  max_products: 'products',
+  max_customers: 'customers',
+  max_sales_monthly: 'sales/mo',
+  max_staff: 'staff members',
+}
+
+function formatFeatures(featureLimits) {
+  if (!featureLimits || typeof featureLimits !== 'object') return []
+  return Object.entries(featureLimits)
+    .map(([key, value]) => {
+      if (key === 'financial_reports') return value ? 'Financial reports' : null
+      if (key === 'product_profit_view') return value ? 'Product profit view' : null
+      const label = FEATURE_LABELS[key]
+      if (!label) return null
+      if (value === -1) return `Unlimited ${label}`
+      return `${Number(value).toLocaleString()} ${label}`
+    })
+    .filter(Boolean)
+}
+
+function groupPlansByFamily(plans) {
+  if (!plans) return []
+  const paid = plans.filter((p) => p.billing_cycle !== 'trial')
+  const groups = {}
+  for (const plan of paid) {
+    const baseCode = plan.plan_code.replace(/_yearly$/, '')
+    if (!groups[baseCode]) {
+      groups[baseCode] = {
+        code: baseCode,
+        name: plan.display_name.replace(/ Yearly$/, ''),
+        description: PLAN_DESCRIPTIONS[baseCode] || '',
+        monthly: null,
+        yearly: null,
+        yearlyCode: null,
+        features: formatFeatures(plan.feature_limits),
+      }
+    }
+    const entry = {
+      inr: plan.price_inr != null ? Number(plan.price_inr) : null,
+      usd: plan.price_usd != null ? Number(plan.price_usd) : null,
+    }
+    if (plan.billing_cycle === 'yearly') {
+      groups[baseCode].yearly = entry
+      groups[baseCode].yearlyCode = plan.plan_code
+    } else {
+      groups[baseCode].monthly = entry
+      if (!groups[baseCode].name) groups[baseCode].name = plan.display_name
+    }
+  }
+  return Object.values(groups).sort((a, b) => {
+    const aPlan = paid.find((p) => p.plan_code.replace(/_yearly$/, '') === a.code)
+    const bPlan = paid.find((p) => p.plan_code.replace(/_yearly$/, '') === b.code)
+    return (aPlan?.sort_order ?? 0) - (bPlan?.sort_order ?? 0)
+  })
+}
 
 export default function PricingPage() {
   const navigate = useNavigate()
@@ -30,15 +73,19 @@ export default function PricingPage() {
   const country = useAuthStore((s) => s.business)?.business_country_code || 'IN'
   const isIndia = country.toUpperCase() === 'IN'
 
+  const { data: plansData, isLoading } = usePlans()
   const { mutate: startCheckout, isPending } = useCheckout()
   const [selectedBilling, setSelectedBilling] = useState('monthly')
 
-  function handleSubscribe(planCode) {
+  const displayPlans = useMemo(() => groupPlansByFamily(plansData), [plansData])
+
+  function handleSubscribe(planCode, yearlyCode) {
     if (!isLoggedIn) {
       navigate(`/signup?plan=${planCode}`)
       return
     }
-    startCheckout(planCode, {
+    const resolvedCode = selectedBilling === 'yearly' && yearlyCode ? yearlyCode : planCode
+    startCheckout({ planCode: resolvedCode, billingCycle: selectedBilling }, {
       onSuccess: (data) => {
         if (data.provider === 'razorpay') {
           openRazorpayCheckout(data)
@@ -64,6 +111,14 @@ export default function PricingPage() {
     }
     const rzp = new window.Razorpay(options)
     rzp.open()
+  }
+
+  if (isLoading) {
+    return (
+      <div style={{ maxWidth: 960, margin: '0 auto', padding: '40px 24px', textAlign: 'center' }}>
+        <Spinner size={32} />
+      </div>
+    )
   }
 
   return (
@@ -100,7 +155,7 @@ export default function PricingPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
-        {PRICING_PLANS.map((plan) => {
+        {displayPlans.map((plan) => {
           const price = selectedBilling === 'yearly' && plan.yearly
             ? (isIndia ? `₹${plan.yearly.inr}/yr` : `$${plan.yearly.usd}/yr`)
             : (isIndia ? `₹${plan.monthly.inr}/mo` : `$${plan.monthly.usd}/mo`)
@@ -129,8 +184,8 @@ export default function PricingPage() {
               </ul>
               <Button
                 variant="primary"
-                onClick={() => handleSubscribe(plan.code)}
-                disabled={isPending}
+                onClick={() => handleSubscribe(plan.code, plan.yearlyCode)}
+                disabled={isPending || (selectedBilling === 'yearly' && !plan.yearly)}
                 style={{ width: '100%' }}
               >
                 {isPending ? <Spinner size={16} /> : 'Get Started'}

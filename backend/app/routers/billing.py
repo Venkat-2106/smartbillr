@@ -55,6 +55,32 @@ def _record_pending_payment(db, bid, plan_id, provider, order_id, amount, curren
     return str(result.payment_id)
 
 
+def _find_existing_checkout(db, bid, plan_id):
+    """Return an existing 'created' checkout for this business+plan within the last 10 minutes, or None."""
+    row = db.execute(
+        text("""
+            SELECT payment_id, provider, provider_order_id, amount, currency
+            FROM subscription_payments
+            WHERE business_id = CAST(:bid AS uuid)
+              AND plan_id = :plan_id
+              AND status = 'created'
+              AND created_at > NOW() - INTERVAL '10 minutes'
+            ORDER BY created_at DESC
+            LIMIT 1
+        """),
+        {"bid": bid, "plan_id": plan_id},
+    ).fetchone()
+    if not row:
+        return None
+    return {
+        "payment_id": str(row.payment_id),
+        "provider": row.provider,
+        "provider_order_id": row.provider_order_id,
+        "amount": float(row.amount),
+        "currency": row.currency,
+    }
+
+
 @router.post("/checkout")
 def create_checkout(
     payload: CheckoutRequest,
@@ -70,6 +96,9 @@ def create_checkout(
     if not plan:
         return error_response("Plan not found", 404)
 
+    if payload.billing_cycle and plan.billing_cycle != payload.billing_cycle:
+        return error_response("Billing cycle mismatch for this plan", 400)
+
     business = db.execute(
         text("SELECT business_country_code, business_email FROM businesses WHERE business_id = CAST(:bid AS uuid)"),
         {"bid": bid},
@@ -78,6 +107,30 @@ def create_checkout(
         return error_response("Business not found", 404)
 
     is_india = (business.business_country_code or "").upper() == "IN"
+
+    existing = _find_existing_checkout(db, bid, str(plan.plan_id))
+    if existing:
+        if existing["provider"] == "razorpay":
+            return success_response({
+                "provider": "razorpay",
+                "razorpay_order_id": existing["provider_order_id"],
+                "razorpay_key_id": os.getenv("RAZORPAY_KEY_ID"),
+                "amount": int(existing["amount"] * 100),
+                "currency": existing["currency"],
+                "payment_id": existing["payment_id"],
+            })
+        else:
+            try:
+                import stripe as _stripe
+                _stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+                session_obj = _stripe.checkout.Session.retrieve(existing["provider_order_id"])
+                return success_response({
+                    "provider": "stripe",
+                    "checkout_url": session_obj.url,
+                    "payment_id": existing["payment_id"],
+                })
+            except Exception:
+                logger.warning("Failed to retrieve existing Stripe session %s, creating new one", existing["provider_order_id"])
 
     if is_india:
         if not plan.price_inr or float(plan.price_inr) <= 0:

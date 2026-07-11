@@ -42,8 +42,8 @@ export function useCategories() {
 
   // ── Filter / sort / page state ──────────────────────────────────────────
   const [search,   setSearchRaw] = useState('')
-  const [sortKey,  setSortKey]   = useState('category_name')
-  const [sortDir,  setSortDir]   = useState('asc')
+  const [sortKey,  setSortKey]   = useState('updated_at')
+  const [sortDir,  setSortDir]   = useState('desc')
   const [page,     setPage]      = useState(1)
   const [dateFrom, setDateFrom]  = useState('')
   const [dateTo,   setDateTo]    = useState('')

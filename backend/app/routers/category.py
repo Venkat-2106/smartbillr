@@ -100,8 +100,8 @@ def get_categories(
     search:       Optional[str] = Query(default=None, description="Search by category name"),
     updated_from: Optional[str] = Query(default=None, description="Filter updated_at >= YYYY-MM-DD"),
     updated_to:   Optional[str] = Query(default=None, description="Filter updated_at <= YYYY-MM-DD"),
-    sort_by:      Optional[str] = Query(default="category_name", description="Column to sort by"),
-    sort_dir:     Optional[str] = Query(default="asc",           description="asc or desc"),
+    sort_by:      Optional[str] = Query(default="updated_at", description="Column to sort by"),
+    sort_dir:     Optional[str] = Query(default="desc",        description="asc or desc"),
 ):
     business_id = current_user["business_id"]
 

@@ -46,32 +46,6 @@ KEY_BIZ = "sub_biz:{user_id}"
 KEY_SUB = "sub_cache:{user_id}"
 
 
-def _cache_biz_get(user_id: str) -> str | None:
-    """L1 → L2 → None."""
-    v = _user_business_cache.get(user_id)
-    if v is not None:
-        return v
-    try:
-        r = _get_redis_sub()
-        if r is not None:
-            v = r.get(KEY_BIZ.format(user_id=user_id))
-            if v is not None:
-                _user_business_cache[user_id] = v
-                return v
-    except Exception:
-        pass
-    return None
-
-
-def _cache_biz_set(user_id: str, value: str):
-    _user_business_cache[user_id] = value
-    try:
-        r = _get_redis_sub()
-        if r is not None:
-            r.setex(KEY_BIZ.format(user_id=user_id), 60, value)
-    except Exception:
-        pass
-
 
 def _cache_sub_get(user_id: str) -> dict | None | bool:
     """
@@ -112,28 +86,6 @@ def _cache_sub_set(user_id: str, value: dict | None):
 
 
 # ── Public API ──────────────────────────────────────────────────────────────
-
-
-def _extract_business_id_from_db(user_id: str) -> str | None:
-    cached = _cache_biz_get(user_id)
-    if cached is not None:
-        return cached
-
-    db = SessionLocal()
-    try:
-        db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
-        row = db.execute(
-            text("SELECT business_id FROM profiles WHERE id = :user_id AND is_active = true LIMIT 1"),
-            {"user_id": user_id},
-        ).fetchone()
-        result = str(row.business_id) if row else None
-        if result:
-            _cache_biz_set(user_id, result)
-        return result
-    except Exception:
-        return None
-    finally:
-        db.close()
 
 
 def clear_subscription_user_cache(user_id: str):

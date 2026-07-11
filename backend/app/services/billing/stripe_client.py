@@ -12,7 +12,9 @@ def _get_secret_key() -> str:
 
 
 def create_checkout_session(
-    price_id: str,
+    price_id: str | None,
+    amount_usd: float,
+    plan_name: str,
     success_url: str,
     cancel_url: str,
     client_reference_id: str,
@@ -24,9 +26,23 @@ def create_checkout_session(
         raise RuntimeError("stripe package not installed")
 
     stripe.api_key = _get_secret_key()
+
+    if price_id:
+        line_items = [{"price": price_id, "quantity": 1}]
+    else:
+        amount_cents = int(amount_usd * 100)
+        line_items = [{
+            "price_data": {
+                "currency": "usd",
+                "unit_amount": amount_cents,
+                "product_data": {"name": plan_name},
+            },
+            "quantity": 1,
+        }]
+
     session = stripe.checkout.Session.create(
         mode="payment",
-        line_items=[{"price": price_id, "quantity": 1}],
+        line_items=line_items,
         success_url=success_url,
         cancel_url=cancel_url,
         client_reference_id=client_reference_id,

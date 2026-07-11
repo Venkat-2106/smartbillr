@@ -86,7 +86,7 @@ def create_checkout(
         order = razorpay_client.create_order(
             amount_paise=int(float(plan.price_inr) * 100),
             currency="INR",
-            receipt=f"biz_{bid}_{plan.plan_code}",
+            receipt=f"biz_{bid[:8]}_{plan.plan_code}"[:40],
             notes={"business_id": bid, "plan_code": plan.plan_code},
         )
 
@@ -109,6 +109,8 @@ def create_checkout(
 
         session = stripe_client.create_checkout_session(
             price_id=plan.stripe_price_id,
+            amount_usd=float(plan.price_usd),
+            plan_name=plan.display_name,
             success_url=f"{FRONTEND_URL}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{FRONTEND_URL}/billing?cancelled=1",
             client_reference_id=bid,

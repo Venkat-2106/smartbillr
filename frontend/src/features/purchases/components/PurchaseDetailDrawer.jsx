@@ -17,6 +17,7 @@ import { selectStyle }             from '../../../shared/components/FormField'
 import { formatCurrency }          from '../../../shared/utils/formatCurrency'
 import { formatDate }              from '../../../shared/utils/formatDate'
 import { usePermissions }          from '../../../shared/hooks/usePermissions'
+import { getTaxLabel }             from '../../../shared/utils/formatTax'
 import useAuthStore                from '../../../store/authStore'
 import CreatePurchaseReturnDrawer  from '../../purchaseReturns/components/CreatePurchaseReturnDrawer'
 
@@ -282,7 +283,7 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
                 <SummaryRow label="IGST"           value={formatCurrency(data.pur_igst_total, country)} />
               )}
               {hasTax && (data.pur_tax_total || 0) > 0 && (
-                <SummaryRow label="Tax"            value={formatCurrency(data.pur_tax_total, country)} />
+                <SummaryRow label={getTaxLabel(country)}  value={formatCurrency(data.pur_tax_total, country)} />
               )}
               <SummaryRow label="Total"            value={formatCurrency(data.pur_final_amount || 0, country)} bold />
             </div>
@@ -333,7 +334,7 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
                     </div>
                     {(item.gst_rate || 0) > 0 && (
                       <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
-                        GST {item.gst_rate}%
+                        {getTaxLabel(country)} {item.gst_rate}%
                       </div>
                     )}
                   </div>

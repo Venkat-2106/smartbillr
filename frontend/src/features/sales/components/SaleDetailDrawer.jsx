@@ -32,6 +32,7 @@ import {
   triggerPrint,
 } from '../../../shared/utils/printUtils';
 import { usePermissions } from '../../../shared/hooks/usePermissions';
+import { detectTaxType, getTaxLabel } from '../../../shared/utils/formatTax';
 import CreateSalesReturnDrawer from '../../salesReturns/components/CreateSalesReturnDrawer';
 import useAuthStore from '../../../store/authStore';
 
@@ -89,11 +90,26 @@ function buildInvoiceHTML(
   const showMRP       = anyItemHasMRP(items);
   const totalSavings  = computeTotalSavings(items);
 
-  const gstBreakdown = (cgst > 0 || sgst > 0 || igst > 0) ? `
-    <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">CGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(cgst, country)}</td></tr>
-    <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">SGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(sgst, country)}</td></tr>
-    ${igst > 0 ? `<tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">IGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(igst, country)}</td></tr>` : ''}
-  ` : '';
+  const taxType = detectTaxType(detail);
+  const gstBreakdown = (() => {
+    if (taxType === 'cgst_sgst' && (cgst > 0 || sgst > 0)) {
+      return `
+        <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">CGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(cgst, country)}</td></tr>
+        <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">SGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(sgst, country)}</td></tr>
+      `;
+    }
+    if (taxType === 'igst' && igst > 0) {
+      return `
+        <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">IGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(igst, country)}</td></tr>
+      `;
+    }
+    if (taxType === 'generic' && taxTotal > 0) {
+      return `
+        <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">${getTaxLabel(country)}</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(taxTotal, country)}</td></tr>
+      `;
+    }
+    return '';
+  })();
 
   // MRP FEATURE: build item rows with optional MRP + Discount columns
   const itemRows = items.map((item, i) => {
@@ -657,13 +673,32 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                 </DrawerSection>
               )}
 
-              {(cgst > 0 || sgst > 0 || igst > 0) && (
-                <DrawerSection title="Tax Breakdown">
-                  {cgst > 0 && <InfoRow label="CGST" value={formatCurrency(cgst, country)} />}
-                  {sgst > 0 && <InfoRow label="SGST" value={formatCurrency(sgst, country)} />}
-                  {igst > 0 && <InfoRow label="IGST" value={formatCurrency(igst, country)} isLast />}
-                </DrawerSection>
-              )}
+              {(() => {
+                const tt = detectTaxType(detail);
+                if (tt === 'cgst_sgst' && (cgst > 0 || sgst > 0)) {
+                  return (
+                    <DrawerSection title="Tax Breakdown">
+                      {cgst > 0 && <InfoRow label="CGST" value={formatCurrency(cgst, country)} />}
+                      {sgst > 0 && <InfoRow label="SGST" value={formatCurrency(sgst, country)} isLast />}
+                    </DrawerSection>
+                  );
+                }
+                if (tt === 'igst' && igst > 0) {
+                  return (
+                    <DrawerSection title="Tax Breakdown">
+                      <InfoRow label="IGST" value={formatCurrency(igst, country)} isLast />
+                    </DrawerSection>
+                  );
+                }
+                if (tt === 'generic' && taxTotal > 0) {
+                  return (
+                    <DrawerSection title="Tax Breakdown">
+                      <InfoRow label={getTaxLabel(country)} value={formatCurrency(taxTotal, country)} isLast />
+                    </DrawerSection>
+                  );
+                }
+                return null;
+              })()}
 
               <DrawerSection title="Summary">
                 <InfoRow label="Subtotal"   value={formatCurrency(subtotal, country)} />

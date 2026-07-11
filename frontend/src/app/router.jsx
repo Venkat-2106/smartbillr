@@ -29,6 +29,9 @@ const SubscriptionPage = React.lazy(() => import('../features/subscription/pages
 const StaffPage = React.lazy(() => import('../features/staff/pages/StaffPage'))
 const ReportsPage = React.lazy(() => import('../features/reports/pages/ReportsPage'))
 
+const PricingPage = React.lazy(() => import('../features/billing/pages/PricingPage'))
+const BillingSuccessPage = React.lazy(() => import('../features/billing/pages/BillingSuccessPage'))
+
 const DashboardLayoutAdmin   = React.lazy(() => import('./layouts/admin/AdminDashboardLayout'))
 const AdminLoginPage         = React.lazy(() => import('../features/admin/pages/AdminLoginPage'))
 const AdminBusinessesPage    = React.lazy(() => import('../features/admin/pages/AdminBusinessesPage'))
@@ -52,6 +55,8 @@ export default function AppRouter() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/unauthorized"   element={<UnauthorizedPage />} />
         <Route path="/subscription"   element={<SubscriptionPage />} />
+        <Route path="/pricing"        element={<PricingPage />} />
+        <Route path="/billing/success" element={<BillingSuccessPage />} />
 
         {/* Super admin routes — separate from business tenant flow */}
         <Route path="/admin/login" element={<AdminLoginPage />} />

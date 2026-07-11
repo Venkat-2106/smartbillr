@@ -24,6 +24,7 @@ from app.database import Base
 from app.models import (
     business,
     business_counters,
+    billing,
     category,
     customer,
     expense,

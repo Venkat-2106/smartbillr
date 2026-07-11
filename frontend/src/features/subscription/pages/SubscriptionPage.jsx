@@ -282,7 +282,7 @@ export default function SubscriptionPage() {
             </div>
             <Button
               variant="primary"
-              onClick={() => navigate('/upgrade')}
+              onClick={() => navigate('/pricing')}
               rightIcon={<span style={{ marginLeft: 2 }}>→</span>}
             >
               Upgrade now

@@ -2,15 +2,11 @@ import React, { Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Spinner } from '../shared/components'
 import DashboardLayout from './layouts/DashboardLayout'
-import DashboardLayoutAdmin from './layouts/admin/AdminDashboardLayout'
 import LoginPage from '../features/auth/pages/LoginPage'
 import SignupPage from '../features/auth/pages/SignupPage'
 import ResetPasswordPage from '../features/auth/pages/ResetPasswordPage'
 import UnauthorizedPage from '../features/auth/pages/UnauthorizedPage'
 import ProtectedRoute from '../features/auth/components/ProtectedRoute'
-import AdminLoginPage from '../features/admin/pages/AdminLoginPage'
-import AdminBusinessesPage from '../features/admin/pages/AdminBusinessesPage'
-import AdminBusinessDetailPage from '../features/admin/pages/AdminBusinessDetailPage'
 import AdminProtectedRoute from '../features/admin/components/AdminProtectedRoute'
 import LandingPage from '../features/public/pages/LandingPage'
 
@@ -32,6 +28,11 @@ const SettingsPage = React.lazy(() => import('../features/settings/pages/Setting
 const SubscriptionPage = React.lazy(() => import('../features/subscription/pages/SubscriptionPage'))
 const StaffPage = React.lazy(() => import('../features/staff/pages/StaffPage'))
 const ReportsPage = React.lazy(() => import('../features/reports/pages/ReportsPage'))
+
+const DashboardLayoutAdmin   = React.lazy(() => import('./layouts/admin/AdminDashboardLayout'))
+const AdminLoginPage         = React.lazy(() => import('../features/admin/pages/AdminLoginPage'))
+const AdminBusinessesPage    = React.lazy(() => import('../features/admin/pages/AdminBusinessesPage'))
+const AdminBusinessDetailPage = React.lazy(() => import('../features/admin/pages/AdminBusinessDetailPage'))
 
 // ─── Router ───────────────────────────────────────────────────────────────────
 export default function AppRouter() {

@@ -100,7 +100,7 @@ def purchase_row_to_dict(row, items):
     }
 
 
-# ── Helper: format purchase row for list response (no audit fields) ──
+# ── Helper: format purchase row for list response ──
 def purchase_row_to_dict_list(row):
     return {
         "pur_id":             str(row.pur_id),
@@ -116,6 +116,8 @@ def purchase_row_to_dict_list(row):
         "pur_final_amount":   float(row.pur_final_amount) if row.pur_final_amount else None,
         "pur_payment_status": row.pur_payment_status,
         "pur_created_at":     fmt_ts(row.pur_created_at),
+        "updated_at":         fmt_ts(row.updated_at) if hasattr(row, "updated_at") else None,
+        "last_updated_by":    row.last_updated_by if hasattr(row, "last_updated_by") else None,
     }
 
 
@@ -488,9 +490,12 @@ def get_all_purchases(
                p.pur_tax_total, p.pur_final_amount,
                p.pur_payment_status,
                p.pur_created_at,
+               p.updated_at,
+               pr.full_name AS last_updated_by,
                COUNT(*) OVER() AS total_count
         FROM purchases p
         LEFT JOIN suppliers s ON s.supp_id = p.supp_id
+        LEFT JOIN profiles pr ON pr.id = p.updated_by
         WHERE p.business_id = CAST(:bid AS uuid)
           AND p.is_deleted = false
         {extra_where}

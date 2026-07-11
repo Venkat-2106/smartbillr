@@ -139,6 +139,32 @@ function buildColumns(onRowClick) {
         </span>
       ),
     },
+    {
+      key:      'updated_at',
+      label:    'Last Updated',
+      sortable: false,
+      width:    110,
+      render: (row) => (
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+          {row.updated_at ? formatDate(row.updated_at) : '—'}
+        </span>
+      ),
+    },
+    {
+      key:      'last_updated_by',
+      label:    'Last Updated By',
+      sortable: false,
+      width:    140,
+      render: (row) => (
+        row.last_updated_by
+          ? (
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
+              {row.last_updated_by}
+            </span>
+          )
+          : <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>
+      ),
+    },
   ]
 }
 

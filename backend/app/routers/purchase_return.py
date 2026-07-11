@@ -56,6 +56,8 @@ def return_to_dict(r, items):
         "return_amount":     float(r.return_amount) if r.return_amount else 0.0,
         "return_created_at": fmt_ts(r.return_created_at),
         "created_by":        str(r.created_by) if r.created_by else None,
+        "updated_at":        fmt_ts(r.updated_at) if hasattr(r, "updated_at") else None,
+        "last_updated_by":   r.last_updated_by if hasattr(r, "last_updated_by") else None,
         "items":             [return_item_to_dict(i) for i in items]
     }
 
@@ -411,10 +413,12 @@ def get_all_purchase_returns(
     params["limit"] = pagination["limit"]
 
     list_sql = f"""
-        SELECT pr.*, s.supp_name
+        SELECT pr.*, s.supp_name,
+               prof.full_name AS last_updated_by
         FROM purchase_returns pr
         LEFT JOIN purchases p ON p.pur_id = pr.pur_id
         LEFT JOIN suppliers s ON s.supp_id = p.supp_id
+        LEFT JOIN profiles prof ON prof.id = pr.updated_by
         WHERE pr.business_id = CAST(:bid AS uuid)
         {extra_where}
         ORDER BY {order_col} {order_dir}

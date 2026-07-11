@@ -40,8 +40,8 @@ export function useSales() {
   // ── Drawer state ─────────────────────────────────────────────────────────
   const [drawerSale, setDrawerSale] = useState(null);
 
-  // ── Debounce search — shared hook, 300ms (same as useCustomers) ───────────
-  const debouncedSearch = useDebounce(search, 400);
+  // ── Debounce search — 350ms, matches project-wide standard ────────────────
+  const debouncedSearch = useDebounce(search, 350);
 
   // ── CSV export ────────────────────────────────────────────────────────────
   const [isExporting, setIsExporting] = useState(false);

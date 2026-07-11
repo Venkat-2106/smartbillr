@@ -58,6 +58,8 @@ def return_to_dict(r, items):
         "rejected_reason": r.rejected_reason,
         "return_created_at": fmt_ts(r.return_created_at),
         "created_by": str(r.created_by) if r.created_by else None,
+        "updated_at": fmt_ts(r.updated_at) if hasattr(r, "updated_at") else None,
+        "last_updated_by": r.last_updated_by if hasattr(r, "last_updated_by") else None,
         "items": [return_item_to_dict(i) for i in items]
     }
 
@@ -353,9 +355,11 @@ def get_all_sales_returns(
     params["limit"] = pagination["limit"]
 
     list_sql = f"""
-        SELECT sr.*, s.invoice_no
+        SELECT sr.*, s.invoice_no,
+               prof.full_name AS last_updated_by
         FROM sales_returns sr
         LEFT JOIN sales s ON s.sales_id = sr.sale_id
+        LEFT JOIN profiles prof ON prof.id = sr.updated_by
         WHERE sr.business_id = CAST(:bid AS uuid)
         {extra_where}
         ORDER BY {order_col} {order_dir}

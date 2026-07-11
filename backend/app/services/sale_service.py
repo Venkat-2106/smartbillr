@@ -263,6 +263,7 @@ def get_sales_list(db: Session, business_id: str, pagination: dict, search: str,
         "sales_final_amount": "s.sales_final_amount",
         "sales_payment_status": "s.sales_payment_status",
         "sales_payment_method": "s.sales_payment_method",
+        "updated_at": "s.updated_at",
     }
     order_col = SORTABLE.get(sort_by, "s.sales_created_at")
     order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
@@ -297,10 +298,13 @@ def get_sales_list(db: Session, business_id: str, pagination: dict, search: str,
                s.cgst_total, s.sgst_total, s.igst_total, s.tax_total,
                s.sales_payment_status, s.sales_payment_method,
                s.sales_created_at,
+               s.updated_at,
+               prof.full_name AS last_updated_by,
                COUNT(*) OVER() AS total_count,
                pay.cumulative_paid
         FROM sales s
         LEFT JOIN customers c ON c.cust_id = s.customer_id
+        LEFT JOIN profiles prof ON prof.id = s.updated_by
         LEFT JOIN LATERAL (
             SELECT COALESCE(cumulative_paid, 0) AS cumulative_paid,
                    payment_status
@@ -340,6 +344,8 @@ def get_sales_list(db: Session, business_id: str, pagination: dict, search: str,
             "total_paid": str(total_paid_dec),
             "remaining_balance": str(remaining) if remaining > 0 else "0",
             "sales_created_at": fmt_ts(r.sales_created_at),
+            "updated_at": fmt_ts(r.updated_at) if hasattr(r, "updated_at") else None,
+            "last_updated_by": r.last_updated_by if hasattr(r, "last_updated_by") else None,
         })
 
     return result, total

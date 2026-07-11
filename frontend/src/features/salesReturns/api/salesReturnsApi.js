@@ -47,6 +47,11 @@ export async function fetchSalesReturn(returnId) {
   return res.data
 }
 
+export async function createSalesReturn(payload) {
+  const res = await api.post('/sales-returns/', payload)
+  return res.data
+}
+
 export async function updateSalesReturnStatus(returnId, payload) {
   const res = await api.put(`/sales-returns/${returnId}/`, payload)
   return res.data

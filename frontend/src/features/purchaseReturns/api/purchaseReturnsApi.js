@@ -47,6 +47,11 @@ export async function fetchPurchaseReturn(returnId) {
   return res.data
 }
 
+export async function createPurchaseReturn(payload) {
+  const res = await api.post('/purchase-returns/', payload)
+  return res.data
+}
+
 export async function updatePurchaseReturnStatus(returnId, payload) {
   const res = await api.put(`/purchase-returns/${returnId}/`, payload)
   return res.data

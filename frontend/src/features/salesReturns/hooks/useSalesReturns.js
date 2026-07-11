@@ -5,6 +5,7 @@ import {
   fetchSalesReturns,
   fetchAllSalesReturnsForExport,
   fetchSalesReturn,
+  createSalesReturn,
   updateSalesReturnStatus,
   deleteSalesReturn,
 } from '../api/salesReturnsApi'
@@ -78,6 +79,18 @@ export function useSalesReturns() {
     }
   }
 
+  const createMutation = useMutation({
+    mutationFn: createSalesReturn,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['salesReturns'] })
+      queryClient.invalidateQueries({ queryKey: ['sales'] })
+      toast.success('Return created successfully')
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Failed to create return')
+    },
+  })
+
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, payload }) => updateSalesReturnStatus(id, payload),
     onSuccess: (data) => {
@@ -117,6 +130,8 @@ export function useSalesReturns() {
     setPage: tbl.setPage,
     totalPages, totalItems,
     handleExport,
+    createReturn: (payload, callbacks) => createMutation.mutate(payload, callbacks),
+    isCreating: createMutation.isPending,
     updateStatus: (id, payload, callbacks) => updateStatusMutation.mutate({ id, payload }, callbacks),
     deleteReturn: (id, callbacks) => deleteMutation.mutate(id, callbacks),
     isUpdatingStatus: updateStatusMutation.isPending,

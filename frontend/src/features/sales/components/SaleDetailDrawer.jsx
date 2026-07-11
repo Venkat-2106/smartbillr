@@ -31,6 +31,8 @@ import {
   escapeHTML,
   triggerPrint,
 } from '../../../shared/utils/printUtils';
+import { usePermissions } from '../../../shared/hooks/usePermissions';
+import CreateSalesReturnDrawer from '../../salesReturns/components/CreateSalesReturnDrawer';
 import useAuthStore from '../../../store/authStore';
 
 // ── Payment status badge helper (for print — literal hex, no CSS vars) ────────
@@ -218,6 +220,9 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
   const [partialAmount, setPartialAmount] = useState('');
   const [partialError,  setPartialError]  = useState('');
   const [printHovered,  setPrintHovered]  = useState(false);
+  const [showReturnDrawer, setShowReturnDrawer] = useState(false);
+
+  const { can } = usePermissions();
 
   const { data: detail, isLoading, isError } = useQuery({
     queryKey: ['sale', sale?.sales_id],
@@ -351,6 +356,27 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {can('sales_returns.manage') && (
+              <button
+                onClick={() => setShowReturnDrawer(true)}
+                disabled={isLoading}
+                title="Process Return"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: 'var(--bg-page)',
+                  border: '1px solid var(--border)',
+                  cursor: isLoading ? 'not-allowed' : 'pointer',
+                  padding: '6px 12px', borderRadius: 8,
+                  color: isLoading ? 'var(--text-muted)' : 'var(--text-secondary)',
+                  fontSize: 13, fontWeight: 600,
+                  fontFamily: 'inherit',
+                  opacity: isLoading ? 0.5 : 1,
+                  transition: 'all 0.13s',
+                }}
+              >
+                Process Return
+              </button>
+            )}
             <button
               onClick={handlePrint}
               disabled={isLoading || !!isError}
@@ -694,6 +720,13 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
           )}
         </div>
       </div>
+
+      {showReturnDrawer && (
+        <CreateSalesReturnDrawer
+          saleId={sale.sales_id}
+          onClose={() => setShowReturnDrawer(false)}
+        />
+      )}
     </>
   );
 }

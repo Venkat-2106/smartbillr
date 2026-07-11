@@ -16,6 +16,8 @@ import { Badge, Button, Spinner } from '../../../shared/components'
 import { selectStyle }            from '../../../shared/components/FormField'
 import { formatCurrency }         from '../../../shared/utils/formatCurrency'
 import { formatDate }             from '../../../shared/utils/formatDate'
+import { usePermissions }         from '../../../shared/hooks/usePermissions'
+import CreatePurchaseReturnDrawer from '../../purchaseReturns/components/CreatePurchaseReturnDrawer'
 
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' }
 const STATUS_LABEL   = { paid: 'Paid',    partial: 'Partial', pending: 'Unpaid' }
@@ -74,6 +76,9 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
   const { data, isLoading } = usePurchaseDetail(purId)
   const [editingStatus, setEditingStatus] = useState(false)
   const [newStatus,     setNewStatus]     = useState('')
+  const [showReturnDrawer, setShowReturnDrawer] = useState(false)
+
+  const { can } = usePermissions()
 
   function handleStatusSave() {
     if (!newStatus) return
@@ -145,6 +150,24 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
                 <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
               </svg>
               Delete
+            </button>
+          )}
+          {data && can('purchase_returns.manage') && (
+            <button
+              onClick={() => setShowReturnDrawer(true)}
+              disabled={isLoading}
+              style={{
+                background: 'var(--bg-page)', border: '1px solid var(--border)',
+                cursor: isLoading ? 'not-allowed' : 'pointer',
+                padding: '4px 10px', borderRadius: 8,
+                color: isLoading ? 'var(--text-muted)' : 'var(--text-secondary)',
+                fontSize: 12, fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: 4,
+                fontFamily: 'inherit',
+                opacity: isLoading ? 0.5 : 1,
+              }}
+            >
+              Process Return
             </button>
           )}
           <button
@@ -367,6 +390,13 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
           </>
         )}
       </div>
+
+      {showReturnDrawer && (
+        <CreatePurchaseReturnDrawer
+          purchaseId={purId}
+          onClose={() => setShowReturnDrawer(false)}
+        />
+      )}
     </div>
   )
 }

@@ -23,7 +23,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast }                from 'react-hot-toast'
 import { createPurchase, fetchSuppliersLean } from '../api/purchasesApi'
 import { searchProductsLean }   from '../../sales/api/salesApi'
-import { Button, PageHeader, FormField, Spinner } from '../../../shared/components'
+import { Button, PageHeader, FormField } from '../../../shared/components'
 import { selectStyle }          from '../../../shared/components/FormField'
 import { formatCurrency }       from '../../../shared/utils/formatCurrency'
 import useAuthStore             from '../../../store/authStore'
@@ -234,8 +234,6 @@ export default function CreatePurchasePage() {
     mutation.mutate(buildBody())
   }
 
-  const isPageLoading = loadingSupp
-
   return (
     <>
       <PageHeader
@@ -252,7 +250,7 @@ export default function CreatePurchasePage() {
               variant="primary"
               onClick={handleSubmit}
               loading={mutation.isPending}
-              disabled={!isValid || isPageLoading}
+              disabled={!isValid}
             >
               Create Purchase
             </Button>
@@ -260,12 +258,7 @@ export default function CreatePurchasePage() {
         }
       />
 
-      {isPageLoading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
-          <Spinner size="lg" />
-        </div>
-      ) : (
-        <div style={{
+      <div style={{
           display: 'grid',
           gridTemplateColumns: '1fr 340px',
           gap: 24,
@@ -281,15 +274,17 @@ export default function CreatePurchasePage() {
                 <div style={{ position: 'relative' }}>
                   <input
                     type="text"
-                    value={selectedSuppName || suppSearch}
+                    value={loadingSupp ? '' : (selectedSuppName || suppSearch)}
                     onChange={handleSuppInputChange}
-                    onFocus={() => setSuppDropOpen(true)}
+                    onFocus={() => { if (!loadingSupp) setSuppDropOpen(true); }}
                     onBlur={() => setTimeout(() => setSuppDropOpen(false), 150)}
-                    placeholder="Type supplier name or phone…"
+                    placeholder={loadingSupp ? 'Loading suppliers…' : 'Type supplier name or phone…'}
+                    disabled={loadingSupp}
                     autoComplete="off"
                     style={{
                       ...selectStyle,
-                      cursor: 'text',
+                      cursor: loadingSupp ? 'wait' : 'text',
+                      opacity: loadingSupp ? 0.6 : 1,
                       borderColor: suppId ? 'var(--accent-600)' : undefined,
                     }}
                   />
@@ -309,7 +304,7 @@ export default function CreatePurchasePage() {
                     >×</button>
                   )}
 
-                  {suppDropOpen && !suppId && (
+                  {suppDropOpen && !suppId && !loadingSupp && (
                     <div style={{
                       position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
                       background: 'var(--bg-card)',
@@ -479,7 +474,6 @@ export default function CreatePurchasePage() {
             )}
           </div>
         </div>
-      )}
     </>
   )
 }

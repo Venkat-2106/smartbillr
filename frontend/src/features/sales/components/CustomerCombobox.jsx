@@ -7,7 +7,7 @@ import {
   DropdownMenuEmpty,
 } from '../../../shared/components/DropdownMenu';
 
-export default function CustomerCombobox({ customers = [], customerId, onChange, onAddNew }) {
+export default function CustomerCombobox({ customers = [], customerId, onChange, onAddNew, loading = false }) {
   const [search, setSearch] = useState('');
   const [dropOpen, setDropOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -114,15 +114,17 @@ export default function CustomerCombobox({ customers = [], customerId, onChange,
         <input
           ref={inputRef}
           type="text"
-          value={displayText}
+          value={loading ? '' : displayText}
           onChange={handleInputChange}
-          onFocus={() => setDropOpen(true)}
+          onFocus={() => { if (!loading) setDropOpen(true); }}
           onKeyDown={handleKeyDown}
-          placeholder="Walk-in or type name / phone…"
+          placeholder={loading ? 'Loading customers…' : 'Walk-in or type name / phone…'}
+          disabled={loading}
           autoComplete="off"
           style={{
             ...selectStyle,
-            cursor: 'text',
+            cursor: loading ? 'wait' : 'text',
+            opacity: loading ? 0.6 : 1,
             borderColor: customerId ? 'var(--accent-600)' : undefined,
           }}
         />
@@ -144,7 +146,7 @@ export default function CustomerCombobox({ customers = [], customerId, onChange,
           </button>
         )}
 
-        {dropOpen && !customerId && (
+        {dropOpen && !customerId && !loading && (
           <div style={{
             position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
             zIndex: 200,

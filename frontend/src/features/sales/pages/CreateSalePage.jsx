@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, PageHeader, FormField, Spinner } from '../../../shared/components';
+import { Button, PageHeader, FormField } from '../../../shared/components';
 import { selectStyle } from '../../../shared/components/FormField';
 import { formatCurrency } from '../../../shared/utils/formatCurrency';
 import { NUM_INPUT_STYLE } from '../../../shared/constants/styles';
@@ -39,7 +39,7 @@ export default function CreateSalePage() {
     handleCloseAddCustModal, handleAddNewCustomerSubmit,
     handleOpenAddCust,
     stockErrors, handleStockOverrideConfirm, handleStockOverrideCancel,
-    totals, isValid, isPageLoading,
+    totals, isValid,
     handleSubmit, isPending,
     parsedPaidAmount,
   } = useCreateSale();
@@ -93,13 +93,7 @@ export default function CreateSalePage() {
         onConfirm={handleStockOverrideConfirm}
       />
 
-      {isPageLoading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
-          <Spinner size="lg" />
-        </div>
-      ) : (
-        <>
-          <div style={{
+      <div style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
             gap: 16,
@@ -116,6 +110,7 @@ export default function CreateSalePage() {
                 customerId={customerId}
                 onChange={handleCustomerChange}
                 onAddNew={handleOpenAddCust}
+                loading={loadingCust}
               />
             </div>
 
@@ -364,8 +359,6 @@ export default function CreateSalePage() {
               )}
             </div>
           </div>
-        </>
-      )}
     </>
   );
 }

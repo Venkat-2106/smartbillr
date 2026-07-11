@@ -52,6 +52,10 @@ def create_category(
     biz_id = str(new_category.business_id)
     db.commit()
 
+    # Re-set GUCs after commit (SET LOCAL is transaction-scoped — lost on commit)
+    db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": str(current_user["user_id"])})
+    db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": str(current_user["business_id"])})
+
     # Refresh timestamps via raw SQL with explicit business_id filter (RLS bypass).
     # SQLAlchemy ORM's refresh() fails because RLS policies block the implicit SELECT.
     row = db.execute(
@@ -186,7 +190,7 @@ def get_categories(
 # ══════════════════════════════════════════════════════════════════
 # GET /categories/{category_id} → Category detail WITH product list
 # ══════════════════════════════════════════════════════════════════
-@router.get("/{category_id}")
+@router.get("/{category_id}/")
 def get_category(
     category_id:  str,
     current_user: dict = Depends(require_permission("products.view")),
@@ -286,7 +290,7 @@ def get_category(
 # PUT /categories/{category_id} → Update category name
 # DB triggers automatically set updated_at + updated_by on commit
 # ══════════════════════════════════════════════════════════════════
-@router.put("/{category_id}")
+@router.put("/{category_id}/")
 def update_category(
     category_id: str,
     payload: CategoryUpdate,
@@ -318,14 +322,15 @@ def update_category(
     for field, value in update_data.items():
         setattr(category, field, value)
 
-    # updated_at and updated_by are set automatically by DB triggers
-    # trg_categories_updated_at / trg_categories_updated_by
-
     cat_id = str(category.category_id)
     biz_id = str(category.business_id)
     db.commit()
 
-    # Refresh timestamps via raw SQL with explicit business_id filter (RLS bypass).
+    # Re-set GUCs after commit (SET LOCAL is transaction-scoped — lost on commit)
+    db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": str(current_user["user_id"])})
+    db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": str(current_user["business_id"])})
+
+    # Re-fetch row after commit
     row = db.execute(
         text("""
             SELECT category_name, created_at, updated_at, updated_by
@@ -339,7 +344,6 @@ def update_category(
     if not row:
         return error_response("Category not found after update", 500)
 
-    # Fetch the updater's name to return in response
     updated_by_name = None
     if row.updated_by:
         updated_by_name = db.execute(
@@ -362,7 +366,7 @@ def update_category(
 # ══════════════════════════════════════════════════════════════════
 # DELETE /categories/{category_id} → Soft delete with CASCADE
 # ══════════════════════════════════════════════════════════════════
-@router.delete("/{category_id}")
+@router.delete("/{category_id}/")
 def delete_category(
     category_id: str,
     current_user: dict = Depends(require_permission("products.edit")),

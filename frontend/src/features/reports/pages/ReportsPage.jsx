@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { BentoCard, LineChart, BarChart, DonutChart, EmptyState } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate } from '../../../shared/utils/formatDate'
+import { getTaxLabel } from '../../../shared/utils/formatTax'
 import useAuthStore from '../../../store/authStore'
 import { usePermissions } from '../../../shared/hooks/usePermissions'
 import {
@@ -295,7 +296,7 @@ function PurchasesSection({ dateFrom, dateTo }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
         {[
           { label: 'Total Spend', value: s ? formatCurrency(s.total_amount, country) : '—', sub: `${s?.total_purchases ?? 0} purchases`, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg> },
-          { label: 'Total Tax', value: s ? formatCurrency(s.total_tax, country) : '—', sub: `CGST: ${formatCurrency(s?.total_cgst ?? 0, country)} · SGST: ${formatCurrency(s?.total_sgst ?? 0, country)}`, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> },
+          { label: `${getTaxLabel(country)} Total`, value: s ? formatCurrency(s.total_tax, country) : '—', sub: country === 'IN' ? `CGST: ${formatCurrency(s?.total_cgst ?? 0, country)} · SGST: ${formatCurrency(s?.total_sgst ?? 0, country)}` : undefined, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> },
           { label: 'Paid', value: s?.paid_count ?? '—', sub: 'Completed purchases', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> },
           { label: 'Pending', value: s?.pending_count ?? '—', sub: 'Unpaid purchases', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
         ].map((c, i) => <StatCard key={i} {...c} loading={summary.isLoading} />)}
@@ -580,18 +581,23 @@ function TaxSection({ dateFrom, dateTo }) {
   const totalPaid = paid.data?.total_tax ?? 0
   const netLiability = liability.data?.net_tax_liability
 
+  const taxLabel = getTaxLabel(country)
+  const collectedSub = country === 'IN'
+    ? `CGST: ${formatCurrency(collected.data?.total_cgst ?? 0, country)} · SGST: ${formatCurrency(collected.data?.total_sgst ?? 0, country)}`
+    : undefined
+
   return (
     <BentoCard>
-      <SectionTitle title="Tax Reports" subtitle="Tax collected, paid, and net liability" />
+      <SectionTitle title={`${taxLabel} Reports`} subtitle={`${taxLabel} collected, paid, and net liability`} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
-        <StatCard label="Tax Collected" value={formatCurrency(totalCollected, country)} sub={`CGST: ${formatCurrency(collected.data?.total_cgst ?? 0, country)} · SGST: ${formatCurrency(collected.data?.total_sgst ?? 0, country)}`} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>} loading={collected.isLoading} />
-        <StatCard label="Tax Paid" value={formatCurrency(totalPaid, country)} sub={`On purchases`} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>} loading={paid.isLoading} />
+        <StatCard label={`${taxLabel} Collected`} value={formatCurrency(totalCollected, country)} sub={collectedSub} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>} loading={collected.isLoading} />
+        <StatCard label={`${taxLabel} Paid`} value={formatCurrency(totalPaid, country)} sub={`On purchases`} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>} loading={paid.isLoading} />
         {netLiability != null && <StatCard label="Net Liability" value={formatCurrency(Math.abs(netLiability), country)} sub={netLiability >= 0 ? 'Payable' : 'Refundable'} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>} loading={liability.isLoading} />}
       </div>
 
-      <InfoCard title="Tax by GST Rate" subtitle="Breakdown by tax slab">
+      <InfoCard title={`${taxLabel} by Rate`} subtitle="Breakdown by tax slab">
         <DataTable columns={[
-          { key: 'gst_rate', label: 'GST Rate', bold: true, format: v => `${v}%` },
+          { key: 'gst_rate', label: `${taxLabel} Rate`, bold: true, format: v => `${v}%` },
           { key: 'item_count', label: 'Items', align: 'center' },
           { key: 'taxable_amount', label: 'Taxable Value', align: 'right', format: v => formatCurrency(v, country) },
           { key: 'tax_amount', label: 'Tax Amount', align: 'right', format: v => formatCurrency(v, country) },

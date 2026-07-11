@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from 'react-router-dom'
@@ -14,10 +14,11 @@ import { businessSchema } from '../schemas/businessSchema'
 import { useSubscription } from '../../subscription/hooks/useSubscription'
 import { SUBSCRIPTION_DISPLAY_NAMES as DISPLAY_NAMES } from '../../../shared/utils/subscriptionUtils'
 import { formatDate } from '../../../shared/utils/formatDate'
+import { getTaxLabel } from '../../../shared/utils/formatTax'
 
-const TABS = [
+const BASE_TABS = [
   { key: 'general', label: 'Business Info' },
-  { key: 'tax', label: 'Tax Settings' },
+  { key: 'tax', label: 'Tax Settings', gstOnly: true },
   { key: 'pricing', label: 'Pricing & Plans' },
 ]
 
@@ -30,6 +31,14 @@ export default function SettingsPage() {
   const { data: sub, isLoading: subLoading } = useSubscription()
 
   const business = data?.data ?? data
+
+  const country = business?.business_country_code || ''
+  const taxLabel = getTaxLabel(country)
+  const isGstCountry = taxLabel === 'GST'
+  const tabs = useMemo(
+    () => BASE_TABS.filter(t => !t.gstOnly || isGstCountry),
+    [isGstCountry]
+  )
 
   const {
     register,
@@ -78,6 +87,8 @@ export default function SettingsPage() {
     save(payload)
   }
 
+  const safeActiveTab = tabs.some(t => t.key === activeTab) ? activeTab : 'general'
+
   return (
     <>
       <div style={{ marginBottom: 28 }}>
@@ -94,16 +105,16 @@ export default function SettingsPage() {
           display: 'flex', borderBottom: '1px solid var(--border)',
           background: 'var(--bg-page)',
         }}>
-          {TABS.map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               style={{
                 padding: '14px 24px',
                 background: 'none', border: 'none',
-                borderBottom: activeTab === tab.key ? '2px solid var(--accent-600)' : '2px solid transparent',
-                color: activeTab === tab.key ? 'var(--accent-600)' : 'var(--text-muted)',
-                fontWeight: activeTab === tab.key ? 700 : 500,
+                borderBottom: safeActiveTab === tab.key ? '2px solid var(--accent-600)' : '2px solid transparent',
+                color: safeActiveTab === tab.key ? 'var(--accent-600)' : 'var(--text-muted)',
+                fontWeight: safeActiveTab === tab.key ? 700 : 500,
                 fontSize: 13,
                 cursor: 'pointer',
                 fontFamily: 'inherit',
@@ -292,7 +303,7 @@ export default function SettingsPage() {
                     letterSpacing: '0.08em', color: 'var(--text-muted)',
                     margin: '0 0 20px',
                   }}>
-                    Tax Configuration
+                    {taxLabel} Configuration
                   </p>
 
                   <div style={{
@@ -305,10 +316,10 @@ export default function SettingsPage() {
                   }}>
                     <div>
                       <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3 }}>
-                        GST Registered
+                        {taxLabel} Registered
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                        Enable if your business is registered for GST
+                        Enable if your business is registered for {taxLabel}
                       </div>
                     </div>
                     <label style={{
@@ -319,7 +330,7 @@ export default function SettingsPage() {
                         type="checkbox"
                         {...register('is_gst_registered')}
                         style={{ opacity: 0, width: 0, height: 0 }}
-                        aria-label="GST registered"
+                        aria-label={`${taxLabel} registered`}
                       />
                       <span style={{
                         position: 'absolute', inset: 0,
@@ -339,10 +350,10 @@ export default function SettingsPage() {
                     </label>
                   </div>
 
-                  <FormField label="GSTIN" error={errors.gstin?.message} style={{ marginBottom: 16 }}>
+                  <FormField label={country === 'IN' ? 'GSTIN' : `${taxLabel} Number`} error={errors.gstin?.message} style={{ marginBottom: 16 }}>
                     <Input
                       {...register('gstin')}
-                      placeholder="e.g. 33AABCU9603R1ZM"
+                      placeholder={country === 'IN' ? 'e.g. 33AABCU9603R1ZM' : `e.g. Tax ID`}
                       style={{ fontFamily: 'monospace', letterSpacing: '0.03em' }}
                     />
                   </FormField>

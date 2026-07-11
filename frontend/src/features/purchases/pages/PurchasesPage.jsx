@@ -122,7 +122,7 @@ export default function PurchasesPage() {
   const navigate = useNavigate()
   const hasPermission = useAuthStore(s => s.hasPermission)
   const canEdit = hasPermission('purchases.edit')
-  const canCreate = hasPermission('purchases.view')
+  const canCreate = hasPermission('purchases.create')
   const subscription = useAuthStore(s => s.subscription)
   const business  = useAuthStore(s => s.business)
   const country   = business?.business_country_code || 'IN'

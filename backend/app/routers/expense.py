@@ -242,6 +242,13 @@ def update_expense(
     if not expense:
         return error_response("Expense not found", status_code=404)
 
+    if expense.source_type:
+        return error_response(
+            f"This expense was auto-generated from a {expense.source_type} and cannot be "
+            f"edited or deleted directly. Adjust the source {expense.source_type} instead.",
+            status_code=400
+        )
+
     if data.expense_category is not None:
         expense.expense_category = data.expense_category
     if data.expense_amount is not None:
@@ -286,6 +293,13 @@ def delete_expense(
 
     if not expense:
         return error_response("Expense not found", status_code=404)
+
+    if expense.source_type:
+        return error_response(
+            f"This expense was auto-generated from a {expense.source_type} and cannot be "
+            f"edited or deleted directly. Adjust the source {expense.source_type} instead.",
+            status_code=400
+        )
 
     expense.is_deleted = True
     # updated_by is auto-set by DB trigger trg_expenses_updated_by

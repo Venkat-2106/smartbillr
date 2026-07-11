@@ -294,7 +294,8 @@ def _check_subscription_for_user(user_id: str) -> dict | None:
         _cache_sub_set(user_id, result)
         return result
 
-    except Exception:
+    except Exception as e:
+        logging.warning("Subscription check failed, allowing request through: %s", e)
         return None
     finally:
         db.close()

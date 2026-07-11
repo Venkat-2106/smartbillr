@@ -181,8 +181,9 @@ export default function CreatePurchasePage() {
     let taxTotal = 0
     items.forEach(item => {
       const s = (Number(item.unit_price) || 0) * (Number(item.quantity) || 0)
-      const t = s * ((Number(item.tax_rate) || 0) / 100)
-      subtotal += s
+      const rawTax = s * ((Number(item.tax_rate) || 0) / 100)
+      const t = Math.round(rawTax * 100) / 100
+      subtotal += Math.round(s * 100) / 100
       taxTotal += t
     })
     const discountAmt = Number(discount) || 0

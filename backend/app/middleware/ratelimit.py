@@ -120,7 +120,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
-        if any(path.startswith(s) for s in SKIP_PATHS):
+        if path in ("/", "/health"):
             return await call_next(request)
 
         is_auth = (

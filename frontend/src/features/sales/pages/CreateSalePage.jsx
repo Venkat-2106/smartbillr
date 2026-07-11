@@ -93,6 +93,8 @@ export default function CreateSalePage() {
         onConfirm={handleStockOverrideConfirm}
       />
 
+      {/* FIX: Full-page spinner gate removed — form renders immediately.
+          CustomerCombobox handles its own loading state via the `loading` prop. */}
       <div style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',

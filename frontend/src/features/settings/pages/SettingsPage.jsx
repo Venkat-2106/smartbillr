@@ -32,6 +32,8 @@ export default function SettingsPage() {
 
   const business = data?.data ?? data
 
+  // FIX: Tax Settings tab only shown for GST-using countries (IN, AU, SG, NZ).
+  // Labels inside the tab use getTaxLabel() for country-appropriate text.
   const country = business?.business_country_code || ''
   const taxLabel = getTaxLabel(country)
   const isGstCountry = taxLabel === 'GST'

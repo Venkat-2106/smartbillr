@@ -581,6 +581,8 @@ function TaxSection({ dateFrom, dateTo }) {
   const totalPaid = paid.data?.total_tax ?? 0
   const netLiability = liability.data?.net_tax_liability
 
+  // FIX: Country-aware tax labels — title, stat card labels, and CGST/SGST
+  // sub-labels all use getTaxLabel(country) instead of hardcoded "Tax"/"GST".
   const taxLabel = getTaxLabel(country)
   const collectedSub = country === 'IN'
     ? `CGST: ${formatCurrency(collected.data?.total_cgst ?? 0, country)} · SGST: ${formatCurrency(collected.data?.total_sgst ?? 0, country)}`

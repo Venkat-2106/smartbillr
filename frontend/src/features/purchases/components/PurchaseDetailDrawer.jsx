@@ -17,7 +17,7 @@ import { selectStyle }             from '../../../shared/components/FormField'
 import { formatCurrency }          from '../../../shared/utils/formatCurrency'
 import { formatDate }              from '../../../shared/utils/formatDate'
 import { usePermissions }          from '../../../shared/hooks/usePermissions'
-import { getTaxLabel, detectTaxType } from '../../../shared/utils/formatTax'
+import { getTaxLabel, detectTaxType } from '../../../shared/utils/formatTax'  // FIX: added detectTaxType to prevent double-counted tax rows
 import useAuthStore                from '../../../store/authStore'
 import CreatePurchaseReturnDrawer  from '../../purchaseReturns/components/CreatePurchaseReturnDrawer'
 
@@ -273,6 +273,9 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
               {(data.pur_discount || 0) > 0 && (
                 <SummaryRow label="Discount"       value={`− ${formatCurrency(data.pur_discount, country)}`} danger />
               )}
+              {/* FIX: Use detectTaxType() for mutually exclusive tax rows —
+                  previously CGST+SGST+generic all rendered simultaneously,
+                  double-counting tax for India purchases. */}
               {hasTax && (() => {
                 const tt = detectTaxType(data)
                 if (tt === 'cgst_sgst') {

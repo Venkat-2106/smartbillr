@@ -258,6 +258,8 @@ export default function CreatePurchasePage() {
         }
       />
 
+      {/* FIX: Full-page spinner gate removed — form renders immediately.
+          Supplier input handles its own loading state (disabled + placeholder). */}
       <div style={{
           display: 'grid',
           gridTemplateColumns: '1fr 340px',

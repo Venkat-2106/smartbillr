@@ -24,6 +24,8 @@ class Sale(Base):
     sales_payment_method = Column(String,       nullable=True)
     sales_payment_status = Column(String,       default="unpaid")
     created_by           = Column(UUID(as_uuid=True), nullable=True)
+    # FIX: Added updated_by column + trg_sales_updated_by trigger (migration c8d9e0f1a2b3).
+    # Auto-populated by fn_set_updated_by() on every UPDATE via the BEFORE UPDATE trigger.
     updated_by           = Column(UUID(as_uuid=True), nullable=True)
     is_deleted           = Column(Boolean,      default=False)
     sales_created_at     = Column(TIMESTAMP,    nullable=True, server_default=text("now()"))

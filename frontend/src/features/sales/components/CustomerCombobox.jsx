@@ -7,6 +7,9 @@ import {
   DropdownMenuEmpty,
 } from '../../../shared/components/DropdownMenu';
 
+// FIX: Added `loading` prop — when true, input is disabled with
+// "Loading customers…" placeholder so the form renders immediately
+// without blocking on the customer-list fetch (see CreateSalePage.jsx).
 export default function CustomerCombobox({ customers = [], customerId, onChange, onAddNew, loading = false }) {
   const [search, setSearch] = useState('');
   const [dropOpen, setDropOpen] = useState(false);

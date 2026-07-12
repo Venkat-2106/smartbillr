@@ -1,4 +1,44 @@
 # app/routers/purchase.py
+#
+# ── ASYNC MIGRATION NOTE (2026-07) ──────────────────────────────────────────
+#
+# This router was migrated from sync SQLAlchemy (psycopg2) to async
+# (asyncpg).  Key patterns to be aware of:
+#
+#   - All Session usage → AsyncSession (get_async_db dependency).
+#   - db.execute(...) → await db.execute(...).
+#   - paginate() → paginate_async() (avoids opening a second sync conn).
+#   - SET LOCAL with bind params is NOT supported by asyncpg (server-side
+#     binding sends $1 which SET grammar rejects).  All GUC-setting uses
+#     set_config() instead — see middleware/rbac.py for the canonical pattern.
+#   - Every await db.commit() must be followed by
+#     await async_set_rls_gucs_after_commit(db, current_user) when further
+#     queries follow in the same request.  set_config(is_local=true) values
+#     are transaction-scoped and are cleared by Postgres on commit.
+#
+# ── PURCHASE FLOW ────────────────────────────────────────────────────────────
+#
+# create_purchase:
+#   1. Validate subscription tier limit (max purchases/month).
+#   2. Validate supplier (if provided) belongs to this business.
+#   3. Bulk-validate all products exist and are active.
+#   4. Calculate tax via centralized tax_engine (handles India GST rules).
+#   5. Insert purchase header + items in one transaction.
+#   6. Update prod_cost_price for each product (last-purchase-cost accounting).
+#   7. Auto-create expense if pur_payment_status='paid' (race-safe via
+#      INSERT ... WHERE NOT EXISTS + unique partial index).
+#   8. Clean up stale low-stock alerts for restocked products.
+#   9. Re-fetch full purchase + items for the response.
+#
+# update_purchase_status:
+#   When manually marking as "paid", auto-inserts an expense record
+#   (same INSERT ... WHERE NOT EXISTS pattern as create_purchase).
+#
+# delete_purchase:
+#   Optional stock reduction via reduce_stock=true query param.
+#   Uses bulk FROM (VALUES ...) UPDATE for multi-product stock changes
+#   and batch INSERT into stock_movements.
+# ─────────────────────────────────────────────────────────────────────────────
 
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
@@ -758,6 +798,10 @@ async def update_purchase_status(
         expense_created = result is not None
 
     await db.commit()
+    # RLS: SET LOCAL/set_config GUCs are transaction-scoped and are cleared
+    # by this commit. Re-set them in case any future code adds a query after
+    # this point (matches the convention in product.py, expense.py).
+    await async_set_rls_gucs_after_commit(db, current_user)
 
     response_data = {"message": "Purchase payment status updated", "status": status}
     if expense_created:
@@ -871,4 +915,9 @@ async def delete_purchase(
                 )
 
     await db.commit()
+    # RLS: SET LOCAL/set_config GUCs are transaction-scoped and are cleared
+    # by this commit. Re-set them in case any future code adds a query after
+    # this point (matches the convention in product.py, expense.py).
+    await async_set_rls_gucs_after_commit(db, current_user)
+
     return success_response({"message": "Purchase deleted successfully"})

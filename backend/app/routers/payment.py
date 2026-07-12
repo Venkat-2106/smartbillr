@@ -1,4 +1,34 @@
 # app/routers/payment.py
+#
+# ── ASYNC MIGRATION NOTE (2026-07) ──────────────────────────────────────────
+#
+# This router was migrated from sync SQLAlchemy (psycopg2) to async
+# (asyncpg).  Key patterns to be aware of:
+#
+#   - All Session usage → AsyncSession (get_async_db dependency).
+#   - db.execute(...) → await db.execute(...).
+#   - paginate() → paginate_async() (avoids opening a second sync conn).
+#   - SET LOCAL with bind params is NOT supported by asyncpg (server-side
+#     binding sends $1 which SET grammar rejects).  All GUC-setting uses
+#     set_config() instead — see middleware/rbac.py for the canonical pattern.
+#
+# ── CONCURRENCY MODEL (create_payment) ───────────────────────────────────────
+#
+# Payment recording uses two levels of row locking to prevent double-charging:
+#
+#   1. FOR UPDATE on the sales row — serializes concurrent payment requests
+#      for the same sale.  Without this, two requests both see
+#      already_paid=0 and both record a full payment.
+#
+#   2. FOR UPDATE on the active payments row — serializes the
+#      deactivate-old / insert-new cycle.  For a sale with zero prior
+#      payments (first payment), there is no payments row to lock, so the
+#      sale-level lock (above) is the sole serialization point.
+#
+# Both locks are released when db.commit() fires at the end of the route.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# app/routers/payment.py
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,8 +42,9 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
 from app.utils.payment_helpers import record_payment_and_sync_async, calculate_payment_status
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timezone
 from app.utils.timestamp import fmt_ts
+import logging
 
 router = APIRouter(prefix="/v1/payments", tags=["Payments"])
 
@@ -97,12 +128,10 @@ async def create_payment(
         return error_response("Sale not found", status_code=404)
 
     # ── Get sale final amount from DB (generated column) ─────────────────────
-    sale_row = (await db.execute(
-        text("SELECT sales_final_amount FROM sales WHERE sales_id = CAST(:sid AS uuid)"),
-        {"sid": str(data.sale_id)}
-    )).fetchone()
-
-    sale_final = Decimal(str(sale_row.sales_final_amount)) if sale_row and sale_row.sales_final_amount else Decimal("0")
+    # PERF: sales_final_amount is already available on the `sale` ORM object
+    # fetched above — removed a redundant second query that re-fetched the same
+    # column via raw SQL.
+    sale_final = Decimal(str(sale.sales_final_amount)) if sale.sales_final_amount else Decimal("0")
 
     # ── Lock the sale row to serialize concurrent payments ────────────────────
     # The payments FOR UPDATE below only locks existing payment rows. For a
@@ -110,9 +139,12 @@ async def create_payment(
     # concurrent requests both see already_paid=0 and double-charge the customer.
     # Locking the sale row guarantees that only one payment request proceeds at
     # a time, regardless of whether a payments row exists yet.
+    # SECURITY: business_id filter added for defense-in-depth consistency with
+    # every other query in this file, even though sales_id (UUID PK) alone is
+    # sufficient to identify the correct row.
     await db.execute(
-        text("SELECT 1 FROM sales WHERE sales_id = CAST(:sid AS uuid) FOR UPDATE"),
-        {"sid": str(data.sale_id)}
+        text("SELECT 1 FROM sales WHERE sales_id = CAST(:sid AS uuid) AND business_id = CAST(:bid AS uuid) FOR UPDATE"),
+        {"sid": str(data.sale_id), "bid": business_id}
     )
 
     # ── Get total already paid by reading cumulative_paid from active row ─────
@@ -155,18 +187,26 @@ async def create_payment(
     new_status = calculate_payment_status(total_after, sale_final)
 
     # ── Deactivate old row, insert new active row, sync sales table ───────────
-    new_payment_id = await record_payment_and_sync_async(
-        db              = db,
-        business_id     = business_id,
-        sale_id         = str(data.sale_id),
-        sale_final      = sale_final,
-        payment_amount  = new_payment,
-        payment_method  = data.payment_method or "cash",
-        new_status      = new_status,
-        cumulative_paid = total_after.quantize(Decimal("0.01"))
-    )
+    # Explicit try/except for this financial write path — unlike a generic 500,
+    # this ensures rollback happens and the client gets an actionable message
+    # instead of an opaque "Internal Server Error".
+    try:
+        new_payment_id = await record_payment_and_sync_async(
+            db              = db,
+            business_id     = business_id,
+            sale_id         = str(data.sale_id),
+            sale_final      = sale_final,
+            payment_amount  = new_payment,
+            payment_method  = data.payment_method or "cash",
+            new_status      = new_status,
+            cumulative_paid = total_after.quantize(Decimal("0.01"))
+        )
 
-    await db.commit()
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        logging.exception("create_payment failed")
+        return error_response("Failed to record payment. Please try again.", status_code=500)
 
     new_remaining = (sale_final - total_after).quantize(Decimal("0.01"))
 
@@ -185,7 +225,11 @@ async def create_payment(
             "payment_method":  data.payment_method or "cash",
             "payment_status":  new_status,
             "is_active":       True,
-            "payment_paid_at": fmt_ts(datetime.utcnow())
+            # datetime.utcnow() is deprecated since Python 3.12 (returns a naive datetime).
+            # Using timezone-aware now() instead — this value is response-only, not
+            # persisted (the DB row uses its own default), but naive datetimes risk
+            # timezone confusion downstream.
+            "payment_paid_at": fmt_ts(datetime.now(timezone.utc))
         }
     }, status_code=201)
 

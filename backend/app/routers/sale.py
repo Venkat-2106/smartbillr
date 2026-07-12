@@ -1,3 +1,43 @@
+# app/routers/sale.py
+#
+# ── ASYNC MIGRATION NOTE (2026-07) ──────────────────────────────────────────
+#
+# This router was migrated from sync SQLAlchemy (psycopg2) to async
+# (asyncpg).  Key patterns to be aware of:
+#
+#   - All Session usage → AsyncSession (get_async_db dependency).
+#   - db.execute(...) → await db.execute(...).
+#   - paginate() → paginate_async() (avoids opening a second sync conn).
+#   - SET LOCAL with bind params is NOT supported by asyncpg (server-side
+#     binding sends $1 which SET grammar rejects).  All GUC-setting uses
+#     set_config() instead — see middleware/rbac.py for the canonical pattern.
+#   - Every await db.commit() must be followed by
+#     await async_set_rls_gucs_after_commit(db, current_user) when further
+#     queries follow in the same request.  set_config(is_local=true) values
+#     are transaction-scoped and are cleared by Postgres on commit.
+#   - Heavy business logic lives in app/services/sale_service.py (async).
+#     This router handles HTTP concerns only — validation, auth, response
+#     formatting.  The service layer owns DB queries, stock movements,
+#     payment auto-recording, and tax calculations.
+#
+# ── CONCURRENCY NOTES ────────────────────────────────────────────────────────
+#
+# create_sale:
+#   Uses a DB transaction to atomically insert the sale header, items,
+#   stock movements, and payment record.  Invoice numbers are generated
+#   via a sequence (gapless under normal load, but not gap-proof under
+#   high concurrency — acceptable for this SaaS tier).
+#
+# handle_sale_status_patch:
+#   Uses FOR UPDATE on the sale row to serialize concurrent status
+#   changes.  The payment sync helper (record_payment_and_sync_async)
+#   also locks the active payment row to prevent double-recording.
+#
+# delete_sale:
+#   Soft-deletes the sale and optionally restores stock.  Stock restore
+#   uses bulk FROM (VALUES ...) UPDATE for efficiency.
+# ─────────────────────────────────────────────────────────────────────────────
+
 from fastapi import APIRouter, Depends, Query
 from fastapi import Body
 from pydantic import BaseModel, field_validator
@@ -6,7 +46,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from decimal import Decimal
 from app.database import get_async_db
-from app.middleware.rbac import require_permission
+from app.middleware.rbac import require_permission, async_set_rls_gucs_after_commit
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
 from app.schemas.sale import SaleCreate
@@ -104,6 +144,10 @@ async def create_sale(
         await auto_record_payment(db, business_id, new_sale_id, data, total_amount)
 
         await db.commit()
+        # RLS: SET LOCAL/set_config GUCs are transaction-scoped and are cleared
+        # by this commit. Re-set them in case any future code adds a query after
+        # this point (matches the convention in product.py, purchase.py, expense.py).
+        await async_set_rls_gucs_after_commit(db, current_user)
 
         return success_response({
             "message": "Sale created successfully",
@@ -295,6 +339,10 @@ async def handle_sale_status_patch(
         await update_payment_status(db, sales_id, body.status, business_id)
 
     await db.commit()
+    # RLS: SET LOCAL/set_config GUCs are transaction-scoped and are cleared
+    # by this commit. Re-set them in case any future code adds a query after
+    # this point (matches the convention in product.py, purchase.py, expense.py).
+    await async_set_rls_gucs_after_commit(db, current_user)
 
     response_data = {
         "message": "Payment status updated",
@@ -434,5 +482,9 @@ async def delete_sale(
             )
 
     await db.commit()
+    # RLS: SET LOCAL/set_config GUCs are transaction-scoped and are cleared
+    # by this commit. Re-set them in case any future code adds a query after
+    # this point (matches the convention in product.py, purchase.py, expense.py).
+    await async_set_rls_gucs_after_commit(db, current_user)
 
     return success_response({"message": "Sale deleted successfully"})

@@ -1,3 +1,37 @@
+# app/routers/expense.py
+#
+# ── ASYNC MIGRATION NOTE (2026-07) ──────────────────────────────────────────
+#
+# This router was migrated from sync SQLAlchemy (psycopg2) to async
+# (asyncpg).  Key patterns to be aware of:
+#
+#   - All Session usage → AsyncSession (get_async_db dependency).
+#   - db.execute(...) → await db.execute(...).
+#   - paginate() → paginate_async() (avoids opening a second sync conn).
+#   - SET LOCAL with bind params is NOT supported by asyncpg (server-side
+#     binding sends $1 which SET grammar rejects).  All GUC-setting uses
+#     set_config() instead — see middleware/rbac.py for the canonical pattern.
+#   - Every await db.commit() must be followed by
+#     await async_set_rls_gucs_after_commit(db, current_user) when further
+#     queries follow in the same request.  set_config(is_local=true) values
+#     are transaction-scoped and are cleared by Postgres on commit.
+#
+# ── AUTO-GENERATED EXPENSES (source_type / source_id) ────────────────────────
+#
+# Some expenses are auto-created by other modules:
+#   - Purchases with pur_payment_status='paid' → INSERT INTO expenses
+#     with source_type='purchase', source_id=pur_id.  Race-safe via
+#     INSERT ... WHERE NOT EXISTS + unique partial index.
+#   - (Future: sales returns, purchase returns may also auto-create.)
+#
+# IMPORTANT: Auto-generated expenses (source_type IS NOT NULL) cannot be
+# edited or deleted via the expense CRUD endpoints.  Both update_expense
+# and delete_expense check source_type and return HTTP 400 if set.
+# The user must modify the SOURCE record (e.g., the purchase) instead.
+# This prevents the expenses ledger from drifting out of sync with its
+# source module.
+# ─────────────────────────────────────────────────────────────────────────────
+
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -209,7 +243,19 @@ async def get_expense(
     if not expense:
         return error_response("Expense not found", status_code=404)
 
-    updated_by_name = current_user.get("full_name") if expense.updated_by else None
+    # BUG FIX: previously used current_user.get("full_name") here, which showed
+    # the REQUESTING user's name instead of the actual last editor. updated_by is
+    # a separate user's UUID (whoever last modified this row) — must be looked up
+    # independently, same as get_all_expenses already does via its profiles JOIN.
+    if expense.updated_by:
+        result = await db.execute(
+            text("SELECT full_name FROM profiles WHERE id = :uid"),
+            {"uid": str(expense.updated_by)}
+        )
+        row = result.fetchone()
+        updated_by_name = row.full_name if row else None
+    else:
+        updated_by_name = None
 
     return success_response(expense_to_dict(expense, last_updated_by=updated_by_name))
 
@@ -295,6 +341,10 @@ async def delete_expense(
     expense.is_deleted = True
     # updated_by is auto-set by DB trigger trg_expenses_updated_by
     await db.commit()
+    # RLS: SET LOCAL/set_config GUCs are transaction-scoped and are cleared
+    # by this commit. Re-set them in case any future code adds a query after
+    # this point (matches the convention in product.py, purchase.py).
+    await async_set_rls_gucs_after_commit(db, current_user)
 
     return success_response({
         "message": "Expense deleted successfully"

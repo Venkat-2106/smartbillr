@@ -11,6 +11,23 @@
 #   6. [NEW] PUT /customers/{id} sets updated_by = current_user["user_id"],
 #            fetches updater name, returns it in response
 #            (DB trigger trg_customers_updated_at auto-sets updated_at on commit)
+#
+# ── ASYNC MIGRATION NOTE (2026-07) ──────────────────────────────────────────
+#
+# This router was migrated from sync SQLAlchemy (psycopg2) to async
+# (asyncpg).  Key patterns to be aware of:
+#
+#   - All Session usage → AsyncSession (get_async_db dependency).
+#   - db.execute(...) → await db.execute(...).
+#   - paginate() → paginate_async() (avoids opening a second sync conn).
+#   - SET LOCAL with bind params is NOT supported by asyncpg (server-side
+#     binding sends $1 which SET grammar rejects).  All GUC-setting uses
+#     set_config() instead — see middleware/rbac.py for the canonical pattern.
+#   - Every await db.commit() must be followed by
+#     await async_set_rls_gucs_after_commit(db, current_user) when further
+#     queries follow in the same request.  set_config(is_local=true) values
+#     are transaction-scoped and are cleared by Postgres on commit.
+# ─────────────────────────────────────────────────────────────────────────────
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -696,5 +713,9 @@ async def delete_customer(
     customer.is_deleted = True
     customer.updated_by = current_user["user_id"]
     await db.commit()
+    # RLS: SET LOCAL/set_config GUCs are transaction-scoped and are cleared
+    # by this commit. Re-set them in case any future code adds a query after
+    # this point (matches the convention in create_customer, update_customer).
+    await async_set_rls_gucs_after_commit(db, current_user)
 
     return success_response({"message": "Customer deleted successfully"})

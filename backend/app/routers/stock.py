@@ -1,9 +1,39 @@
+# app/routers/stock.py
+#
+# ── ASYNC MIGRATION NOTE (2026-07) ──────────────────────────────────────────
+#
+# This router was migrated from sync SQLAlchemy (psycopg2) to async
+# (asyncpg).  Key patterns to be aware of:
+#
+#   - All Session usage → AsyncSession (get_async_db dependency).
+#   - db.execute(...) → await db.execute(...).
+#   - paginate() → paginate_async() (avoids opening a second sync conn).
+#   - SET LOCAL with bind params is NOT supported by asyncpg (server-side
+#     binding sends $1 which SET grammar rejects).  All GUC-setting uses
+#     set_config() instead — see middleware/rbac.py for the canonical pattern.
+#   - Every await db.commit() must be followed by
+#     await async_set_rls_gucs_after_commit(db, current_user) when further
+#     queries follow in the same request.  set_config(is_local=true) values
+#     are transaction-scoped and are cleared by Postgres on commit.
+#
+# ── STOCK MOVEMENT LOGGING ───────────────────────────────────────────────────
+#
+# Every stock-affecting operation (sale, purchase, adjustment, return)
+# inserts a row into stock_movements.  move_qty is always signed:
+#   positive → stock increased (purchase, sales return, add adjustment)
+#   negative → stock decreased (sale, purchase return, remove adjustment)
+#
+# Low-stock alerts are managed by a DB trigger (trg_low_stock_alert) on
+# the products table.  After each stock change, cleanup_product_alerts()
+# removes stale alerts for products now above their threshold.
+# ─────────────────────────────────────────────────────────────────────────────
+
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from app.database import get_async_db
-from app.middleware.rbac import require_permission
+from app.middleware.rbac import require_permission, async_set_rls_gucs_after_commit
 from app.models.stock import StockMovement, LowStockAlert
 from app.models.product import Product
 from app.schemas.stock import StockAdjustment
@@ -508,6 +538,10 @@ async def adjust_stock(
         await cleanup_product_alerts(db, business_id, str(data.product_id))
 
         await db.commit()
+        # RLS: SET LOCAL/set_config GUCs are transaction-scoped and are cleared
+        # by this commit. Re-set them in case any future code adds a query after
+        # this point (matches the convention in product.py, purchase.py, expense.py).
+        await async_set_rls_gucs_after_commit(db, current_user)
 
         return success_response({
             "message":         f"Stock '{data.adjustment_type}' applied successfully",
@@ -628,6 +662,10 @@ async def mark_alert_read(
 
     alert.alert_status = "read"
     await db.commit()
+    # RLS: SET LOCAL/set_config GUCs are transaction-scoped and are cleared
+    # by this commit. Re-set them in case any future code adds a query after
+    # this point (matches the convention in product.py, purchase.py, expense.py).
+    await async_set_rls_gucs_after_commit(db, current_user)
 
     return success_response({
         "message":  "Alert marked as read",

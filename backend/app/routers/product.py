@@ -923,5 +923,9 @@ async def delete_product(
     product.is_deleted = True
     product.updated_by = current_user["user_id"]
     await db.commit()
+    # RLS: SET LOCAL/set_config GUCs are transaction-scoped and are cleared
+    # by this commit. Re-set them in case any future code adds a query after
+    # this point (matches the convention in create_product, update_product).
+    await async_set_rls_gucs_after_commit(db, current_user)
 
     return success_response({"message": "Product deleted successfully"})

@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import func, text
-from app.database import get_db
-from app.middleware.rbac import require_permission_with_rls, set_rls_gucs_after_commit
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
+from app.database import get_async_db
+from app.middleware.rbac import require_permission, async_set_rls_gucs_after_commit
 from app.models.expense import Expense
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate
 from app.utils.response import success_response, error_response
-from app.utils.pagination import paginate, pagination_response
+from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts, fmt_date
 
 router = APIRouter(prefix="/v1/expenses", tags=["Expenses"])
@@ -57,10 +57,10 @@ def expense_to_dict_list(row):
 # POST /expenses → Create new expense
 # ─────────────────────────────────────────
 @router.post("/")
-def create_expense(
+async def create_expense(
     data: ExpenseCreate,
-    current_user: dict = Depends(require_permission_with_rls("expenses.manage")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("expenses.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
     user_id = current_user["user_id"]
@@ -76,9 +76,9 @@ def create_expense(
     )
 
     db.add(new_expense)
-    db.commit()
-    set_rls_gucs_after_commit(db, current_user)
-    db.refresh(new_expense)
+    await db.commit()
+    await async_set_rls_gucs_after_commit(db, current_user)
+    await db.refresh(new_expense)
 
     creator_name = current_user.get("full_name")
 
@@ -92,10 +92,10 @@ def create_expense(
 # GET /expenses → Get all expenses (paginated)
 # ─────────────────────────────────────────
 @router.get("/")
-def get_all_expenses(
-    current_user: dict = Depends(require_permission_with_rls("expenses.manage")),
-    db: Session = Depends(get_db),
-    pagination: dict = Depends(paginate),
+async def get_all_expenses(
+    current_user: dict = Depends(require_permission("expenses.manage")),
+    db: AsyncSession = Depends(get_async_db),
+    pagination: dict = Depends(paginate_async),
     search: Optional[str] = Query(default=None),
     category: Optional[str] = Query(default=None),
     sort_by: Optional[str] = Query(default="expense_date"),
@@ -152,7 +152,7 @@ def get_all_expenses(
         ORDER BY {order_col} {order_dir}
         OFFSET :offset LIMIT :limit
     """
-    rows = db.execute(text(list_sql), params).fetchall()
+    rows = (await db.execute(text(list_sql), params)).fetchall()
 
     total = rows[0].total_count if rows else 0
 
@@ -169,19 +169,19 @@ def get_all_expenses(
 
 # ── GET /expenses/summary → KPI cards for expenses page ──────────
 @router.get("/summary")
-def get_expense_summary_kpi(
-    current_user: dict = Depends(require_permission_with_rls("expenses.manage")),
-    db: Session = Depends(get_db)
+async def get_expense_summary_kpi(
+    current_user: dict = Depends(require_permission("expenses.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
-    row = db.execute(text("""
+    row = (await db.execute(text("""
         SELECT
             COUNT(*)                                                              AS total_count,
             COUNT(*) FILTER (WHERE date_trunc('month', expense_date) = date_trunc('month', CURRENT_DATE)) AS monthly_count
         FROM expenses
         WHERE business_id = CAST(:bid AS uuid)
           AND is_deleted  = false
-    """), {"bid": bid}).fetchone()
+    """), {"bid": bid})).fetchone()
 
     return success_response({
         "total_count":   int(row.total_count),
@@ -193,18 +193,18 @@ def get_expense_summary_kpi(
 # GET /expenses/{expense_id} → Get one expense
 # ─────────────────────────────────────────
 @router.get("/{expense_id}")
-def get_expense(
+async def get_expense(
     expense_id: str,
-    current_user: dict = Depends(require_permission_with_rls("expenses.manage")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("expenses.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    expense = db.query(Expense).filter(
+    expense = (await db.execute(select(Expense).where(
         Expense.expense_id == expense_id,
         Expense.business_id == business_id,
         Expense.is_deleted == False
-    ).first()
+    ))).scalar_one_or_none()
 
     if not expense:
         return error_response("Expense not found", status_code=404)
@@ -218,19 +218,19 @@ def get_expense(
 # PUT /expenses/{expense_id} → Update expense
 # ─────────────────────────────────────────
 @router.put("/{expense_id}")
-def update_expense(
+async def update_expense(
     expense_id: str,
     data: ExpenseUpdate,
-    current_user: dict = Depends(require_permission_with_rls("expenses.manage")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("expenses.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    expense = db.query(Expense).filter(
+    expense = (await db.execute(select(Expense).where(
         Expense.expense_id == expense_id,
         Expense.business_id == business_id,
         Expense.is_deleted == False
-    ).first()
+    ))).scalar_one_or_none()
 
     if not expense:
         return error_response("Expense not found", status_code=404)
@@ -253,9 +253,9 @@ def update_expense(
 
     expense.updated_by = current_user["user_id"]
 
-    db.commit()
-    set_rls_gucs_after_commit(db, current_user)
-    db.refresh(expense)
+    await db.commit()
+    await async_set_rls_gucs_after_commit(db, current_user)
+    await db.refresh(expense)
 
     updated_by_name = current_user.get("full_name")
 
@@ -269,18 +269,18 @@ def update_expense(
 # DELETE /expenses/{expense_id} → Soft delete
 # ─────────────────────────────────────────
 @router.delete("/{expense_id}")
-def delete_expense(
+async def delete_expense(
     expense_id: str,
-    current_user: dict = Depends(require_permission_with_rls("expenses.manage")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("expenses.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    expense = db.query(Expense).filter(
+    expense = (await db.execute(select(Expense).where(
         Expense.expense_id == expense_id,
         Expense.business_id == business_id,
         Expense.is_deleted == False
-    ).first()
+    ))).scalar_one_or_none()
 
     if not expense:
         return error_response("Expense not found", status_code=404)
@@ -294,7 +294,7 @@ def delete_expense(
 
     expense.is_deleted = True
     # updated_by is auto-set by DB trigger trg_expenses_updated_by
-    db.commit()
+    await db.commit()
 
     return success_response({
         "message": "Expense deleted successfully"

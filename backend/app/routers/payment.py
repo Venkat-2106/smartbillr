@@ -1,16 +1,16 @@
 # app/routers/payment.py
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import text
-from app.database import get_db
-from app.middleware.rbac import require_permission_with_rls
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
+from app.database import get_async_db
+from app.middleware.rbac import require_permission
 from app.models.payment import Payment
 from app.models.sale import Sale
 from app.schemas.payment import PaymentCreate
 from app.utils.response import success_response, error_response
-from app.utils.pagination import paginate, pagination_response
-from app.utils.payment_helpers import record_payment_and_sync, calculate_payment_status
+from app.utils.pagination import paginate_async, pagination_response
+from app.utils.payment_helpers import record_payment_and_sync_async, calculate_payment_status
 from decimal import Decimal
 from datetime import datetime
 from app.utils.timestamp import fmt_ts
@@ -79,28 +79,28 @@ def payment_to_dict(p) -> dict:
 # POST /payments → Record a new payment installment for a sale
 # ══════════════════════════════════════════════════════════════════
 @router.post("/")
-def create_payment(
+async def create_payment(
     data:         PaymentCreate,
-    current_user: dict = Depends(require_permission_with_rls("payments.manage")),
-    db:           Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("payments.manage")),
+    db:           AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
     # ── Validate sale exists and belongs to this business ────────────────────
-    sale = db.query(Sale).filter(
+    sale = (await db.execute(select(Sale).where(
         Sale.sales_id    == data.sale_id,
         Sale.business_id == business_id,
         Sale.is_deleted  == False
-    ).first()
+    ))).scalar_one_or_none()
 
     if not sale:
         return error_response("Sale not found", status_code=404)
 
     # ── Get sale final amount from DB (generated column) ─────────────────────
-    sale_row = db.execute(
+    sale_row = (await db.execute(
         text("SELECT sales_final_amount FROM sales WHERE sales_id = CAST(:sid AS uuid)"),
         {"sid": str(data.sale_id)}
-    ).fetchone()
+    )).fetchone()
 
     sale_final = Decimal(str(sale_row.sales_final_amount)) if sale_row and sale_row.sales_final_amount else Decimal("0")
 
@@ -110,7 +110,7 @@ def create_payment(
     # concurrent requests both see already_paid=0 and double-charge the customer.
     # Locking the sale row guarantees that only one payment request proceeds at
     # a time, regardless of whether a payments row exists yet.
-    db.execute(
+    await db.execute(
         text("SELECT 1 FROM sales WHERE sales_id = CAST(:sid AS uuid) FOR UPDATE"),
         {"sid": str(data.sale_id)}
     )
@@ -119,7 +119,7 @@ def create_payment(
     # FOR UPDATE on payments locks the active payment row (if one exists) so a
     # concurrent request cannot read the same cumulative_paid and double-record.
     # Lock is released when db.commit() is called at the end of this route.
-    active_row = db.execute(
+    active_row = (await db.execute(
         text("""
             SELECT COALESCE(cumulative_paid, 0) AS already_paid
             FROM payments
@@ -129,7 +129,7 @@ def create_payment(
             FOR UPDATE
         """),
         {"sid": str(data.sale_id), "bid": business_id}
-    ).fetchone()
+    )).fetchone()
 
     already_paid  = Decimal(str(active_row.already_paid)) if active_row else Decimal("0")
     new_payment   = data.payment_amount  # already Decimal from Pydantic schema
@@ -155,7 +155,7 @@ def create_payment(
     new_status = calculate_payment_status(total_after, sale_final)
 
     # ── Deactivate old row, insert new active row, sync sales table ───────────
-    new_payment_id = record_payment_and_sync(
+    new_payment_id = await record_payment_and_sync_async(
         db              = db,
         business_id     = business_id,
         sale_id         = str(data.sale_id),
@@ -166,7 +166,7 @@ def create_payment(
         cumulative_paid = total_after.quantize(Decimal("0.01"))
     )
 
-    db.commit()
+    await db.commit()
 
     new_remaining = (sale_final - total_after).quantize(Decimal("0.01"))
 
@@ -205,10 +205,10 @@ def create_payment(
 #   sales_final_amount, and remaining_balance in each row.
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
-def get_all_payments(
-    current_user: dict = Depends(require_permission_with_rls("payments.manage")),
-    db:           Session = Depends(get_db),
-    pagination:   dict = Depends(paginate),
+async def get_all_payments(
+    current_user: dict = Depends(require_permission("payments.manage")),
+    db:           AsyncSession = Depends(get_async_db),
+    pagination:   dict = Depends(paginate_async),
     search:       str  = Query(default=None),
     status:       str  = Query(default=None),
     sort_by:      str  = Query(default="payment_paid_at"),
@@ -256,7 +256,7 @@ def get_all_payments(
     """
 
     # DATA (with total count via window function)
-    rows = db.execute(
+    rows = (await db.execute(
         text(f"""
             SELECT
                 p.payment_id,
@@ -277,7 +277,7 @@ def get_all_payments(
             LIMIT :limit OFFSET :offset
         """),
         {**params, "limit": pagination["limit"], "offset": pagination["offset"]}
-    ).fetchall()
+    )).fetchall()
 
     total = rows[0].total_count if rows else 0
 
@@ -308,22 +308,22 @@ def get_all_payments(
 
 # ── GET /payments/summary → KPI cards for payments page ──────────────
 @router.get("/summary")
-def get_payment_summary_kpi(
-    current_user: dict = Depends(require_permission_with_rls("payments.manage")),
-    db: Session = Depends(get_db)
+async def get_payment_summary_kpi(
+    current_user: dict = Depends(require_permission("payments.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
 
-    row = db.execute(text("""
+    row = (await db.execute(text("""
         SELECT
             (SELECT COALESCE(SUM(cumulative_paid), 0) FROM payments
               WHERE business_id = CAST(:bid AS uuid) AND is_active = true)          AS total_collected,
             (SELECT COUNT(*) FROM sales
               WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false
                 AND sales_payment_status IN ('pending','partial'))                  AS pending_count
-    """), {"bid": bid}).fetchone()
+    """), {"bid": bid})).fetchone()
 
     return success_response({
         "total_collected": float(row.total_collected) if can_financial else None,
@@ -336,25 +336,25 @@ def get_payment_summary_kpi(
 # (Declared BEFORE /{payment_id} to avoid FastAPI routing conflict)
 # ══════════════════════════════════════════════════════════════════
 @router.get("/sale/{sale_id}")
-def get_payments_by_sale(
+async def get_payments_by_sale(
     sale_id:      str,
-    current_user: dict = Depends(require_permission_with_rls("payments.manage")),
-    db:           Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("payments.manage")),
+    db:           AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
     # Validate sale belongs to this business
-    sale = db.query(Sale).filter(
+    sale = (await db.execute(select(Sale).where(
         Sale.sales_id    == sale_id,
         Sale.business_id == business_id,
         Sale.is_deleted  == False
-    ).first()
+    ))).scalar_one_or_none()
 
     if not sale:
         return error_response("Sale not found", status_code=404)
 
     # Fetch all payment rows + customer_name via JOIN, latest first
-    rows = db.execute(
+    rows = (await db.execute(
         text("""
             SELECT
                 p.payment_id, p.business_id, p.sale_id,
@@ -371,7 +371,7 @@ def get_payments_by_sale(
             ORDER BY p.payment_paid_at DESC
         """),
         {"sid": sale_id, "bid": business_id}
-    ).fetchall()
+    )).fetchall()
 
     sale_final = Decimal(str(rows[0].sales_final_amount)) if rows and rows[0].sales_final_amount else Decimal("0")
 
@@ -411,17 +411,17 @@ def get_payments_by_sale(
 # (Must be declared AFTER /sale/{sale_id})
 # ══════════════════════════════════════════════════════════════════
 @router.get("/{payment_id}")
-def get_payment(
+async def get_payment(
     payment_id:   str,
-    current_user: dict = Depends(require_permission_with_rls("payments.manage")),
-    db:           Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("payments.manage")),
+    db:           AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    payment = db.query(Payment).filter(
+    payment = (await db.execute(select(Payment).where(
         Payment.payment_id  == payment_id,
         Payment.business_id == business_id
-    ).first()
+    ))).scalar_one_or_none()
 
     if not payment:
         return error_response("Payment not found", status_code=404)

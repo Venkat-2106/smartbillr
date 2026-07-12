@@ -2,19 +2,19 @@
 
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import func, text
-from app.database import get_db
-from app.middleware.rbac import require_permission_with_rls, set_rls_gucs_after_commit
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
+from app.database import get_async_db
+from app.middleware.rbac import require_permission, async_set_rls_gucs_after_commit
 from app.models.purchase import Purchase
 from app.models.product import Product
 from app.models.supplier import Supplier
 from app.schemas.purchase import PurchaseCreate
 from app.utils.response import success_response, error_response
-from app.utils.pagination import paginate, pagination_response
+from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.tax_engine import calculate_item_tax
-from app.utils.usage_limits import check_create_allowed, fetch_subscription_type
+from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 import logging
 from decimal import Decimal
 import uuid
@@ -31,8 +31,8 @@ router = APIRouter(prefix="/v1/purchases", tags=["Purchases"])
 # ─────────────────────────────────────────
 # HELPER: Fetch full purchase via raw SQL
 # ─────────────────────────────────────────
-def fetch_full_purchase(db: Session, pur_id: str, business_id: str):
-    return db.execute(
+async def fetch_full_purchase(db: AsyncSession, pur_id: str, business_id: str):
+    return (await db.execute(
         text("""
             SELECT p.pur_id, p.business_id, p.supp_id,
                    s.supp_name,
@@ -49,14 +49,14 @@ def fetch_full_purchase(db: Session, pur_id: str, business_id: str):
               AND p.business_id = CAST(:bid AS uuid)
         """),
         {"pid": pur_id, "bid": business_id}
-    ).fetchone()
+    )).fetchone()
 
 
 # ─────────────────────────────────────────
 # HELPER: Fetch purchase items via raw SQL
 # ─────────────────────────────────────────
-def fetch_purchase_items(db: Session, pur_id: str, business_id: str):
-    return db.execute(
+async def fetch_purchase_items(db: AsyncSession, pur_id: str, business_id: str):
+    return (await db.execute(
         text("""
             SELECT pi.item_id, pi.product_id,
                    p.prod_name,
@@ -71,7 +71,7 @@ def fetch_purchase_items(db: Session, pur_id: str, business_id: str):
               AND pi.business_id = CAST(:bid AS uuid)
         """),
         {"pid": pur_id, "bid": business_id}
-    ).fetchall()
+    )).fetchall()
 
 
 # ─────────────────────────────────────────
@@ -146,17 +146,17 @@ def purchase_item_to_dict(row):
 # POST /purchases → Create new purchase
 # ─────────────────────────────────────────
 @router.post("/")
-def create_purchase(
+async def create_purchase(
     data: PurchaseCreate,
-    current_user: dict = Depends(require_permission_with_rls("purchases.create")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("purchases.create")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
     user_id     = current_user["user_id"]
 
     # ── Subscription tier limit check ─────────────────────────────────────────
-    sub_type = current_user.get("subscription_type") or fetch_subscription_type(db, business_id)
-    allowed, msg = check_create_allowed(
+    sub_type = current_user.get("subscription_type") or await fetch_subscription_type_async(db, business_id)
+    allowed, msg = await check_create_allowed_async(
         db, business_id, sub_type, "max_purchases_per_month",
         "purchases", date_column="pur_created_at"
     )
@@ -165,14 +165,14 @@ def create_purchase(
 
     try:
         # Step 1 → Get business country and state for tax engine
-        business = db.execute(
+        business = (await db.execute(
             text("""
                 SELECT business_country_code, business_state
                 FROM businesses
                 WHERE business_id = CAST(:bid AS uuid)
             """),
             {"bid": business_id}
-        ).fetchone()
+        )).fetchone()
 
         biz_country = (business.business_country_code or "").strip() if business else ""
         biz_state   = (business.business_state or "").strip()         if business else ""
@@ -181,11 +181,11 @@ def create_purchase(
         supp_country = ""
         supp_state   = ""
         if data.supp_id:
-            supplier = db.query(Supplier).filter(
+            supplier = (await db.execute(select(Supplier).where(
                 Supplier.supp_id     == data.supp_id,
                 Supplier.business_id == business_id,
                 Supplier.is_deleted  == False
-            ).first()
+            ))).scalar_one_or_none()
 
             if not supplier:
                 return error_response("Supplier not found", status_code=404)
@@ -203,11 +203,11 @@ def create_purchase(
 
         # Bulk product lookup — one query for all items
         requested_ids = [str(item.product_id) for item in data.items]
-        products_bulk = db.query(Product).filter(
+        products_bulk = (await db.execute(select(Product).where(
             Product.prod_id.in_(requested_ids),
             Product.business_id == business_id,
             Product.is_deleted  == False
-        ).all()
+        ))).scalars().all()
         product_cache = {str(p.prod_id): p for p in products_bulk}
 
         for item in data.items:
@@ -260,7 +260,7 @@ def create_purchase(
         discount   = str(data.pur_discount or Decimal("0"))
         new_pur_id = str(uuid.uuid4())
 
-        db.execute(
+        await db.execute(
             text("""
                 INSERT INTO purchases (
                     pur_id, business_id, supp_id,
@@ -297,7 +297,7 @@ def create_purchase(
         # Step 5 → Insert purchase items (DB trigger auto-increases stock)
         # GENERATED columns (item_subtotal, item_tax_total, item_total_with_tax)
         # are never inserted — DB computes them.
-        db.execute(
+        await db.execute(
             text("""
                 INSERT INTO purchase_items (
                     item_id, business_id, pur_id, product_id,
@@ -336,7 +336,7 @@ def create_purchase(
         # Last-purchase-cost accounting: set cost price to the unit price from
         # this purchase.  prod_profit is a generated column — DB recomputes it.
         if calculated_items:
-            db.execute(
+            await db.execute(
                 text("""
                     UPDATE products p
                     SET prod_cost_price = v.unit_price::numeric,
@@ -360,10 +360,10 @@ def create_purchase(
         # Race-safety: INSERT ... WHERE NOT EXISTS prevents duplicate expenses
         # when PATCH /status is called concurrently with "paid".
         if data.pur_payment_status == "paid":
-            pur_row      = fetch_full_purchase(db, new_pur_id, business_id)
+            pur_row      = await fetch_full_purchase(db, new_pur_id, business_id)
             final_amount = Decimal(str(pur_row.pur_final_amount)) if pur_row and pur_row.pur_final_amount else Decimal("0")
 
-            db.execute(
+            await db.execute(
                 text("""
                     INSERT INTO expenses (
                         expense_id, business_id, expense_category,
@@ -405,7 +405,7 @@ def create_purchase(
         # BATCH: single query for all items instead of N individual DELETEs.
         if calculated_items:
             prod_ids = [calc["product_id"] for calc in calculated_items]
-            db.execute(
+            await db.execute(
                 text("""
                     DELETE FROM low_stock_alerts la
                     USING products p
@@ -417,13 +417,13 @@ def create_purchase(
                 {"pids": "{" + ",".join(prod_ids) + "}", "bid": business_id}
             )
 
-        db.commit()
+        await db.commit()
 
-        # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
-        set_rls_gucs_after_commit(db, current_user)
+        # Re-set GUCs after commit (set_config is transaction-scoped)
+        await async_set_rls_gucs_after_commit(db, current_user)
 
-        pur_row   = fetch_full_purchase(db, new_pur_id, business_id)
-        item_rows = fetch_purchase_items(db, new_pur_id, business_id)
+        pur_row   = await fetch_full_purchase(db, new_pur_id, business_id)
+        item_rows = await fetch_purchase_items(db, new_pur_id, business_id)
 
         return success_response({
             "message":  "Purchase created successfully",
@@ -431,7 +431,7 @@ def create_purchase(
         }, status_code=201)
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logging.exception(e)
         return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
@@ -440,10 +440,10 @@ def create_purchase(
 # GET /purchases → Get all purchases (paginated, filtered, sorted)
 # ─────────────────────────────────────────
 @router.get("/")
-def get_all_purchases(
-    current_user: dict       = Depends(require_permission_with_rls("purchases.view")),
-    db:           Session    = Depends(get_db),
-    pagination:   dict       = Depends(paginate),
+async def get_all_purchases(
+    current_user: dict       = Depends(require_permission("purchases.view")),
+    db:           AsyncSession = Depends(get_async_db),
+    pagination:   dict       = Depends(paginate_async),
     search:       Optional[str] = Query(default=None),
     status:       Optional[str] = Query(default=None),
     sort_by:      Optional[str] = Query(default="pur_created_at"),
@@ -505,7 +505,7 @@ def get_all_purchases(
         ORDER BY {order_col} {order_dir}
         OFFSET :offset LIMIT :limit
     """
-    rows = db.execute(text(list_sql), params).fetchall()
+    rows = (await db.execute(text(list_sql), params)).fetchall()
     total = rows[0].total_count if rows else 0
 
     result = []
@@ -521,12 +521,12 @@ def get_all_purchases(
 # GET /purchases/summary → KPI summary for purchases page
 # ─────────────────────────────────────────
 @router.get("/summary")
-def get_purchase_summary_kpi(
-    current_user: dict = Depends(require_permission_with_rls("purchases.view")),
-    db: Session = Depends(get_db)
+async def get_purchase_summary_kpi(
+    current_user: dict = Depends(require_permission("purchases.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
-    row = db.execute(text("""
+    row = (await db.execute(text("""
         SELECT
             COUNT(*)                                                             AS total_count,
             COUNT(*) FILTER (WHERE date_trunc('month', pur_created_at) = date_trunc('month', CURRENT_DATE)) AS monthly_count,
@@ -536,7 +536,7 @@ def get_purchase_summary_kpi(
         FROM purchases
         WHERE business_id = CAST(:bid AS uuid)
           AND is_deleted  = false
-    """), {"bid": bid}).fetchone()
+    """), {"bid": bid})).fetchone()
 
     return success_response({
         "total_count":       int(row.total_count),
@@ -551,14 +551,14 @@ def get_purchase_summary_kpi(
 # Includes: purchase details + items + all returns for this purchase
 # ─────────────────────────────────────────
 @router.get("/{pur_id}")
-def get_purchase(
+async def get_purchase(
     pur_id: str,
-    current_user: dict = Depends(require_permission_with_rls("purchases.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("purchases.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    row = db.execute(
+    row = (await db.execute(
         text("""
             SELECT p.pur_id, p.business_id, p.supp_id,
                    s.supp_name,
@@ -576,15 +576,15 @@ def get_purchase(
               AND p.is_deleted  = false
         """),
         {"pid": pur_id, "bid": business_id}
-    ).fetchone()
+    )).fetchone()
 
     if not row:
         return error_response("Purchase not found", status_code=404)
 
-    items = fetch_purchase_items(db, pur_id, business_id)
+    items = await fetch_purchase_items(db, pur_id, business_id)
 
     # Fetch all purchase returns for this purchase
-    return_rows = db.execute(text("""
+    return_rows = (await db.execute(text("""
         SELECT
             pr.return_id,
             pr.pur_id,
@@ -610,13 +610,13 @@ def get_purchase(
                  pr.rejected_reason, pr.return_amount,
                  pr.return_created_at, pr.created_by
         ORDER BY pr.return_created_at DESC
-    """), {"pid": pur_id, "bid": business_id}).fetchall()
+    """), {"pid": pur_id, "bid": business_id})).fetchall()
 
     # BATCH: fetch ALL return items for all returns in one query
     ret_ids      = [str(ret.return_id) for ret in return_rows]
     all_ret_items = []
     if ret_ids:
-        all_ret_items = db.execute(text("""
+        all_ret_items = (await db.execute(text("""
             SELECT
                 pri.return_item_id, pri.return_id,
                 pri.product_id, p.prod_name AS product_name,
@@ -625,7 +625,7 @@ def get_purchase(
             FROM purchase_return_items pri
             JOIN products p ON p.prod_id = pri.product_id
             WHERE pri.return_id = ANY(CAST(:ids AS uuid[]))
-        """), {"ids": "{" + ",".join(ret_ids) + "}"}).fetchall()
+        """), {"ids": "{" + ",".join(ret_ids) + "}"})).fetchall()
 
     ret_items_by_return = {}
     for ri in all_ret_items:
@@ -679,11 +679,11 @@ def get_purchase(
 # record so the expenses ledger stays in sync.
 # ─────────────────────────────────────────
 @router.patch("/{pur_id}/status")
-def update_purchase_status(
+async def update_purchase_status(
     pur_id: str,
     body: PurchaseStatusUpdate,
-    current_user: dict = Depends(require_permission_with_rls("purchases.edit")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("purchases.edit")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     status  = body.status
     allowed = ["pending", "paid", "partial"]
@@ -693,11 +693,11 @@ def update_purchase_status(
     business_id = current_user["business_id"]
     user_id     = current_user["user_id"]
 
-    purchase = db.query(Purchase).filter(
+    purchase = (await db.execute(select(Purchase).where(
         Purchase.pur_id      == pur_id,
         Purchase.business_id == business_id,
         Purchase.is_deleted  == False
-    ).first()
+    ))).scalar_one_or_none()
 
     if not purchase:
         return error_response("Purchase not found", 404)
@@ -708,10 +708,10 @@ def update_purchase_status(
     expense_created = False
 
     if status == "paid" and old_status != "paid":
-        pur_row = db.execute(
+        pur_row = (await db.execute(
             text("SELECT pur_final_amount FROM purchases WHERE pur_id = CAST(:pid AS uuid)"),
             {"pid": pur_id}
-        ).fetchone()
+        )).fetchone()
         final_amount = Decimal(str(pur_row.pur_final_amount)) if pur_row and pur_row.pur_final_amount else Decimal("0")
 
         # Race-safe insert: the WHERE NOT EXISTS check runs inside the same
@@ -719,7 +719,7 @@ def update_purchase_status(
         # uncommitted within this transaction) state.  Combined with the
         # unique partial index (business_id, source_type, source_id) this
         # guarantees at most one expense per purchase.
-        result = db.execute(
+        result = (await db.execute(
             text("""
                 INSERT INTO expenses (
                     expense_id, business_id, expense_category,
@@ -754,10 +754,10 @@ def update_purchase_status(
                 "source_type":      "purchase",
                 "source_id":        pur_id
             }
-        ).fetchone()
+        )).fetchone()
         expense_created = result is not None
 
-    db.commit()
+    await db.commit()
 
     response_data = {"message": "Purchase payment status updated", "status": status}
     if expense_created:
@@ -773,20 +773,20 @@ def update_purchase_status(
 # DELETE /purchases/{pur_id} → Soft delete
 # ─────────────────────────────────────────
 @router.delete("/{pur_id}")
-def delete_purchase(
+async def delete_purchase(
     pur_id: str,
     reduce_stock: bool = Query(False),
-    current_user: dict = Depends(require_permission_with_rls("purchases.delete")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("purchases.delete")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
     user_id = current_user["user_id"]
 
-    purchase = db.query(Purchase).filter(
+    purchase = (await db.execute(select(Purchase).where(
         Purchase.pur_id      == pur_id,
         Purchase.business_id == business_id,
         Purchase.is_deleted  == False
-    ).first()
+    ))).scalar_one_or_none()
 
     if not purchase:
         return error_response("Purchase not found", status_code=404)
@@ -795,16 +795,16 @@ def delete_purchase(
     purchase.updated_by = user_id
 
     if reduce_stock:
-        items = db.execute(text("""
+        items = (await db.execute(text("""
             SELECT product_id, pur_item_qty FROM purchase_items
             WHERE pur_id = CAST(:pur_id AS uuid) AND business_id = CAST(:bid AS uuid)
-        """), {"pur_id": pur_id, "bid": business_id}).fetchall()
+        """), {"pur_id": pur_id, "bid": business_id})).fetchall()
 
         if items:
             prod_ids = [str(item.product_id) for item in items]
 
             # 1. Bulk SELECT: fetch current stock for all products at once
-            product_rows = db.execute(
+            product_rows = (await db.execute(
                 text("""
                     SELECT prod_id, prod_stock_qty
                     FROM products
@@ -812,7 +812,7 @@ def delete_purchase(
                       AND business_id = CAST(:business_id AS uuid)
                 """),
                 {"pids": "{" + ",".join(prod_ids) + "}", "business_id": business_id}
-            ).all()
+            )).all()
 
             prod_stock_map = {str(row.prod_id): row.prod_stock_qty for row in product_rows}
 
@@ -832,7 +832,7 @@ def delete_purchase(
                     update_params[f"pid_{i}"] = str(item.product_id)
                     update_params[f"qty_{i}"] = item.pur_item_qty
 
-                db.execute(
+                await db.execute(
                     text(f"""
                         UPDATE products
                         SET prod_stock_qty = products.prod_stock_qty - v.reduce_qty,
@@ -859,7 +859,7 @@ def delete_purchase(
                     insert_params[f"mprev_{i}"] = prod_stock_map[pid]
                     insert_params[f"mnotes_{i}"] = f"Stock reduced from deleted purchase {purchase.pur_id}"
 
-                db.execute(
+                await db.execute(
                     text(f"""
                         INSERT INTO stock_movements (
                             move_id, business_id, product_id,
@@ -870,5 +870,5 @@ def delete_purchase(
                     insert_params
                 )
 
-    db.commit()
+    await db.commit()
     return success_response({"message": "Purchase deleted successfully"})

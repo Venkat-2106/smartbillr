@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import func, text
-from app.database import get_db
-from app.middleware.rbac import require_permission_with_rls
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
+from app.database import get_async_db
+from app.middleware.rbac import require_permission
 from app.models.stock import StockMovement, LowStockAlert
 from app.models.product import Product
 from app.schemas.stock import StockAdjustment
 from app.utils.response import success_response, error_response
-from app.utils.pagination import paginate, pagination_response
-from app.utils.queries import fetch_stock_kpi_counts
+from app.utils.pagination import paginate_async, pagination_response
+from app.utils.queries import fetch_stock_kpi_counts_async
 from app.utils.timestamp import fmt_ts
 import uuid
 import logging
@@ -69,20 +69,18 @@ def alert_to_dict(a):
 #     trg_low_stock_alert (AFTER UPDATE ON products) already inserted
 #     a new alert row
 # ─────────────────────────────────────────
-def cleanup_product_alerts(db: Session, business_id: str, product_id: str):
-    product = db.query(Product).filter(
+async def cleanup_product_alerts(db: AsyncSession, business_id: str, product_id: str):
+    product = (await db.execute(select(Product).where(
         Product.prod_id      == product_id,
         Product.business_id  == business_id,
         Product.is_deleted   == False
-    ).first()
+    ))).scalar_one_or_none()
 
     if not product:
         return
 
-    # If stock is above the configured threshold, the product no longer
-    # qualifies for a low-stock alert — remove all its alert records.
     if product.prod_stock_qty > product.prod_low_stock_alert:
-        db.execute(
+        await db.execute(
             text("""
                 DELETE FROM low_stock_alerts
                 WHERE business_id = CAST(:business_id AS uuid)
@@ -99,10 +97,10 @@ def cleanup_product_alerts(db: Session, business_id: str, product_id: str):
 # GET /stock/movements → All stock movements
 # ─────────────────────────────────────────
 @router.get("/movements")
-def get_all_movements(
-current_user: dict          = Depends(require_permission_with_rls("stock.view")),
-db:           Session       = Depends(get_db),
-pagination:   dict          = Depends(paginate),
+async def get_all_movements(
+current_user: dict          = Depends(require_permission("stock.view")),
+db:           AsyncSession  = Depends(get_async_db),
+pagination:   dict          = Depends(paginate_async),
 search:       Optional[str] = Query(default=None, description="Search by product name"),
 move_type:    Optional[str] = Query(default=None, description="sale | purchase | adjustment | stock_override | return"),
 date_from:    Optional[str] = Query(default=None, description="ISO datetime — move_created_at >="),
@@ -147,7 +145,7 @@ sort_dir:     Optional[str] = Query(default="desc"),
         params["date_to"] = date_to.strip()
 
     # ── Combined data + count query ──────────────────────────────────────────
-    rows = db.execute(
+    rows = (await db.execute(
         text(f"""
             SELECT
                 sm.move_id, sm.business_id, sm.product_id,
@@ -172,7 +170,7 @@ sort_dir:     Optional[str] = Query(default="desc"),
             OFFSET :offset LIMIT :limit
         """),
         params
-    ).fetchall()
+    )).fetchall()
     total = rows[0].total_count if rows else 0
 
     data = []
@@ -207,17 +205,17 @@ sort_dir:     Optional[str] = Query(default="desc"),
 # GET /stock/movements/{move_id} → One movement
 # ─────────────────────────────────────────
 @router.get("/movements/{move_id}")
-def get_movement(
+async def get_movement(
     move_id: str,
-    current_user: dict = Depends(require_permission_with_rls("stock.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("stock.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    movement = db.query(StockMovement).filter(
+    movement = (await db.execute(select(StockMovement).where(
         StockMovement.move_id == move_id,
         StockMovement.business_id == business_id
-    ).first()
+    ))).scalar_one_or_none()
 
     if not movement:
         return error_response("Stock movement not found", status_code=404)
@@ -241,10 +239,10 @@ def get_movement(
 #     row_to_dict(show_profit=...) in product.py
 # ─────────────────────────────────────────
 @router.get("/current")
-def get_current_stock(
-    current_user: dict          = Depends(require_permission_with_rls("stock.view")),
-    db:           Session       = Depends(get_db),
-    pagination:   dict          = Depends(paginate),
+async def get_current_stock(
+    current_user: dict          = Depends(require_permission("stock.view")),
+    db:           AsyncSession  = Depends(get_async_db),
+    pagination:   dict          = Depends(paginate_async),
     search:       Optional[str] = Query(default=None, description="Search by product name, SKU, or barcode"),
     category_id:  Optional[str] = Query(default=None, description="Filter by category_id"),
     status:       Optional[str] = Query(default=None, description="in_stock | low_stock | out_of_stock"),
@@ -306,7 +304,7 @@ def get_current_stock(
             extra_where += " AND p.prod_stock_qty > p.prod_low_stock_alert"
 
     # ── Combined data + count query ──────────────────────────────────────────
-    rows = db.execute(
+    rows = (await db.execute(
         text(f"""
             SELECT
                 p.prod_id, p.prod_name, p.barcode, p.unit,
@@ -323,7 +321,7 @@ def get_current_stock(
             OFFSET :offset LIMIT :limit
         """),
         params
-    ).fetchall()
+    )).fetchall()
     total = rows[0].total_count if rows else 0
 
     data = []
@@ -378,14 +376,14 @@ def get_current_stock(
 # This lets reports show net stock change easily.
 # ─────────────────────────────────────────
 @router.get("/summary")
-def get_stock_summary_kpi(
-    current_user: dict = Depends(require_permission_with_rls("stock.view")),
-    db: Session = Depends(get_db)
+async def get_stock_summary_kpi(
+    current_user: dict = Depends(require_permission("stock.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     show_profit = "view_product_profit" in current_user.get("permissions", set())
 
-    counts = fetch_stock_kpi_counts(db, bid)
+    counts = await fetch_stock_kpi_counts_async(db, bid)
 
     return success_response({
         "total_count":        counts["total_count"],
@@ -396,16 +394,16 @@ def get_stock_summary_kpi(
 
 
 @router.post("/adjust")
-def adjust_stock(
+async def adjust_stock(
     data: StockAdjustment,
-    current_user: dict = Depends(require_permission_with_rls("stock.adjust")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("stock.adjust")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
     user_id = current_user["user_id"]
 
     try:
-        row = db.execute(
+        row = (await db.execute(
             text("""
                 SELECT prod_stock_qty, prod_name FROM products
                 WHERE prod_id = CAST(:pid AS uuid)
@@ -414,7 +412,7 @@ def adjust_stock(
                 FOR UPDATE
             """),
             {"pid": str(data.product_id), "bid": business_id}
-        ).fetchone()
+        )).fetchone()
 
         if not row:
             return error_response("Product not found", status_code=404)
@@ -453,7 +451,7 @@ def adjust_stock(
         # ── Update product stock ─────────────────────────────────────────────
         # updated_by → set here, consistent with PUT /products/{prod_id} pattern.
         # updated_at → intentionally omitted; fn_set_updated_at trigger handles it.
-        db.execute(
+        await db.execute(
             text("""
                 UPDATE products
                 SET prod_stock_qty = :new_stock,
@@ -476,7 +474,7 @@ def adjust_stock(
         # If it is a plain column, the DB trigger fills it. Either way,
         # never insert it manually — this avoids the GeneratedAlways error.
         new_move_id = str(uuid.uuid4())
-        db.execute(
+        await db.execute(
             text("""
                 INSERT INTO stock_movements (
                     move_id, business_id, product_id,
@@ -507,9 +505,9 @@ def adjust_stock(
 
         # ── Revalidate low-stock alerts ──────────────────────────────────────
         # If stock is now above the threshold, remove stale alert records.
-        cleanup_product_alerts(db, business_id, str(data.product_id))
+        await cleanup_product_alerts(db, business_id, str(data.product_id))
 
-        db.commit()
+        await db.commit()
 
         return success_response({
             "message":         f"Stock '{data.adjustment_type}' applied successfully",
@@ -522,7 +520,7 @@ def adjust_stock(
         })
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logging.exception(e)
         return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
@@ -546,10 +544,10 @@ def adjust_stock(
 #   5. Excludes soft-deleted products (p.is_deleted = false).
 # ─────────────────────────────────────────
 @router.get("/alerts")
-def get_low_stock_alerts(
-    current_user: dict = Depends(require_permission_with_rls("stock.view")),
-    db: Session = Depends(get_db),
-    pagination: dict = Depends(paginate)
+async def get_low_stock_alerts(
+    current_user: dict = Depends(require_permission("stock.view")),
+    db: AsyncSession = Depends(get_async_db),
+    pagination: dict = Depends(paginate_async)
 ):
     business_id = current_user["business_id"]
     params = {
@@ -559,7 +557,7 @@ def get_low_stock_alerts(
     }
 
     # Combined data + count — latest unread alert per product with real-time stock
-    rows = db.execute(
+    rows = (await db.execute(
         text("""
             SELECT DISTINCT ON (la.product_id)
                 la.alert_id, la.business_id, la.product_id,
@@ -579,7 +577,7 @@ def get_low_stock_alerts(
             OFFSET :offset LIMIT :limit
         """),
         params
-    ).fetchall()
+    )).fetchall()
     total = rows[0].total_count if rows else 0
 
     data = []
@@ -607,17 +605,17 @@ def get_low_stock_alerts(
 # PUT /stock/alerts/{alert_id}/read → Mark alert as read
 # ─────────────────────────────────────────
 @router.put("/alerts/{alert_id}/read")
-def mark_alert_read(
+async def mark_alert_read(
     alert_id: str,
-    current_user: dict = Depends(require_permission_with_rls("stock.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("stock.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    alert = db.query(LowStockAlert).filter(
+    alert = (await db.execute(select(LowStockAlert).where(
         LowStockAlert.alert_id == alert_id,
         LowStockAlert.business_id == business_id
-    ).first()
+    ))).scalar_one_or_none()
 
     if not alert:
         return error_response("Alert not found", status_code=404)
@@ -629,7 +627,7 @@ def mark_alert_read(
         })
 
     alert.alert_status = "read"
-    db.commit()
+    await db.commit()
 
     return success_response({
         "message":  "Alert marked as read",

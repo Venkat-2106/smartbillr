@@ -209,6 +209,9 @@ export default function useCreateSale() {
   // ── Build mutation body ──────────────────────────────────────────────────
   const buildBody = useCallback((overrideFlag = false) => {
     const parsedPaid = Number(paidAmount) || 0;
+    // Filter out the trailing empty row (newItem) — it exists as a "next
+    // row to fill" UI affordance but must not be sent to the backend.
+    // Without this filter, the empty product_id would trigger a 422.
     const body = {
       customer_id:          customerId || null,
       sales_payment_method: paymentMethod,
@@ -356,6 +359,9 @@ export default function useCreateSale() {
     (parsedPaidAmount > 0 && parsedPaidAmount < totals.grandTotal);
 
   // ── Form validation ───────────────────────────────────────────────────────
+  // filledItems excludes the trailing empty newItem() row — without this
+  // filter, isValid would always be false because the empty row has no
+  // product_id, blocking form submission even when all real items are valid.
   const filledItems = useMemo(() => items.filter(i => i.product_id), [items]);
 
   const isValid = useMemo(() =>

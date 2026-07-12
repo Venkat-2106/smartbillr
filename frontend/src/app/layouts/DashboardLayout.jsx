@@ -344,7 +344,7 @@ export default function DashboardLayout() {
 
   const { theme, setTheme, accent, setAccent } = useTheme()
   const { user, business, profile } = useAuthStore()
-  const permissions = useAuthStore(s => s.permissions)
+  const permissions = useAuthStore(s => s.profile?.permissions) ?? []
   const showBanner  = useAuthStore(s => s.subscription && !s.subscription.is_expired)
   const navigate = useNavigate()
   const location = useLocation()
@@ -424,7 +424,7 @@ export default function DashboardLayout() {
 
   const visibleNav = useMemo(() =>
     NAV
-      .map(section => ({ ...section, items: section.items.filter(item => permissions.includes(item.permission)) }))
+      .map(section => ({ ...section, items: section.items.filter(item => (permissions ?? []).includes(item.permission)) }))
       .filter(section => section.items.length > 0),
     [permissions]
   )

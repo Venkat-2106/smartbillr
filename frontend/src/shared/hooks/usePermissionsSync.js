@@ -24,7 +24,7 @@ export function usePermissionsSync() {
   useEffect(() => {
     if (!profile) return
     const current = useAuthStore.getState()
-    const oldPerms = current.permissions ?? []
+    const oldPerms = current.profile?.permissions ?? []
     const newPerms = profile.permissions ?? []
 
     const changed =

@@ -13,7 +13,7 @@
 import useAuthStore from "../../store/authStore";
 
 export function usePermissions() {
-  const permissions = useAuthStore(s => s.permissions)
+  const permissions = useAuthStore(s => s.profile?.permissions)
   const profile     = useAuthStore(s => s.profile)
   const role        = profile?.role ?? 'staff'
 

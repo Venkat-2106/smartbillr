@@ -8,7 +8,7 @@ export default function ProtectedRoute({ children, permission = null }) {
   )
   const token       = useAuthStore((s) => s.token)
   const profile     = useAuthStore((s) => s.profile)
-  const permissions = useAuthStore((s) => s.permissions)
+  const permissions = useAuthStore((s) => s.profile?.permissions)
 
   useEffect(() => {
     if (hydrated) return
@@ -23,7 +23,7 @@ export default function ProtectedRoute({ children, permission = null }) {
     return <Navigate to="/login" replace />
   }
 
-  if (permission && !permissions.includes(permission)) {
+  if (permission && !(permissions ?? []).includes(permission)) {
     return <Navigate to="/unauthorized" replace />
   }
 

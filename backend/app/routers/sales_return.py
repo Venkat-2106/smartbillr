@@ -339,21 +339,13 @@ def get_all_sales_returns(
         extra_where += " AND sr.return_created_at <= :date_to"
         params["date_to"] = date_to
 
-    count_sql = f"""
-        SELECT COUNT(sr.return_id)
-        FROM sales_returns sr
-        LEFT JOIN sales s ON s.sales_id = sr.sale_id
-        WHERE sr.business_id = CAST(:bid AS uuid)
-        {extra_where}
-    """
-    total = db.execute(text(count_sql), params).scalar() or 0
-
     params["offset"] = pagination["offset"]
     params["limit"] = pagination["limit"]
 
     list_sql = f"""
         SELECT sr.*, s.invoice_no,
-               prof.full_name AS last_updated_by
+               prof.full_name AS last_updated_by,
+               COUNT(*) OVER() AS total_count
         FROM sales_returns sr
         LEFT JOIN sales s ON s.sales_id = sr.sale_id
         LEFT JOIN profiles prof ON prof.id = sr.updated_by
@@ -363,6 +355,7 @@ def get_all_sales_returns(
         OFFSET :offset LIMIT :limit
     """
     returns = db.execute(text(list_sql), params).fetchall()
+    total = returns[0].total_count if returns else 0
 
     # BATCH: fetch all return items for this page in one query
     ret_ids = [str(r.return_id) for r in returns]

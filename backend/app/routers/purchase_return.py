@@ -358,22 +358,13 @@ def get_all_purchase_returns(
         extra_where += " AND pr.return_created_at <= :date_to"
         params["date_to"] = date_to
 
-    count_sql = f"""
-        SELECT COUNT(pr.return_id)
-        FROM purchase_returns pr
-        LEFT JOIN purchases p ON p.pur_id = pr.pur_id
-        LEFT JOIN suppliers s ON s.supp_id = p.supp_id
-        WHERE pr.business_id = CAST(:bid AS uuid)
-        {extra_where}
-    """
-    total = db.execute(text(count_sql), params).scalar() or 0
-
     params["offset"] = pagination["offset"]
     params["limit"] = pagination["limit"]
 
     list_sql = f"""
         SELECT pr.*, s.supp_name,
-               prof.full_name AS last_updated_by
+               prof.full_name AS last_updated_by,
+               COUNT(*) OVER() AS total_count
         FROM purchase_returns pr
         LEFT JOIN purchases p ON p.pur_id = pr.pur_id
         LEFT JOIN suppliers s ON s.supp_id = p.supp_id
@@ -384,6 +375,7 @@ def get_all_purchase_returns(
         OFFSET :offset LIMIT :limit
     """
     returns = db.execute(text(list_sql), params).fetchall()
+    total = returns[0].total_count if returns else 0
 
     # BATCH: fetch all return items in one query
     ret_ids = [str(r.return_id) for r in returns]

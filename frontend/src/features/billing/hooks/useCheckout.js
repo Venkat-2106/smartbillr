@@ -5,7 +5,7 @@ export function usePlans() {
   return useQuery({
     queryKey: ['billing-plans'],
     queryFn: fetchPlans,
-    staleTime: 10 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
   })
 }
 

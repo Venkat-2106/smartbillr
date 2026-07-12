@@ -73,6 +73,7 @@ from app.models.category import Category
 from app.schemas.product import ProductCreate, ProductUpdate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
+from app.utils.queries import fetch_stock_kpi_counts
 from app.utils.timestamp import fmt_ts
 from app.utils.usage_limits import check_create_allowed, fetch_subscription_type
 from sqlalchemy.exc import IntegrityError
@@ -442,22 +443,13 @@ def get_product_summary_kpi(
     bid = current_user["business_id"]
     show_profit = "view_product_profit" in current_user.get("permissions", set())
 
-    row = db.execute(text("""
-        SELECT
-            COUNT(*)                                                              AS total_count,
-            COALESCE(SUM(prod_stock_qty * prod_cost_price), 0)                    AS stock_value,
-            COUNT(*) FILTER (WHERE prod_stock_qty <= prod_low_stock_alert)        AS low_stock_count,
-            COUNT(*) FILTER (WHERE prod_stock_qty = 0)                            AS out_of_stock_count
-        FROM products
-        WHERE business_id = CAST(:bid AS uuid)
-          AND is_deleted  = false
-    """), {"bid": bid}).fetchone()
+    counts = fetch_stock_kpi_counts(db, bid)
 
     return success_response({
-        "total_count":       int(row.total_count),
-        "stock_value":       float(row.stock_value) if show_profit else None,
-        "low_stock_count":   int(row.low_stock_count),
-        "out_of_stock_count": int(row.out_of_stock_count),
+        "total_count":       counts["total_count"],
+        "stock_value":       counts["stock_value"] if show_profit else None,
+        "low_stock_count":   counts["low_stock_count"],
+        "out_of_stock_count": counts["out_of_stock_count"],
     })
 
 

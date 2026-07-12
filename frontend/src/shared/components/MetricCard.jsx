@@ -1,4 +1,6 @@
-export default function MetricCard({
+import { memo } from 'react'
+
+function MetricCard({
   icon,
   label,
   value,
@@ -80,3 +82,5 @@ export default function MetricCard({
     </div>
   )
 }
+
+export default memo(MetricCard)

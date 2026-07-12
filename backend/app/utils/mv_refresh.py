@@ -1,4 +1,5 @@
 import logging
+import os
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -12,6 +13,21 @@ _last_refresh: float = 0.0
 _STALE_AFTER_SECONDS = 300  # 5 minutes
 
 
+def _try_acquire_refresh_lock() -> bool:
+    """Redis SETNX distributed lock — prevents multiple workers from refreshing
+    simultaneously.  Falls back to allowing the refresh when Redis is unavailable
+    (single-worker dev environment)."""
+    redis_url = os.getenv("REDIS_URL")
+    if not redis_url:
+        return True
+    try:
+        import redis
+        r = redis.from_url(redis_url, decode_responses=True)
+        return bool(r.set("mv_refresh_lock", "1", nx=True, ex=300))
+    except Exception:
+        return True
+
+
 def refresh_dashboard_mvs(db: Session, force: bool = False) -> None:
     """Refresh dashboard materialized views if stale.
 
@@ -21,8 +37,13 @@ def refresh_dashboard_mvs(db: Session, force: bool = False) -> None:
     global _last_refresh
 
     now = time()
-    if not force and (now - _last_refresh) < _STALE_AFTER_SECONDS:
-        return
+    if not force:
+        if os.getenv("REDIS_URL"):
+            if not _try_acquire_refresh_lock():
+                return
+        else:
+            if (now - _last_refresh) < _STALE_AFTER_SECONDS:
+                return
 
     try:
         db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_SUMMARY}"))
@@ -48,8 +69,12 @@ def refresh_dashboard_mvs_background() -> None:
     global _last_refresh
 
     now = time()
-    if (now - _last_refresh) < _STALE_AFTER_SECONDS:
-        return
+    if os.getenv("REDIS_URL"):
+        if not _try_acquire_refresh_lock():
+            return
+    else:
+        if (now - _last_refresh) < _STALE_AFTER_SECONDS:
+            return
 
     db = SessionLocal()
     try:

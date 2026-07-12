@@ -9,7 +9,6 @@ const useAuthStore = create(
       user:          null,
       business:      null,
       profile:       null,
-      permissions:   [],
       subscription:  null,
       isSuperAdmin:  false,
 
@@ -20,13 +19,7 @@ const useAuthStore = create(
         set({ business }),
 
       setProfile: (profile) =>
-        set({
-          profile,
-          permissions: profile?.permissions || [],
-        }),
-
-      setPermissions: (permissions) =>
-        set({ permissions: Array.isArray(permissions) ? permissions : [] }),
+        set({ profile }),
 
       setSubscription: (subscription) =>
         set({ subscription }),
@@ -35,17 +28,17 @@ const useAuthStore = create(
         set({ isSuperAdmin: val }),
 
       hasPermission: (code) => {
-        const perms = get().permissions
+        const perms = get().profile?.permissions
         return Array.isArray(perms) && perms.includes(code)
       },
 
       hasAnyPermission: (...codes) => {
-        const perms = get().permissions
+        const perms = get().profile?.permissions
         return Array.isArray(perms) && codes.some(code => perms.includes(code))
       },
 
       hasAllPermissions: (...codes) => {
-        const perms = get().permissions
+        const perms = get().profile?.permissions
         return Array.isArray(perms) && codes.every(code => perms.includes(code))
       },
 
@@ -62,7 +55,6 @@ const useAuthStore = create(
           user:          null,
           business:      null,
           profile:       null,
-          permissions:   [],
           subscription:  null,
           isSuperAdmin:  false,
         }),
@@ -75,7 +67,6 @@ const useAuthStore = create(
         user:         state.user,
         business:     state.business,
         profile:      state.profile,
-        permissions:  state.permissions,
         subscription: state.subscription,
         isSuperAdmin: state.isSuperAdmin,
       }),

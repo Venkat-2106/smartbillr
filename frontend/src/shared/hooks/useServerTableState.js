@@ -54,7 +54,7 @@
 // useCustomers.js so that migrating it is a near-zero diff.
 // Do not rename these fields without updating every adopting hook.
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useDebounce }           from './useDebounce'
 
 // ── unwrapPagination ──────────────────────────────────────────────────────────
@@ -113,6 +113,7 @@ export function useServerTableState({
   // ── Sort ─────────────────────────────────────────────────────────────────
   const [sortKey, setSortKey] = useState(initialSortKey)
   const [sortDir, setSortDir] = useState(initialSortDir)
+  const sortKeyRef = useRef(initialSortKey)
 
   // ── Date range ───────────────────────────────────────────────────────────
   // Raw 'YYYY-MM-DD' strings from <input type="date">.
@@ -134,16 +135,17 @@ export function useServerTableState({
 
   // handleSort: clicking the same column header toggles direction; clicking
   // a different column switches to it and resets direction to 'asc'.
-  // This is the verbatim toggle logic copied from all four source hooks.
+  // Uses a ref to track sortKey so the callback stays stable ([] deps).
   const handleSort = useCallback((key) => {
-    if (sortKey === key) {
+    if (sortKeyRef.current === key) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     } else {
       setSortKey(key)
       setSortDir('asc')
     }
+    sortKeyRef.current = key
     setPage(1)
-  }, [sortKey])
+  }, [])
 
   const handleDateFrom = useCallback((val) => {
     setDateFromRaw(val)

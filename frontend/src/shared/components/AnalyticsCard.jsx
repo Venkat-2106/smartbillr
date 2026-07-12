@@ -1,4 +1,6 @@
-export default function AnalyticsCard({
+import { memo } from 'react'
+
+function AnalyticsCard({
   title,
   subtitle,
   action,
@@ -53,3 +55,5 @@ export default function AnalyticsCard({
     </div>
   )
 }
+
+export default memo(AnalyticsCard)

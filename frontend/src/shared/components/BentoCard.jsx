@@ -1,4 +1,6 @@
-export default function BentoCard({
+import { memo } from 'react'
+
+function BentoCard({
   children,
   colSpan,
   style,
@@ -21,3 +23,5 @@ export default function BentoCard({
     </div>
   )
 }
+
+export default memo(BentoCard)

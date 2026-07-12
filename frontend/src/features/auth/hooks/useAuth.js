@@ -17,7 +17,7 @@ import supabase from '../../../lib/supabaseClient'
 export function useLogin() {
   const [isLoading, setIsLoading] = useState(false)
   const [pendingSession, setPendingSession] = useState(null)
-  const { setAuth, setBusiness, setProfile, setPermissions, setSubscription } = useAuthStore()
+  const { setAuth, setBusiness, setProfile, setSubscription } = useAuthStore()
   const navigate = useNavigate()
 
   async function login(email, password) {
@@ -71,7 +71,6 @@ export function useLogin() {
         const profile = profileResult.value.data
         if (profile) {
           setProfile(profile)
-          setPermissions(profile.permissions ?? [])
         }
       }
 

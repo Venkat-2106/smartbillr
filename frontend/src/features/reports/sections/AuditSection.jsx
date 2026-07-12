@@ -4,7 +4,7 @@ import { useUserActivities, useLoginActivities, useDataChanges, useExportActivit
 import { SectionTitle, InfoCard, DataTable } from '../components/shared'
 
 export default function AuditSection({ dateFrom, dateTo }) {
-  const perms = useAuthStore(st => st.permissions)
+  const perms = useAuthStore(st => st.profile?.permissions)
   const isAdmin = perms?.includes('staff.manage')
 
   const activities = useUserActivities(dateFrom, dateTo, { enabled: isAdmin })

@@ -379,7 +379,7 @@ export default function DashboardPage() {
   const navigate = useNavigate()
   const [trendPeriod, setTrendPeriod] = useState('weekly')
 
-  const metricCards = [
+  const metricCards = useMemo(() => [
     data?.total_revenue != null ? {
       label: 'Revenue',
       value: formatCurrency(data.total_revenue, country),
@@ -430,7 +430,7 @@ export default function DashboardPage() {
       onClick: () => navigate('/stock'),
       subtitle: 'Unread alerts',
     },
-  ].filter(Boolean)
+  ].filter(Boolean), [data, country, navigate])
 
   return (
     <div>

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
-from app.middleware.rbac import require_permission
+from app.middleware.rbac import require_permission_with_rls, set_rls_gucs_after_commit
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryResponse
@@ -25,7 +25,7 @@ router = APIRouter(
 @router.post("/")
 def create_category(
     payload: CategoryCreate,
-    current_user: dict = Depends(require_permission("products.edit")),
+    current_user: dict = Depends(require_permission_with_rls("products.edit")),
     db: Session = Depends(get_db)
 ):
     # Block duplicate category names within the same business (case-insensitive)
@@ -52,9 +52,8 @@ def create_category(
     biz_id = str(new_category.business_id)
     db.commit()
 
-    # Re-set GUCs after commit (SET LOCAL is transaction-scoped — lost on commit)
-    db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": str(current_user["user_id"])})
-    db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": str(current_user["business_id"])})
+    # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
+    set_rls_gucs_after_commit(db, current_user)
 
     # Refresh timestamps via raw SQL with explicit business_id filter (RLS bypass).
     # SQLAlchemy ORM's refresh() fails because RLS policies block the implicit SELECT.
@@ -98,7 +97,7 @@ def create_category(
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
 def get_categories(
-    current_user: dict          = Depends(require_permission("products.view")),
+    current_user: dict          = Depends(require_permission_with_rls("products.view")),
     pagination:   dict          = Depends(paginate),
     db:           Session       = Depends(get_db),
     search:       Optional[str] = Query(default=None, description="Search by category name"),
@@ -193,7 +192,7 @@ def get_categories(
 @router.get("/{category_id}/")
 def get_category(
     category_id:  str,
-    current_user: dict = Depends(require_permission("products.view")),
+    current_user: dict = Depends(require_permission_with_rls("products.view")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -294,7 +293,7 @@ def get_category(
 def update_category(
     category_id: str,
     payload: CategoryUpdate,
-    current_user: dict = Depends(require_permission("products.edit")),
+    current_user: dict = Depends(require_permission_with_rls("products.edit")),
     db: Session = Depends(get_db)
 ):
     category = db.query(Category).filter(
@@ -326,9 +325,8 @@ def update_category(
     biz_id = str(category.business_id)
     db.commit()
 
-    # Re-set GUCs after commit (SET LOCAL is transaction-scoped — lost on commit)
-    db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": str(current_user["user_id"])})
-    db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": str(current_user["business_id"])})
+    # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
+    set_rls_gucs_after_commit(db, current_user)
 
     # Re-fetch row after commit
     row = db.execute(
@@ -369,7 +367,7 @@ def update_category(
 @router.delete("/{category_id}/")
 def delete_category(
     category_id: str,
-    current_user: dict = Depends(require_permission("products.edit")),
+    current_user: dict = Depends(require_permission_with_rls("products.edit")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]

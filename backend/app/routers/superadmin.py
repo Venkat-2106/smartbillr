@@ -5,7 +5,7 @@
 # path parameters.
 #
 # SECURITY:
-#   All routes use Depends(verify_super_admin) which authenticates via JWT
+#   All routes use Depends(verify_super_admin_with_rls) which authenticates via JWT
 #   + super_admins table lookup. It does NOT query profiles, does NOT carry
 #   a business_id, and does NOT pass require_permission() checks.
 #
@@ -18,7 +18,8 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from app.database import get_db
-from app.middleware.auth import verify_super_admin, clear_user_cache, clear_business_users_cache
+from app.middleware.auth import clear_user_cache, clear_business_users_cache
+from app.middleware.rbac import verify_super_admin_with_rls_with_rls
 from app.utils.response import success_response, error_response
 from app.schemas.business import SubscriptionUpdate, VALID_PAYMENT_STATUSES, VALID_SUBSCRIPTION_TYPES
 
@@ -51,7 +52,7 @@ def _parse_dt(val):
 
 @router.post("/logout")
 def super_admin_logout(
-    current_user: dict = Depends(verify_super_admin),
+    current_user: dict = Depends(verify_super_admin_with_rls),
     db: Session = Depends(get_db),
 ):
     user_id = current_user["user_id"]
@@ -74,7 +75,7 @@ def list_businesses(
     sort_by: str = Query(default="created_at"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
     search: Optional[str] = Query(default=None),
-    current_user: dict = Depends(verify_super_admin),
+    current_user: dict = Depends(verify_super_admin_with_rls),
     db: Session = Depends(get_db),
 ):
     if sort_by not in SORTABLE_WHITELIST:
@@ -154,7 +155,7 @@ def list_businesses(
 @router.get("/businesses/{business_id}")
 def get_business(
     business_id: str,
-    current_user: dict = Depends(verify_super_admin),
+    current_user: dict = Depends(verify_super_admin_with_rls),
     db: Session = Depends(get_db),
 ):
     row = db.execute(
@@ -226,7 +227,7 @@ def get_business(
 def update_business_subscription(
     business_id: str,
     payload: SubscriptionUpdate,
-    current_user: dict = Depends(verify_super_admin),
+    current_user: dict = Depends(verify_super_admin_with_rls),
     db: Session = Depends(get_db),
 ):
     existing = db.execute(
@@ -277,7 +278,7 @@ class StatusUpdate:
 def update_business_status(
     business_id: str,
     is_active: bool = Query(..., description="true = activate, false = suspend"),
-    current_user: dict = Depends(verify_super_admin),
+    current_user: dict = Depends(verify_super_admin_with_rls),
     db: Session = Depends(get_db),
 ):
     existing = db.execute(

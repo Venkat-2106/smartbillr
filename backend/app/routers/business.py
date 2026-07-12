@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Optional
 from app.database import get_db
-from app.middleware.rbac import require_permission
+from app.middleware.rbac import require_permission_with_rls, set_rls_gucs_after_commit
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.schemas.business import BusinessCreate, BusinessUpdate, BusinessResponse
@@ -19,7 +19,7 @@ router = APIRouter(
 # ─── GET MY BUSINESS ───────────────────────────────────────────
 @router.get("/me")
 def get_my_business(
-    current_user: dict = Depends(require_permission("dashboard.view")),
+    current_user: dict = Depends(require_permission_with_rls("dashboard.view")),
     db: Session = Depends(get_db)
 ):
     business = db.query(Business).filter(
@@ -37,7 +37,7 @@ def get_my_business(
 @router.put("/me")
 def update_my_business(
     payload: BusinessUpdate,
-    current_user: dict = Depends(require_permission("settings.manage")),
+    current_user: dict = Depends(require_permission_with_rls("settings.manage")),
     db: Session = Depends(get_db)
 ):
     business = db.query(Business).filter(
@@ -54,6 +54,7 @@ def update_my_business(
         setattr(business, field, value)
 
     db.commit()
+    set_rls_gucs_after_commit(db, current_user)
     db.refresh(business)
 
     return success_response(BusinessResponse.from_orm(business).dict())
@@ -62,7 +63,7 @@ def update_my_business(
 # ─── GET ALL STAFF OF MY BUSINESS ──────────────────────────────
 @router.get("/staff")
 def get_staff(
-    current_user: dict = Depends(require_permission("settings.manage")),
+    current_user: dict = Depends(require_permission_with_rls("settings.manage")),
     db: Session = Depends(get_db),
     pagination: dict = Depends(paginate),
     search: Optional[str] = Query(default=None),

@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from app.database import get_db
-from app.middleware.auth import verify_token
-from app.middleware.rbac import require_permission
+from app.middleware.rbac import require_permission_with_rls
+from app.middleware.rbac import verify_token_with_rls
 from app.utils.response import success_response, error_response
 from app.schemas.billing import (
     CheckoutRequest,
@@ -84,7 +84,7 @@ def _find_existing_checkout(db, bid, plan_id):
 @router.post("/checkout")
 def create_checkout(
     payload: CheckoutRequest,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(verify_token_with_rls),
     db: Session = Depends(get_db),
 ):
     # NOTE: Uses verify_token directly (not require_permission) because
@@ -190,7 +190,7 @@ def create_checkout(
 @router.get("/checkout/{payment_id}/status")
 def checkout_status(
     payment_id: str,
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(verify_token_with_rls),
     db: Session = Depends(get_db),
 ):
     # NOTE: Uses verify_token directly — expired businesses must be able to
@@ -297,7 +297,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/cancel")
 def cancel_subscription(
-    current_user: dict = Depends(require_permission("settings.manage")),
+    current_user: dict = Depends(require_permission_with_rls("settings.manage")),
     db: Session = Depends(get_db),
 ):
     bid = current_user["business_id"]

@@ -5,7 +5,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
-from app.middleware.rbac import require_permission
+from app.middleware.rbac import require_permission_with_rls, set_rls_gucs_after_commit
 from app.models.purchase import Purchase
 from app.models.product import Product
 from app.models.supplier import Supplier
@@ -148,7 +148,7 @@ def purchase_item_to_dict(row):
 @router.post("/")
 def create_purchase(
     data: PurchaseCreate,
-    current_user: dict = Depends(require_permission("purchases.create")),
+    current_user: dict = Depends(require_permission_with_rls("purchases.create")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -419,6 +419,9 @@ def create_purchase(
 
         db.commit()
 
+        # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
+        set_rls_gucs_after_commit(db, current_user)
+
         pur_row   = fetch_full_purchase(db, new_pur_id, business_id)
         item_rows = fetch_purchase_items(db, new_pur_id, business_id)
 
@@ -438,7 +441,7 @@ def create_purchase(
 # ─────────────────────────────────────────
 @router.get("/")
 def get_all_purchases(
-    current_user: dict       = Depends(require_permission("purchases.view")),
+    current_user: dict       = Depends(require_permission_with_rls("purchases.view")),
     db:           Session    = Depends(get_db),
     pagination:   dict       = Depends(paginate),
     search:       Optional[str] = Query(default=None),
@@ -519,7 +522,7 @@ def get_all_purchases(
 # ─────────────────────────────────────────
 @router.get("/summary")
 def get_purchase_summary_kpi(
-    current_user: dict = Depends(require_permission("purchases.view")),
+    current_user: dict = Depends(require_permission_with_rls("purchases.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -550,7 +553,7 @@ def get_purchase_summary_kpi(
 @router.get("/{pur_id}")
 def get_purchase(
     pur_id: str,
-    current_user: dict = Depends(require_permission("purchases.view")),
+    current_user: dict = Depends(require_permission_with_rls("purchases.view")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -679,7 +682,7 @@ def get_purchase(
 def update_purchase_status(
     pur_id: str,
     body: PurchaseStatusUpdate,
-    current_user: dict = Depends(require_permission("purchases.edit")),
+    current_user: dict = Depends(require_permission_with_rls("purchases.edit")),
     db: Session = Depends(get_db)
 ):
     status  = body.status
@@ -773,7 +776,7 @@ def update_purchase_status(
 def delete_purchase(
     pur_id: str,
     reduce_stock: bool = Query(False),
-    current_user: dict = Depends(require_permission("purchases.delete")),
+    current_user: dict = Depends(require_permission_with_rls("purchases.delete")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]

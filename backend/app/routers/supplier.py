@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from app.database import get_db
-from app.middleware.rbac import require_permission
+from app.middleware.rbac import require_permission_with_rls, set_rls_gucs_after_commit
 from app.models.supplier import Supplier
 from app.schemas.supplier import SupplierCreate, SupplierUpdate
 from app.utils.response import success_response, error_response
@@ -63,7 +63,7 @@ def supplier_to_dict(s, last_updated_by=None) -> dict:
 @router.post("/")
 def create_supplier(
     data:         SupplierCreate,
-    current_user: dict = Depends(require_permission("suppliers.manage")),
+    current_user: dict = Depends(require_permission_with_rls("suppliers.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -101,6 +101,8 @@ def create_supplier(
     except IntegrityError:
         db.rollback()
         return error_response("Supplier with this phone already exists", 400)
+    # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
+    set_rls_gucs_after_commit(db, current_user)
     db.refresh(new_supplier)
 
     creator_name = db.execute(
@@ -124,7 +126,7 @@ def create_supplier(
 # ══════════════════════════════════════════════════════════════════
 @router.get("/lean")
 def get_suppliers_lean(
-    current_user: dict = Depends(require_permission("suppliers.manage")),
+    current_user: dict = Depends(require_permission_with_rls("suppliers.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -161,7 +163,7 @@ def get_suppliers_lean(
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
 def get_all_suppliers(
-    current_user: dict          = Depends(require_permission("suppliers.manage")),
+    current_user: dict          = Depends(require_permission_with_rls("suppliers.manage")),
     db:           Session       = Depends(get_db),
     pagination:   dict          = Depends(paginate),
     search:       Optional[str] = Query(default=None, description="Search by name, phone, or email"),
@@ -274,7 +276,7 @@ def get_all_suppliers(
 @router.get("/search/phone")
 def search_supplier_by_phone(
     phone:        str,
-    current_user: dict = Depends(require_permission("suppliers.manage")),
+    current_user: dict = Depends(require_permission_with_rls("suppliers.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -302,7 +304,7 @@ def search_supplier_by_phone(
 @router.get("/{supp_id}")
 def get_supplier(
     supp_id:      str,
-    current_user: dict = Depends(require_permission("suppliers.manage")),
+    current_user: dict = Depends(require_permission_with_rls("suppliers.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -326,7 +328,7 @@ def get_supplier(
 def update_supplier(
     supp_id:      str,
     data:         SupplierUpdate,
-    current_user: dict = Depends(require_permission("suppliers.manage")),
+    current_user: dict = Depends(require_permission_with_rls("suppliers.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -365,6 +367,8 @@ def update_supplier(
     except IntegrityError:
         db.rollback()
         return error_response("Supplier with this phone already exists", 400)
+    # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
+    set_rls_gucs_after_commit(db, current_user)
     db.refresh(supplier)
 
     updated_by_name = db.execute(
@@ -384,7 +388,7 @@ def update_supplier(
 @router.delete("/{supp_id}")
 def delete_supplier(
     supp_id:      str,
-    current_user: dict = Depends(require_permission("suppliers.manage")),
+    current_user: dict = Depends(require_permission_with_rls("suppliers.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]

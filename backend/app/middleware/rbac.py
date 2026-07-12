@@ -48,7 +48,9 @@
 #   Removing it makes the auth flow simpler and strictly faster.
 
 from fastapi import HTTPException, Depends
-from app.middleware.auth import verify_token
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from app.middleware.auth import verify_token, verify_super_admin
 from app.dependencies.subscription import verify_subscription
 
 
@@ -171,3 +173,150 @@ def get_current_user_with_permissions(
         use require_permission() or add verify_subscription explicitly.
     """
     return current_user
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SYNC RLS CONTEXT — Fixes the cross-engine GUC gap
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# PROBLEM:
+#   verify_token() is async and sets app.current_user_id / app.current_business_id
+#   GUCs on its AsyncSession (async engine). Sync routers use a completely
+#   separate Session (sync engine, different connection pool). The GUCs are
+#   invisible to the sync connection, so RLS policies silently filter out
+#   every row — queries return empty/None, routes return 404.
+#
+# SOLUTION:
+#   Composed dependencies that call the existing auth deps (verify_token /
+#   require_permission / verify_super_admin) then set the GUCs on the sync
+#   db session. Composition over duplication — the existing dependency does
+#   all auth + permission checking; we only add the missing GUC setup.
+#
+#   SET LOCAL (transaction-scoped) works fine on the sync path because
+#   psycopg2 substitutes bind params client-side before sending to Postgres.
+# ══════════════════════════════════════════════════════════════════════════════
+
+_SET_RLS_SQL = text(
+    "SET LOCAL app.current_user_id = :uid"
+)
+_SET_BID_SQL = text(
+    "SET LOCAL app.current_business_id = :bid"
+)
+
+
+def set_rls_gucs(db: Session, current_user: dict) -> None:
+    """Set tenant RLS GUCs on a sync db session. Call BEFORE any queries."""
+    db.execute(_SET_RLS_SQL, {"uid": str(current_user["user_id"])})
+    db.execute(_SET_BID_SQL, {"bid": str(current_user["business_id"])})
+
+
+def set_rls_gucs_after_commit(db: Session, current_user: dict) -> None:
+    """Re-set tenant RLS GUCs after db.commit().
+
+    SET LOCAL is transaction-scoped — the values are lost when the
+    transaction ends. Call this after every commit that is followed by
+    further queries on the same sync session.
+    """
+    set_rls_gucs(db, current_user)
+
+
+def require_permission_with_rls(permission_code: str):
+    """
+    Drop-in replacement for require_permission() that also sets RLS GUCs
+    on the sync db session used by the route handler.
+
+    Composition: calls the existing require_permission() for auth + permission
+    check, then sets GUCs on the sync session.
+
+    Usage in any sync router:
+        @router.get("/items")
+        def list_items(
+            current_user: dict = Depends(require_permission_with_rls("items.view")),
+            db: Session = Depends(get_db),
+        ):
+    """
+    def dependency(
+        current_user: dict = Depends(require_permission(permission_code)),
+        db: Session = Depends(get_db),
+    ) -> dict:
+        set_rls_gucs(db, current_user)
+        return current_user
+
+    return dependency
+
+
+def require_any_permission_with_rls(*permission_codes: str):
+    """
+    Sync-safe version of require_any_permission() — sets RLS GUCs on the
+    sync db session.
+    """
+    def dependency(
+        current_user: dict = Depends(require_any_permission(*permission_codes)),
+        db: Session = Depends(get_db),
+    ) -> dict:
+        set_rls_gucs(db, current_user)
+        return current_user
+
+    return dependency
+
+
+def require_all_permissions_with_rls(*permission_codes: str):
+    """
+    Sync-safe version of require_all_permissions() — sets RLS GUCs on the
+    sync db session.
+    """
+    def dependency(
+        current_user: dict = Depends(require_all_permissions(*permission_codes)),
+        db: Session = Depends(get_db),
+    ) -> dict:
+        set_rls_gucs(db, current_user)
+        return current_user
+
+    return dependency
+
+
+def get_current_user_with_permissions_rls(
+    current_user: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Sync-safe version of get_current_user_with_permissions() — sets RLS GUCs
+    on the sync db session for the soft-check permission pattern.
+    """
+    set_rls_gucs(db, current_user)
+    return current_user
+
+
+def verify_token_with_rls(
+    current_user: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Sync-safe verify_token — sets RLS GUCs on the sync db session.
+
+    Use this in sync routers that call verify_token directly (not via
+    require_permission), e.g. profiles, subscription, billing checkout.
+    """
+    set_rls_gucs(db, current_user)
+    return current_user
+
+
+def verify_super_admin_with_rls(
+    current_user: dict = Depends(verify_super_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Sync-safe verify_super_admin — sets super-admin RLS GUCs on the sync
+    db session (app.current_user_id + app.is_super_admin).
+
+    Use this in sync superadmin routers and subscription admin routes.
+    """
+    db.execute(_SET_RLS_SQL, {"uid": str(current_user["user_id"])})
+    db.execute(text("SET LOCAL app.is_super_admin = 'true'"))
+    return current_user
+
+
+def set_superadmin_rls_gucs_after_commit(db: Session, current_user: dict) -> None:
+    """Re-set super-admin RLS GUCs after db.commit()."""
+    db.execute(_SET_RLS_SQL, {"uid": str(current_user["user_id"])})
+    db.execute(text("SET LOCAL app.is_super_admin = 'true'"))

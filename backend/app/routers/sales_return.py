@@ -3,7 +3,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
-from app.middleware.rbac import require_permission
+from app.middleware.rbac import require_permission_with_rls, set_rls_gucs_after_commit
 from app.models.sales_return import SalesReturn
 from app.models.sale import Sale
 from app.schemas.sales_return import SalesReturnCreate, SalesReturnUpdate
@@ -157,7 +157,7 @@ def validate_return_items(db: Session, sale_id: str, business_id: str, items, ex
 @router.post("/")
 def create_sales_return(
     data: SalesReturnCreate,
-    current_user: dict = Depends(require_permission("sales_returns.manage")),
+    current_user: dict = Depends(require_permission_with_rls("sales_returns.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -278,6 +278,9 @@ def create_sales_return(
 
         db.commit()
 
+        # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
+        set_rls_gucs_after_commit(db, current_user)
+
         return_row = db.query(SalesReturn).filter(
             SalesReturn.return_id == new_return_id
         ).first()
@@ -300,7 +303,7 @@ def create_sales_return(
 # ─────────────────────────────────────────
 @router.get("/")
 def get_all_sales_returns(
-    current_user: dict = Depends(require_permission("sales_returns.manage")),
+    current_user: dict = Depends(require_permission_with_rls("sales_returns.manage")),
     db: Session = Depends(get_db),
     pagination: dict = Depends(paginate),
     search: Optional[str] = Query(default=None),
@@ -393,7 +396,7 @@ def get_all_sales_returns(
 @router.get("/{return_id}")
 def get_sales_return(
     return_id: str,
-    current_user: dict = Depends(require_permission("sales_returns.manage")),
+    current_user: dict = Depends(require_permission_with_rls("sales_returns.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -420,7 +423,7 @@ def get_sales_return(
 def update_sales_return(
     return_id: str,
     data: SalesReturnUpdate,
-    current_user: dict = Depends(require_permission("sales_returns.manage")),
+    current_user: dict = Depends(require_permission_with_rls("sales_returns.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -483,6 +486,8 @@ def update_sales_return(
         )
 
         db.commit()
+        # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
+        set_rls_gucs_after_commit(db, current_user)
         db.refresh(sales_return)
 
         items = fetch_return_items(db, return_id)
@@ -506,7 +511,7 @@ def update_sales_return(
 @router.delete("/{return_id}")
 def delete_sales_return(
     return_id: str,
-    current_user: dict = Depends(require_permission("sales_returns.manage")),
+    current_user: dict = Depends(require_permission_with_rls("sales_returns.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]

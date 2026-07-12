@@ -8,7 +8,7 @@
 #   - Raw SQL via text() for all reads (never ORM for GET)
 #   - Success/error response via success_response() / error_response()
 #   - business_id extracted from current_user (JWT) — never from request body
-#   - Permission gated via require_permission()
+#   - Permission gated via require_permission_with_rls()
 #   - COALESCE on all aggregates to prevent null propagation
 #   - generate_series for time-series zero-fill
 #   - Dashboard.financial permission gates revenue/cost/profit figures
@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from app.database import get_db
-from app.middleware.rbac import require_permission
+from app.middleware.rbac import require_permission_with_rls
 from app.utils.timestamp import fmt_ts
 from app.utils.response import success_response, error_response
 from app.utils.mv_refresh import refresh_dashboard_mvs
@@ -75,7 +75,7 @@ def _date_col(table_alias: str, col: str, date_from: Optional[str], date_to: Opt
 def get_report_summary(
     date_from: Optional[str] = Query(None, description="ISO date — sales/purchases/expenses from"),
     date_to:   Optional[str] = Query(None, description="ISO date — sales/purchases/expenses to"),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -186,7 +186,7 @@ def get_report_summary(
 
 @router.post("/refresh")
 def refresh_materialized_views(
-    current_user: dict = Depends(require_permission("staff.manage")),
+    current_user: dict = Depends(require_permission_with_rls("staff.manage")),
     db: Session = Depends(get_db)
 ):
     """Refresh all report materialized views concurrently.
@@ -211,7 +211,7 @@ def get_sales_trend(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     tz_offset_minutes: int = Query(0),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     """Revenue over time — daily (weekly), monthly, yearly.
@@ -347,7 +347,7 @@ def get_sales_trend(
 def get_sales_by_customer(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -390,7 +390,7 @@ def get_sales_by_customer(
 def get_sales_by_product(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -440,7 +440,7 @@ def get_sales_by_product(
 def get_sales_by_category(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -482,7 +482,7 @@ def get_sales_by_category(
 def get_sales_by_payment_method(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -517,7 +517,7 @@ def get_sales_by_payment_method(
 def get_sales_invoice_status(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -559,7 +559,7 @@ def get_sales_invoice_status(
 def get_purchase_summary(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -603,7 +603,7 @@ def get_purchase_trend(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     tz_offset_minutes: int = Query(0),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -698,7 +698,7 @@ def get_purchase_trend(
 def get_purchases_by_supplier(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -739,7 +739,7 @@ def get_purchases_by_supplier(
 def get_purchases_by_product(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -778,7 +778,7 @@ def get_purchases_by_product(
 def get_purchase_tax_summary(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -814,7 +814,7 @@ def get_purchase_tax_summary(
 def get_gross_profit(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -855,7 +855,7 @@ def get_gross_profit(
 def get_profit_by_product(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -904,7 +904,7 @@ def get_profit_by_product(
 def get_profit_by_category(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -952,7 +952,7 @@ def get_profit_by_category(
 def get_profit_by_customer(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1005,7 +1005,7 @@ def get_profit_trend(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     tz_offset_minutes: int = Query(0),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1114,7 +1114,7 @@ def get_profit_trend(
 
 @router.get("/inventory/valuation")
 def get_inventory_valuation(
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1168,7 +1168,7 @@ def get_inventory_valuation(
 def get_inventory_movement_summary(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1200,7 +1200,7 @@ def get_inventory_movement_summary(
 def get_stock_flow(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1225,7 +1225,7 @@ def get_stock_flow(
 @router.get("/inventory/moving-products")
 def get_moving_products(
     period: str = "monthly",
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1319,7 +1319,7 @@ def get_top_customers(
     limit: int = Query(10, ge=1, le=100),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1363,7 +1363,7 @@ def get_top_customers(
 @router.get("/customers/{cust_id}/history")
 def get_customer_purchase_history(
     cust_id: str,
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1465,7 +1465,7 @@ def get_customer_purchase_history(
 
 @router.get("/customers/lifetime-value")
 def get_customer_lifetime_value(
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1512,7 +1512,7 @@ def get_customer_lifetime_value(
 
 @router.get("/customers/outstanding")
 def get_customer_outstanding(
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1558,7 +1558,7 @@ def get_top_suppliers(
     limit: int = Query(10, ge=1, le=100),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1600,7 +1600,7 @@ def get_top_suppliers(
 @router.get("/suppliers/{supp_id}/history")
 def get_supplier_purchase_history(
     supp_id: str,
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1664,7 +1664,7 @@ def get_supplier_purchase_history(
 
 @router.get("/suppliers/spend-analysis")
 def get_supplier_spend_analysis(
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1714,7 +1714,7 @@ def get_supplier_spend_analysis(
 def get_expenses_by_category(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1750,7 +1750,7 @@ def get_expense_trend(
     period: str = "monthly",
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1844,7 +1844,7 @@ def get_expense_trend(
 def get_expense_distribution(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1900,7 +1900,7 @@ def get_expense_distribution(
 def get_tax_collected(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1932,7 +1932,7 @@ def get_tax_collected(
 def get_tax_paid(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -1964,7 +1964,7 @@ def get_tax_paid(
 def get_tax_liability(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -2001,7 +2001,7 @@ def get_tax_liability(
 def get_tax_by_rate(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -2042,7 +2042,7 @@ def get_tax_by_rate(
 def get_sales_returns_summary(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -2090,7 +2090,7 @@ def get_sales_returns_summary(
 def get_purchase_returns_summary(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -2124,7 +2124,7 @@ def get_returns_trend(
     period: str = "monthly",
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -2196,7 +2196,7 @@ def get_returns_trend(
 def get_returns_profit_impact(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -2248,7 +2248,7 @@ def get_payment_collections(
     period: str = "monthly",
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -2338,7 +2338,7 @@ def get_payment_collections(
 
 @router.get("/payments/outstanding")
 def get_outstanding_receivables(
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -2386,7 +2386,7 @@ def get_outstanding_receivables(
 def get_payments_by_method(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -2422,7 +2422,7 @@ def get_payments_by_method(
 
 @router.get("/payments/partial")
 def get_partial_payments(
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -2472,7 +2472,7 @@ def get_user_activities(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     user_id: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -2523,7 +2523,7 @@ def get_user_activities(
 def get_login_activities(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -2562,7 +2562,7 @@ def get_data_changes(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     table_name: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -2625,7 +2625,7 @@ def get_data_changes(
 def get_export_activities(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission("reports.view")),
+    current_user: dict = Depends(require_permission_with_rls("reports.view")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]

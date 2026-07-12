@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import get_db
-from app.middleware.rbac import require_permission
+from app.middleware.rbac import require_permission_with_rls
 from app.models.payment import Payment
 from app.models.sale import Sale
 from app.schemas.payment import PaymentCreate
@@ -81,7 +81,7 @@ def payment_to_dict(p) -> dict:
 @router.post("/")
 def create_payment(
     data:         PaymentCreate,
-    current_user: dict = Depends(require_permission("payments.manage")),
+    current_user: dict = Depends(require_permission_with_rls("payments.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -206,7 +206,7 @@ def create_payment(
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
 def get_all_payments(
-    current_user: dict = Depends(require_permission("payments.manage")),
+    current_user: dict = Depends(require_permission_with_rls("payments.manage")),
     db:           Session = Depends(get_db),
     pagination:   dict = Depends(paginate),
     search:       str  = Query(default=None),
@@ -309,7 +309,7 @@ def get_all_payments(
 # ── GET /payments/summary → KPI cards for payments page ──────────────
 @router.get("/summary")
 def get_payment_summary_kpi(
-    current_user: dict = Depends(require_permission("payments.manage")),
+    current_user: dict = Depends(require_permission_with_rls("payments.manage")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -338,7 +338,7 @@ def get_payment_summary_kpi(
 @router.get("/sale/{sale_id}")
 def get_payments_by_sale(
     sale_id:      str,
-    current_user: dict = Depends(require_permission("payments.manage")),
+    current_user: dict = Depends(require_permission_with_rls("payments.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -413,7 +413,7 @@ def get_payments_by_sale(
 @router.get("/{payment_id}")
 def get_payment(
     payment_id:   str,
-    current_user: dict = Depends(require_permission("payments.manage")),
+    current_user: dict = Depends(require_permission_with_rls("payments.manage")),
     db:           Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]

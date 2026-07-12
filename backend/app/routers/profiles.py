@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import get_db
-from app.middleware.auth import verify_token
+from app.middleware.rbac import verify_token_with_rls
 from app.dependencies.subscription import verify_subscription
 from app.utils.response import success_response, error_response
 import logging
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/v1/profiles", tags=["Profiles"])
 @router.get("/me")
 def get_my_profile(
     _sub: None = Depends(verify_subscription),
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(verify_token_with_rls),
     db: Session = Depends(get_db),
 ):
     """

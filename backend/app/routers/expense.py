@@ -3,7 +3,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.database import get_db
-from app.middleware.rbac import require_permission
+from app.middleware.rbac import require_permission_with_rls, set_rls_gucs_after_commit
 from app.models.expense import Expense
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate
 from app.utils.response import success_response, error_response
@@ -59,7 +59,7 @@ def expense_to_dict_list(row):
 @router.post("/")
 def create_expense(
     data: ExpenseCreate,
-    current_user: dict = Depends(require_permission("expenses.manage")),
+    current_user: dict = Depends(require_permission_with_rls("expenses.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -77,6 +77,7 @@ def create_expense(
 
     db.add(new_expense)
     db.commit()
+    set_rls_gucs_after_commit(db, current_user)
     db.refresh(new_expense)
 
     creator_name = current_user.get("full_name")
@@ -92,7 +93,7 @@ def create_expense(
 # ─────────────────────────────────────────
 @router.get("/")
 def get_all_expenses(
-    current_user: dict = Depends(require_permission("expenses.manage")),
+    current_user: dict = Depends(require_permission_with_rls("expenses.manage")),
     db: Session = Depends(get_db),
     pagination: dict = Depends(paginate),
     search: Optional[str] = Query(default=None),
@@ -169,7 +170,7 @@ def get_all_expenses(
 # ── GET /expenses/summary → KPI cards for expenses page ──────────
 @router.get("/summary")
 def get_expense_summary_kpi(
-    current_user: dict = Depends(require_permission("expenses.manage")),
+    current_user: dict = Depends(require_permission_with_rls("expenses.manage")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -194,7 +195,7 @@ def get_expense_summary_kpi(
 @router.get("/{expense_id}")
 def get_expense(
     expense_id: str,
-    current_user: dict = Depends(require_permission("expenses.manage")),
+    current_user: dict = Depends(require_permission_with_rls("expenses.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -220,7 +221,7 @@ def get_expense(
 def update_expense(
     expense_id: str,
     data: ExpenseUpdate,
-    current_user: dict = Depends(require_permission("expenses.manage")),
+    current_user: dict = Depends(require_permission_with_rls("expenses.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]
@@ -253,6 +254,7 @@ def update_expense(
     expense.updated_by = current_user["user_id"]
 
     db.commit()
+    set_rls_gucs_after_commit(db, current_user)
     db.refresh(expense)
 
     updated_by_name = current_user.get("full_name")
@@ -269,7 +271,7 @@ def update_expense(
 @router.delete("/{expense_id}")
 def delete_expense(
     expense_id: str,
-    current_user: dict = Depends(require_permission("expenses.manage")),
+    current_user: dict = Depends(require_permission_with_rls("expenses.manage")),
     db: Session = Depends(get_db)
 ):
     business_id = current_user["business_id"]

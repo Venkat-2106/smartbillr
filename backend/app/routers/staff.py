@@ -22,7 +22,7 @@ import os
 import re
 
 from app.database import get_db
-from app.middleware.rbac import require_permission
+from app.middleware.rbac import require_permission_with_rls
 from app.middleware.auth import clear_user_cache
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
@@ -124,7 +124,7 @@ def delete_supabase_auth_user(auth_user_id: str):
 @router.post("")
 def create_staff(
     body:         CreateStaffRequest,
-    current_user: dict    = Depends(require_permission("staff.manage")),
+    current_user: dict    = Depends(require_permission_with_rls("staff.manage")),
     db:           Session = Depends(get_db),
 ):
     business_id = current_user["business_id"]
@@ -266,7 +266,7 @@ def create_staff(
 
 @router.get("")
 def list_staff(
-    current_user: dict    = Depends(require_permission("staff.manage")),
+    current_user: dict    = Depends(require_permission_with_rls("staff.manage")),
     db:           Session = Depends(get_db),
     pagination:   dict    = Depends(paginate),
     search:       Optional[str] = Query(default=None),
@@ -334,7 +334,7 @@ def list_staff(
 # ── GET /staff/summary → KPI cards for staff page ───────────────────
 @router.get("/summary")
 def get_staff_summary_kpi(
-    current_user: dict = Depends(require_permission("staff.manage")),
+    current_user: dict = Depends(require_permission_with_rls("staff.manage")),
     db: Session = Depends(get_db)
 ):
     bid = current_user["business_id"]
@@ -376,7 +376,7 @@ def get_staff_summary_kpi(
 def update_staff(
     staff_id:     str,
     body:         UpdateStaffRequest,
-    current_user: dict    = Depends(require_permission("staff.manage")),
+    current_user: dict    = Depends(require_permission_with_rls("staff.manage")),
     db:           Session = Depends(get_db),
 ):
     business_id = current_user["business_id"]
@@ -444,7 +444,7 @@ def update_staff(
 @router.delete("/{staff_id}")
 def deactivate_staff(
     staff_id:     str,
-    current_user: dict    = Depends(require_permission("staff.manage")),
+    current_user: dict    = Depends(require_permission_with_rls("staff.manage")),
     db:           Session = Depends(get_db),
 ):
     business_id = current_user["business_id"]

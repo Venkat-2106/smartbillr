@@ -9,7 +9,7 @@ import os
 import logging
 
 from app.database import get_db
-from app.middleware.auth import verify_token, verify_super_admin
+from app.middleware.rbac import verify_token_with_rls, verify_super_admin_with_rls
 from app.utils.response import success_response, error_response
 from app.schemas.business import (
     BusinessCreate,
@@ -243,7 +243,7 @@ def register_business(
 
 @sub_router.get("/me/subscription")
 def get_my_subscription(
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(verify_token_with_rls),
     db: Session = Depends(get_db),
 ):
     bid = current_user["business_id"]
@@ -309,7 +309,7 @@ def get_my_subscription(
 def update_subscription(
     business_id: str,
     payload: SubscriptionUpdate,
-    current_user: dict = Depends(verify_super_admin),
+    current_user: dict = Depends(verify_super_admin_with_rls),
     db: Session = Depends(get_db),
 ):
     ALLOWED_COLUMNS = {"payment_status", "subscription_type", "subscription_start_at",
@@ -352,7 +352,7 @@ def update_subscription(
 
 @admin_router.get("/businesses")
 def list_all_businesses(
-    current_user: dict = Depends(verify_super_admin),
+    current_user: dict = Depends(verify_super_admin_with_rls),
     db: Session = Depends(get_db),
 ):
     rows = db.execute(

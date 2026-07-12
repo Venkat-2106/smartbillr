@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import datetime, timezone
 from app.database import get_db
-from app.middleware.auth import verify_token, clear_user_cache
+from app.middleware.rbac import verify_token_with_rls
+from app.middleware.auth import clear_user_cache
 from app.utils.response import success_response
 
 router = APIRouter(prefix="/v1/auth", tags=["Auth"])
@@ -11,7 +12,7 @@ router = APIRouter(prefix="/v1/auth", tags=["Auth"])
 
 @router.post("/logout")
 def logout(
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(verify_token_with_rls),
     db: Session = Depends(get_db),
 ):
     user_id = current_user["user_id"]
@@ -30,7 +31,7 @@ def logout(
 
 @router.post("/record-login")
 def record_login(
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(verify_token_with_rls),
     db: Session = Depends(get_db),
 ):
     user_id = current_user["user_id"]
@@ -67,7 +68,7 @@ def record_login(
 
 @router.post("/confirm-session")
 def confirm_session(
-    current_user: dict = Depends(verify_token),
+    current_user: dict = Depends(verify_token_with_rls),
     db: Session = Depends(get_db),
 ):
     user_id = current_user["user_id"]

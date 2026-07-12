@@ -38,7 +38,7 @@ def _build_async_url(url: str) -> tuple[str, dict]:
     parsed = urlparse(url)
     params = parse_qs(parsed.query)
 
-    connect_args = {}
+    connect_args = {"statement_cache_size": 0}
     sslmode = params.pop("sslmode", [None])[0]
     if sslmode:
         import ssl as _ssl

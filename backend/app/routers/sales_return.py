@@ -249,35 +249,32 @@ def create_sales_return(
         # Step 5 → Insert return items into sales_return_items
         # This table is what the DB trigger trg_validate_sales_return_items watches.
         # Required columns: sale_item_id, unit_price, original_qty, original_unit_price, business_id
-        for calc in calculated_items:
-            db.execute(
-                text("""
-                    INSERT INTO sales_return_items (
-                        return_item_id, return_id, sale_item_id,
-                        product_id, return_qty, unit_price,
-                        original_qty, original_unit_price, business_id
-                    ) VALUES (
-                        CAST(:return_item_id AS uuid),
-                        CAST(:return_id AS uuid),
-                        CAST(:sale_item_id AS uuid),
-                        CAST(:product_id AS uuid),
-                        :return_qty, :unit_price,
-                        :original_qty, :original_unit_price,
-                        CAST(:business_id AS uuid)
-                    )
-                """),
-                {
-                    "return_item_id": str(uuid.uuid4()),
-                    "return_id": new_return_id,
-                    "sale_item_id": calc["sale_item_id"],
-                    "product_id": calc["product_id"],
-                    "return_qty": calc["return_qty"],
-                    "unit_price": str(calc["refund_amount"]),
-                    "original_qty": calc["original_qty"],
-                    "original_unit_price": str(calc["original_unit_price"]),
-                    "business_id": business_id
-                }
-            )
+        if calculated_items:
+            value_clauses = []
+            params: dict = {"rid": new_return_id, "bid": business_id}
+            for i, calc in enumerate(calculated_items):
+                tag = f"i{i}"
+                value_clauses.append(
+                    f"(CAST(:{tag}_id AS uuid), CAST(:rid AS uuid), "
+                    f" CAST(:{tag}_sid AS uuid), CAST(:{tag}_pid AS uuid), "
+                    f" :{tag}_qty, :{tag}_up, :{tag}_oq, :{tag}_oup, "
+                    f" CAST(:bid AS uuid))"
+                )
+                params[f"{tag}_id"]  = str(uuid.uuid4())
+                params[f"{tag}_sid"] = calc["sale_item_id"]
+                params[f"{tag}_pid"] = calc["product_id"]
+                params[f"{tag}_qty"] = calc["return_qty"]
+                params[f"{tag}_up"]  = str(calc["refund_amount"])
+                params[f"{tag}_oq"]  = calc["original_qty"]
+                params[f"{tag}_oup"] = str(calc["original_unit_price"])
+
+            db.execute(text(f"""
+                INSERT INTO sales_return_items (
+                    return_item_id, return_id, sale_item_id,
+                    product_id, return_qty, unit_price,
+                    original_qty, original_unit_price, business_id
+                ) VALUES {", ".join(value_clauses)}
+            """), params)
 
         db.commit()
 

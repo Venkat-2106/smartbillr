@@ -9,6 +9,7 @@ from app.schemas.purchase_return import PurchaseReturnCreate, PurchaseReturnUpda
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts
+from app.utils.bulk_stock_adjust import bulk_check_and_reduce_stock
 from decimal import Decimal
 import uuid
 import logging
@@ -266,60 +267,18 @@ def create_purchase_return(
         # return header, return items, and stock updates are all one atomic
         # transaction. If stock update fails, nothing is committed.
         if data.return_status == "approved" and data.restock:
-            for item in data.items:
-                product_id = str(item.product_id)
-                return_qty = item.return_qty
-
-                result = db.execute(text("""
-                    UPDATE products
-                    SET prod_stock_qty = prod_stock_qty - :qty,
-                        updated_by = CAST(:uid AS uuid)
-                    WHERE prod_id      = CAST(:pid AS uuid)
-                      AND business_id  = CAST(:bid AS uuid)
-                      AND prod_stock_qty >= :qty
-                    RETURNING prod_stock_qty
-                """), {
-                    "pid": product_id,
-                    "bid": str(business_id),
-                    "qty": return_qty,
-                    "uid": str(user_id),
-                }).fetchone()
-
-                if not result:
-                    db.rollback()
-                    return error_response(
-                        f"Product {product_id}: insufficient stock to return "
-                        f"{return_qty} units",
-                        status_code=400
-                    )
-
-                prev_stock = result.prod_stock_qty + return_qty
-
-                db.execute(text("""
-                    INSERT INTO stock_movements
-                        (move_id, product_id, business_id, move_type,
-                         move_qty, move_prev_stock,
-                         purchase_reference_id, move_notes, move_created_by)
-                    VALUES (
-                        CAST(:move_id AS uuid),
-                        CAST(:product_id AS uuid),
-                        CAST(:business_id AS uuid),
-                        'purchase_return',
-                        :move_qty, :prev_stock,
-                        CAST(:return_id AS uuid),
-                        :move_notes,
-                        CAST(:created_by AS uuid)
-                    )
-                """), {
-                    "move_id":     str(uuid.uuid4()),
-                    "product_id":  product_id,
-                    "business_id": str(business_id),
-                    "move_qty":    -return_qty,
-                    "prev_stock":  prev_stock,
-                    "return_id":   new_return_id,
-                    "move_notes":  f"Stock reduced from purchase return {new_return_id}",
-                    "created_by":  str(user_id),
-                })
+            stock_err = bulk_check_and_reduce_stock(
+                db,
+                business_id=str(business_id),
+                user_id=str(user_id),
+                items=data.items,
+                reference_id=new_return_id,
+                movement_type="purchase_return",
+                movement_notes_prefix="Stock reduced from purchase return",
+            )
+            if stock_err:
+                db.rollback()
+                return error_response(stock_err, status_code=400)
 
             # Mark stock_updated = true on the header
             db.execute(text("""
@@ -548,62 +507,18 @@ def update_purchase_return(
 
             # Reduce stock only if restock=true
             if data.restock:
-                for row in item_rows:
-                    product_id = str(row.product_id)
-                    return_qty = row.return_qty
-
-                    result = db.execute(text("""
-                        UPDATE products
-                        SET prod_stock_qty = prod_stock_qty - :qty,
-                            updated_by = CAST(:uid AS uuid)
-                        WHERE prod_id      = CAST(:pid AS uuid)
-                          AND business_id  = CAST(:bid AS uuid)
-                          AND prod_stock_qty >= :qty
-                        RETURNING prod_stock_qty
-                    """), {
-                        "pid": product_id,
-                        "bid": str(business_id),
-                        "qty": return_qty,
-                        "uid": str(user_id),
-                    }).fetchone()
-
-                    if not result:
-                        db.rollback()
-                        return error_response(
-                            f"Product {product_id}: insufficient stock to return "
-                            f"{return_qty} units",
-                            status_code=400
-                        )
-
-                    prev_stock = result.prod_stock_qty + return_qty
-
-                    # Record stock movement
-                    # move_qty is negative → stock going OUT to supplier
-                    db.execute(text("""
-                        INSERT INTO stock_movements
-                            (move_id, product_id, business_id, move_type,
-                             move_qty, move_prev_stock,
-                             purchase_reference_id, move_notes, move_created_by)
-                        VALUES (
-                            CAST(:move_id AS uuid),
-                            CAST(:product_id AS uuid),
-                            CAST(:business_id AS uuid),
-                            'purchase_return',
-                            :move_qty, :prev_stock,
-                            CAST(:return_id AS uuid),
-                            :move_notes,
-                            CAST(:created_by AS uuid)
-                        )
-                    """), {
-                        "move_id":     str(uuid.uuid4()),
-                        "product_id":  product_id,
-                        "business_id": str(business_id),
-                        "move_qty":    -return_qty,
-                        "prev_stock":  prev_stock,
-                        "return_id":   return_id,
-                        "move_notes":  f"Stock reduced from purchase return {return_id}",
-                        "created_by":  str(user_id),
-                    })
+                stock_err = bulk_check_and_reduce_stock(
+                    db,
+                    business_id=str(business_id),
+                    user_id=str(user_id),
+                    items=item_rows,
+                    reference_id=return_id,
+                    movement_type="purchase_return",
+                    movement_notes_prefix="Stock reduced from purchase return",
+                )
+                if stock_err:
+                    db.rollback()
+                    return error_response(stock_err, status_code=400)
 
         # Update the return header
         db.execute(text("""

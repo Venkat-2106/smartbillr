@@ -79,10 +79,7 @@ def create_expense(
     db.commit()
     db.refresh(new_expense)
 
-    creator_name = db.execute(
-        text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
-        {"uid": str(user_id)}
-    ).scalar()
+    creator_name = current_user.get("full_name")
 
     return success_response({
         "message": "Expense created successfully",
@@ -211,12 +208,7 @@ def get_expense(
     if not expense:
         return error_response("Expense not found", status_code=404)
 
-    updated_by_name = None
-    if expense.updated_by:
-        updated_by_name = db.execute(
-            text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
-            {"uid": str(expense.updated_by)}
-        ).scalar()
+    updated_by_name = current_user.get("full_name") if expense.updated_by else None
 
     return success_response(expense_to_dict(expense, last_updated_by=updated_by_name))
 
@@ -263,10 +255,7 @@ def update_expense(
     db.commit()
     db.refresh(expense)
 
-    updated_by_name = db.execute(
-        text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
-        {"uid": str(expense.updated_by)}
-    ).scalar()
+    updated_by_name = current_user.get("full_name")
 
     return success_response({
         "message": "Expense updated successfully",

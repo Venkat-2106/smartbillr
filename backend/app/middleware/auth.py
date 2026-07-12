@@ -355,6 +355,7 @@ def verify_token(
         text("""
             SELECT
                 p.business_id,
+                p.full_name,
                 r.name                                      AS role,
                 STRING_AGG(perm.code, ',')                  AS permissions_csv,
                 p.last_logout_at
@@ -367,7 +368,7 @@ def verify_token(
                 ON perm.id = rp.permission_id
             WHERE p.id        = :user_id
               AND p.is_active = true
-            GROUP BY p.business_id, r.name, p.last_logout_at
+            GROUP BY p.business_id, p.full_name, r.name, p.last_logout_at
             LIMIT 1
         """),
         {"user_id": user_id}
@@ -408,6 +409,7 @@ def verify_token(
     user_data = {
         "user_id":          user_id,
         "business_id":      str(result.business_id),
+        "full_name":        result.full_name,
         "role":             result.role or "staff",
         "permissions":      permissions,
         "last_logout_at":   last_logout_epoch,

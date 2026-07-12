@@ -99,10 +99,7 @@ def create_customer(
     db.refresh(new_customer)
 
     # Fetch the creator's name so the table shows it immediately after creation
-    creator_name = db.execute(
-        text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
-        {"uid": str(current_user["user_id"])}
-    ).scalar()
+    creator_name = current_user.get("full_name")
 
     return success_response({
         "message":  "Customer created successfully",
@@ -664,10 +661,7 @@ def update_customer(
     db.refresh(customer)
 
     # Fetch the updater's name to return in response
-    updated_by_name = db.execute(
-        text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
-        {"uid": str(customer.updated_by)}
-    ).scalar()
+    updated_by_name = current_user.get("full_name")
 
     return success_response({
         "message":  "Customer updated successfully",

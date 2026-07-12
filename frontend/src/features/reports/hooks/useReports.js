@@ -405,35 +405,39 @@ export function usePartialPayments() {
 // 12. Audit Reports (Admin only — calls will 403 without staff.manage)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export function useUserActivities(dateFrom, dateTo) {
+export function useUserActivities(dateFrom, dateTo, options = {}) {
   return useQuery({
     queryKey: ['user-activities', dateFrom, dateTo],
     queryFn: () => api.fetchUserActivities(dateParams(dateFrom, dateTo)),
     staleTime: DEFAULT_STALE,
+    ...options,
   })
 }
 
-export function useLoginActivities(dateFrom, dateTo) {
+export function useLoginActivities(dateFrom, dateTo, options = {}) {
   return useQuery({
     queryKey: ['login-activities', dateFrom, dateTo],
     queryFn: () => api.fetchLoginActivities(dateParams(dateFrom, dateTo)),
     staleTime: DEFAULT_STALE,
+    ...options,
   })
 }
 
-export function useDataChanges(dateFrom, dateTo) {
+export function useDataChanges(dateFrom, dateTo, options = {}) {
   return useQuery({
     queryKey: ['data-changes', dateFrom, dateTo],
     queryFn: () => api.fetchDataChanges(dateParams(dateFrom, dateTo)),
     staleTime: DEFAULT_STALE,
+    ...options,
   })
 }
 
-export function useExportActivities(dateFrom, dateTo) {
+export function useExportActivities(dateFrom, dateTo, options = {}) {
   return useQuery({
     queryKey: ['export-activities', dateFrom, dateTo],
     queryFn: () => api.fetchExportActivities(dateParams(dateFrom, dateTo)),
     staleTime: DEFAULT_STALE,
+    ...options,
   })
 }
 

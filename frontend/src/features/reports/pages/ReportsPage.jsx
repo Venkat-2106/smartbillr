@@ -8,7 +8,7 @@ import useAuthStore from '../../../store/authStore'
 import { usePermissions } from '../../../shared/hooks/usePermissions'
 import {
   useReportSummary,
-  useSalesTrend, useSalesByCustomer, useSalesByProduct, useSalesByCategory,
+  useSalesTrend, useSalesByCustomer, useSalesByProduct,
   useSalesByPaymentMethod, useSalesInvoiceStatus,
   usePurchaseSummary, usePurchaseTrend, usePurchasesBySupplier, usePurchasesByProduct,
   usePurchaseTaxSummary,
@@ -193,7 +193,6 @@ function SalesSection({ dateFrom, dateTo }) {
   const trend = useSalesTrend(period, dateFrom, dateTo)
   const byCustomer = useSalesByCustomer(dateFrom, dateTo)
   const byProduct = useSalesByProduct(dateFrom, dateTo)
-  const byCategory = useSalesByCategory(dateFrom, dateTo)
   const byPayment = useSalesByPaymentMethod(dateFrom, dateTo)
   const invoiceStatus = useSalesInvoiceStatus(dateFrom, dateTo)
   const business = useAuthStore(st => st.business)
@@ -711,13 +710,13 @@ function PaymentsSection({ dateFrom, dateTo }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function AuditSection({ dateFrom, dateTo }) {
-  const activities = useUserActivities(dateFrom, dateTo)
-  const logins = useLoginActivities(dateFrom, dateTo)
-  const changes = useDataChanges(dateFrom, dateTo)
-  const exports = useExportActivities(dateFrom, dateTo)
   const perms = useAuthStore(st => st.permissions)
-
   const isAdmin = perms?.includes('staff.manage')
+
+  const activities = useUserActivities(dateFrom, dateTo, { enabled: isAdmin })
+  const logins = useLoginActivities(dateFrom, dateTo, { enabled: isAdmin })
+  const changes = useDataChanges(dateFrom, dateTo, { enabled: isAdmin })
+  const exports = useExportActivities(dateFrom, dateTo, { enabled: isAdmin })
 
   if (!isAdmin) {
     return <EmptyState icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>} title="Admin Only" description="Audit reports are restricted to administrators." />

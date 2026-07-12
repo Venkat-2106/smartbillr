@@ -38,6 +38,7 @@ def _get_redis_sub():
 
 _subscription_cache: TTLCache | None = TTLCache(maxsize=10000, ttl=60)
 _user_business_cache: TTLCache = TTLCache(maxsize=10000, ttl=60)
+_sub_biz_index: dict[str, set[str]] = {}  # business_id → set of cached user_ids
 
 
 # ── Cache helpers ───────────────────────────────────────────────────────────
@@ -72,7 +73,7 @@ def _cache_sub_get(user_id: str) -> dict | None:
     return None
 
 
-def _cache_sub_set(user_id: str, value: dict | None, subscription_type: str = "trial"):
+def _cache_sub_set(user_id: str, value: dict | None, subscription_type: str = "trial", business_id: str | None = None):
     """
     Cache the subscription check result.
       value=None          → valid subscription; cache {"_valid": True, "subscription_type": ...}
@@ -81,12 +82,17 @@ def _cache_sub_set(user_id: str, value: dict | None, subscription_type: str = "t
     store = {"_valid": True, "subscription_type": subscription_type} if value is None else {**value, "_valid": False}
     if _subscription_cache is not None:
         _subscription_cache[KEY_SUB.format(user_id=user_id)] = store
+    if business_id:
+        _user_business_cache[user_id] = business_id
+        _sub_biz_index.setdefault(business_id, set()).add(user_id)
     try:
         r = _get_redis_sub()
         if r is not None:
             r.setex(
                 KEY_SUB.format(user_id=user_id), 60, json.dumps(store)
             )
+            if business_id:
+                r.setex(KEY_BIZ.format(user_id=user_id), 60, business_id)
     except Exception:
         pass
 
@@ -95,7 +101,11 @@ def _cache_sub_set(user_id: str, value: dict | None, subscription_type: str = "t
 
 
 def clear_subscription_user_cache(user_id: str):
-    _user_business_cache.pop(user_id, None)
+    biz = _user_business_cache.pop(user_id, None)
+    if biz and biz in _sub_biz_index:
+        _sub_biz_index[biz].discard(user_id)
+        if not _sub_biz_index[biz]:
+            del _sub_biz_index[biz]
     if _subscription_cache is not None:
         _subscription_cache.pop(KEY_SUB.format(user_id=user_id), None)
     try:
@@ -112,19 +122,14 @@ def clear_subscription_user_cache(user_id: str):
 def clear_subscription_business_cache(business_id: str):
     """
     Invalidate subscription cache entries for ALL users belonging to a business.
-    Both _user_business_cache and _subscription_cache are keyed by user_id,
-    so we scan and match by business_id — same pattern as auth.py's
-    clear_business_users_cache.
+
+    Uses _sub_biz_index for O(1) lookup instead of scanning _user_business_cache.
+    Stale index entries (from TTL expiry) are silently skipped.
     """
-    user_ids_to_clear = []
-
-    for key, val in list(_user_business_cache.items()):
-        if val == business_id:
-            user_ids_to_clear.append(key)
-            _user_business_cache.pop(key, None)
-
-    if _subscription_cache is not None:
-        for uid in user_ids_to_clear:
+    user_ids = _sub_biz_index.pop(business_id, set())
+    for uid in user_ids:
+        _user_business_cache.pop(uid, None)
+        if _subscription_cache is not None:
             _subscription_cache.pop(KEY_SUB.format(user_id=uid), None)
 
     try:
@@ -216,11 +221,13 @@ def _check_subscription_for_user(user_id: str, db=None) -> tuple[dict | None, st
             _cache_sub_set(user_id, result)
             return result, "trial"
 
+        business_id = str(profile_row.business_id)
+
         # Step 2 — Now that we have the business_id, set the GUC so
         # businesses' tenant_access_policy allows the subscription query.
         db.execute(
             text("SET LOCAL app.current_business_id = :bid"),
-            {"bid": str(profile_row.business_id)},
+            {"bid": business_id},
         )
 
         row = db.execute(
@@ -237,7 +244,7 @@ def _check_subscription_for_user(user_id: str, db=None) -> tuple[dict | None, st
                   AND (is_deleted = false OR is_deleted IS NULL)
                 LIMIT 1
             """),
-            {"bid": str(profile_row.business_id)},
+            {"bid": business_id},
         ).fetchone()
 
         if not row:
@@ -299,7 +306,7 @@ def _check_subscription_for_user(user_id: str, db=None) -> tuple[dict | None, st
                 "message": "Account subscription status is invalid. Please contact support.",
             }
 
-        _cache_sub_set(user_id, result, subscription_type)
+        _cache_sub_set(user_id, result, subscription_type, business_id=business_id)
         return result, subscription_type
 
     except Exception as e:

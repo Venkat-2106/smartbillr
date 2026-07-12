@@ -79,6 +79,7 @@ security = HTTPBearer()
 #   This eliminates the multi-instance stale cache window entirely.
 #   Falls back to TTLCache if REDIS_URL is not set.
 _permissions_cache: TTLCache | None = TTLCache(maxsize=1000, ttl=10)
+_business_users_index: dict[str, set[str]] = {}  # business_id → set of cached user_ids
 _redis = None
 
 def _get_redis():
@@ -123,6 +124,9 @@ def _cache_set(key: str, value: dict, ttl: int = 10):
         except Exception:
             pass
     if _permissions_cache is not None:
+        biz_id = value.get("business_id")
+        if biz_id:
+            _business_users_index.setdefault(biz_id, set()).add(key)
         _permissions_cache[key] = value
 
 
@@ -134,6 +138,13 @@ def _cache_pop(key: str):
         except Exception:
             pass
     if _permissions_cache is not None:
+        entry = _permissions_cache.get(key)
+        if entry:
+            biz_id = entry.get("business_id")
+            if biz_id and biz_id in _business_users_index:
+                _business_users_index[biz_id].discard(key)
+                if not _business_users_index[biz_id]:
+                    del _business_users_index[biz_id]
         _permissions_cache.pop(key, None)
 
 # ── JWKS client ─────────────────────────────────────────────────────────
@@ -186,6 +197,10 @@ def clear_business_users_cache(business_id: str) -> None:
 
     Called when a business is suspended or reactivated so cached
     entries don't bypass the suspension check for up to 10s.
+
+    Uses _business_users_index for O(1) lookup instead of scanning the
+    full _permissions_cache. Stale index entries (from TTL expiry) are
+    silently skipped — the cache entry is already gone.
     """
     r = _get_redis()
     if r:
@@ -198,15 +213,13 @@ def clear_business_users_cache(business_id: str) -> None:
                     entry = json.loads(data)
                     if entry.get("business_id") == business_id:
                         r.delete(key)
-            return
         except Exception:
             pass
-    if _permissions_cache is not None:
-        keys = list(_permissions_cache.keys())
-        for key in keys:
-            entry = _permissions_cache.get(key)
-            if entry and entry.get("business_id") == business_id:
-                _permissions_cache.pop(key, None)
+
+    user_ids = _business_users_index.pop(business_id, set())
+    for uid in user_ids:
+        if _permissions_cache is not None and uid in _permissions_cache:
+            _permissions_cache.pop(uid, None)
 
 
 def decode_token_payload(token: str) -> dict:

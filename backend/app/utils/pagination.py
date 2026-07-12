@@ -10,9 +10,10 @@
 
 from fastapi import Depends, Query
 from sqlalchemy.orm import Session
-from app.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.database import get_db, get_async_db
 from app.middleware.auth import verify_token
-from app.utils.usage_limits import fetch_subscription_type
+from app.utils.usage_limits import fetch_subscription_type, fetch_subscription_type_async
 from app.utils.subscription_features import get_feature_limits
 
 
@@ -25,6 +26,36 @@ def paginate(
     # Apply tier-based export row cap
     business_id = current_user["business_id"]
     sub_type = fetch_subscription_type(db, business_id)
+    tier_limits = get_feature_limits(sub_type)
+    max_rows = tier_limits.get("max_export_rows")
+    capped = False
+    if max_rows is not None and limit > max_rows:
+        limit = max_rows
+        capped = True
+
+    offset = (page - 1) * limit
+    return {
+        "page":        page,
+        "limit":       limit,
+        "offset":      offset,
+        "_capped":     capped,
+    }
+
+
+async def paginate_async(
+    page:  int = Query(default=1,  ge=1,          description="Page number"),
+    limit: int = Query(default=20, ge=1, le=10000, description="Items per page (max 10000)"),
+    current_user: dict = Depends(verify_token),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Async variant of paginate() for async route handlers.
+
+    Uses the async session (get_async_db) so paginated async routes open
+    only one DB connection instead of two (async + sync).  The tier-based
+    export cap is fetched via fetch_subscription_type_async.
+    """
+    business_id = current_user["business_id"]
+    sub_type = await fetch_subscription_type_async(db, business_id)
     tier_limits = get_feature_limits(sub_type)
     max_rows = tier_limits.get("max_export_rows")
     capped = False

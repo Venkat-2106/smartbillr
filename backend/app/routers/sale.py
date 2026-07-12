@@ -11,7 +11,7 @@ from app.models.sale import Sale
 from app.models.sale_item import SaleItem
 from app.schemas.sale import SaleCreate
 from app.utils.response import success_response, error_response
-from app.utils.pagination import paginate, pagination_response
+from app.utils.pagination import paginate_async, pagination_response
 from app.services.sale_service import (
     generate_invoice_number,
     validate_and_cache_products,
@@ -121,7 +121,7 @@ async def create_sale(
 async def get_sales(
     current_user: dict = Depends(require_permission("sales.view")),
     db: AsyncSession = Depends(get_async_db),
-    pagination: dict = Depends(paginate),
+    pagination: dict = Depends(paginate_async),
     search: str = Query(None),
     status: str = Query(None),
     date_from: str = Query(None),
@@ -199,7 +199,7 @@ async def handle_sale_status_patch(
         Sale.sales_id == sales_id,
         Sale.business_id == business_id,
         Sale.is_deleted == False
-    ))).scalar_one_or_none()
+    ).with_for_update())).scalar_one_or_none()
 
     if not sale:
         return error_response("Sale not found", 404)

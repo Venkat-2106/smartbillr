@@ -21,7 +21,7 @@ from app.middleware.rbac import require_permission, async_set_rls_gucs_after_com
 from app.models.customer import Customer
 from app.schemas.customer import CustomerCreate, CustomerUpdate
 from app.utils.response import success_response, error_response
-from app.utils.pagination import paginate, pagination_response
+from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 from typing import Optional
@@ -121,7 +121,7 @@ async def create_customer(
 async def get_all_customers(
     current_user: dict          = Depends(require_permission("customers.manage")),
     db:           AsyncSession  = Depends(get_async_db),
-    pagination:   dict          = Depends(paginate),
+    pagination:   dict          = Depends(paginate_async),
     search:       Optional[str] = Query(default=None, description="Search by name, phone, or email"),
     phone:        Optional[str] = Query(default=None, description="Exact phone match (for sale form auto-fill)"),
     updated_from: Optional[str] = Query(default=None, description="Filter updated_at >= YYYY-MM-DD"),
@@ -383,7 +383,7 @@ async def get_customer(
     cust_id:      str,
     current_user: dict = Depends(require_permission("customers.manage")),
     db:           AsyncSession = Depends(get_async_db),
-    pagination:   dict = Depends(paginate)
+    pagination:   dict = Depends(paginate_async)
 ):
     business_id = current_user["business_id"]
 

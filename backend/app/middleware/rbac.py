@@ -223,17 +223,29 @@ def set_rls_gucs_after_commit(db: Session, current_user: dict) -> None:
 
 
 async def async_set_rls_gucs(db: AsyncSession, current_user: dict) -> None:
-    """Set tenant RLS GUCs on an async db session. Call BEFORE any queries."""
-    await db.execute(_SET_RLS_SQL, {"uid": str(current_user["user_id"])})
-    await db.execute(_SET_BID_SQL, {"bid": str(current_user["business_id"])})
+    """Set tenant RLS GUCs on an async db session. Call BEFORE any queries.
+
+    Uses set_config() instead of SET LOCAL with bind params because asyncpg
+    sends bind params server-side ($1), and Postgres's SET/SET LOCAL grammar
+    doesn't accept parameters — it throws a syntax error. set_config() is an
+    ordinary function call that does accept real bind parameters.
+    """
+    await db.execute(
+        text("SELECT set_config('app.current_user_id', :uid, true)"),
+        {"uid": str(current_user["user_id"])},
+    )
+    await db.execute(
+        text("SELECT set_config('app.current_business_id', :bid, true)"),
+        {"bid": str(current_user["business_id"])},
+    )
 
 
 async def async_set_rls_gucs_after_commit(db: AsyncSession, current_user: dict) -> None:
     """Re-set tenant RLS GUCs on an async session after await db.commit().
 
-    SET LOCAL is transaction-scoped — the values are lost when the
-    transaction ends. Call this after every commit that is followed by
-    further queries on the same async session.
+    set_config(name, value, is_local=true) is transaction-scoped — the values
+    are lost when the transaction ends. Call this after every commit that is
+    followed by further queries on the same async session.
     """
     await async_set_rls_gucs(db, current_user)
 

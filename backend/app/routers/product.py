@@ -72,7 +72,7 @@ from app.models.product import Product
 from app.models.category import Category
 from app.schemas.product import ProductCreate, ProductUpdate
 from app.utils.response import success_response, error_response
-from app.utils.pagination import paginate, pagination_response
+from app.utils.pagination import paginate_async, pagination_response
 from app.utils.queries import fetch_stock_kpi_counts_async
 from app.utils.timestamp import fmt_ts
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
@@ -350,7 +350,7 @@ async def create_product(
 async def get_all_products(
     current_user: dict          = Depends(require_permission("products.view")),
     db:           AsyncSession  = Depends(get_async_db),
-    pagination:   dict          = Depends(paginate),
+    pagination:   dict          = Depends(paginate_async),
     search:       Optional[str] = Query(default=None, description="Search by name or barcode"),
     updated_from: Optional[str] = Query(default=None, description="Filter updated_at >= this date (YYYY-MM-DD)"),
     updated_to:   Optional[str] = Query(default=None, description="Filter updated_at <= this date (YYYY-MM-DD)"),

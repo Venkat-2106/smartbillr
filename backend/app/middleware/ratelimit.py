@@ -58,26 +58,22 @@ def _client_ip(request: Request) -> str:
 
 def _jwt_user_id(request: Request) -> str | None:
     """
-    Extracts 'sub' from the JWT WITHOUT verifying the signature.
+    Extracts 'sub' from the JWT payload.
 
-    This is intentional: this value is only used to pick a per-user
-    rate-limit bucket key, never for authorization. Real auth happens
-    later via verify_token() (app/middleware/auth.py), which fully
-    verifies the signature via JWKS.
-
-    Tradeoff: a forged token with an arbitrary 'sub' could exhaust
-    another user's rate-limit quota (denial-of-service against rate
-    limiting only — not against their account or data, since the
-    forged token is rejected downstream by verify_token). Accepted
-    as low-risk since the alternative (verifying every token here too)
-    would double signature-verification cost on every request.
+    First tries the pre-decoded payload already stored on request.state
+    by SubscriptionMiddleware (which runs earlier in the middleware stack).
+    Falls back to a standalone decode WITHOUT signature verification for
+    excluded paths where SubscriptionMiddleware didn't run (e.g. /auth/*).
     """
+    payload = getattr(request.state, "verified_jwt_payload", None)
+    if payload:
+        return payload.get("sub")
+    # Fallback for excluded paths where SubscriptionMiddleware didn't run
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         return None
-    token = auth[len("Bearer "):]
     try:
-        payload = pyjwt.decode(token, options={"verify_signature": False})
+        payload = pyjwt.decode(auth[len("Bearer "):], options={"verify_signature": False})
         return payload.get("sub")
     except pyjwt.InvalidTokenError:
         return None

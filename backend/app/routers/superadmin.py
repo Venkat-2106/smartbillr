@@ -19,7 +19,7 @@ from typing import Optional
 
 from app.database import get_db
 from app.middleware.auth import clear_user_cache, clear_business_users_cache
-from app.middleware.rbac import verify_super_admin_with_rls_with_rls
+from app.middleware.rbac import verify_super_admin_with_rls
 from app.utils.response import success_response, error_response
 from app.schemas.business import SubscriptionUpdate, VALID_PAYMENT_STATUSES, VALID_SUBSCRIPTION_TYPES
 

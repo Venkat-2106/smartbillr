@@ -50,6 +50,7 @@
 from fastapi import HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from app.database import get_db
 from app.middleware.auth import verify_token, verify_super_admin
 from app.dependencies.subscription import verify_subscription
 

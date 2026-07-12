@@ -61,6 +61,22 @@
 # 3. POST: added explicit barcode duplicate check after name check.
 # 4. PUT:  added explicit barcode duplicate check with exclude_id pattern.
 # ─────────────────────────────────────────────────────────────────────────────
+#
+# ── ASYNC MIGRATION NOTE (2026-07) ──────────────────────────────────────────
+#
+# This router was migrated from sync SQLAlchemy (psycopg2) to async
+# (asyncpg).  Key patterns to be aware of:
+#
+#   - All Session usage → AsyncSession (get_async_db dependency).
+#   - db.execute(...) → await db.execute(...).
+#   - paginate() → paginate_async() (avoids opening a second sync conn).
+#   - SET LOCAL with bind params is NOT supported by asyncpg (server-side
+#     binding sends $1 which SET grammar rejects).  All GUC-setting uses
+#     set_config() instead — see middleware/rbac.py for the canonical pattern.
+#   - paginate_async lives in utils/pagination.py and is shared by all
+#     async routers (customer, product, sale).  Don't add a local copy.
+#
+# ─────────────────────────────────────────────────────────────────────────────
 
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -114,8 +130,16 @@ async def get_product_with_profit(db: AsyncSession, prod_id, business_id: str):
 
 
 # ── Helper: format one product row as a dict ──────────────────────────────
-def row_to_dict(row, show_profit: bool = True):
-    return {
+def row_to_dict(row, show_profit: bool = True, include_audit: bool = True):
+    """Convert a product query row to a JSON-safe dict.
+
+    show_profit  — when False, cost_price and profit are omitted (non-admin staff).
+    include_audit — when False, created_by/created_by_name are omitted; used by
+                     the list endpoint which doesn't JOIN the profiles table for
+                     created_by (saves one JOIN).  The detail endpoint passes
+                     True (default) since it already JOINs both pr1 and pr2.
+    """
+    d = {
         "prod_id":              str(row.prod_id),
         "business_id":          str(row.business_id),
         "category_id":          str(row.category_id) if row.category_id else None,
@@ -134,37 +158,14 @@ def row_to_dict(row, show_profit: bool = True):
         "unit":                 row.unit,
         "is_deleted":           row.is_deleted,
         "prod_created_at":      fmt_ts(row.prod_created_at),
-        "created_by":           str(row.created_by)  if row.created_by  else None,
-        "created_by_name":      row.created_by_name  if row.created_by_name  else None,
         "updated_at":           fmt_ts(row.updated_at),
         "updated_by":           str(row.updated_by)  if row.updated_by  else None,
         "last_updated_by":      row.last_updated_by  if row.last_updated_by  else None,
     }
-
-
-# ── Helper: format one product row for list response ─────────────────────
-def row_to_dict_list(row, show_profit: bool = True):
-    return {
-        "prod_id":              str(row.prod_id),
-        "business_id":          str(row.business_id),
-        "category_id":          str(row.category_id) if row.category_id else None,
-        "category_name":        row.category_name if row.category_name else None,
-        "prod_name":            row.prod_name,
-        "prod_sell_price":      float(row.prod_sell_price),
-        "prod_mrp":             float(row.prod_mrp) if row.prod_mrp is not None else None,
-        "prod_cost_price":      float(row.prod_cost_price) if show_profit else None,
-        "prod_profit":          float(row.prod_profit) if (show_profit and row.prod_profit is not None) else None,
-        "prod_stock_qty":       row.prod_stock_qty,
-        "prod_low_stock_alert": row.prod_low_stock_alert,
-        "tax_rate":             float(row.tax_rate) if row.tax_rate is not None else 0,
-        "tax_code":             row.tax_code,
-        "barcode":              row.barcode,
-        "unit":                 row.unit,
-        "prod_created_at":      fmt_ts(row.prod_created_at),
-        "updated_at":           fmt_ts(row.updated_at),
-        "updated_by":           str(row.updated_by)  if row.updated_by  else None,
-        "last_updated_by":      row.last_updated_by  if row.last_updated_by  else None,
-    }
+    if include_audit:
+        d["created_by"] = str(row.created_by) if row.created_by else None
+        d["created_by_name"] = row.created_by_name if row.created_by_name else None
+    return d
 
 
 # ── Helper: check for duplicate product name within a business ────────────────
@@ -430,7 +431,7 @@ async def get_all_products(
 
     return success_response(
         pagination_response(
-            [row_to_dict_list(r, show_profit=show_profit) for r in rows],
+            [row_to_dict(r, show_profit=show_profit, include_audit=False) for r in rows],
             total,
             pagination["page"],
             pagination["limit"],
@@ -735,25 +736,23 @@ async def get_product(
             {"prod_id": prod_id, "bid": business_id}
         )).fetchall()
 
+        # Safe float parser for audit old_data/new_data values.
+        # Defined once outside the loop to avoid re-creating the closure
+        # on every iteration.  Returns None for missing or unparseable values.
+        def to_float(v):
+            try:
+                return float(v) if v is not None else None
+            except (TypeError, ValueError):
+                return None
+
         for a in audit_rows:
             old_data = a.old_data or {}
             new_data = a.new_data or {}
 
-            old_sell = old_data.get("prod_sell_price")
-            new_sell = new_data.get("prod_sell_price")
-            old_cost = old_data.get("prod_cost_price")
-            new_cost = new_data.get("prod_cost_price")
-
-            def to_float(v):
-                try:
-                    return float(v) if v is not None else None
-                except (TypeError, ValueError):
-                    return None
-
-            old_sell = to_float(old_sell)
-            new_sell = to_float(new_sell)
-            old_cost = to_float(old_cost)
-            new_cost = to_float(new_cost)
+            old_sell = to_float(old_data.get("prod_sell_price"))
+            new_sell = to_float(new_data.get("prod_sell_price"))
+            old_cost = to_float(old_data.get("prod_cost_price"))
+            new_cost = to_float(new_data.get("prod_cost_price"))
 
             sell_changed = old_sell is not None and new_sell is not None and old_sell != new_sell
             cost_changed = old_cost is not None and new_cost is not None and old_cost != new_cost

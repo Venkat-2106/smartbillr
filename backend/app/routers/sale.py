@@ -195,6 +195,9 @@ async def handle_sale_status_patch(
 
     business_id = current_user["business_id"]
 
+    # with_for_update: row-level lock prevents two concurrent PATCHes from
+    # both reading the same pending sale and applying duplicate adjustments.
+    # This is the only endpoint that mutates sale financials in-place.
     sale = (await db.execute(select(Sale).where(
         Sale.sales_id == sales_id,
         Sale.business_id == business_id,

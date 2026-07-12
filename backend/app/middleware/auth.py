@@ -508,7 +508,11 @@ async def verify_super_admin_token(
     # (on businesses, and any future cross-tenant admin tables) grants access.
     # Only reachable after the super_admins row lookup above succeeded, so a
     # regular tenant user has no path to setting this GUC themselves.
-    await db.execute(text("SET LOCAL app.is_super_admin = 'true'"))
+    #
+    # Uses set_config() instead of SET LOCAL — see middleware/rbac.py for
+    # why: asyncpg sends bind params server-side ($1), and Postgres's
+    # SET/SET LOCAL grammar rejects them with a syntax error.
+    await db.execute(text("SELECT set_config('app.is_super_admin', 'true', true)"))
 
     return {"user_id": user_id, "is_super_admin": True}
 

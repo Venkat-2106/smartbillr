@@ -50,8 +50,13 @@ async def paginate_async(
 ):
     """Async variant of paginate() for async route handlers.
 
-    Uses the async session (get_async_db) so paginated async routes open
-    only one DB connection instead of two (async + sync).  The tier-based
+    Added as part of the sync→async migration (2026-07).
+
+    Why a separate function instead of making paginate() generic?
+    paginate() uses the sync SessionLocal and is shared by 16+ sync
+    routers.  Making it async would break every sync caller.  The async
+    routers (customer, product, sale) use this async variant so they open
+    only ONE DB connection instead of two (async + sync).  The tier-based
     export cap is fetched via fetch_subscription_type_async.
     """
     business_id = current_user["business_id"]

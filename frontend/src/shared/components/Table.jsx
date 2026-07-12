@@ -1,4 +1,4 @@
-import { useState, memo } from 'react'
+import { memo } from 'react'
 
 function Skeleton({ w = '60%', h = 13 }) {
   return (
@@ -57,15 +57,8 @@ function Table({
 }) {
   const SKELETON_ROWS = 8
 
-  // FIX: Track hovered column via React state instead of direct DOM mutation.
-  // Previously: onMouseEnter/Leave set e.currentTarget.style.color directly.
-  // Problem: React wipes inline styles on re-render (e.g. when user types in
-  // SearchBar), causing the hover color to snap off while the mouse is still
-  // on the header.
-  // Fix: hoveredCol holds the key of the currently hovered <th>. The color
-  // is derived from state in the style object — React manages it cleanly.
-  const [hoveredCol, setHoveredCol] = useState(null)
-  const [hoveredRow, setHoveredRow] = useState(null)
+  // Hover highlight is now pure CSS (:hover), so no React state is needed.
+  // Sort-highlight stays state-driven via the `sorted` class on <th>.
 
   return (
     <>
@@ -89,36 +82,32 @@ function Table({
                 {columns.map(col => {
                   const isSorted = sortKey === col.key
                   const canSort  = col.sortable && onSort
-                  // Header text is accent if: currently sorted OR being hovered (and sortable)
-                  const isHighlighted = isSorted || (canSort && hoveredCol === col.key)
 
                   return (
                       <th
                         key={col.key}
                         onClick={() => canSort && onSort(col.key)}
                         onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && canSort) { e.preventDefault(); onSort(col.key); } }}
-                        onMouseEnter={() => canSort && setHoveredCol(col.key)}
-                        onMouseLeave={() => setHoveredCol(null)}
+                        data-sortable={canSort ? '' : undefined}
                         tabIndex={canSort ? 0 : -1}
                         role={canSort ? 'columnheader button' : 'columnheader'}
                         aria-sort={isSorted ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
-                      style={{
-                        padding: '12px 20px',
-                        textAlign: col.align === 'right'  ? 'right'
-                                 : col.align === 'center' ? 'center' : 'left',
-                        fontSize: 11,
-                        fontWeight: 700,
-                        // FIX: color now derived from state — never from DOM mutation
-                        color: isHighlighted ? 'var(--accent-600)' : 'var(--text-muted)',
-                        letterSpacing: '0.08em',
-                        textTransform: 'uppercase',
-                        whiteSpace: 'nowrap',
-                        width: col.width || 'auto',
-                        fontFamily: 'var(--font-sans, "Inter", sans-serif)',
-                        cursor: canSort ? 'pointer' : 'default',
-                        userSelect: 'none',
-                        transition: 'color 0.14s',
-                      }}
+                        className={`table-header-cell${isSorted ? ' sorted' : ''}`}
+                        style={{
+                          padding: '12px 20px',
+                          textAlign: col.align === 'right'  ? 'right'
+                                   : col.align === 'center' ? 'center' : 'left',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          letterSpacing: '0.08em',
+                          textTransform: 'uppercase',
+                          whiteSpace: 'nowrap',
+                          width: col.width || 'auto',
+                          fontFamily: 'var(--font-sans, "Inter", sans-serif)',
+                          cursor: canSort ? 'pointer' : 'default',
+                          userSelect: 'none',
+                          transition: 'color 0.14s',
+                        }}
                     >
                       {col.label}
                       {col.sortable && (
@@ -167,27 +156,21 @@ function Table({
               ) : (
                 rows.map((row, i) => {
                   const rowId = row[rowKey] ?? i
-                  const isHovered = hoveredRow === rowId
                   const isSelected = selectedIndex != null && i === selectedIndex
                   const delay = Math.min(i * 30, 300)
                   return (
                   <tr
                     key={rowId}
+                    className={`table-row${isSelected ? ' selected' : ''}`}
                     onClick={() => {
                       onSelectedIndexChange?.(i)
                       onRowClick?.(row)
                     }}
-                    onMouseEnter={() => setHoveredRow(rowId)}
-                    onMouseLeave={() => setHoveredRow(null)}
                     style={{
                       borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none',
                       cursor: onRowClick ? 'pointer' : 'default',
                       transition: 'background 0.15s',
-                      background: isSelected
-                        ? 'var(--accent-glow)'
-                        : isHovered
-                        ? 'var(--bg-hover)'
-                        : 'transparent',
+                      background: isSelected ? 'var(--accent-glow)' : undefined,
                       boxShadow: isSelected
                         ? 'inset 2px 0 0 var(--accent-500)'
                         : 'none',

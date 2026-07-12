@@ -280,6 +280,11 @@ body {
 
 .row-in { animation: row-in 0.25s var(--ease-out) both; }
 
+/* ─── Table Row & Header Hover ──────────────────────────────── */
+.table-row:hover:not(.selected) { background: var(--bg-hover); }
+.table-header-cell[data-sortable]:hover { color: var(--accent-600); }
+.table-header-cell.sorted { color: var(--accent-600); }
+
 /* ─── Card Hover ─────────────────────────────────────────────── */
 .card-hover {
   transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), border-color 0.2s var(--ease-out);

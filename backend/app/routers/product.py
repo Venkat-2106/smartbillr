@@ -733,6 +733,7 @@ def get_product(
                   AND al.business_id = CAST(:bid AS uuid)
                   AND al.action_type = 'update'
                 ORDER BY al.created_at DESC
+                LIMIT 100
             """),
             {"prod_id": prod_id, "bid": business_id}
         ).fetchall()

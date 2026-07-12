@@ -24,6 +24,8 @@ export function usePermissionsSync() {
   useEffect(() => {
     if (!profile) return
     const current = useAuthStore.getState()
+    // FIX (LOW-9 cleanup): permissions lives at profile.permissions, not a top-level
+    // store field. The old current.permissions was always [] → always saw "changed".
     const oldPerms = current.profile?.permissions ?? []
     const newPerms = profile.permissions ?? []
 

@@ -13,6 +13,9 @@
 import useAuthStore from "../../store/authStore";
 
 export function usePermissions() {
+  // FIX (LOW-9 cleanup): permissions lives at profile.permissions, not a top-level
+  // store field. The old s.permissions was always undefined → can()/canAny()/canAll()
+  // always returned false.
   const permissions = useAuthStore(s => s.profile?.permissions)
   const profile     = useAuthStore(s => s.profile)
   const role        = profile?.role ?? 'staff'

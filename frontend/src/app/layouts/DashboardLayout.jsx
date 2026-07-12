@@ -344,6 +344,8 @@ export default function DashboardLayout() {
 
   const { theme, setTheme, accent, setAccent } = useTheme()
   const { user, business, profile } = useAuthStore()
+  // FIX (LOW-9 cleanup): permissions lives at profile.permissions, not a top-level
+  // store field. The old s.permissions was always undefined → crashed .includes().
   const permissions = useAuthStore(s => s.profile?.permissions) ?? []
   const showBanner  = useAuthStore(s => s.subscription && !s.subscription.is_expired)
   const navigate = useNavigate()

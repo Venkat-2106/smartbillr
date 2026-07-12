@@ -8,6 +8,8 @@ export default function ProtectedRoute({ children, permission = null }) {
   )
   const token       = useAuthStore((s) => s.token)
   const profile     = useAuthStore((s) => s.profile)
+  // FIX (LOW-9 cleanup): permissions lives at profile.permissions, not a top-level
+  // store field. The old s.permissions was always undefined → crashed .includes().
   const permissions = useAuthStore((s) => s.profile?.permissions)
 
   useEffect(() => {
@@ -23,6 +25,7 @@ export default function ProtectedRoute({ children, permission = null }) {
     return <Navigate to="/login" replace />
   }
 
+  // Guard: permissions is [] until profile loads from API
   if (permission && !(permissions ?? []).includes(permission)) {
     return <Navigate to="/unauthorized" replace />
   }

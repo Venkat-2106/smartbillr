@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, select
 from sqlalchemy.exc import IntegrityError
 from app.database import get_async_db
-from app.middleware.rbac import require_permission
+from app.middleware.rbac import require_permission, async_set_rls_gucs_after_commit
 from app.models.customer import Customer
 from app.schemas.customer import CustomerCreate, CustomerUpdate
 from app.utils.response import success_response, error_response
@@ -96,6 +96,8 @@ async def create_customer(
     except IntegrityError:
         await db.rollback()
         return error_response("Customer with this phone already exists", 400)
+    # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
+    await async_set_rls_gucs_after_commit(db, current_user)
     await db.refresh(new_customer)
 
     # Fetch the creator's name so the table shows it immediately after creation
@@ -658,6 +660,8 @@ async def update_customer(
     except IntegrityError:
         await db.rollback()
         return error_response("Customer with this phone already exists", 400)
+    # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
+    await async_set_rls_gucs_after_commit(db, current_user)
     await db.refresh(customer)
 
     # Fetch the updater's name to return in response

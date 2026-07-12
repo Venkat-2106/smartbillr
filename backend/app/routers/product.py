@@ -67,7 +67,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select, text
 from app.database import get_async_db
-from app.middleware.rbac import require_permission, get_current_user_with_permissions
+from app.middleware.rbac import require_permission, get_current_user_with_permissions, async_set_rls_gucs_after_commit
 from app.models.product import Product
 from app.models.category import Category
 from app.schemas.product import ProductCreate, ProductUpdate
@@ -254,7 +254,7 @@ async def create_product(
             Category.category_id == data.category_id,
             Category.business_id == business_id,
             Category.is_deleted == False
-        )).scalar_one_or_none())
+        ))).scalar_one_or_none()
         if not category:
             return error_response("Category not found", 404)
 
@@ -295,7 +295,7 @@ async def create_product(
         tax_code              = data.tax_code,
         barcode               = data.barcode,
         unit                  = data.unit,
-        prod_created_at       = datetime.now(timezone.utc),
+        prod_created_at       = datetime.now(timezone.utc).replace(tzinfo=None),
         created_by            = current_user["user_id"],
         updated_by            = current_user["user_id"],
     )
@@ -316,6 +316,9 @@ async def create_product(
             return error_response("A product with this name already exists.", 400)
         # Default → barcode uniqueness violation
         return error_response("A product with this barcode already exists.", 400)
+
+    # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
+    await async_set_rls_gucs_after_commit(db, current_user)
 
     row = await get_product_with_profit(db, new_prod_id, business_id)
 
@@ -825,7 +828,7 @@ async def update_product(
         Product.prod_id      == prod_id,
         Product.business_id  == business_id,
         Product.is_deleted   == False
-    )).scalar_one_or_none())
+    ))).scalar_one_or_none()
 
     if not product:
         return error_response("Product not found", status_code=404)
@@ -836,7 +839,7 @@ async def update_product(
             Category.category_id == data.category_id,
             Category.business_id == business_id,
             Category.is_deleted  == False
-        )).scalar_one_or_none())
+        ))).scalar_one_or_none()
         if not category:
             return error_response("Category not found", status_code=404)
         product.category_id = data.category_id
@@ -882,6 +885,9 @@ async def update_product(
             return error_response("A product with this name already exists.", 400)
         return error_response("A product with this barcode already exists.", 400)
 
+    # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
+    await async_set_rls_gucs_after_commit(db, current_user)
+
     await db.refresh(product)
 
     row = await get_product_with_profit(db, product.prod_id, business_id)
@@ -907,7 +913,7 @@ async def delete_product(
         Product.prod_id     == prod_id,
         Product.business_id == business_id,
         Product.is_deleted  == False
-    )).scalar_one_or_none())
+    ))).scalar_one_or_none()
 
     if not product:
         return error_response("Product not found", status_code=404)

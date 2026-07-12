@@ -49,6 +49,7 @@
 
 from fastapi import HTTPException, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.database import get_db
 from app.middleware.auth import verify_token, verify_super_admin
@@ -219,6 +220,22 @@ def set_rls_gucs_after_commit(db: Session, current_user: dict) -> None:
     further queries on the same sync session.
     """
     set_rls_gucs(db, current_user)
+
+
+async def async_set_rls_gucs(db: AsyncSession, current_user: dict) -> None:
+    """Set tenant RLS GUCs on an async db session. Call BEFORE any queries."""
+    await db.execute(_SET_RLS_SQL, {"uid": str(current_user["user_id"])})
+    await db.execute(_SET_BID_SQL, {"bid": str(current_user["business_id"])})
+
+
+async def async_set_rls_gucs_after_commit(db: AsyncSession, current_user: dict) -> None:
+    """Re-set tenant RLS GUCs on an async session after await db.commit().
+
+    SET LOCAL is transaction-scoped — the values are lost when the
+    transaction ends. Call this after every commit that is followed by
+    further queries on the same async session.
+    """
+    await async_set_rls_gucs(db, current_user)
 
 
 def require_permission_with_rls(permission_code: str):

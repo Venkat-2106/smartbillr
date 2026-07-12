@@ -15,11 +15,8 @@ _STALE_AFTER_SECONDS = 300  # 5 minutes
 def refresh_dashboard_mvs(db: Session, force: bool = False) -> None:
     """Refresh dashboard materialized views if stale.
 
-    Uses CONCURRENTLY so reads are never blocked.
-    Skips refresh if views were refreshed less than 5 minutes ago
-    (unless *force* is True).
-
-    Failed refreshes (e.g. non-PostgreSQL backend) are silently ignored.
+    Uses the caller's db session so it stays inside the same transaction.
+    Kept for manual/admin trigger endpoints (pass force=True).
     """
     global _last_refresh
 
@@ -37,3 +34,31 @@ def refresh_dashboard_mvs(db: Session, force: bool = False) -> None:
             "Materialized view refresh failed (dashboard will serve stale data): %s", e
         )
         db.rollback()
+
+
+def refresh_dashboard_mvs_background() -> None:
+    """Refresh dashboard materialized views in a background thread.
+
+    Opens its own SessionLocal() so the refresh never blocks the user's
+    request or borrows their connection.  Uses the same 5-minute stale
+    check as the synchronous variant.
+    """
+    from app.database import SessionLocal          # avoid circular import at module level
+
+    global _last_refresh
+
+    now = time()
+    if (now - _last_refresh) < _STALE_AFTER_SECONDS:
+        return
+
+    db = SessionLocal()
+    try:
+        db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_SUMMARY}"))
+        db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_TREND}"))
+        db.commit()
+        _last_refresh = now
+    except OperationalError as e:
+        logging.warning("MV background refresh failed: %s", e)
+        db.rollback()
+    finally:
+        db.close()

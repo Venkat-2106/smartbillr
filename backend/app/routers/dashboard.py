@@ -23,13 +23,13 @@
 #                         if user lacks it, those fields return null
 
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import get_db
 from app.middleware.rbac import require_permission, get_current_user_with_permissions
 from app.utils.response import success_response, error_response
-from app.utils.mv_refresh import refresh_dashboard_mvs
+from app.utils.mv_refresh import refresh_dashboard_mvs_background
 from datetime import datetime, timedelta, timezone
 import calendar
 
@@ -69,6 +69,7 @@ router = APIRouter(prefix="/v1/dashboard", tags=["Dashboard"])
 
 @router.get("/summary")
 def get_dashboard_summary(
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(require_permission("dashboard.view")),
     db: Session = Depends(get_db)
 ):
@@ -76,9 +77,10 @@ def get_dashboard_summary(
     permissions = current_user.get("permissions", set())
     can_see_financials = "dashboard.financial" in permissions
 
-    # Auto-refresh materialized view if stale (>= 5 min since last refresh).
-    # Falls back to live query below if MV hasn't been populated yet.
-    refresh_dashboard_mvs(db)
+    # Fire-and-forget MV refresh in background — dashboard reads from the
+    # (possibly slightly stale) materialized view below, so this never
+    # blocks the user's response.
+    background_tasks.add_task(refresh_dashboard_mvs_background)
 
     main_row = db.execute(
         text("""

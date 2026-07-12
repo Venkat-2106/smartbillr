@@ -317,6 +317,136 @@ def _check_subscription_for_user(user_id: str, db=None) -> tuple[dict | None, st
             db.close()
 
 
+async def _check_subscription_for_user_async(user_id: str, db) -> tuple[dict | None, str]:
+    """
+    Async variant of _check_subscription_for_user for use by FastAPI
+    async dependencies (verify_subscription).
+
+    Accepts an AsyncSession. Uses the same caching logic.
+    """
+    cached = _cache_sub_get(user_id)
+    if cached is not None:
+        sub_type = cached.get("subscription_type", "trial") if cached.get("_valid") else cached.get("subscription_type", "trial")
+        return (None if cached.get("_valid") else cached, sub_type)
+
+    try:
+        from sqlalchemy import text
+
+        await db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
+
+        result = await db.execute(
+            text("""
+                SELECT business_id
+                FROM profiles
+                WHERE id = :user_id
+                  AND is_active = true
+                LIMIT 1
+            """),
+            {"user_id": user_id},
+        )
+        profile_row = result.fetchone()
+
+        if not profile_row:
+            err = {
+                "error_code": "INACTIVE",
+                "status": "not_found",
+                "message": "User or business not found",
+            }
+            _cache_sub_set(user_id, err)
+            return err, "trial"
+
+        business_id = str(profile_row.business_id)
+
+        await db.execute(
+            text("SET LOCAL app.current_business_id = :bid"),
+            {"bid": business_id},
+        )
+
+        row_result = await db.execute(
+            text("""
+                SELECT
+                    business_id,
+                    payment_status,
+                    subscription_type,
+                    subscription_end_at,
+                    trial_end_at,
+                    is_active
+                FROM businesses
+                WHERE business_id = CAST(:bid AS uuid)
+                  AND (is_deleted = false OR is_deleted IS NULL)
+                LIMIT 1
+            """),
+            {"bid": business_id},
+        )
+        row = row_result.fetchone()
+
+        if not row:
+            err = {
+                "error_code": "INACTIVE",
+                "status": "not_found",
+                "message": "User or business not found",
+            }
+            _cache_sub_set(user_id, err)
+            return err, "trial"
+
+        subscription_type = row.subscription_type or "trial"
+        now = datetime.now(timezone.utc)
+        result_error = None
+
+        if not row.is_active:
+            result_error = {
+                "error_code": "SUSPENDED",
+                "status": "suspended",
+                "message": "Business account is suspended",
+            }
+
+        trial_end = row.trial_end_at
+        sub_end = row.subscription_end_at
+
+        if result_error is None and row.payment_status == "pending":
+            if trial_end and now > trial_end:
+                result_error = {
+                    "error_code": "TRIAL_EXPIRED",
+                    "status": "trial_expired",
+                    "message": "Trial period has expired. Please complete payment to continue.",
+                    "payment_status": row.payment_status,
+                    "subscription_type": subscription_type,
+                    "trial_end_at": trial_end.isoformat() if trial_end else None,
+                    "subscription_end_at": sub_end.isoformat() if sub_end else None,
+                }
+
+        if result_error is None and row.payment_status in ("paid", "suspended"):
+            expired = now > sub_end if sub_end else False
+            if expired or row.payment_status == "suspended":
+                result_error = {
+                    "error_code": "SUBSCRIPTION_EXPIRED",
+                    "status": "subscription_expired",
+                    "message": "Subscription has expired. Please renew to continue.",
+                    "payment_status": row.payment_status,
+                    "subscription_type": subscription_type,
+                    "trial_end_at": trial_end.isoformat() if trial_end else None,
+                    "subscription_end_at": sub_end.isoformat() if sub_end else None,
+                }
+
+        if result_error is None and row.payment_status not in ("pending", "paid", "suspended"):
+            logging.warning(
+                "Unknown payment_status '%s' for business %s — treating as suspended",
+                row.payment_status, row.business_id
+            )
+            result_error = {
+                "error_code": "INVALID_STATE",
+                "status": "invalid",
+                "message": "Account subscription status is invalid. Please contact support.",
+            }
+
+        _cache_sub_set(user_id, result_error, subscription_type, business_id=business_id)
+        return result_error, subscription_type
+
+    except Exception as e:
+        logging.warning("Async subscription check failed, allowing request through: %s", e)
+        return None, "trial"
+
+
 class SubscriptionMiddleware:
     """
     ASGI middleware that validates tenant subscription status on every

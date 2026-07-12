@@ -13,10 +13,10 @@
 #            (DB trigger trg_customers_updated_at auto-sets updated_at on commit)
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text, select
 from sqlalchemy.exc import IntegrityError
-from app.database import get_db
+from app.database import get_async_db
 from app.middleware.rbac import require_permission
 from app.models.customer import Customer
 from app.schemas.customer import CustomerCreate, CustomerUpdate
@@ -56,10 +56,10 @@ def customer_to_dict(c, last_updated_by=None) -> dict:
 # POST /customers → Create new customer
 # ══════════════════════════════════════════════════════════════════
 @router.post("/")
-def create_customer(
+async def create_customer(
     data:         CustomerCreate,
     current_user: dict = Depends(require_permission("customers.manage")),
-    db:           Session = Depends(get_db)
+    db:           AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
@@ -70,11 +70,11 @@ def create_customer(
         return error_response(msg, status_code=403)
 
     if data.cust_phone:
-        existing = db.query(Customer).filter(
+        existing = (await db.execute(select(Customer).where(
             Customer.business_id == business_id,
             Customer.cust_phone  == data.cust_phone,
             Customer.is_deleted  == False
-        ).first()
+        ))).scalar_one_or_none()
         if existing:
             return error_response("Customer with this phone already exists", 400)
 
@@ -92,11 +92,11 @@ def create_customer(
 
     db.add(new_customer)
     try:
-        db.commit()
+        await db.commit()
     except IntegrityError:
-        db.rollback()
+        await db.rollback()
         return error_response("Customer with this phone already exists", 400)
-    db.refresh(new_customer)
+    await db.refresh(new_customer)
 
     # Fetch the creator's name so the table shows it immediately after creation
     creator_name = current_user.get("full_name")
@@ -116,9 +116,9 @@ def create_customer(
 #      No N+1 — one SQL query returns all names at once.
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
-def get_all_customers(
+async def get_all_customers(
     current_user: dict          = Depends(require_permission("customers.manage")),
-    db:           Session       = Depends(get_db),
+    db:           AsyncSession  = Depends(get_async_db),
     pagination:   dict          = Depends(paginate),
     search:       Optional[str] = Query(default=None, description="Search by name, phone, or email"),
     phone:        Optional[str] = Query(default=None, description="Exact phone match (for sale form auto-fill)"),
@@ -175,7 +175,7 @@ def get_all_customers(
         extra_where += " AND c.updated_at <= :updated_to"
         params["updated_to"] = updated_to
 
-    rows = db.execute(
+    rows = (await db.execute(
         text(f"""
             SELECT
                 c.cust_id, c.business_id,
@@ -196,7 +196,7 @@ def get_all_customers(
             OFFSET :offset LIMIT :limit
         """),
         params
-    ).fetchall()
+    )).fetchall()
 
     total = rows[0].total_count if rows else 0
 
@@ -249,9 +249,9 @@ def get_all_customers(
 # as a UUID parameter.
 # ══════════════════════════════════════════════════════════════════
 @router.get("/lean")
-def get_customers_lean(
+async def get_customers_lean(
     current_user: dict          = Depends(require_permission("customers.manage")),
-    db:           Session       = Depends(get_db),
+    db:           AsyncSession  = Depends(get_async_db),
     search:       Optional[str] = Query(default=None, description="Filter by name or phone"),
 ):
     """
@@ -268,7 +268,7 @@ def get_customers_lean(
         where_extra = """ AND (c.cust_name ILIKE :q OR c.cust_phone ILIKE :q)"""
         params["q"] = f"%{search.strip()}%"
 
-    rows = db.execute(
+    rows = (await db.execute(
         text(f"""
             SELECT cust_id, cust_name, cust_phone
             FROM customers c
@@ -279,7 +279,7 @@ def get_customers_lean(
             LIMIT 1000
         """),
         params
-    ).fetchall()
+    )).fetchall()
 
     return success_response([
         {
@@ -295,21 +295,21 @@ def get_customers_lean(
 # GET /customers/search/phone?phone=9876543210
 # ══════════════════════════════════════════════════════════════════
 @router.get("/search/phone")
-def search_customer_by_phone(
+async def search_customer_by_phone(
     phone:        str,
     current_user: dict = Depends(require_permission("customers.manage")),
-    db:           Session = Depends(get_db)
+    db:           AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
     if not phone or not phone.strip():
         return error_response("Phone number is required", 400)
 
-    customer = db.query(Customer).filter(
+    customer = (await db.execute(select(Customer).where(
         Customer.business_id == business_id,
         Customer.cust_phone  == phone.strip(),
         Customer.is_deleted  == False
-    ).first()
+    ))).scalar_one_or_none()
 
     if not customer:
         return error_response(f"No customer found with phone number '{phone}'", 404)
@@ -319,15 +319,15 @@ def search_customer_by_phone(
 
 # ── GET /customers/summary → KPI cards for customers page ──────────
 @router.get("/summary")
-def get_customer_summary_kpi(
+async def get_customer_summary_kpi(
     current_user: dict = Depends(require_permission("customers.manage")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
 
-    row = db.execute(text("""
+    row = (await db.execute(text("""
         WITH customer_counts AS (
             SELECT
                 COUNT(*)                                                        AS total_count,
@@ -352,7 +352,7 @@ def get_customer_summary_kpi(
                   AND s.sales_payment_status IN ('pending', 'partial')
             ), 0) AS outstanding_balance
         FROM customer_counts cc
-    """), {"bid": bid}).fetchone()
+    """), {"bid": bid})).fetchone()
 
     return success_response({
         "total_count":        int(row.total_count),
@@ -377,25 +377,25 @@ def get_customer_summary_kpi(
 #   (see recommendations below) rather than page=1&limit=10000.
 # ══════════════════════════════════════════════════════════════════
 @router.get("/{cust_id}")
-def get_customer(
+async def get_customer(
     cust_id:      str,
     current_user: dict = Depends(require_permission("customers.manage")),
-    db:           Session = Depends(get_db),
+    db:           AsyncSession = Depends(get_async_db),
     pagination:   dict = Depends(paginate)
 ):
     business_id = current_user["business_id"]
 
-    customer = db.query(Customer).filter(
+    customer = (await db.execute(select(Customer).where(
         Customer.cust_id     == cust_id,
         Customer.business_id == business_id,
         Customer.is_deleted  == False
-    ).first()
+    ))).scalar_one_or_none()
 
     if not customer:
         return error_response("Customer not found", 404)
 
     # ── Summary aggregates (over ALL sales, not just current page) ──
-    agg = db.execute(
+    agg = (await db.execute(
         text("""
             SELECT
                 COUNT(*)                                  AS total_sales,
@@ -406,7 +406,7 @@ def get_customer(
               AND is_deleted  = false
         """),
         {"cid": cust_id, "bid": business_id}
-    ).fetchone()
+    )).fetchone()
 
     total_sales = agg.total_sales if agg and agg.total_sales else 0
     total_spent = float(agg.total_spent) if agg and agg.total_spent else 0.0
@@ -415,7 +415,7 @@ def get_customer(
     total_returns = 0.0
 
     if total_sales > 0:
-        paid_row = db.execute(
+        paid_row = (await db.execute(
             text("""
                 SELECT COALESCE(SUM(p.cumulative_paid), 0) AS total_paid
                 FROM payments p
@@ -426,10 +426,10 @@ def get_customer(
                   AND p.is_active   = true
             """),
             {"cid": cust_id, "bid": business_id}
-        ).fetchone()
+        )).fetchone()
         total_paid = float(paid_row.total_paid) if paid_row else 0.0
 
-        ret_row = db.execute(
+        ret_row = (await db.execute(
             text("""
                 SELECT COALESCE(SUM(sr.return_amount), 0) AS total_returns
                 FROM sales_returns sr
@@ -440,13 +440,13 @@ def get_customer(
                   AND sr.return_status = 'approved'
             """),
             {"cid": cust_id, "bid": business_id}
-        ).fetchone()
+        )).fetchone()
         total_returns = float(ret_row.total_returns) if ret_row else 0.0
 
     outstanding = round(total_spent - total_paid, 2)
 
     # ── Paginated sales query ──────────────────────────────────────
-    sale_rows = db.execute(
+    sale_rows = (await db.execute(
         text("""
             SELECT
                 sales_id, invoice_no,
@@ -468,7 +468,7 @@ def get_customer(
             "offset": pagination["offset"],
             "limit":  pagination["limit"],
         }
-    ).fetchall()
+    )).fetchall()
 
     total_count = sale_rows[0].total_count if sale_rows else 0
 
@@ -477,7 +477,7 @@ def get_customer(
         sale_ids = [str(r.sales_id) for r in sale_rows]
 
         # ── Items for paginated sales (batch) ────────────────────
-        items_rows = db.execute(
+        items_rows = (await db.execute(
             text("""
                 SELECT
                     si.sale_id,
@@ -490,7 +490,7 @@ def get_customer(
                   AND si.business_id = CAST(:bid AS uuid)
             """),
             {"ids": "{" + ",".join(sale_ids) + "}", "bid": business_id}
-        ).fetchall()
+        )).fetchall()
 
         items_by_sale: dict = {}
         for i in items_rows:
@@ -507,7 +507,7 @@ def get_customer(
             })
 
         # ── Payment summary for paginated sales (batch GROUP BY) ──
-        pay_rows = db.execute(
+        pay_rows = (await db.execute(
             text("""
                 SELECT
                     sale_id,
@@ -520,12 +520,12 @@ def get_customer(
                 GROUP BY sale_id
             """),
             {"ids": "{" + ",".join(sale_ids) + "}", "bid": business_id}
-        ).fetchall()
+        )).fetchall()
 
         pay_by_sale = {str(r.sale_id): r for r in pay_rows}
 
         # ── Returns for paginated sales (batch) ──────────────────
-        return_rows = db.execute(
+        return_rows = (await db.execute(
             text("""
                 SELECT
                     sale_id, return_id, return_amount, return_reason,
@@ -536,7 +536,7 @@ def get_customer(
                 ORDER BY return_created_at DESC
             """),
             {"ids": "{" + ",".join(sale_ids) + "}", "bid": business_id}
-        ).fetchall()
+        )).fetchall()
 
         returns_by_sale: dict = {}
         for r in return_rows:
@@ -614,30 +614,30 @@ def get_customer(
 #      DB trigger trg_customers_updated_at auto-sets updated_at on commit
 # ══════════════════════════════════════════════════════════════════
 @router.put("/{cust_id}")
-def update_customer(
+async def update_customer(
     cust_id:      str,
     data:         CustomerUpdate,
     current_user: dict = Depends(require_permission("customers.manage")),
-    db:           Session = Depends(get_db)
+    db:           AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    customer = db.query(Customer).filter(
+    customer = (await db.execute(select(Customer).where(
         Customer.cust_id     == cust_id,
         Customer.business_id == business_id,
         Customer.is_deleted  == False
-    ).first()
+    ))).scalar_one_or_none()
 
     if not customer:
         return error_response("Customer not found", 404)
 
     if data.cust_phone:
-        existing = db.query(Customer).filter(
+        existing = (await db.execute(select(Customer).where(
             Customer.business_id == business_id,
             Customer.cust_id     != cust_id,
             Customer.cust_phone  == data.cust_phone,
             Customer.is_deleted  == False
-        ).first()
+        ))).scalar_one_or_none()
         if existing:
             return error_response("Customer with this phone already exists", 400)
 
@@ -654,11 +654,11 @@ def update_customer(
     customer.updated_by = current_user["user_id"]
 
     try:
-        db.commit()
+        await db.commit()
     except IntegrityError:
-        db.rollback()
+        await db.rollback()
         return error_response("Customer with this phone already exists", 400)
-    db.refresh(customer)
+    await db.refresh(customer)
 
     # Fetch the updater's name to return in response
     updated_by_name = current_user.get("full_name")
@@ -673,24 +673,24 @@ def update_customer(
 # DELETE /customers/{cust_id} → Soft delete
 # ══════════════════════════════════════════════════════════════════
 @router.delete("/{cust_id}")
-def delete_customer(
+async def delete_customer(
     cust_id:      str,
     current_user: dict = Depends(require_permission("customers.manage")),
-    db:           Session = Depends(get_db)
+    db:           AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    customer = db.query(Customer).filter(
+    customer = (await db.execute(select(Customer).where(
         Customer.cust_id     == cust_id,
         Customer.business_id == business_id,
         Customer.is_deleted  == False
-    ).first()
+    ))).scalar_one_or_none()
 
     if not customer:
         return error_response("Customer not found", 404)
 
     customer.is_deleted = True
     customer.updated_by = current_user["user_id"]
-    db.commit()
+    await db.commit()
 
     return success_response({"message": "Customer deleted successfully"})

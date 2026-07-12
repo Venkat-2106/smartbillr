@@ -45,3 +45,7 @@ backend/dist/
 e2e/.env
 test-results/
 e2e/.auth/
+frontend/e2e/.auth/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/

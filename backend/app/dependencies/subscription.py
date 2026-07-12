@@ -1,15 +1,15 @@
 import logging
 
 from fastapi import Depends, HTTPException, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
-from app.middleware.subscription import _check_subscription_for_user
+from app.database import get_async_db
+from app.middleware.subscription import _check_subscription_for_user_async
 
 
-def verify_subscription(
+async def verify_subscription(
     request: Request,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> None:
     """
     FastAPI dependency that validates tenant subscription status.
@@ -53,7 +53,7 @@ def verify_subscription(
         return
 
     # ── Check subscription (uses shared db session + GUCs from verify_token) ─
-    error, subscription_type = _check_subscription_for_user(user_id, db)
+    error, subscription_type = await _check_subscription_for_user_async(user_id, db)
 
     # Always propagate subscription_type for downstream use (verify_token
     # reads this to populate user_data["subscription_type"]).

@@ -64,9 +64,9 @@
 
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.orm import Session
-from sqlalchemy import func, text
-from app.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select, text
+from app.database import get_async_db
 from app.middleware.rbac import require_permission, get_current_user_with_permissions
 from app.models.product import Product
 from app.models.category import Category
@@ -86,8 +86,8 @@ PROFIT_PERMISSION = "view_product_profit"
 
 
 # ── Helper: fetch one product row — all fields + both JOIN names ───────────
-def get_product_with_profit(db: Session, prod_id, business_id: str):
-    row = db.execute(
+async def get_product_with_profit(db: AsyncSession, prod_id, business_id: str):
+    row = (await db.execute(
         text("""
             SELECT
                 p.prod_id, p.business_id, p.category_id, p.prod_name,
@@ -109,7 +109,7 @@ def get_product_with_profit(db: Session, prod_id, business_id: str):
               AND p.is_deleted = false
         """),
         {"prod_id": str(prod_id), "bid": business_id}
-    ).fetchone()
+    )).fetchone()
     return row
 
 
@@ -178,8 +178,8 @@ def row_to_dict_list(row, show_profit: bool = True):
 #   - TRIM   → ignores leading/trailing spaces: " Laptop " == "Laptop"
 #   The DB index (uix_products_name_business) uses the same expression, so
 #   this query hits the index efficiently.
-def _find_duplicate_name(
-    db:         Session,
+async def _find_duplicate_name(
+    db:         AsyncSession,
     business_id: str,
     name:        str,
     exclude_id:  Optional[str] = None
@@ -200,7 +200,7 @@ def _find_duplicate_name(
     # Without it the function always returned None, so duplicate name checks
     # on POST and PUT never blocked conflicting names (only the DB index did,
     # which produces a raw IntegrityError instead of a clean 400 response).
-    return db.execute(text(sql), params).fetchone()
+    return (await db.execute(text(sql), params)).fetchone()
 
 
 
@@ -211,8 +211,8 @@ def _find_duplicate_name(
 #             a duplicate of its own unchanged barcode.
 # Exact = match (not ILIKE): barcodes are case-sensitive. Also hits the
 # btree index (business_id, barcode) directly — no full table scan.
-def _find_duplicate_barcode(
-    db:          Session,
+async def _find_duplicate_barcode(
+    db:          AsyncSession,
     business_id: str,
     barcode:     str,
     exclude_id:  str = None
@@ -227,34 +227,34 @@ def _find_duplicate_barcode(
     if exclude_id:
         sql += " AND prod_id != CAST(:exclude_id AS uuid)"
         params["exclude_id"] = exclude_id
-    return db.execute(text(sql), params).fetchone()
+    return (await db.execute(text(sql), params)).fetchone()
 
 
 # ─────────────────────────────────────────
 # POST /products → Create new product
 # ─────────────────────────────────────────
 @router.post("/")
-def create_product(
+async def create_product(
     data: ProductCreate,
     current_user: dict = Depends(require_permission("products.edit")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
     show_profit = PROFIT_PERMISSION in current_user.get("permissions", set())
 
     # ── 0. Subscription tier limit check ──────────────────────────────────────
-    sub_type = current_user.get("subscription_type") or fetch_subscription_type(db, business_id)
-    allowed, msg = check_create_allowed(db, business_id, sub_type, "max_products", "products")
+    sub_type = current_user.get("subscription_type") or await fetch_subscription_type(db, business_id)
+    allowed, msg = await check_create_allowed(db, business_id, sub_type, "max_products", "products")
     if not allowed:
         return error_response(msg, status_code=403)
 
     # ── 1. Validate category belongs to this business ─────────────────────────
     if data.category_id:
-        category = db.query(Category).filter(
+        category = (await db.execute(select(Category).where(
             Category.category_id == data.category_id,
             Category.business_id == business_id,
             Category.is_deleted == False
-        ).first()
+        )).scalar_one_or_none())
         if not category:
             return error_response("Category not found", 404)
 
@@ -267,7 +267,7 @@ def create_product(
     #   but raises a raw IntegrityError with a Postgres error string.
     #   Checking explicitly here lets us return a clean, user-friendly message.
     #   The index is the final safety net for concurrent race-condition inserts.
-    dup = _find_duplicate_name(db, business_id, data.prod_name)
+    dup = await _find_duplicate_name(db, business_id, data.prod_name)
     if dup:
         return error_response("A product with this name already exists.", 400)
 
@@ -276,7 +276,7 @@ def create_product(
     # allowed on multiple products — not every product has a barcode.
     if data.barcode and data.barcode.strip():
         data.barcode = data.barcode.strip()
-        dup_bc = _find_duplicate_barcode(db, business_id, data.barcode)
+        dup_bc = await _find_duplicate_barcode(db, business_id, data.barcode)
         if dup_bc:
             return error_response("A product with this barcode already exists.", 400)
 
@@ -302,9 +302,11 @@ def create_product(
 
     try:
         db.add(new_product)
-        db.commit()
+        await db.flush()  # assign prod_id while session is still open
+        new_prod_id = new_product.prod_id
+        await db.commit()
     except IntegrityError as e:
-        db.rollback()
+        await db.rollback()
         # Distinguish between the two unique constraints so the user gets
         # a precise error message rather than a generic one.
         err_str = str(e.orig).lower()
@@ -315,7 +317,7 @@ def create_product(
         # Default → barcode uniqueness violation
         return error_response("A product with this barcode already exists.", 400)
 
-    row = get_product_with_profit(db, new_product.prod_id, business_id)
+    row = await get_product_with_profit(db, new_prod_id, business_id)
 
     return success_response({
         "message": "Product created successfully",
@@ -342,9 +344,9 @@ def create_product(
 #   total in the pagination envelope always reflects the filtered result set.
 # ─────────────────────────────────────────
 @router.get("/")
-def get_all_products(
+async def get_all_products(
     current_user: dict          = Depends(require_permission("products.view")),
-    db:           Session       = Depends(get_db),
+    db:           AsyncSession  = Depends(get_async_db),
     pagination:   dict          = Depends(paginate),
     search:       Optional[str] = Query(default=None, description="Search by name or barcode"),
     updated_from: Optional[str] = Query(default=None, description="Filter updated_at >= this date (YYYY-MM-DD)"),
@@ -396,7 +398,7 @@ def get_all_products(
         extra_where += " AND p.updated_at <= :updated_to"
         params["updated_to"] = updated_to
 
-    rows = db.execute(
+    rows = (await db.execute(
         text(f"""
             SELECT
                 p.prod_id, p.business_id, p.category_id, p.prod_name,
@@ -419,7 +421,7 @@ def get_all_products(
             OFFSET :offset LIMIT :limit
         """),
         params
-    ).fetchall()
+    )).fetchall()
 
     total = rows[0].total_count if rows else 0
 
@@ -436,14 +438,14 @@ def get_all_products(
 
 # ── GET /products/summary → KPI cards for products page ─────────────
 @router.get("/summary")
-def get_product_summary_kpi(
+async def get_product_summary_kpi(
     current_user: dict = Depends(require_permission("products.view")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     show_profit = "view_product_profit" in current_user.get("permissions", set())
 
-    counts = fetch_stock_kpi_counts(db, bid)
+    counts = await fetch_stock_kpi_counts(db, bid)
 
     return success_response({
         "total_count":       counts["total_count"],
@@ -472,11 +474,11 @@ def get_product_summary_kpi(
 #   or the literal string "search" would be treated as a UUID and fail parsing.
 # ══════════════════════════════════════════════════════════════════
 @router.get("/search")
-def search_products_lean(
+async def search_products_lean(
     q:            str           = Query(default="", description="Search by name or barcode (min 2 chars)"),
     limit:        int           = Query(default=20,  ge=1, le=50, description="Max results to return"),
     current_user: dict          = Depends(require_permission("products.view")),
-    db:           Session       = Depends(get_db)
+    db:           AsyncSession  = Depends(get_async_db)
 ):
     """
     Lean product search for the sales creation form.
@@ -491,7 +493,7 @@ def search_products_lean(
     if len(q) < 2:
         return success_response([])
 
-    rows = db.execute(
+    rows = (await db.execute(
         text("""
             SELECT
                 p.prod_id,
@@ -517,7 +519,7 @@ def search_products_lean(
             "q":   f"%{q}%",
             "lim": limit,
         }
-    ).fetchall()
+    )).fetchall()
 
     return success_response([
         {
@@ -558,17 +560,17 @@ def search_products_lean(
 #                    tax_rate, barcode, unit, prod_stock_qty
 #   These are identical to the /products/search lean response.
 @router.get("/barcode/{code}")
-def get_product_by_barcode(
+async def get_product_by_barcode(
     code: str,
     current_user: dict = Depends(require_permission("products.view")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
     # PERF: No profile JOINs, no category JOIN, no audit fields.
     # Uses idx_products_business_barcode_active (business_id, barcode)
     # partial index for a single index scan — no heap access needed.
-    row = db.execute(
+    row = (await db.execute(
         text("""
             SELECT
                 p.prod_id,
@@ -586,7 +588,7 @@ def get_product_by_barcode(
             LIMIT 1
         """),
         {"business_id": business_id, "barcode": code.strip()}
-    ).fetchone()
+    )).fetchone()
 
     if not row:
         return error_response(f"No product found with barcode: {code}", status_code=404)
@@ -607,15 +609,15 @@ def get_product_by_barcode(
 # GET /products/{prod_id} → Single product WITH full history
 # ══════════════════════════════════════════════════════════════════
 @router.get("/{prod_id}")
-def get_product(
+async def get_product(
     prod_id: str,
     current_user: dict = Depends(require_permission("products.view")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
     show_profit = PROFIT_PERMISSION in current_user.get("permissions", set())
 
-    row = db.execute(
+    row = (await db.execute(
         text("""
             SELECT
                 p.prod_id, p.business_id, p.category_id, p.prod_name,
@@ -637,12 +639,12 @@ def get_product(
               AND p.is_deleted  = false
         """),
         {"prod_id": prod_id, "bid": business_id}
-    ).fetchone()
+    )).fetchone()
 
     if not row:
         return error_response("Product not found", status_code=404)
 
-    stock_rows = db.execute(
+    stock_rows = (await db.execute(
         text("""
             SELECT
                 sm.move_id,
@@ -667,7 +669,7 @@ def get_product(
             LIMIT 100
         """),
         {"prod_id": prod_id, "bid": business_id}
-    ).fetchall()
+    )).fetchall()
 
     stock_history = []
     for s in stock_rows:
@@ -709,7 +711,7 @@ def get_product(
     price_history = []
 
     if show_profit:
-        audit_rows = db.execute(
+        audit_rows = (await db.execute(
             text("""
                 SELECT
                     al.audit_id,
@@ -728,7 +730,7 @@ def get_product(
                 LIMIT 100
             """),
             {"prod_id": prod_id, "bid": business_id}
-        ).fetchall()
+        )).fetchall()
 
         for a in audit_rows:
             old_data = a.old_data or {}
@@ -810,31 +812,31 @@ def get_product(
 # DB trigger fn_set_updated_at auto-sets updated_at on commit.
 # created_by is NEVER changed — it records the original creator.
 @router.put("/{prod_id}")
-def update_product(
+async def update_product(
     prod_id: str,
     data: ProductUpdate,
     current_user: dict = Depends(require_permission("products.edit")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
     show_profit = PROFIT_PERMISSION in current_user.get("permissions", set())
 
-    product = db.query(Product).filter(
+    product = (await db.execute(select(Product).where(
         Product.prod_id      == prod_id,
         Product.business_id  == business_id,
         Product.is_deleted   == False
-    ).first()
+    )).scalar_one_or_none())
 
     if not product:
         return error_response("Product not found", status_code=404)
 
     # ── Validate category if being updated ───────────────────────────────────
     if data.category_id:
-        category = db.query(Category).filter(
+        category = (await db.execute(select(Category).where(
             Category.category_id == data.category_id,
             Category.business_id == business_id,
             Category.is_deleted  == False
-        ).first()
+        )).scalar_one_or_none())
         if not category:
             return error_response("Category not found", status_code=404)
         product.category_id = data.category_id
@@ -844,7 +846,7 @@ def update_product(
     # exclude_id = prod_id so a product isn't flagged as a duplicate of itself
     # (i.e. editing "Laptop" and saving as "Laptop" again is fine).
     if data.prod_name is not None:
-        dup = _find_duplicate_name(db, business_id, data.prod_name, exclude_id=prod_id)
+        dup = await _find_duplicate_name(db, business_id, data.prod_name, exclude_id=prod_id)
         if dup:
             return error_response("A product with this name already exists.", 400)
         product.prod_name = data.prod_name   # already stripped by schema validator
@@ -862,7 +864,7 @@ def update_product(
     if data.barcode is not None:
         clean_bc = data.barcode.strip() if data.barcode else None
         if clean_bc:
-            dup_bc = _find_duplicate_barcode(db, business_id, clean_bc, exclude_id=prod_id)
+            dup_bc = await _find_duplicate_barcode(db, business_id, clean_bc, exclude_id=prod_id)
             if dup_bc:
                 return error_response("A product with this barcode already exists.", 400)
         product.barcode = clean_bc or None
@@ -872,17 +874,17 @@ def update_product(
     product.updated_by = current_user["user_id"]
 
     try:
-        db.commit()
+        await db.commit()
     except IntegrityError as e:
-        db.rollback()
+        await db.rollback()
         err_str = str(e.orig).lower()
         if "uix_products_name_business" in err_str:
             return error_response("A product with this name already exists.", 400)
         return error_response("A product with this barcode already exists.", 400)
 
-    db.refresh(product)
+    await db.refresh(product)
 
-    row = get_product_with_profit(db, product.prod_id, business_id)
+    row = await get_product_with_profit(db, product.prod_id, business_id)
 
     return success_response({
         "message": "Product updated successfully",
@@ -894,24 +896,24 @@ def update_product(
 # DELETE /products/{prod_id} → Soft delete
 # ─────────────────────────────────────────
 @router.delete("/{prod_id}")
-def delete_product(
+async def delete_product(
     prod_id: str,
     current_user: dict = Depends(require_permission("products.edit")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    product = db.query(Product).filter(
+    product = (await db.execute(select(Product).where(
         Product.prod_id     == prod_id,
         Product.business_id == business_id,
         Product.is_deleted  == False
-    ).first()
+    )).scalar_one_or_none())
 
     if not product:
         return error_response("Product not found", status_code=404)
 
     product.is_deleted = True
     product.updated_by = current_user["user_id"]
-    db.commit()
+    await db.commit()
 
     return success_response({"message": "Product deleted successfully"})

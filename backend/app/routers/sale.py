@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, Query
 from fastapi import Body
 from pydantic import BaseModel, field_validator
 from typing import Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
 from decimal import Decimal
-from app.database import get_db
+from app.database import get_async_db
 from app.middleware.rbac import require_permission
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
@@ -50,10 +50,10 @@ class SaleStatusUpdate(BaseModel):
 
 
 @router.post("/")
-def create_sale(
+async def create_sale(
     data: SaleCreate,
     current_user: dict = Depends(require_permission("sales.create")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
     user_id = current_user["user_id"]
@@ -103,7 +103,7 @@ def create_sale(
         update_sale_tax_totals(db, new_sale_id)
         auto_record_payment(db, business_id, new_sale_id, data, total_amount)
 
-        db.commit()
+        await db.commit()
 
         return success_response({
             "message": "Sale created successfully",
@@ -113,14 +113,14 @@ def create_sale(
         }, 201)
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         return error_response(parse_sale_error(str(e)), 500)
 
 
 @router.get("/")
-def get_sales(
+async def get_sales(
     current_user: dict = Depends(require_permission("sales.view")),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     pagination: dict = Depends(paginate),
     search: str = Query(None),
     status: str = Query(None),
@@ -139,15 +139,15 @@ def get_sales(
 
 
 @router.get("/summary")
-def get_sales_summary(
+async def get_sales_summary(
     current_user: dict = Depends(require_permission("sales.view")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
 
-    row = db.execute(text("""
+    row = (await db.execute(text("""
         SELECT
             COALESCE(SUM(s.sales_final_amount) FILTER (WHERE s.sales_created_at::date = CURRENT_DATE), 0) AS today_revenue,
             COALESCE(SUM(s.sales_final_amount) FILTER (WHERE s.sales_created_at >= CURRENT_DATE - INTERVAL '7 days'), 0) AS weekly_revenue,
@@ -160,7 +160,7 @@ def get_sales_summary(
            AND p.is_active = true
         WHERE s.business_id = CAST(:bid AS uuid)
           AND s.is_deleted = false
-    """), {"bid": business_id}).fetchone()
+    """), {"bid": business_id})).fetchone()
 
     return success_response({
         "today_revenue": str(row.today_revenue) if can_financial else None,
@@ -171,10 +171,10 @@ def get_sales_summary(
 
 
 @router.get("/{sales_id}")
-def get_sale(
+async def get_sale(
     sales_id: str,
     current_user: dict = Depends(require_permission("sales.view")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     sale = get_sale_detail(db, current_user["business_id"], sales_id)
     if not sale:
@@ -183,11 +183,11 @@ def get_sale(
 
 
 @router.patch("/{sales_id}/status")
-def handle_sale_status_patch(
+async def handle_sale_status_patch(
     sales_id: str,
     body: SaleStatusUpdate,
     current_user: dict = Depends(require_permission("sales.edit")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     allowed = ["pending", "paid", "partial"]
     if body.status not in allowed:
@@ -195,20 +195,20 @@ def handle_sale_status_patch(
 
     business_id = current_user["business_id"]
 
-    sale = db.query(Sale).filter(
+    sale = (await db.execute(select(Sale).where(
         Sale.sales_id == sales_id,
         Sale.business_id == business_id,
         Sale.is_deleted == False
-    ).first()
+    ))).scalar_one_or_none()
 
     if not sale:
         return error_response("Sale not found", 404)
 
     # Resolve currency symbol from the business's country code
-    biz = db.execute(
+    biz = (await db.execute(
         text("SELECT business_country_code FROM businesses WHERE business_id = CAST(:bid AS uuid)"),
         {"bid": business_id}
-    ).fetchone()
+    )).fetchone()
     currency_sym = get_currency_symbol(biz.business_country_code if biz else None)
 
     old_status = sale.sales_payment_status
@@ -291,7 +291,7 @@ def handle_sale_status_patch(
         update_sale_status(db, sales_id, body.status, business_id)
         update_payment_status(db, sales_id, body.status, business_id)
 
-    db.commit()
+    await db.commit()
 
     response_data = {
         "message": "Payment status updated",
@@ -306,20 +306,20 @@ def handle_sale_status_patch(
 
 
 @router.delete("/{sales_id}")
-def delete_sale(
+async def delete_sale(
     sales_id: str,
     restore_stock: bool = Query(False),
     current_user: dict = Depends(require_permission("sales.delete")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
     user_id = current_user["user_id"]
 
-    sale = db.query(Sale).filter(
+    sale = (await db.execute(select(Sale).where(
         Sale.sales_id == sales_id,
         Sale.business_id == business_id,
         Sale.is_deleted == False
-    ).first()
+    ))).scalar_one_or_none()
 
     if not sale:
         return error_response("Sale not found", 404)
@@ -328,7 +328,7 @@ def delete_sale(
     sale.updated_by = user_id
 
     # Deactivate all payment rows so they no longer appear in active payments
-    db.execute(
+    await db.execute(
         text("""
             UPDATE payments
             SET is_active = false
@@ -339,17 +339,17 @@ def delete_sale(
     )
 
     if restore_stock:
-        sale_items = db.query(SaleItem).filter(
+        sale_items = (await db.execute(select(SaleItem).where(
             SaleItem.sale_id == sales_id,
             SaleItem.business_id == business_id
-        ).all()
+        ))).scalars().all()
 
         if sale_items:
             prod_ids = [str(item.product_id) for item in sale_items]
             pids_param = "{" + ",".join(prod_ids) + "}"
 
             # 1. Bulk SELECT: fetch current stock for all products at once
-            product_rows = db.execute(
+            product_rows = (await db.execute(
                 text("""
                     SELECT prod_id, prod_stock_qty
                     FROM products
@@ -357,7 +357,7 @@ def delete_sale(
                       AND business_id = CAST(:business_id AS uuid)
                 """),
                 {"pids": pids_param, "business_id": business_id}
-            ).all()
+            )).all()
 
             prod_stock_map = {str(row.prod_id): row.prod_stock_qty for row in product_rows}
 
@@ -378,7 +378,7 @@ def delete_sale(
                     update_params[f"pid_{i}"] = str(item.product_id)
                     update_params[f"qty_{i}"] = item.sale_item_quantity
 
-                db.execute(
+                await db.execute(
                     text(f"""
                         UPDATE products
                         SET prod_stock_qty = products.prod_stock_qty + v.restore_qty,
@@ -405,7 +405,7 @@ def delete_sale(
                     insert_params[f"mprev_{i}"] = prod_stock_map[pid]
                     insert_params[f"mnotes_{i}"] = f"Stock restored from deleted sale {sale.invoice_no}"
 
-                db.execute(
+                await db.execute(
                     text(f"""
                         INSERT INTO stock_movements (
                             move_id, business_id, product_id,
@@ -417,7 +417,7 @@ def delete_sale(
                 )
 
             # 4. Bulk cleanup product alerts (single query — matches cleanup_product_alerts logic)
-            db.execute(
+            await db.execute(
                 text("""
                     DELETE FROM low_stock_alerts la
                     USING products p
@@ -430,6 +430,6 @@ def delete_sale(
                 {"pids": pids_param, "bid": business_id}
             )
 
-    db.commit()
+    await db.commit()
 
     return success_response({"message": "Sale deleted successfully"})

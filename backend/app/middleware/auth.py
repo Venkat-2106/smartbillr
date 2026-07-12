@@ -50,8 +50,9 @@
 from fastapi import HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from app.database import get_db
+from app.database import get_db, get_async_db
 import jwt
 from jwt import PyJWKClient
 import os
@@ -301,10 +302,10 @@ def decode_token_payload(token: str) -> dict:
         raise HTTPException(status_code=401, detail=f"Token verification failed: {e}")
 
 
-def verify_token(
+async def verify_token(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ) -> dict:
     """
     FastAPI dependency — runs on every protected endpoint.
@@ -352,19 +353,14 @@ def verify_token(
                 status_code=403,
                 detail="Your business account has been suspended. Contact support.",
             )
-        db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
-        db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": cached_val["business_id"]})
+        await db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
+        await db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": cached_val["business_id"]})
         cached_val["subscription_type"] = getattr(request.state, "subscription_type", None)
         return {**cached_val, "token_iat": token_iat}
 
     # ── Cache miss — single DB query fetches profile + role + permissions + last_logout_at ──
-    # Must set app.current_user_id BEFORE the profiles query so the
-    # self_lookup_policy (which checks id = app.current_user_id()) allows
-    # the user to read their own row.  The business_id GUC is unknown until
-    # after this query returns, so it cannot be set yet — we defer the
-    # businesses JOIN to a separate check below once both GUCs are set.
-    db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
-    result = db.execute(
+    await db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
+    result = (await db.execute(
         text("""
             SELECT
                 p.business_id,
@@ -385,18 +381,18 @@ def verify_token(
             LIMIT 1
         """),
         {"user_id": user_id}
-    ).fetchone()
+    )).fetchone()
 
     if result is None:
         raise HTTPException(status_code=403, detail="User not found or inactive")
 
     # ── Now that we know the business_id, set the GUC and check suspension ──
-    db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": str(result.business_id)})
+    await db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": str(result.business_id)})
 
-    business_active = db.execute(
+    business_active = (await db.execute(
         text("SELECT is_active FROM businesses WHERE business_id = CAST(:bid AS uuid) LIMIT 1"),
         {"bid": str(result.business_id)}
-    ).scalar()
+    )).scalar()
 
     if not business_active:
         raise HTTPException(
@@ -437,10 +433,10 @@ def verify_token(
     return user_data
 
 
-def verify_super_admin_token(
+async def verify_super_admin_token(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> dict:
     """
     FastAPI dependency for super admin authentication with revocation support.
@@ -471,12 +467,12 @@ def verify_super_admin_token(
     # Must set app.current_user_id BEFORE the super_admins query so the
     # self_lookup_policy (which checks user_id = app.current_user_id())
     # allows the super admin to read their own row.
-    db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
+    await db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
 
-    row = db.execute(
+    row = (await db.execute(
         text("SELECT last_logout_at FROM super_admins WHERE user_id = :uid LIMIT 1"),
         {"uid": user_id},
-    ).fetchone()
+    )).fetchone()
     if not row:
         raise HTTPException(
             status_code=403,
@@ -495,7 +491,7 @@ def verify_super_admin_token(
     # (on businesses, and any future cross-tenant admin tables) grants access.
     # Only reachable after the super_admins row lookup above succeeded, so a
     # regular tenant user has no path to setting this GUC themselves.
-    db.execute(text("SET LOCAL app.is_super_admin = 'true'"))
+    await db.execute(text("SET LOCAL app.is_super_admin = 'true'"))
 
     return {"user_id": user_id, "is_super_admin": True}
 

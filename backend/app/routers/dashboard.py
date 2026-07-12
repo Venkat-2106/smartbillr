@@ -24,9 +24,9 @@
 
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from app.database import get_db
+from app.database import get_async_db
 from app.middleware.rbac import require_permission, get_current_user_with_permissions
 from app.utils.response import success_response, error_response
 from app.utils.mv_refresh import refresh_dashboard_mvs_background
@@ -68,10 +68,10 @@ router = APIRouter(prefix="/v1/dashboard", tags=["Dashboard"])
 #   The frontend checks and shows/hides those stat cards accordingly.
 
 @router.get("/summary")
-def get_dashboard_summary(
+async def get_dashboard_summary(
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(require_permission("dashboard.view")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
     permissions = current_user.get("permissions", set())
@@ -82,7 +82,7 @@ def get_dashboard_summary(
     # blocks the user's response.
     background_tasks.add_task(refresh_dashboard_mvs_background)
 
-    main_row = db.execute(
+    main_row = (await db.execute(
         text("""
             SELECT
                 total_invoices, total_revenue,
@@ -93,12 +93,12 @@ def get_dashboard_summary(
             WHERE business_id = CAST(:bid AS uuid)
         """),
         {"bid": business_id}
-    ).fetchone()
+    )).fetchone()
 
     # Fallback to live query if MV hasn't been populated yet
     # (e.g. brand-new business before first refresh cycle).
     if main_row is None:
-        main_row = db.execute(
+        main_row = (await db.execute(
             text("""
                 SELECT
                     COUNT(*)                                                              AS total_invoices,
@@ -124,7 +124,7 @@ def get_dashboard_summary(
                   AND is_deleted   = false
             """),
             {"bid": business_id}
-        ).fetchone()
+        )).fetchone()
 
     return success_response({
         "total_invoices":   int(main_row.total_invoices)   if main_row else 0,
@@ -163,11 +163,11 @@ def get_dashboard_summary(
 #        A business with 5,000 invoices still gets accurate counts.
 
 @router.get("/trend")
-def get_dashboard_trend(
+async def get_dashboard_trend(
     period: str = "weekly",
     tz_offset_minutes: int = Query(default=0, ge=-840, le=840, description="Client timezone offset in minutes. Valid range: -840 to +840 (UTC-14 to UTC+14)"),
     current_user: dict = Depends(require_permission("dashboard.view")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
@@ -185,7 +185,7 @@ def get_dashboard_trend(
         date_from = datetime.combine(user_start, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
         date_to = datetime.combine(user_today, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
 
-        rows = db.execute(
+        rows = (await db.execute(
             text("""
                 WITH daily AS (
                     SELECT
@@ -213,7 +213,7 @@ def get_dashboard_trend(
                 "user_start": user_start,
                 "user_today": user_today,
             }
-        ).fetchall()
+        )).fetchall()
 
         days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
         result = [
@@ -237,7 +237,7 @@ def get_dashboard_trend(
         date_from = datetime.combine(user_start_month, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
         date_to = datetime.combine(user_end_month, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
 
-        rows = db.execute(
+        rows = (await db.execute(
             text("""
                 WITH monthly AS (
                     SELECT
@@ -265,7 +265,7 @@ def get_dashboard_trend(
                 "user_start": user_start_month,
                 "user_end": user_today_month,
             }
-        ).fetchall()
+        )).fetchall()
 
         month_short = ['Jan','Feb','Mar','Apr','May','Jun',
                        'Jul','Aug','Sep','Oct','Nov','Dec']
@@ -284,7 +284,7 @@ def get_dashboard_trend(
         date_from = datetime.combine(user_start_year, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
         date_to = datetime.combine(user_end_year, datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
 
-        rows = db.execute(
+        rows = (await db.execute(
             text("""
                 WITH yearly AS (
                     SELECT
@@ -312,7 +312,7 @@ def get_dashboard_trend(
                 "user_start": user_start_year,
                 "user_end": user_end_year,
             }
-        ).fetchall()
+        )).fetchall()
 
         result = [
             {

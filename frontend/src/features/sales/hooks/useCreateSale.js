@@ -25,6 +25,7 @@ const newItem = () => ({
 export default function useCreateSale() {
   const navigate    = useNavigate();
   const queryClient = useQueryClient();
+  const user        = useAuthStore((s) => s.user);
   const business    = useAuthStore((s) => s.business);
 
   // ── Form state ───────────────────────────────────────────────────────────
@@ -70,6 +71,7 @@ export default function useCreateSale() {
     queryKey: ['customers-for-sale'],
     queryFn:  fetchCustomersForSale,
     staleTime: 5 * 60 * 1000,
+    enabled: !!user,
   });
 
   // ── Lean product search ────────────────────────────────────────────────────

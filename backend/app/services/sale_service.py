@@ -1,32 +1,36 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text, select
 from decimal import Decimal
 from app.models.product import Product
 from app.models.sale import Sale
 from app.schemas.sale import SaleCreate
-from app.utils.payment_helpers import record_payment_and_sync, calculate_payment_status
+from app.utils.payment_helpers import record_payment_and_sync_async, calculate_payment_status
 from app.utils.timestamp import fmt_ts
 import uuid
 import re
 
 
-def generate_invoice_number(db: Session, business_id: str) -> str:
-    result = db.execute(
+async def generate_invoice_number(db: AsyncSession, business_id: str) -> str:
+    result = await db.execute(
         text("SELECT get_next_invoice_number(:bid) AS invoice_no"),
         {"bid": business_id}
-    ).fetchone()
-    if not result or not result.invoice_no:
+    )
+    row = result.fetchone()
+    if not row or not row.invoice_no:
         raise Exception("Failed to generate invoice number — business counter not found")
-    return result.invoice_no
+    return row.invoice_no
 
 
-def validate_and_cache_products(db: Session, business_id: str, items, allow_stock_override: bool):
+async def validate_and_cache_products(db: AsyncSession, business_id: str, items, allow_stock_override: bool):
     requested_ids = [str(item.product_id) for item in items]
-    products_bulk = db.query(Product).filter(
-        Product.prod_id.in_(requested_ids),
-        Product.business_id == business_id,
-        Product.is_deleted == False
-    ).all()
+    result = await db.execute(
+        select(Product).where(
+            Product.prod_id.in_(requested_ids),
+            Product.business_id == business_id,
+            Product.is_deleted == False
+        )
+    )
+    products_bulk = result.scalars().all()
     product_cache = {str(p.prod_id): p for p in products_bulk}
 
     override_items = []
@@ -63,8 +67,8 @@ def calculate_total_amount(items) -> Decimal:
     return total
 
 
-def create_sale_header(db: Session, business_id: str, user_id: str, new_sale_id: str, invoice_no: str, data: SaleCreate, total_amount: Decimal, discount: Decimal):
-    db.execute(
+async def create_sale_header(db: AsyncSession, business_id: str, user_id: str, new_sale_id: str, invoice_no: str, data: SaleCreate, total_amount: Decimal, discount: Decimal):
+    await db.execute(
         text("""
             INSERT INTO sales (
                 sales_id, business_id, customer_id,
@@ -93,13 +97,13 @@ def create_sale_header(db: Session, business_id: str, user_id: str, new_sale_id:
     )
 
 
-def handle_stock_overrides(db: Session, business_id: str, user_id: str, new_sale_id: str, override_items: list):
+async def handle_stock_overrides(db: AsyncSession, business_id: str, user_id: str, new_sale_id: str, override_items: list):
     for ov in override_items:
         product = ov["product"]
         avail = ov["available_qty"]
         shortfall = ov["requested_qty"] - avail
 
-        db.execute(
+        await db.execute(
             text("""
                 UPDATE products
                 SET prod_stock_qty = prod_stock_qty + :shortfall
@@ -108,7 +112,7 @@ def handle_stock_overrides(db: Session, business_id: str, user_id: str, new_sale
             {"shortfall": shortfall, "product_id": str(product.prod_id)}
         )
 
-        db.execute(
+        await db.execute(
             text("""
                 INSERT INTO stock_movements (
                     business_id, product_id,
@@ -140,7 +144,7 @@ def handle_stock_overrides(db: Session, business_id: str, user_id: str, new_sale
         )
 
 
-def insert_sale_items(db: Session, business_id: str, new_sale_id: str, items, product_cache: dict):
+async def insert_sale_items(db: AsyncSession, business_id: str, new_sale_id: str, items, product_cache: dict):
     if not items:
         return
     value_clauses = []
@@ -160,7 +164,7 @@ def insert_sale_items(db: Session, business_id: str, new_sale_id: str, items, pr
         value_params[f"mrp_{idx}"] = item_mrp
         value_params[f"cost_{idx}"] = cost_price
 
-    db.execute(
+    await db.execute(
         text(f"""
             INSERT INTO sale_items (
                 business_id, sale_id, product_id,
@@ -173,8 +177,8 @@ def insert_sale_items(db: Session, business_id: str, new_sale_id: str, items, pr
     )
 
 
-def update_sale_tax_totals(db: Session, new_sale_id: str):
-    db.execute(
+async def update_sale_tax_totals(db: AsyncSession, new_sale_id: str):
+    await db.execute(
         text("""
             UPDATE sales
             SET
@@ -197,14 +201,15 @@ def update_sale_tax_totals(db: Session, new_sale_id: str):
     )
 
 
-def auto_record_payment(db: Session, business_id: str, new_sale_id: str, data: SaleCreate, total_amount: Decimal):
+async def auto_record_payment(db: AsyncSession, business_id: str, new_sale_id: str, data: SaleCreate, total_amount: Decimal):
     if data.sales_payment_status not in ("paid", "partial"):
         return
 
-    sale_row = db.execute(
+    result = await db.execute(
         text("SELECT sales_final_amount FROM sales WHERE sales_id = CAST(:sid AS uuid)"),
         {"sid": new_sale_id}
-    ).fetchone()
+    )
+    sale_row = result.fetchone()
     final_amount = (
         Decimal(str(sale_row.sales_final_amount))
         if sale_row and sale_row.sales_final_amount
@@ -212,7 +217,7 @@ def auto_record_payment(db: Session, business_id: str, new_sale_id: str, data: S
     )
 
     if data.sales_payment_status == "paid":
-        record_payment_and_sync(
+        await record_payment_and_sync_async(
             db=db,
             business_id=business_id,
             sale_id=new_sale_id,
@@ -225,7 +230,7 @@ def auto_record_payment(db: Session, business_id: str, new_sale_id: str, data: S
     elif data.sales_payment_status == "partial" and data.paid_amount and data.paid_amount > 0:
         paid = data.paid_amount
         if paid >= final_amount:
-            record_payment_and_sync(
+            await record_payment_and_sync_async(
                 db=db,
                 business_id=business_id,
                 sale_id=new_sale_id,
@@ -236,7 +241,7 @@ def auto_record_payment(db: Session, business_id: str, new_sale_id: str, data: S
                 cumulative_paid=final_amount,
             )
         else:
-            record_payment_and_sync(
+            await record_payment_and_sync_async(
                 db=db,
                 business_id=business_id,
                 sale_id=new_sale_id,
@@ -255,7 +260,7 @@ def parse_sale_error(error_msg: str) -> str:
     return "An unexpected error occurred. Please try again."
 
 
-def get_sales_list(db: Session, business_id: str, pagination: dict, search: str, status: str, date_from: str, date_to: str, sort_by: str, sort_dir: str):
+async def get_sales_list(db: AsyncSession, business_id: str, pagination: dict, search: str, status: str, date_from: str, date_to: str, sort_by: str, sort_dir: str):
     SORTABLE = {
         "sales_created_at": "s.sales_created_at",
         "invoice_no": "s.invoice_no",
@@ -319,16 +324,17 @@ def get_sales_list(db: Session, business_id: str, pagination: dict, search: str,
         ORDER BY {order_col} {order_dir}
         OFFSET :offset LIMIT :limit
     """
-    rows = db.execute(text(data_sql), params).fetchall()
+    result = await db.execute(text(data_sql), params)
+    rows = result.fetchall()
     total = rows[0].total_count if rows else 0
 
-    result = []
+    result_list = []
     for r in rows:
         sale_final = Decimal(str(r.sales_final_amount)) if r.sales_final_amount else Decimal("0")
         total_paid_dec = Decimal(str(r.cumulative_paid)) if r.cumulative_paid else Decimal("0")
         remaining = sale_final - total_paid_dec
 
-        result.append({
+        result_list.append({
             "sales_id": str(r.sales_id),
             "invoice_no": r.invoice_no,
             "customer_id": str(r.customer_id) if r.customer_id else None,
@@ -348,11 +354,11 @@ def get_sales_list(db: Session, business_id: str, pagination: dict, search: str,
             "last_updated_by": r.last_updated_by if hasattr(r, "last_updated_by") else None,
         })
 
-    return result, total
+    return result_list, total
 
 
-def get_sale_detail(db: Session, business_id: str, sales_id: str):
-    sale = db.execute(
+async def get_sale_detail(db: AsyncSession, business_id: str, sales_id: str):
+    result = await db.execute(
         text("""
             SELECT s.sales_id, s.business_id, s.customer_id,
                    c.cust_name        AS customer_name,
@@ -368,12 +374,13 @@ def get_sale_detail(db: Session, business_id: str, sales_id: str):
               AND s.is_deleted  = false
         """),
         {"sid": sales_id, "bid": business_id}
-    ).fetchone()
+    )
+    sale = result.fetchone()
 
     if not sale:
         return None
 
-    items = db.execute(
+    items_result = await db.execute(
         text("""
             SELECT si.sale_item_id, si.product_id,
                    p.prod_name         AS product_name,
@@ -387,9 +394,10 @@ def get_sale_detail(db: Session, business_id: str, sales_id: str):
               AND si.business_id = CAST(:bid AS uuid)
         """),
         {"sid": sales_id, "bid": business_id}
-    ).fetchall()
+    )
+    items = items_result.fetchall()
 
-    active_payment = db.execute(
+    payment_result = await db.execute(
         text("""
             SELECT COALESCE(cumulative_paid, 0) AS total_paid,
                    payment_status
@@ -399,7 +407,8 @@ def get_sale_detail(db: Session, business_id: str, sales_id: str):
               AND is_active    = true
         """),
         {"sid": sales_id, "bid": business_id}
-    ).fetchone()
+    )
+    active_payment = payment_result.fetchone()
 
     sale_final = Decimal(str(sale.sales_final_amount)) if sale.sales_final_amount else Decimal("0")
     total_paid = Decimal(str(active_payment.total_paid)) if active_payment else Decimal("0")
@@ -440,9 +449,10 @@ def get_sale_detail(db: Session, business_id: str, sales_id: str):
 
     return {
         "sales_id": str(sale.sales_id),
-        "invoice_no": sale.invoice_no,
+        "business_id": str(sale.business_id),
         "customer_id": str(sale.customer_id) if sale.customer_id else None,
-        "customer_name": sale.customer_name or None,
+        "customer_name": sale.customer_name,
+        "invoice_no": sale.invoice_no,
         "sales_total_amount": str(sale.sales_total_amount),
         "sales_discount": str(sale.sales_discount),
         "cgst_total": str(sale.cgst_total) if sale.cgst_total else None,
@@ -452,23 +462,24 @@ def get_sale_detail(db: Session, business_id: str, sales_id: str):
         "sales_final_amount": str(sale.sales_final_amount) if sale.sales_final_amount else None,
         "sales_payment_method": sale.sales_payment_method,
         "sales_payment_status": sale.sales_payment_status,
-        "total_paid": str(total_paid),
-        "remaining_balance": str(remaining) if remaining > 0 else "0",
         "sales_created_at": fmt_ts(sale.sales_created_at),
         "items": items_data,
+        "total_paid": str(total_paid),
+        "remaining_balance": str(remaining) if remaining > 0 else "0",
     }
 
 
-def get_sale_final_amount(db: Session, sales_id: str, business_id: str) -> Decimal:
-    sale_row = db.execute(
+async def get_sale_final_amount(db: AsyncSession, sales_id: str, business_id: str) -> Decimal:
+    result = await db.execute(
         text("SELECT sales_final_amount FROM sales WHERE sales_id = CAST(:sid AS uuid) AND business_id = CAST(:bid AS uuid)"),
         {"sid": sales_id, "bid": business_id}
-    ).fetchone()
+    )
+    sale_row = result.fetchone()
     return Decimal(str(sale_row.sales_final_amount)) if sale_row and sale_row.sales_final_amount else Decimal("0")
 
 
-def get_sale_active_payment(db: Session, sales_id: str, business_id: str) -> Decimal:
-    row = db.execute(
+async def get_sale_active_payment(db: AsyncSession, sales_id: str, business_id: str) -> Decimal:
+    result = await db.execute(
         text("""
             SELECT COALESCE(cumulative_paid, 0) AS already_paid
             FROM payments
@@ -477,19 +488,20 @@ def get_sale_active_payment(db: Session, sales_id: str, business_id: str) -> Dec
               AND is_active = true
         """),
         {"sid": sales_id, "bid": business_id}
-    ).fetchone()
+    )
+    row = result.fetchone()
     return Decimal(str(row.already_paid)) if row else Decimal("0")
 
 
-def update_sale_status(db: Session, sales_id: str, status: str, business_id: str):
-    db.execute(
+async def update_sale_status(db: AsyncSession, sales_id: str, status: str, business_id: str):
+    await db.execute(
         text("UPDATE sales SET sales_payment_status = :status WHERE sales_id = CAST(:sid AS uuid) AND business_id = CAST(:bid AS uuid)"),
         {"status": status, "sid": sales_id, "bid": business_id}
     )
 
 
-def update_payment_status(db: Session, sales_id: str, status: str, business_id: str):
-    db.execute(
+async def update_payment_status(db: AsyncSession, sales_id: str, status: str, business_id: str):
+    await db.execute(
         text("""
             UPDATE payments SET payment_status = :status
             WHERE sale_id = CAST(:sid AS uuid) AND business_id = CAST(:bid AS uuid) AND is_active = true

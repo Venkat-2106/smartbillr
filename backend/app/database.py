@@ -2,6 +2,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from dotenv import load_dotenv
 import os
 
@@ -24,12 +25,45 @@ Base = declarative_base()
 
 # ── Async engine (for async route handlers) ─────────────────────────────
 # Uses the same DATABASE_URL with the postgresql+asyncpg:// scheme.
-# Falls back gracefully if asyncpg is not installed.
+# asyncpg does not accept sslmode as a URL parameter (that's psycopg2).
+# We strip it and pass SSL config via connect_args instead.
 
-ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+def _build_async_url(url: str) -> tuple[str, dict]:
+    """Convert a psycopg2-style DATABASE_URL to asyncpg-compatible form.
+
+    Returns (cleaned_url, connect_args) where connect_args contains SSL
+    configuration that asyncpg understands.
+    """
+    url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    parsed = urlparse(url)
+    params = parse_qs(parsed.query)
+
+    connect_args = {}
+    sslmode = params.pop("sslmode", [None])[0]
+    if sslmode:
+        import ssl as _ssl
+        if sslmode in ("require", "prefer"):
+            # require/prefer = use SSL but don't verify cert (matches psycopg2 behaviour)
+            ctx = _ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = _ssl.CERT_NONE
+            connect_args["ssl"] = ctx
+        elif sslmode in ("verify-ca", "verify-full"):
+            ctx = _ssl.create_default_context()
+            ctx.check_hostname = True
+            ctx.verify_mode = _ssl.CERT_REQUIRED
+            connect_args["ssl"] = ctx
+
+    clean_query = urlencode(params, doseq=True) if params else ""
+    clean_url = urlunparse(parsed._replace(query=clean_query))
+    return clean_url, connect_args
+
+
+ASYNC_DATABASE_URL, _async_connect_args = _build_async_url(DATABASE_URL)
 
 async_engine = create_async_engine(
     ASYNC_DATABASE_URL,
+    connect_args=_async_connect_args,
     pool_pre_ping=True,
     pool_recycle=300,
     pool_size=5,

@@ -23,7 +23,7 @@ from app.schemas.customer import CustomerCreate, CustomerUpdate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
 from app.utils.timestamp import fmt_ts
-from app.utils.usage_limits import check_create_allowed, fetch_subscription_type
+from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 from typing import Optional
 
 router = APIRouter(prefix="/v1/customers", tags=["Customers"])
@@ -64,8 +64,8 @@ async def create_customer(
     business_id = current_user["business_id"]
 
     # ── Subscription tier limit check ─────────────────────────────────────────
-    sub_type = current_user.get("subscription_type") or fetch_subscription_type(db, business_id)
-    allowed, msg = check_create_allowed(db, business_id, sub_type, "max_customers", "customers")
+    sub_type = current_user.get("subscription_type") or await fetch_subscription_type_async(db, business_id)
+    allowed, msg = await check_create_allowed_async(db, business_id, sub_type, "max_customers", "customers")
     if not allowed:
         return error_response(msg, status_code=403)
 

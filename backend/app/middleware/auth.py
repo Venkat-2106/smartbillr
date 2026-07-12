@@ -353,13 +353,18 @@ async def verify_token(
                 status_code=403,
                 detail="Your business account has been suspended. Contact support.",
             )
-        await db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
-        await db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": cached_val["business_id"]})
+        await db.execute(text("SET LOCAL app.current_user_id = $1"), [user_id])
+        await db.execute(text("SET LOCAL app.current_business_id = $1"), [cached_val["business_id"]])
         cached_val["subscription_type"] = getattr(request.state, "subscription_type", None)
         return {**cached_val, "token_iat": token_iat}
 
     # ── Cache miss — single DB query fetches profile + role + permissions + last_logout_at ──
-    await db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
+    # NOTE: asyncpg requires positional parameters ($1, $2, ...) — NOT named (:uid).
+    # Using text("SET LOCAL ... = :uid") with {"uid": user_id} will fail with
+    # "syntax error at or near $1" because asyncpg prepares the statement and
+    # only understands $N placeholders. This applies to ALL db.execute(text(...))
+    # calls in async context. Use text("... = $1"), [user_id] instead.
+    await db.execute(text("SET LOCAL app.current_user_id = $1"), [user_id])
     result = (await db.execute(
         text("""
             SELECT
@@ -375,23 +380,24 @@ async def verify_token(
                 ON rp.role_id = p.role_id
             LEFT JOIN permissions perm
                 ON perm.id = rp.permission_id
-            WHERE p.id        = :user_id
+            WHERE p.id        = $1
               AND p.is_active = true
             GROUP BY p.business_id, p.full_name, r.name, p.last_logout_at
             LIMIT 1
         """),
-        {"user_id": user_id}
+        [user_id]
     )).fetchone()
 
     if result is None:
         raise HTTPException(status_code=403, detail="User not found or inactive")
 
     # ── Now that we know the business_id, set the GUC and check suspension ──
-    await db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": str(result.business_id)})
+    # asyncpg positional params ($1) — see note above
+    await db.execute(text("SET LOCAL app.current_business_id = $1"), [str(result.business_id)])
 
     business_active = (await db.execute(
-        text("SELECT is_active FROM businesses WHERE business_id = CAST(:bid AS uuid) LIMIT 1"),
-        {"bid": str(result.business_id)}
+        text("SELECT is_active FROM businesses WHERE business_id = CAST($1 AS uuid) LIMIT 1"),
+        [str(result.business_id)]
     )).scalar()
 
     if not business_active:
@@ -467,11 +473,11 @@ async def verify_super_admin_token(
     # Must set app.current_user_id BEFORE the super_admins query so the
     # self_lookup_policy (which checks user_id = app.current_user_id())
     # allows the super admin to read their own row.
-    await db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
+    await db.execute(text("SET LOCAL app.current_user_id = $1"), [user_id])
 
     row = (await db.execute(
-        text("SELECT last_logout_at FROM super_admins WHERE user_id = :uid LIMIT 1"),
-        {"uid": user_id},
+        text("SELECT last_logout_at FROM super_admins WHERE user_id = $1 LIMIT 1"),
+        [user_id],
     )).fetchone()
     if not row:
         raise HTTPException(

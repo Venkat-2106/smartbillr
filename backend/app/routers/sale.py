@@ -29,9 +29,9 @@ from app.services.sale_service import (
     update_sale_status,
     update_payment_status,
 )
-from app.utils.payment_helpers import record_payment_and_sync, calculate_payment_status
+from app.utils.payment_helpers import record_payment_and_sync_async, calculate_payment_status
 from app.utils.currency import get_currency_symbol
-from app.utils.usage_limits import check_create_allowed, fetch_subscription_type
+from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 import uuid
 
 router = APIRouter(prefix="/v1/sales", tags=["Sales"])
@@ -59,8 +59,8 @@ async def create_sale(
     user_id = current_user["user_id"]
 
     # ── Subscription tier limit check ─────────────────────────────────────────
-    sub_type = current_user.get("subscription_type") or fetch_subscription_type(db, business_id)
-    allowed, msg = check_create_allowed(
+    sub_type = current_user.get("subscription_type") or await fetch_subscription_type_async(db, business_id)
+    allowed, msg = await check_create_allowed_async(
         db, business_id, sub_type, "max_sales_per_month",
         "sales", date_column="sales_created_at"
     )
@@ -68,7 +68,7 @@ async def create_sale(
         return error_response(msg, status_code=403)
 
     try:
-        product_cache, override_items, stock_errors = validate_and_cache_products(
+        product_cache, override_items, stock_errors = await validate_and_cache_products(
             db, business_id, data.items, data.allow_stock_override
         )
 
@@ -91,17 +91,17 @@ async def create_sale(
             if (data.sales_discount is not None and data.sales_discount > 0)
             else Decimal("0")
         )
-        invoice_no = generate_invoice_number(db, business_id)
+        invoice_no = await generate_invoice_number(db, business_id)
         new_sale_id = str(uuid.uuid4())
 
-        create_sale_header(db, business_id, user_id, new_sale_id, invoice_no, data, total_amount, discount)
+        await create_sale_header(db, business_id, user_id, new_sale_id, invoice_no, data, total_amount, discount)
 
         if override_items:
-            handle_stock_overrides(db, business_id, user_id, new_sale_id, override_items)
+            await handle_stock_overrides(db, business_id, user_id, new_sale_id, override_items)
 
-        insert_sale_items(db, business_id, new_sale_id, data.items, product_cache)
-        update_sale_tax_totals(db, new_sale_id)
-        auto_record_payment(db, business_id, new_sale_id, data, total_amount)
+        await insert_sale_items(db, business_id, new_sale_id, data.items, product_cache)
+        await update_sale_tax_totals(db, new_sale_id)
+        await auto_record_payment(db, business_id, new_sale_id, data, total_amount)
 
         await db.commit()
 
@@ -129,7 +129,7 @@ async def get_sales(
     sort_by: Optional[str] = Query(default="sales_created_at", description="Column to sort by"),
     sort_dir: Optional[str] = Query(default="desc", description="asc or desc"),
 ):
-    result, total = get_sales_list(
+    result, total = await get_sales_list(
         db, current_user["business_id"], pagination,
         search, status, date_from, date_to, sort_by, sort_dir
     )
@@ -176,7 +176,7 @@ async def get_sale(
     current_user: dict = Depends(require_permission("sales.view")),
     db: AsyncSession = Depends(get_async_db)
 ):
-    sale = get_sale_detail(db, current_user["business_id"], sales_id)
+    sale = await get_sale_detail(db, current_user["business_id"], sales_id)
     if not sale:
         return error_response("Sale not found", 404)
     return success_response(sale)
@@ -212,8 +212,8 @@ async def handle_sale_status_patch(
     currency_sym = get_currency_symbol(biz.business_country_code if biz else None)
 
     old_status = sale.sales_payment_status
-    sale_final = get_sale_final_amount(db, sales_id, business_id)
-    already_paid = get_sale_active_payment(db, sales_id, business_id)
+    sale_final = await get_sale_final_amount(db, sales_id, business_id)
+    already_paid = await get_sale_active_payment(db, sales_id, business_id)
     remaining = (sale_final - already_paid).quantize(Decimal("0.01"))
 
     if old_status == body.status and body.paid_amount is None:
@@ -238,7 +238,7 @@ async def handle_sale_status_patch(
         total_paid = (already_paid + paid_input).quantize(Decimal("0.01"))
         derived_status = calculate_payment_status(total_paid, sale_final)
 
-        record_payment_and_sync(
+        await record_payment_and_sync_async(
             db=db,
             business_id=current_user["business_id"],
             sale_id=sales_id,
@@ -257,7 +257,7 @@ async def handle_sale_status_patch(
 
     elif body.status == "paid" and old_status != "paid":
         if remaining > 0:
-            record_payment_and_sync(
+            await record_payment_and_sync_async(
                 db=db,
                 business_id=current_user["business_id"],
                 sale_id=sales_id,
@@ -275,8 +275,8 @@ async def handle_sale_status_patch(
                 "in the payments table to record the remaining balance as an adjustment."
             )
         else:
-            update_payment_status(db, sales_id, "paid", business_id)
-            update_sale_status(db, sales_id, "paid", business_id)
+            await update_payment_status(db, sales_id, "paid", business_id)
+            await update_sale_status(db, sales_id, "paid", business_id)
             new_total_paid = already_paid
             new_remaining = Decimal("0")
 
@@ -288,8 +288,8 @@ async def handle_sale_status_patch(
         )
 
     else:
-        update_sale_status(db, sales_id, body.status, business_id)
-        update_payment_status(db, sales_id, body.status, business_id)
+        await update_sale_status(db, sales_id, body.status, business_id)
+        await update_payment_status(db, sales_id, body.status, business_id)
 
     await db.commit()
 

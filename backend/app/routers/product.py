@@ -73,9 +73,9 @@ from app.models.category import Category
 from app.schemas.product import ProductCreate, ProductUpdate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate, pagination_response
-from app.utils.queries import fetch_stock_kpi_counts
+from app.utils.queries import fetch_stock_kpi_counts_async
 from app.utils.timestamp import fmt_ts
-from app.utils.usage_limits import check_create_allowed, fetch_subscription_type
+from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 from sqlalchemy.exc import IntegrityError
 from typing import Optional
 
@@ -243,8 +243,8 @@ async def create_product(
     show_profit = PROFIT_PERMISSION in current_user.get("permissions", set())
 
     # ── 0. Subscription tier limit check ──────────────────────────────────────
-    sub_type = current_user.get("subscription_type") or await fetch_subscription_type(db, business_id)
-    allowed, msg = await check_create_allowed(db, business_id, sub_type, "max_products", "products")
+    sub_type = current_user.get("subscription_type") or await fetch_subscription_type_async(db, business_id)
+    allowed, msg = await check_create_allowed_async(db, business_id, sub_type, "max_products", "products")
     if not allowed:
         return error_response(msg, status_code=403)
 
@@ -445,7 +445,7 @@ async def get_product_summary_kpi(
     bid = current_user["business_id"]
     show_profit = "view_product_profit" in current_user.get("permissions", set())
 
-    counts = await fetch_stock_kpi_counts(db, bid)
+    counts = await fetch_stock_kpi_counts_async(db, bid)
 
     return success_response({
         "total_count":       counts["total_count"],

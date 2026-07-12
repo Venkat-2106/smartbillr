@@ -323,6 +323,12 @@ async def _check_subscription_for_user_async(user_id: str, db) -> tuple[dict | N
     async dependencies (verify_subscription).
 
     Accepts an AsyncSession. Uses the same caching logic.
+
+    NOTE: asyncpg requires positional parameters ($1, $2, ...) — NOT named (:uid).
+    Using text("SET LOCAL ... = :uid") with {"uid": user_id} will fail with
+    "syntax error at or near $1" because asyncpg prepares the statement and
+    only understands $N placeholders. This applies to ALL db.execute(text(...))
+    calls in async context. Use text("... = $1"), [user_id] instead.
     """
     cached = _cache_sub_get(user_id)
     if cached is not None:
@@ -332,17 +338,17 @@ async def _check_subscription_for_user_async(user_id: str, db) -> tuple[dict | N
     try:
         from sqlalchemy import text
 
-        await db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
+        await db.execute(text("SET LOCAL app.current_user_id = $1"), [user_id])
 
         result = await db.execute(
             text("""
                 SELECT business_id
                 FROM profiles
-                WHERE id = :user_id
+                WHERE id = $1
                   AND is_active = true
                 LIMIT 1
             """),
-            {"user_id": user_id},
+            [user_id],
         )
         profile_row = result.fetchone()
 
@@ -358,8 +364,8 @@ async def _check_subscription_for_user_async(user_id: str, db) -> tuple[dict | N
         business_id = str(profile_row.business_id)
 
         await db.execute(
-            text("SET LOCAL app.current_business_id = :bid"),
-            {"bid": business_id},
+            text("SET LOCAL app.current_business_id = $1"),
+            [business_id],
         )
 
         row_result = await db.execute(
@@ -372,11 +378,11 @@ async def _check_subscription_for_user_async(user_id: str, db) -> tuple[dict | N
                     trial_end_at,
                     is_active
                 FROM businesses
-                WHERE business_id = CAST(:bid AS uuid)
+                WHERE business_id = CAST($1 AS uuid)
                   AND (is_deleted = false OR is_deleted IS NULL)
                 LIMIT 1
             """),
-            {"bid": business_id},
+            [business_id],
         )
         row = row_result.fetchone()
 

@@ -169,18 +169,28 @@ def _is_excluded(path: str) -> bool:
     return False
 
 
-def _check_subscription_for_user(user_id: str) -> tuple[dict | None, str]:
+def _check_subscription_for_user(user_id: str, db=None) -> tuple[dict | None, str]:
     """
     Fetch subscription status for a user in one query.
     Returns (None, subscription_type) if valid, (error_dict, subscription_type) if invalid.
     Caches result by user_id for 60 seconds (L1 TTLCache + L2 Redis).
+
+    Args:
+        user_id: The auth user ID (JWT sub claim).
+        db: Optional shared SQLAlchemy session.  When provided (FastAPI
+            dependency mode) the caller owns the session lifecycle.
+            When omitted a private SessionLocal is created (legacy /
+            middleware backward-compat).
     """
     cached = _cache_sub_get(user_id)
     if cached is not None:
         sub_type = cached.get("subscription_type", "trial") if cached.get("_valid") else cached.get("subscription_type", "trial")
         return (None if cached.get("_valid") else cached, sub_type)
 
-    db = SessionLocal()
+    own_session = db is None
+    if own_session:
+        from app.database import SessionLocal as _SL
+        db = _SL()
     try:
         # Step 1 — Set app.current_user_id so profiles' self_lookup_policy
         # allows reading the user's own row, then fetch the business_id.
@@ -296,7 +306,8 @@ def _check_subscription_for_user(user_id: str) -> tuple[dict | None, str]:
         logging.warning("Subscription check failed, allowing request through: %s", e)
         return None, "trial"
     finally:
-        db.close()
+        if own_session:
+            db.close()
 
 
 class SubscriptionMiddleware:

@@ -8,7 +8,6 @@ from app.middleware.auth import verify_token
 from app.middleware.security import SecurityHeadersMiddleware
 from app.middleware.ratelimit import RateLimitMiddleware
 from app.middleware.request_size_limit import RequestSizeLimitMiddleware
-from app.middleware.subscription import SubscriptionMiddleware
 from app.utils.response import success_response, error_response
 from app.routers import (
     business, category, customer, supplier,
@@ -93,15 +92,9 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 # Returns 413 Payload Too Large with consistent error format.
 app.add_middleware(RequestSizeLimitMiddleware)
 
-# ── Subscription Access Control ────────────────────────────────────────────────
-# Validates tenant subscription on every authenticated request.
-# Returns 402 Payment Required if trial expired / subscription invalid.
-# Excludes: registration, subscription check, auth, health, admin.
-app.add_middleware(SubscriptionMiddleware)
-
 # ── CORS ──────────────────────────────────────────────────────────────────────
 # Registered last (outermost) so CORS headers are attached even to short-circuit
-# responses from SubscriptionMiddleware (402) and RequestSizeLimitMiddleware (413).
+# responses from RequestSizeLimitMiddleware (413).
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
 ALLOWED_ORIGINS = [origin.strip() for origin in _raw_origins.split(",")]
 

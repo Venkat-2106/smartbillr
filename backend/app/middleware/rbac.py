@@ -49,6 +49,7 @@
 
 from fastapi import HTTPException, Depends
 from app.middleware.auth import verify_token
+from app.dependencies.subscription import verify_subscription
 
 
 def require_permission(permission_code: str):
@@ -75,8 +76,14 @@ def require_permission(permission_code: str):
     PERFORMANCE NOTE:
         verify_token already loaded all permissions in one DB query.
         This function just reads from that result — zero extra DB queries.
+
+    SUBSCRIPTION NOTE:
+        verify_subscription runs automatically to validate the tenant's
+        subscription status.  Routers that need to skip this check (e.g.
+        billing checkout) should use verify_token directly instead.
     """
     def dependency(
+        _sub: None = Depends(verify_subscription),
         current_user: dict = Depends(verify_token),
     ) -> dict:
         if permission_code not in current_user["permissions"]:
@@ -99,6 +106,7 @@ def require_any_permission(*permission_codes: str):
         current_user = Depends(require_any_permission("sales.edit", "sales.delete"))
     """
     def dependency(
+        _sub: None = Depends(verify_subscription),
         current_user: dict = Depends(verify_token),
     ) -> dict:
         if not any(code in current_user["permissions"] for code in permission_codes):
@@ -121,6 +129,7 @@ def require_all_permissions(*permission_codes: str):
         current_user = Depends(require_all_permissions("sales.edit", "dashboard.financial"))
     """
     def dependency(
+        _sub: None = Depends(verify_subscription),
         current_user: dict = Depends(verify_token),
     ) -> dict:
         missing = [code for code in permission_codes if code not in current_user["permissions"]]
@@ -154,5 +163,11 @@ def get_current_user_with_permissions(
     PERFORMANCE NOTE:
         verify_token already loaded all permissions. This is a pass-through.
         Zero extra DB queries.
+
+    NOTE:
+        This helper intentionally does NOT include verify_subscription
+        because it is a "soft" permission helper — the route itself decides
+        how to use permissions.  Routes that need subscription gating should
+        use require_permission() or add verify_subscription explicitly.
     """
     return current_user

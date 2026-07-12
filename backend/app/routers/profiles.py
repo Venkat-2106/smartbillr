@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import get_db
 from app.middleware.auth import verify_token
+from app.dependencies.subscription import verify_subscription
 from app.utils.response import success_response, error_response
 import logging
 
@@ -23,6 +24,7 @@ router = APIRouter(prefix="/v1/profiles", tags=["Profiles"])
 # ─── GET /profiles/me ─────────────────────────────────────────────────────────
 @router.get("/me")
 def get_my_profile(
+    _sub: None = Depends(verify_subscription),
     current_user: dict = Depends(verify_token),
     db: Session = Depends(get_db),
 ):

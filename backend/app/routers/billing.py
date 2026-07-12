@@ -84,9 +84,12 @@ def _find_existing_checkout(db, bid, plan_id):
 @router.post("/checkout")
 def create_checkout(
     payload: CheckoutRequest,
-    current_user: dict = Depends(require_permission("settings.manage")),
+    current_user: dict = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
+    # NOTE: Uses verify_token directly (not require_permission) because
+    # expired/trial businesses must be able to reach checkout to pay.
+    # The subscription middleware/dependency would block them otherwise.
     bid = current_user["business_id"]
 
     plan = db.execute(
@@ -187,9 +190,11 @@ def create_checkout(
 @router.get("/checkout/{payment_id}/status")
 def checkout_status(
     payment_id: str,
-    current_user: dict = Depends(require_permission("settings.manage")),
+    current_user: dict = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
+    # NOTE: Uses verify_token directly — expired businesses must be able to
+    # poll checkout status while completing payment.
     row = db.execute(
         text("""
             SELECT payment_id, status, provider, provider_order_id

@@ -242,7 +242,7 @@ def create_product(
     show_profit = PROFIT_PERMISSION in current_user.get("permissions", set())
 
     # ── 0. Subscription tier limit check ──────────────────────────────────────
-    sub_type = fetch_subscription_type(db, business_id)
+    sub_type = current_user.get("subscription_type") or fetch_subscription_type(db, business_id)
     allowed, msg = check_create_allowed(db, business_id, sub_type, "max_products", "products")
     if not allowed:
         return error_response(msg, status_code=403)

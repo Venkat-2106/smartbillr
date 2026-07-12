@@ -47,10 +47,12 @@ KEY_SUB = "sub_cache:{user_id}"
 
 
 
-def _cache_sub_get(user_id: str) -> dict | None | bool:
+def _cache_sub_get(user_id: str) -> dict | None:
     """
     Check L1 first, then L2.
-    Returns False if valid (no error), dict if blocked, None if not cached.
+    Returns None if not cached, otherwise a dict:
+      {"_valid": True,  "subscription_type": "..."}  → subscription OK
+      {"_valid": False, "error_code": "...", ...}    → subscription blocked
     """
     if _subscription_cache is not None:
         v = _subscription_cache.get(KEY_SUB.format(user_id=user_id))
@@ -70,9 +72,13 @@ def _cache_sub_get(user_id: str) -> dict | None | bool:
     return None
 
 
-def _cache_sub_set(user_id: str, value: dict | None):
-    """False means valid (no error); a dict means blocked; None means skip caching."""
-    store = value if value else False
+def _cache_sub_set(user_id: str, value: dict | None, subscription_type: str = "trial"):
+    """
+    Cache the subscription check result.
+      value=None          → valid subscription; cache {"_valid": True, "subscription_type": ...}
+      value=dict (error)  → blocked;           cache the error dict with _valid=False
+    """
+    store = {"_valid": True, "subscription_type": subscription_type} if value is None else {**value, "_valid": False}
     if _subscription_cache is not None:
         _subscription_cache[KEY_SUB.format(user_id=user_id)] = store
     try:
@@ -163,15 +169,16 @@ def _is_excluded(path: str) -> bool:
     return False
 
 
-def _check_subscription_for_user(user_id: str) -> dict | None:
+def _check_subscription_for_user(user_id: str) -> tuple[dict | None, str]:
     """
     Fetch subscription status for a user in one query.
-    Returns None if valid, error dict if invalid.
+    Returns (None, subscription_type) if valid, (error_dict, subscription_type) if invalid.
     Caches result by user_id for 60 seconds (L1 TTLCache + L2 Redis).
     """
     cached = _cache_sub_get(user_id)
     if cached is not None:
-        return None if cached is False else cached
+        sub_type = cached.get("subscription_type", "trial") if cached.get("_valid") else cached.get("subscription_type", "trial")
+        return (None if cached.get("_valid") else cached, sub_type)
 
     db = SessionLocal()
     try:
@@ -197,7 +204,7 @@ def _check_subscription_for_user(user_id: str) -> dict | None:
                 "message": "User or business not found",
             }
             _cache_sub_set(user_id, result)
-            return result
+            return result, "trial"
 
         # Step 2 — Now that we have the business_id, set the GUC so
         # businesses' tenant_access_policy allows the subscription query.
@@ -230,8 +237,9 @@ def _check_subscription_for_user(user_id: str) -> dict | None:
                 "message": "User or business not found",
             }
             _cache_sub_set(user_id, result)
-            return result
+            return result, "trial"
 
+        subscription_type = row.subscription_type or "trial"
         now = datetime.now(timezone.utc)
         result = None
 
@@ -252,7 +260,7 @@ def _check_subscription_for_user(user_id: str) -> dict | None:
                     "status": "trial_expired",
                     "message": "Trial period has expired. Please complete payment to continue.",
                     "payment_status": row.payment_status,
-                    "subscription_type": row.subscription_type,
+                    "subscription_type": subscription_type,
                     "trial_end_at": trial_end.isoformat() if trial_end else None,
                     "subscription_end_at": sub_end.isoformat() if sub_end else None,
                 }
@@ -265,7 +273,7 @@ def _check_subscription_for_user(user_id: str) -> dict | None:
                     "status": "subscription_expired",
                     "message": "Subscription has expired. Please renew to continue.",
                     "payment_status": row.payment_status,
-                    "subscription_type": row.subscription_type,
+                    "subscription_type": subscription_type,
                     "trial_end_at": trial_end.isoformat() if trial_end else None,
                     "subscription_end_at": sub_end.isoformat() if sub_end else None,
                 }
@@ -281,12 +289,12 @@ def _check_subscription_for_user(user_id: str) -> dict | None:
                 "message": "Account subscription status is invalid. Please contact support.",
             }
 
-        _cache_sub_set(user_id, result)
-        return result
+        _cache_sub_set(user_id, result, subscription_type)
+        return result, subscription_type
 
     except Exception as e:
         logging.warning("Subscription check failed, allowing request through: %s", e)
-        return None
+        return None, "trial"
     finally:
         db.close()
 
@@ -341,7 +349,8 @@ class SubscriptionMiddleware:
             await self.app(scope, receive, send)
             return
 
-        error = _check_subscription_for_user(user_id)
+        error, subscription_type = _check_subscription_for_user(user_id)
+        request.state.subscription_type = subscription_type
         if error is not None:
             response = JSONResponse(
                 status_code=402,

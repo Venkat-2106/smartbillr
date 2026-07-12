@@ -59,7 +59,7 @@ def create_sale(
     user_id = current_user["user_id"]
 
     # ── Subscription tier limit check ─────────────────────────────────────────
-    sub_type = fetch_subscription_type(db, business_id)
+    sub_type = current_user.get("subscription_type") or fetch_subscription_type(db, business_id)
     allowed, msg = check_create_allowed(
         db, business_id, sub_type, "max_sales_per_month",
         "sales", date_column="sales_created_at"

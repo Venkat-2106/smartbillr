@@ -69,7 +69,7 @@ def create_supplier(
     business_id = current_user["business_id"]
 
     # ── Subscription tier limit check ─────────────────────────────────────────
-    sub_type = fetch_subscription_type(db, business_id)
+    sub_type = current_user.get("subscription_type") or fetch_subscription_type(db, business_id)
     allowed, msg = check_create_allowed(db, business_id, sub_type, "max_suppliers", "suppliers")
     if not allowed:
         return error_response(msg, status_code=403)

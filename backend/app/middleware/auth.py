@@ -341,6 +341,7 @@ def verify_token(
             )
         db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": user_id})
         db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": cached_val["business_id"]})
+        cached_val["subscription_type"] = getattr(request.state, "subscription_type", None)
         return {**cached_val, "token_iat": token_iat}
 
     # ── Cache miss — single DB query fetches profile + role + permissions + last_logout_at ──
@@ -412,6 +413,7 @@ def verify_token(
         "last_logout_at":   last_logout_epoch,
         "business_is_active": True,
         "token_iat":        token_iat,
+        "subscription_type": getattr(request.state, "subscription_type", None),
     }
 
     # Cache for 10s so subsequent requests skip the DB query.

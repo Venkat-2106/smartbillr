@@ -15,7 +15,7 @@
 #   so the user gets a clean "A product with this name already exists." message
 #   rather than a raw IntegrityError.
 
-from pydantic import BaseModel, field_validator, model_validator, ConfigDict
+from pydantic import BaseModel, field_validator, ConfigDict
 from typing import Optional
 from uuid import UUID
 from decimal import Decimal
@@ -26,7 +26,7 @@ from app.schemas.validators import strip_and_escape_html
 # ProductCreate — used when creating a new product (POST /products/)
 # ─────────────────────────────────────────────────────────────────────────────
 class ProductCreate(BaseModel):
-    category_id:          Optional[UUID]    = None
+    category_id:          UUID
     prod_name:            str
     prod_sell_price:      Decimal
     prod_cost_price:      Decimal
@@ -73,13 +73,6 @@ class ProductCreate(BaseModel):
             raise ValueError("Quantity cannot be negative")
         return v
 
-    @model_validator(mode="after")
-    def mrp_not_below_sell_price(self):
-        if self.prod_mrp is not None and self.prod_sell_price is not None:
-            if self.prod_mrp < self.prod_sell_price:
-                raise ValueError("MRP cannot be less than the selling price")
-        return self
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ProductUpdate — used when editing an existing product (PUT /products/{id})
@@ -122,13 +115,6 @@ class ProductUpdate(BaseModel):
         if v is not None and v < 0:
             raise ValueError("Price cannot be negative")
         return v
-
-    @model_validator(mode="after")
-    def mrp_not_below_sell_price(self):
-        if self.prod_mrp is not None and self.prod_sell_price is not None:
-            if self.prod_mrp < self.prod_sell_price:
-                raise ValueError("MRP cannot be less than the selling price")
-        return self
 
 
 # ─────────────────────────────────────────────────────────────────────────────

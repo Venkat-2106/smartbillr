@@ -120,9 +120,9 @@ function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categori
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-        <FormField label="Category" error={errors.category_id}>
+        <FormField label="Category *" error={errors.category_id}>
           <select className="sb-select" {...register('category_id')} style={selectStyle}>
-            <option value="">— No category —</option>
+            <option value="">— Select category —</option>
             {categories.map(c => (
               <option key={c.category_id} value={c.category_id}>{c.category_name}</option>
             ))}

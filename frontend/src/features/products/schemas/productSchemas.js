@@ -11,7 +11,7 @@ export const createSchema = z.object({
   tax_code:             z.string().max(50).optional().or(z.literal('')),
   barcode:              z.string().max(100).optional().or(z.literal('')),
   unit:                 z.string().default('pcs'),
-  category_id:          z.string().optional().or(z.literal('')),
+  category_id:          z.string().min(1, 'Category is required'),
 })
 
 export const editSchema = z.object({
@@ -24,5 +24,5 @@ export const editSchema = z.object({
   tax_code:             z.string().max(50).optional().or(z.literal('')),
   barcode:              z.string().max(100).optional().or(z.literal('')),
   unit:                 z.string().default('pcs'),
-  category_id:          z.string().optional().or(z.literal('')),
+  category_id:          z.string().min(1, 'Category is required'),
 })

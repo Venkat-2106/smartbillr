@@ -156,12 +156,15 @@ def row_to_dict(row, show_profit: bool = True, include_audit: bool = True):
         "tax_code":             row.tax_code,
         "barcode":              row.barcode,
         "unit":                 row.unit,
-        "is_deleted":           row.is_deleted,
         "prod_created_at":      fmt_ts(row.prod_created_at),
         "updated_at":           fmt_ts(row.updated_at),
         "updated_by":           str(row.updated_by)  if row.updated_by  else None,
         "last_updated_by":      row.last_updated_by  if row.last_updated_by  else None,
     }
+    # is_deleted is only selected by the detail query (get_product_with_profit);
+    # list queries filter it out and don't SELECT it, so guard with hasattr.
+    if hasattr(row, "is_deleted"):
+        d["is_deleted"] = row.is_deleted
     if include_audit:
         d["created_by"] = str(row.created_by) if row.created_by else None
         d["created_by_name"] = row.created_by_name if row.created_by_name else None

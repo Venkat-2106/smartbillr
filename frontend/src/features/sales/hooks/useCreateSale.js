@@ -214,7 +214,7 @@ export default function useCreateSale() {
       sales_payment_method: paymentMethod,
       sales_payment_status: paymentStatus,
       allow_stock_override: overrideFlag,
-      items: items.map(i => ({
+      items: items.filter(i => i.product_id).map(i => ({
         product_id:           i.product_id,
         sale_item_quantity:   Number(i.quantity),
         sale_item_unit_price: Number(i.unit_price),
@@ -356,11 +356,13 @@ export default function useCreateSale() {
     (parsedPaidAmount > 0 && parsedPaidAmount < totals.grandTotal);
 
   // ── Form validation ───────────────────────────────────────────────────────
+  const filledItems = useMemo(() => items.filter(i => i.product_id), [items]);
+
   const isValid = useMemo(() =>
-    items.length > 0 &&
-    items.every(i => i.product_id && Number(i.quantity) >= 1) &&
+    filledItems.length > 0 &&
+    filledItems.every(i => Number(i.quantity) >= 1) &&
     paidAmountValid,
-    [items, paidAmountValid]
+    [filledItems, paidAmountValid]
   );
 
   // ── Submit ────────────────────────────────────────────────────────────────

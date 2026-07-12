@@ -313,7 +313,7 @@ export default function ProductsPage() {
       ...data,
       tax_code:    data.tax_code    || null,
       barcode:     data.barcode     || null,
-      category_id: data.category_id || null,
+      category_id: data.category_id,
       // MRP FEATURE: send null when prod_mrp is 0 or empty — means "no MRP set"
       prod_mrp:    Number(data.prod_mrp) > 0 ? Number(data.prod_mrp) : null,
     }

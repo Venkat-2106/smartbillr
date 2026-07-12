@@ -79,7 +79,7 @@ export function useProducts() {
   // ── Export ──────────────────────────────────────────────────────────────
   // Lazily fetches ALL matching rows (limit=10000) with the same active
   // search/sort/date filters — only called on export click.
-  async function handleExport() {
+  const handleExport = useCallback(async () => {
     try {
       const rows = await fetchAllProductsForExport({
         search:       debouncedSearch,
@@ -96,13 +96,13 @@ export function useProducts() {
       toast.error('Export failed — please try again')
       return []
     }
-  }
+  }, [debouncedSearch, sortKey, sortDir, dateFrom, dateTo, pagedQuery.data])
 
   // ── Event handlers ──────────────────────────────────────────────────────
-  function handleSearch(val) {
+  const handleSearch = useCallback((val) => {
     setSearchRaw(val)
     setPage(1)
-  }
+  }, [])
 
   const handleSort = useCallback((key) => {
     if (sortKey === key) {
@@ -114,11 +114,11 @@ export function useProducts() {
     setPage(1)
   }, [sortKey])
 
-  function handleDateChange(field, value) {
+  const handleDateChange = useCallback((field, value) => {
     if (field === 'from') setDateFrom(value)
     else                  setDateTo(value)
     setPage(1)
-  }
+  }, [])
 
   return {
     // Table data

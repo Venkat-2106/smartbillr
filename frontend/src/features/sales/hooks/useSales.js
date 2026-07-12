@@ -103,22 +103,22 @@ export function useSales() {
   }, [sortKey]);
 
   // ── Date handler ──────────────────────────────────────────────────────────
-  const handleDateChange = (field, val) => {
+  const handleDateChange = useCallback((field, val) => {
     if (field === 'from') { setDateFrom(val); setPage(1); }
     else                  { setDateTo(val);   setPage(1); }
-  };
+  }, []);
 
   // ── Search handler — resets page ──────────────────────────────────────────
-  const handleSearch = (val) => {
+  const handleSearch = useCallback((val) => {
     setSearchRaw(val);
     setPage(1);
-  };
+  }, []);
 
   // ── Status filter handler — resets page ───────────────────────────────────
-  const handleStatusFilter = (val) => {
+  const handleStatusFilter = useCallback((val) => {
     setStatusRaw(val);
     setPage(1);
-  };
+  }, []);
 
   const activeSearch       = !!debouncedSearch;
   const activeDateFilter   = !!(dateFrom || dateTo);

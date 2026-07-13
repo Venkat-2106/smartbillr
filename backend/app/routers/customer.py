@@ -508,7 +508,9 @@ async def get_customer(
                 WHERE si.sale_id = ANY(CAST(:ids AS uuid[]))
                   AND si.business_id = CAST(:bid AS uuid)
             """),
-            {"ids": "{" + ",".join(sale_ids) + "}", "bid": business_id}
+            # BUG FIX: asyncpg expects a Python list for array params, not a
+            # manually-formatted "{uuid1,uuid2}" string (causes DataError).
+            {"ids": sale_ids, "bid": business_id}
         )).fetchall()
 
         items_by_sale: dict = {}
@@ -538,7 +540,9 @@ async def get_customer(
                   AND business_id = CAST(:bid AS uuid)
                 GROUP BY sale_id
             """),
-            {"ids": "{" + ",".join(sale_ids) + "}", "bid": business_id}
+            # BUG FIX: asyncpg expects a Python list for array params, not a
+            # manually-formatted "{uuid1,uuid2}" string (causes DataError).
+            {"ids": sale_ids, "bid": business_id}
         )).fetchall()
 
         pay_by_sale = {str(r.sale_id): r for r in pay_rows}
@@ -554,7 +558,9 @@ async def get_customer(
                   AND business_id = CAST(:bid AS uuid)
                 ORDER BY return_created_at DESC
             """),
-            {"ids": "{" + ",".join(sale_ids) + "}", "bid": business_id}
+            # BUG FIX: asyncpg expects a Python list for array params, not a
+            # manually-formatted "{uuid1,uuid2}" string (causes DataError).
+            {"ids": sale_ids, "bid": business_id}
         )).fetchall()
 
         returns_by_sale: dict = {}

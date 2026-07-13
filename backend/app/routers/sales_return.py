@@ -100,7 +100,9 @@ def validate_return_items(db: Session, sale_id: str, business_id: str, items, ex
                   AND si.business_id = CAST(:bid AS uuid)
                   AND si.product_id = ANY(CAST(:pids AS uuid[]))
             """),
-            {"sale_id": sale_id, "bid": business_id, "pids": "{" + ",".join(prod_ids) + "}"}
+            # BUG FIX: asyncpg expects a Python list for array params, not a
+            # manually-formatted "{uuid1,uuid2}" string (causes DataError).
+            {"sale_id": sale_id, "bid": business_id, "pids": prod_ids}
         ).fetchall()
         sale_item_map = {str(r.product_id): r for r in rows}
 
@@ -113,7 +115,9 @@ def validate_return_items(db: Session, sale_id: str, business_id: str, items, ex
               AND sr.business_id = CAST(:bid AS uuid)
               AND sr.return_status != 'rejected'
         """
-        params = {"pids": "{" + ",".join(prod_ids) + "}", "bid": business_id}
+        # BUG FIX: asyncpg expects a Python list for array params, not a
+        # manually-formatted "{uuid1,uuid2}" string (causes DataError).
+        params = {"pids": prod_ids, "bid": business_id}
         if exclude_return_id:
             q += " AND sr.return_id != CAST(:return_id AS uuid)"
             params["return_id"] = exclude_return_id
@@ -194,7 +198,9 @@ def create_sales_return(
                     WHERE sale_id = CAST(:sale_id AS uuid)
                       AND product_id = ANY(CAST(:pids AS uuid[]))
                 """),
-                {"sale_id": str(data.sale_id), "pids": "{" + ",".join(prod_ids) + "}"}
+                # BUG FIX: asyncpg expects a Python list for array params, not a
+                # manually-formatted "{uuid1,uuid2}" string (causes DataError).
+                {"sale_id": str(data.sale_id), "pids": prod_ids}
             ).fetchall()
             sale_item_rows = {str(r.product_id): r for r in rows}
 
@@ -372,7 +378,9 @@ def get_all_sales_returns(
                 FROM sales_return_items
                 WHERE return_id = ANY(CAST(:ids AS uuid[]))
             """),
-            {"ids": "{" + ",".join(ret_ids) + "}"}
+            # BUG FIX: asyncpg expects a Python list for array params, not a
+            # manually-formatted "{uuid1,uuid2}" string (causes DataError).
+            {"ids": ret_ids}
         ).fetchall()
 
     items_by_ret = {}

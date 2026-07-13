@@ -103,7 +103,9 @@ def validate_return_items(
               AND pi.product_id = ANY(CAST(:pids AS uuid[]))
         """), {
             "pur_id": pur_id,
-            "pids": "{" + ",".join(prod_ids) + "}"
+            # BUG FIX: asyncpg expects a Python list for array params, not a
+            # manually-formatted "{uuid1,uuid2}" string (causes DataError).
+            "pids": prod_ids
         }).fetchall()
         for row in rows:
             purchase_items[str(row.product_id)] = row
@@ -122,7 +124,9 @@ def validate_return_items(
         """
         params = {
             "pur_id": pur_id,
-            "pids": "{" + ",".join(prod_ids) + "}",
+            # BUG FIX: asyncpg expects a Python list for array params, not a
+            # manually-formatted "{uuid1,uuid2}" string (causes DataError).
+            "pids": prod_ids,
             "business_id": business_id
         }
         if exclude_return_id:
@@ -391,7 +395,9 @@ def get_all_purchase_returns(
             FROM purchase_return_items pri
             JOIN products p ON p.prod_id = pri.product_id
             WHERE pri.return_id = ANY(CAST(:ids AS uuid[]))
-        """), {"ids": "{" + ",".join(ret_ids) + "}"}).fetchall()
+        # BUG FIX: asyncpg expects a Python list for array params, not a
+        # manually-formatted "{uuid1,uuid2}" string (causes DataError).
+        """), {"ids": ret_ids}).fetchall()
 
     items_by_ret = {}
     for it in all_items:

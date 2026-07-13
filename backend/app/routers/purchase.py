@@ -445,6 +445,11 @@ async def create_purchase(
         # BATCH: single query for all items instead of N individual DELETEs.
         if calculated_items:
             prod_ids = [calc["product_id"] for calc in calculated_items]
+            # BUG FIX: asyncpg expects a Python list for array parameters, not
+            # a manually-formatted "{uuid1,uuid2}" string. The string format
+            # worked with psycopg2 but fails with asyncpg (DataError: expected
+            # a sized iterable container, got str). Passing the list directly
+            # works with both drivers and is simpler.
             await db.execute(
                 text("""
                     DELETE FROM low_stock_alerts la
@@ -454,7 +459,7 @@ async def create_purchase(
                       AND la.business_id = CAST(:bid AS uuid)
                       AND p.prod_stock_qty > p.prod_low_stock_alert
                 """),
-                {"pids": "{" + ",".join(prod_ids) + "}", "bid": business_id}
+                {"pids": prod_ids, "bid": business_id}
             )
 
         await db.commit()
@@ -665,7 +670,9 @@ async def get_purchase(
             FROM purchase_return_items pri
             JOIN products p ON p.prod_id = pri.product_id
             WHERE pri.return_id = ANY(CAST(:ids AS uuid[]))
-        """), {"ids": "{" + ",".join(ret_ids) + "}"})).fetchall()
+        # BUG FIX: asyncpg expects a Python list for array params, not a
+        # manually-formatted "{uuid1,uuid2}" string (causes DataError).
+        """), {"ids": ret_ids})).fetchall()
 
     ret_items_by_return = {}
     for ri in all_ret_items:
@@ -855,7 +862,9 @@ async def delete_purchase(
                     WHERE prod_id = ANY(CAST(:pids AS uuid[]))
                       AND business_id = CAST(:business_id AS uuid)
                 """),
-                {"pids": "{" + ",".join(prod_ids) + "}", "business_id": business_id}
+                # BUG FIX: asyncpg expects a Python list for array params, not a
+                # manually-formatted "{uuid1,uuid2}" string (causes DataError).
+                {"pids": prod_ids, "business_id": business_id}
             )).all()
 
             prod_stock_map = {str(row.prod_id): row.prod_stock_qty for row in product_rows}

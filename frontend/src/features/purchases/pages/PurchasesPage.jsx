@@ -20,7 +20,7 @@ import { PURCHASE_CSV_COLUMNS } from '../../../shared/utils/csvExport'
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' }
 const STATUS_LABEL = { paid: 'Paid', partial: 'Partial', pending: 'Unpaid' }
 
-function buildColumns() {
+function buildColumns(country) {
   return [
     {
       key: 'supp_name',
@@ -165,7 +165,7 @@ export default function PurchasesPage() {
     deletePurchase(deletingPur.pur_id, reduceStock, { onSuccess: handleCloseDelete })
   }
 
-  const columns = useMemo(() => buildColumns(), [])
+  const columns = useMemo(() => buildColumns(country), [country])
 
   function handleDateChange(field, value) {
     if (field === 'from') setDateFrom(value)

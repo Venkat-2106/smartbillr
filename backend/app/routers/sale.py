@@ -397,7 +397,9 @@ async def delete_sale(
 
         if sale_items:
             prod_ids = [str(item.product_id) for item in sale_items]
-            pids_param = "{" + ",".join(prod_ids) + "}"
+            # BUG FIX: asyncpg expects a Python list for array params, not a
+            # manually-formatted "{uuid1,uuid2}" string (causes DataError).
+            pids_param = prod_ids
 
             # 1. Bulk SELECT: fetch current stock for all products at once
             product_rows = (await db.execute(

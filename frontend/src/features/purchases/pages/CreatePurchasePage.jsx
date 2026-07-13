@@ -23,7 +23,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast }                from 'react-hot-toast'
 import { createPurchase, fetchSuppliersLean } from '../api/purchasesApi'
 import { searchProductsLean }   from '../../sales/api/salesApi'
-import { Button, PageHeader, FormField } from '../../../shared/components'
+import { Button, PageHeader, FormField, ConfirmDialog } from '../../../shared/components'
 import { selectStyle }          from '../../../shared/components/FormField'
 import { formatCurrency }       from '../../../shared/utils/formatCurrency'
 import useAuthStore             from '../../../store/authStore'
@@ -50,6 +50,10 @@ const newItem = () => ({
   unit_price: 0,   // cost/purchase price
   quantity:   1,
   tax_rate:   0,
+  // COST-ABOVE-SELL FEATURE (2026-07): captured once at product-select time
+  // so PurchaseLineItemRow can warn if the entered unit price ends up above
+  // this without needing another API call.
+  sell_price: 0,
 })
 
 export default function CreatePurchasePage() {
@@ -126,6 +130,11 @@ export default function CreatePurchasePage() {
   // ── Add-item button hover state ───────────────────────────────────────────
   const [addBtnHovered, setAddBtnHovered] = useState(false)
 
+  // COST-ABOVE-SELL FEATURE: confirmation state, same pattern as ProductsPage's
+  // isSellingAtLoss warning — non-blocking, user explicitly confirms and proceeds.
+  const [costWarningOpen, setCostWarningOpen] = useState(false)
+  const [pendingBody, setPendingBody] = useState(null)
+
   // ── Line item handlers — stable useCallback ([]) ─────────────────────────
   const handleItemSearchChange = useCallback((itemId, text) => {
     setSearchMap(prev   => ({ ...prev, [itemId]: text }))
@@ -140,8 +149,15 @@ export default function CreatePurchasePage() {
         ...item,
         product_id: product.prod_id,
         prod_name:  product.prod_name,
+        // BUG FIX: when prod_cost_price is 0/missing, leave unit_price as 0
+        // so the price validation catches it (instead of silently submitting a 0
+        // that the backend rejects with a 422). The user must enter a price.
         unit_price: Number(product.prod_cost_price) || 0,
         tax_rate:   Number(product.tax_rate) || 0,
+        // COST-ABOVE-SELL FEATURE (2026-07): captured once at product-select time
+        // so PurchaseLineItemRow can warn if the entered unit price ends up above
+        // this without needing another API call.
+        sell_price: Number(product.prod_sell_price) || 0,
       }
     }))
     setSearchMap(prev   => ({ ...prev, [itemId]: '' }))
@@ -196,7 +212,24 @@ export default function CreatePurchasePage() {
   // ── Form validation ───────────────────────────────────────────────────────
   const isValid = useMemo(() =>
     items.length > 0 &&
-    items.every(i => i.product_id && Number(i.quantity) >= 1 && Number(i.unit_price) >= 0),
+    // BUG FIX: backend rejects item_unit_price <= 0 (price_must_be_positive
+    // validator in PurchaseItemCreate). Frontend must align — was >= 0 before,
+    // which let price=0 line items through, causing a 422 on submission.
+    items.every(i => i.product_id && Number(i.quantity) >= 1 && Number(i.unit_price) > 0),
+    [items]
+  )
+
+  // ── Work out which line items have a unit_price error (for inline feedback) ──
+  const priceErrors = useMemo(() => {
+    const errs = {}
+    items.forEach(i => { if (i._id && Number(i.unit_price) <= 0) errs[i._id] = true })
+    return errs
+  }, [items])
+
+  // COST-ABOVE-SELL FEATURE: returns items whose unit price exceeds the product's
+  // current sell price — used to warn before submission, not to block it.
+  const itemsAboveSellPrice = useMemo(() =>
+    items.filter(i => i.product_id && i.sell_price > 0 && Number(i.unit_price) > i.sell_price),
     [items]
   )
 
@@ -222,7 +255,18 @@ export default function CreatePurchasePage() {
       navigate('/purchases')
     },
     onError: (err) => {
-      toast.error(err?.response?.data?.message || 'Failed to create purchase')
+      // BUG FIX: FastAPI's automatic Pydantic validation errors come back as
+      // { detail: [{ loc: [...], msg: "...", ... }] } — different from our
+      // app's own error_response() shape ({ message: "..." }). Handle both so
+      // the user sees WHY the submission failed instead of a generic toast.
+      const data = err?.response?.data
+      let message = 'Failed to create purchase'
+      if (data?.message) {
+        message = data.message
+      } else if (Array.isArray(data?.detail) && data.detail.length > 0) {
+        message = data.detail[0].msg || message
+      }
+      toast.error(message)
     },
   })
 
@@ -231,7 +275,24 @@ export default function CreatePurchasePage() {
       toast.error('Select a product and enter a valid quantity for every line item.')
       return
     }
-    mutation.mutate(buildBody())
+    const body = buildBody()
+    if (itemsAboveSellPrice.length > 0) {
+      setPendingBody(body)
+      setCostWarningOpen(true)
+      return
+    }
+    mutation.mutate(body)
+  }
+
+  const handleCostWarningConfirmed = () => {
+    setCostWarningOpen(false)
+    if (pendingBody) mutation.mutate(pendingBody)
+    setPendingBody(null)
+  }
+
+  const handleCostWarningCancelled = () => {
+    setCostWarningOpen(false)
+    setPendingBody(null)
   }
 
   return (
@@ -374,6 +435,7 @@ export default function CreatePurchasePage() {
                 <PurchaseLineItemRow
                   key={item._id}
                   item={item}
+                  priceError={!!priceErrors[item._id]}
                   isOpen={!!openDropMap[item._id]}
                   searchText={searchMap[item._id] || ''}
                   searchResults={openDropMap[item._id] ? productSearchResults : EMPTY_ARRAY}
@@ -476,6 +538,22 @@ export default function CreatePurchasePage() {
             )}
           </div>
         </div>
+
+        <ConfirmDialog
+          open={costWarningOpen}
+          onClose={handleCostWarningCancelled}
+          onConfirm={handleCostWarningConfirmed}
+          variant="warning"
+          title="Cost Price Above Sell Price"
+          message={
+            itemsAboveSellPrice.length === 1
+              ? `${itemsAboveSellPrice[0].prod_name}'s purchase cost is above its current sell price. This product will be sold at a loss until you update its price. Continue?`
+              : `${itemsAboveSellPrice.length} products in this purchase have a cost price above their current sell price and will be sold at a loss until updated. Continue?`
+          }
+          confirmText="Yes, Continue"
+          cancelText="Review Items"
+          loading={mutation.isPending}
+        />
     </>
   )
 }

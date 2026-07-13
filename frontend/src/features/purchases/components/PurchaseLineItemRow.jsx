@@ -33,6 +33,7 @@ import {
 
 const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
   item,
+  priceError,
   isOpen,
   searchText,
   searchResults,
@@ -71,6 +72,10 @@ const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
   const resetHighlight = useCallback(() => setHighlightedIndex(-1), [])
   const s = (Number(item.unit_price) || 0) * (Number(item.quantity) || 0)
   const t = s * ((Number(item.tax_rate) || 0) / 100)
+  // COST-ABOVE-SELL FEATURE: only meaningful once a product is selected and
+  // has a real sell price — sell_price of 0 means "not set", not "free".
+  const isCostAboveSell = item.product_id && item.sell_price > 0 &&
+    Number(item.unit_price) > item.sell_price
 
   return (
     <div style={{
@@ -184,12 +189,35 @@ const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
       />
 
       {/* Unit (cost) price */}
-      <input
-        type="number" min="0" step="0.01"
-        value={item.unit_price}
-        onChange={e => onPriceChange(item._id, 'unit_price', Number(e.target.value) || 0)}
-        style={NUM_INPUT_STYLE}
-      />
+      <div style={{ position: 'relative' }}>
+        <input
+          type="number" min="0" step="0.01"
+          value={item.unit_price}
+          onChange={e => onPriceChange(item._id, 'unit_price', Number(e.target.value) || 0)}
+          style={{
+            ...NUM_INPUT_STYLE,
+            borderColor: priceError ? 'var(--danger-border, #ef4444)' : undefined,
+          }}
+        />
+        {priceError && (
+          <div style={{ fontSize: 11, color: 'var(--danger-text, #ef4444)', marginTop: 2, lineHeight: 1.3 }}>
+            Enter a unit price
+          </div>
+        )}
+        {isCostAboveSell && (
+          <div
+            className="badge-warning"
+            title={`Cost price exceeds the current sell price of ${formatCurrency(item.sell_price, country)}`}
+            style={{
+              position: 'absolute', top: '100%', left: 0, marginTop: 3,
+              fontSize: 10, padding: '2px 6px', borderRadius: 5,
+              border: '1px solid', whiteSpace: 'nowrap', zIndex: 5,
+            }}
+          >
+            Above sell price
+          </div>
+        )}
+      </div>
 
       {/* Tax % */}
       <input

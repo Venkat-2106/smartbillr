@@ -121,7 +121,7 @@ async def get_report_summary(
             FROM mv_dashboard_summary
             WHERE business_id = CAST(:bid AS uuid)
         """), {"bid": bid})
-        row = result.fetchone()
+        row = row.fetchone()
 
     # Fallback to live query if MV empty (brand-new business) or date range provided
     if not use_mv or row is None:
@@ -168,7 +168,7 @@ async def get_report_summary(
                 COALESCE((SELECT SUM(prod_stock_qty * prod_cost_price) FROM products
                            WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false), 0) AS inventory_value
         """), params)
-        row = result.fetchone()
+        row = row.fetchone()
 
     total_sales = float(row.total_sales) if row else 0
     total_purchases = float(row.total_purchases) if row else 0
@@ -314,7 +314,7 @@ async def get_sales_trend(
               ON m.business_id = CAST(:bid AS uuid) AND m.year_month = gs
             ORDER BY gs
         """), {"bid": bid, "user_start": user_start_month, "user_end": user_end_month})
-        rows = result.fetchall()
+        rows = rows.fetchall()
     else:
         rows = await db.execute(text(f"""
             WITH aggregated AS (
@@ -336,7 +336,7 @@ async def get_sales_trend(
             LEFT JOIN aggregated a ON a.bucket = gs
             ORDER BY gs
         """), params)
-        rows = result.fetchall()
+        rows = rows.fetchall()
 
     result = []
     for r in rows:
@@ -387,7 +387,7 @@ async def get_sales_by_customer(
         GROUP BY c.cust_id, c.cust_name
         ORDER BY total_amount DESC
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {
@@ -435,7 +435,7 @@ async def get_sales_by_product(
         GROUP BY p.prod_id, p.prod_name, c.category_name
         ORDER BY total_revenue DESC
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     result = []
     for r in rows:
@@ -482,7 +482,7 @@ async def get_sales_by_category(
         GROUP BY c.category_id, c.category_name
         ORDER BY total_revenue DESC
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {
@@ -520,7 +520,7 @@ async def get_sales_by_payment_method(
         GROUP BY s.sales_payment_method
         ORDER BY total_amount DESC
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {
@@ -558,7 +558,7 @@ async def get_sales_invoice_status(
           AND s.is_deleted = false
           {date_where}
     """), {"bid": bid, **dp})
-    row = result.fetchone()
+    row = row.fetchone()
 
     return success_response({
         "total": int(row.total) if row else 0,
@@ -603,7 +603,7 @@ async def get_purchase_summary(
           AND pr.is_deleted = false
           {date_where}
     """), {"bid": bid, **dp})
-    row = result.fetchone()
+    row = row.fetchone()
 
     return success_response({
         "total_purchases": int(row.total_purchases) if row else 0,
@@ -699,7 +699,7 @@ async def get_purchase_trend(
         LEFT JOIN aggregated a ON a.bucket = gs
         ORDER BY gs
     """), params)
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     result = []
     for r in rows:
@@ -744,7 +744,7 @@ async def get_purchases_by_supplier(
         GROUP BY sp.supp_id, sp.supp_name
         ORDER BY total_amount DESC
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {
@@ -785,7 +785,7 @@ async def get_purchases_by_product(
         GROUP BY p.prod_id, p.prod_name
         ORDER BY total_amount DESC
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {
@@ -821,7 +821,7 @@ async def get_purchase_tax_summary(
           AND pr.is_deleted = false
           {date_where}
     """), {"bid": bid, **dp})
-    row = result.fetchone()
+    row = row.fetchone()
 
     return success_response({
         "total_tax": float(row.total_tax) if can_financial else None,
@@ -862,7 +862,7 @@ async def get_gross_profit(
           AND s.is_deleted = false
           {date_where}
     """), {"bid": bid, **dp})
-    row = result.fetchone()
+    row = row.fetchone()
 
     revenue = float(row.total_revenue) if row else 0
     cost = float(row.total_cost) if row else 0
@@ -905,7 +905,7 @@ async def get_profit_by_product(
         GROUP BY p.prod_id, p.prod_name
         ORDER BY revenue DESC
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     result = []
     for r in rows:
@@ -955,7 +955,7 @@ async def get_profit_by_category(
         GROUP BY c.category_id, c.category_name
         ORDER BY revenue DESC
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     result = []
     for r in rows:
@@ -1006,7 +1006,7 @@ async def get_profit_by_customer(
         GROUP BY c.cust_id, c.cust_name
         ORDER BY revenue DESC
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     result = []
     for r in rows:
@@ -1113,7 +1113,7 @@ async def get_profit_trend(
         LEFT JOIN aggregated a ON a.bucket = gs
         ORDER BY gs
     """), params)
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     result = []
     for r in rows:
@@ -1167,7 +1167,7 @@ async def get_inventory_valuation(
           AND p.is_deleted = false
         ORDER BY stock_value DESC
     """), {"bid": bid})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     total_value = 0
     result = []
@@ -1216,7 +1216,7 @@ async def get_inventory_movement_summary(
         GROUP BY sm.move_type
         ORDER BY movement_count DESC
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {
@@ -1246,7 +1246,7 @@ async def get_stock_flow(
         WHERE sm.business_id = CAST(:bid AS uuid)
           {date_where}
     """), {"bid": bid, **dp})
-    row = result.fetchone()
+    row = row.fetchone()
 
     return success_response({
         "stock_in": int(row.stock_in) if row else 0,
@@ -1282,7 +1282,7 @@ async def get_moving_products(
         ORDER BY qty_sold DESC
         LIMIT 20
     """), {"bid": bid, "days": lookback})
-    fast = result.fetchall()
+    fast = fast.fetchall()
 
     # Slow-moving: products with low sale qty relative to stock
     slow = await db.execute(text("""
@@ -1305,7 +1305,7 @@ async def get_moving_products(
         ORDER BY qty_sold ASC, p.prod_stock_qty DESC
         LIMIT 20
     """), {"bid": bid, "days": lookback})
-    slow = result.fetchall()
+    slow = slow.fetchall()
 
     # Dead stock: no movement at all
     dead = await db.execute(text("""
@@ -1328,7 +1328,7 @@ async def get_moving_products(
         ORDER BY p.prod_stock_qty DESC
         LIMIT 20
     """), {"bid": bid, "days": lookback})
-    dead = result.fetchall()
+    dead = dead.fetchall()
 
     return success_response({
         "fast_moving": [
@@ -1381,7 +1381,7 @@ async def get_top_customers(
         ORDER BY total_spent DESC
         LIMIT :limit
     """), {"bid": bid, "limit": limit, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {
@@ -1415,7 +1415,7 @@ async def get_customer_purchase_history(
           AND c.business_id = CAST(:bid AS uuid)
           AND c.is_deleted = false
     """), {"cust_id": cust_id, "bid": bid})
-    cust_row = result.fetchone()
+    cust_row = row.fetchone()
 
     if not cust_row:
         return success_response(None)
@@ -1433,7 +1433,7 @@ async def get_customer_purchase_history(
           AND s.is_deleted = false
         ORDER BY s.sales_created_at DESC
     """), {"cust_id": cust_id, "bid": bid})
-    sales = result.fetchall()
+    sales = sales.fetchall()
 
     # Payment history
     payments = await db.execute(text("""
@@ -1447,7 +1447,7 @@ async def get_customer_purchase_history(
           AND pay.is_active = true
         ORDER BY pay.payment_paid_at DESC
     """), {"cust_id": cust_id, "bid": bid})
-    payments = result.fetchall()
+    payments = payments.fetchall()
 
     totals = await db.execute(text("""
         SELECT
@@ -1460,7 +1460,7 @@ async def get_customer_purchase_history(
           AND business_id = CAST(:bid AS uuid)
           AND is_deleted = false
     """), {"cust_id": cust_id, "bid": bid})
-    totals = result.fetchone()
+    totals = totals.fetchone()
 
     return success_response({
         "customer": {
@@ -1531,7 +1531,7 @@ async def get_customer_lifetime_value(
         HAVING COUNT(DISTINCT s.sales_id) >= 2
         ORDER BY total_spent DESC
     """), {"bid": bid})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     result = []
     for r in rows:
@@ -1578,7 +1578,7 @@ async def get_customer_outstanding(
         GROUP BY c.cust_id, c.cust_name, c.cust_phone
         ORDER BY total_outstanding DESC
     """), {"bid": bid})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {
@@ -1626,7 +1626,7 @@ async def get_top_suppliers(
         ORDER BY total_spend DESC
         LIMIT :limit
     """), {"bid": bid, "limit": limit, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {
@@ -1653,7 +1653,7 @@ async def get_supplier_purchase_history(
         SELECT supp_name, supp_phone, supp_email FROM suppliers
         WHERE supp_id = CAST(:supp_id AS uuid) AND business_id = CAST(:bid AS uuid) AND is_deleted = false
     """), {"supp_id": supp_id, "bid": bid})
-    supp_row = result.fetchone()
+    supp_row = row.fetchone()
 
     if not supp_row:
         return success_response(None)
@@ -1668,7 +1668,7 @@ async def get_supplier_purchase_history(
           AND pr.is_deleted = false
         ORDER BY pr.pur_created_at DESC
     """), {"supp_id": supp_id, "bid": bid})
-    purchases = result.fetchall()
+    purchases = purchases.fetchall()
 
     totals = await db.execute(text("""
         SELECT
@@ -1681,7 +1681,7 @@ async def get_supplier_purchase_history(
           AND business_id = CAST(:bid AS uuid)
           AND is_deleted = false
     """), {"supp_id": supp_id, "bid": bid})
-    totals = result.fetchone()
+    totals = totals.fetchone()
 
     return success_response({
         "supplier": {
@@ -1737,7 +1737,7 @@ async def get_supplier_spend_analysis(
         GROUP BY sp.supp_id, sp.supp_name
         ORDER BY total_spend DESC
     """), {"bid": bid})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {
@@ -1782,7 +1782,7 @@ async def get_expenses_by_category(
         GROUP BY e.expense_category
         ORDER BY total_amount DESC
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {
@@ -1873,7 +1873,7 @@ async def get_expense_trend(
         LEFT JOIN aggregated a ON a.bucket = gs
         ORDER BY gs
     """), params)
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     result = []
     for r in rows:
@@ -1911,7 +1911,7 @@ async def get_expense_distribution(
           AND e.is_deleted = false
           {date_where}
     """), {"bid": bid, **dp})
-    row = result.fetchone()
+    row = row.fetchone()
 
     rows = await db.execute(text(f"""
         SELECT
@@ -1925,7 +1925,7 @@ async def get_expense_distribution(
         GROUP BY e.expense_category
         ORDER BY amount DESC
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     total = float(row.total_expenses) if row and can_financial else 0
 
@@ -1971,7 +1971,7 @@ async def get_tax_collected(
           AND s.is_deleted = false
           {date_where}
     """), {"bid": bid, **dp})
-    row = result.fetchone()
+    row = row.fetchone()
 
     return success_response({
         "total_tax": float(row.total_tax) if can_financial else None,
@@ -2004,7 +2004,7 @@ async def get_tax_paid(
           AND pr.is_deleted = false
           {date_where}
     """), {"bid": bid, **dp})
-    row = result.fetchone()
+    row = row.fetchone()
 
     return success_response({
         "total_tax": float(row.total_tax) if can_financial else None,
@@ -2040,7 +2040,7 @@ async def get_tax_liability(
             COALESCE((SELECT SUM(pur_tax_total) FROM purchases pr
                        WHERE pr.business_id = CAST(:bid AS uuid) AND pr.is_deleted = false {dp}), 0) AS paid
     """), {"bid": bid, **ps, **pp})
-    row = result.fetchone()
+    row = row.fetchone()
 
     collected = float(row.collected) if row else 0
     paid = float(row.paid) if row else 0
@@ -2077,7 +2077,7 @@ async def get_tax_by_rate(
         GROUP BY si.gst_rate
         ORDER BY si.gst_rate
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {
@@ -2117,7 +2117,7 @@ async def get_sales_returns_summary(
         WHERE sr.business_id = CAST(:bid AS uuid)
           {date_where}
     """), {"bid": bid, **dp})
-    row = result.fetchone()
+    row = row.fetchone()
 
     rows = await db.execute(text(f"""
         SELECT return_reason, COUNT(*) AS count
@@ -2128,7 +2128,7 @@ async def get_sales_returns_summary(
         ORDER BY count DESC
 
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response({
         "summary": {
@@ -2167,7 +2167,7 @@ async def get_purchase_returns_summary(
         WHERE pr.business_id = CAST(:bid AS uuid)
           {date_where}
     """), {"bid": bid, **dp})
-    row = result.fetchone()
+    row = row.fetchone()
 
     return success_response({
         "total_returns": int(row.total_returns) if row else 0,
@@ -2229,7 +2229,7 @@ async def get_returns_trend(
         LEFT JOIN purchase_ret prr ON prr.bucket = gs
         ORDER BY gs
     """), params)
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     result = []
     for r in rows:
@@ -2277,7 +2277,7 @@ async def get_returns_profit_impact(
           AND sr.return_status = 'approved'
           {date_where}
     """), {"bid": bid, **dp})
-    row = result.fetchone()
+    row = row.fetchone()
 
     dp2, pp2 = _date_col("prr", "return_created_at", date_from, date_to)
 
@@ -2289,7 +2289,7 @@ async def get_returns_profit_impact(
           AND prr.return_status = 'approved'
           {dp2}
     """), {"bid": bid, **pp2})
-    row2 = result.fetchone()
+    row2 = row2.fetchone()
 
     sales_return_value = float(row.sales_return_value) if row else 0
     purchase_return_value = float(row2.purchase_return_value) if row2 else 0
@@ -2382,7 +2382,7 @@ async def get_payment_collections(
         LEFT JOIN aggregated a ON a.bucket = gs
         ORDER BY gs
     """), params)
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     result = []
     for r in rows:
@@ -2422,7 +2422,7 @@ async def get_outstanding_receivables(
           AND s.sales_payment_status IN ('pending', 'partial')
         ORDER BY balance DESC
     """), {"bid": bid})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     total_outstanding = 0
     data = []
@@ -2470,7 +2470,7 @@ async def get_payments_by_method(
         GROUP BY pay.payment_method
         ORDER BY total_amount DESC
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     total = sum(float(r.total_amount) for r in rows) if can_financial else 0
 
@@ -2511,7 +2511,7 @@ async def get_partial_payments(
           AND s.is_deleted = false
         ORDER BY pay.payment_paid_at DESC
     """), {"bid": bid})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {
@@ -2568,7 +2568,7 @@ async def get_user_activities(
         ORDER BY al.created_at DESC
         LIMIT 500
     """), params)
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {
@@ -2612,7 +2612,7 @@ async def get_login_activities(
         ORDER BY al.created_at DESC
         LIMIT 200
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {
@@ -2660,7 +2660,7 @@ async def get_data_changes(
         ORDER BY al.created_at DESC
         LIMIT 500
     """), params)
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {
@@ -2717,7 +2717,7 @@ async def get_export_activities(
         ORDER BY al.created_at DESC
         LIMIT 200
     """), {"bid": bid, **dp})
-    rows = result.fetchall()
+    rows = rows.fetchall()
 
     return success_response([
         {

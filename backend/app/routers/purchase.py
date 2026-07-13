@@ -845,6 +845,7 @@ async def delete_purchase(
     purchase.is_deleted = True
     purchase.updated_by = user_id
 
+    stock_warnings = []
     if reduce_stock:
         items = (await db.execute(text("""
             SELECT product_id, pur_item_qty FROM purchase_items
@@ -875,7 +876,19 @@ async def delete_purchase(
             ]
 
             if valid_items:
+                for item in valid_items:
+                    pid = str(item.product_id)
+                    current_stock = prod_stock_map.get(pid, 0)
+                    if current_stock < item.pur_item_qty:
+                        stock_warnings.append({
+                            "product_id": pid,
+                            "current_stock": current_stock,
+                            "requested_reduction": item.pur_item_qty,
+                            "note": "Stock already partially sold; reduced to 0 instead",
+                        })
+
                 # 2. Bulk UPDATE products using FROM (VALUES ...) — subtraction
+                #    clamped to 0 so stock never goes negative.
                 values_clause = ", ".join(
                     f"(CAST(:pid_{i} AS uuid), :qty_{i})"
                     for i in range(len(valid_items))
@@ -888,7 +901,7 @@ async def delete_purchase(
                 await db.execute(
                     text(f"""
                         UPDATE products
-                        SET prod_stock_qty = products.prod_stock_qty - v.reduce_qty,
+                        SET prod_stock_qty = GREATEST(0, products.prod_stock_qty - v.reduce_qty),
                             updated_by = CAST(:user_id AS uuid)
                         FROM (VALUES {values_clause}) AS v(prod_id, reduce_qty)
                         WHERE products.prod_id = v.prod_id
@@ -929,4 +942,7 @@ async def delete_purchase(
     # this point (matches the convention in product.py, expense.py).
     await async_set_rls_gucs_after_commit(db, current_user)
 
-    return success_response({"message": "Purchase deleted successfully"})
+    return success_response({
+        "message": "Purchase deleted successfully",
+        "warnings": stock_warnings,
+    })

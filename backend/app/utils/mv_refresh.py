@@ -4,7 +4,7 @@ import os
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, DBAPIError
 from time import time
 
 MV_SUMMARY = "mv_dashboard_summary"
@@ -32,7 +32,8 @@ def _try_acquire_refresh_lock() -> bool:
 def refresh_dashboard_mvs(db: Session, force: bool = False) -> None:
     """Refresh dashboard materialized views if stale.
 
-    Uses the caller's db session so it stays inside the same transaction.
+    Runs on a dedicated autocommit connection — REFRESH MATERIALIZED VIEW
+    CONCURRENTLY cannot execute inside an open transaction block.
     Kept for manual/admin trigger endpoints (pass force=True).
     """
     global _last_refresh
@@ -47,19 +48,23 @@ def refresh_dashboard_mvs(db: Session, force: bool = False) -> None:
                 return
 
     try:
-        db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_SUMMARY}"))
-        db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_TREND}"))
-        db.commit()
+        from app.database import engine
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            conn.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_SUMMARY}"))
+            conn.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_TREND}"))
         _last_refresh = time()
-    except OperationalError as e:
+    except (OperationalError, DBAPIError) as e:
         logging.warning(
-            "Materialized view refresh failed (dashboard will serve stale data): %s", e
+            "Materialized view refresh failed (%s): %s", type(e).__name__, e
         )
-        db.rollback()
 
 
 async def refresh_dashboard_mvs_async(db: AsyncSession, force: bool = False) -> None:
-    """Async version of refresh_dashboard_mvs for use with AsyncSession."""
+    """Async version of refresh_dashboard_mvs for use with AsyncSession.
+
+    Runs on a dedicated autocommit connection — REFRESH MATERIALIZED VIEW
+    CONCURRENTLY cannot execute inside an open transaction block.
+    """
     global _last_refresh
 
     now = time()
@@ -72,25 +77,26 @@ async def refresh_dashboard_mvs_async(db: AsyncSession, force: bool = False) -> 
                 return
 
     try:
-        await db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_SUMMARY}"))
-        await db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_TREND}"))
-        await db.commit()
+        from app.database import async_engine
+        async with async_engine.connect() as conn:
+            conn = conn.execution_options(isolation_level="AUTOCOMMIT")
+            await conn.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_SUMMARY}"))
+            await conn.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_TREND}"))
         _last_refresh = time()
-    except OperationalError as e:
+    except (OperationalError, DBAPIError) as e:
         logging.warning(
-            "Materialized view refresh failed (dashboard will serve stale data): %s", e
+            "Materialized view refresh failed (%s): %s", type(e).__name__, e
         )
-        await db.rollback()
 
 
 def refresh_dashboard_mvs_background() -> None:
     """Refresh dashboard materialized views in a background thread.
 
-    Opens its own SessionLocal() so the refresh never blocks the user's
-    request or borrows their connection.  Uses the same 5-minute stale
-    check as the synchronous variant.
+    Opens a dedicated autocommit connection so the refresh is never inside
+    an implicit transaction block (REFRESH MATERIALIZED VIEW CONCURRENTLY
+    requires this).  Uses the same 5-minute stale check as the sync variant.
     """
-    from app.database import SessionLocal          # avoid circular import at module level
+    from app.database import engine          # avoid circular import at module level
 
     global _last_refresh
 
@@ -102,14 +108,12 @@ def refresh_dashboard_mvs_background() -> None:
         if (now - _last_refresh) < _STALE_AFTER_SECONDS:
             return
 
-    db = SessionLocal()
+    conn = engine.connect().execution_options(isolation_level="AUTOCOMMIT")
     try:
-        db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_SUMMARY}"))
-        db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_TREND}"))
-        db.commit()
+        conn.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_SUMMARY}"))
+        conn.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_TREND}"))
         _last_refresh = now
-    except OperationalError as e:
-        logging.warning("MV background refresh failed: %s", e)
-        db.rollback()
+    except (OperationalError, DBAPIError) as e:
+        logging.warning("MV background refresh failed (%s): %s", type(e).__name__, e)
     finally:
-        db.close()
+        conn.close()

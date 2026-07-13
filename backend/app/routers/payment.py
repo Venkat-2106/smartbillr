@@ -34,7 +34,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from app.database import get_async_db
-from app.middleware.rbac import require_permission
+from app.middleware.rbac import require_permission, async_set_rls_gucs_after_commit
 from app.models.payment import Payment
 from app.models.sale import Sale
 from app.schemas.payment import PaymentCreate
@@ -203,6 +203,10 @@ async def create_payment(
         )
 
         await db.commit()
+        # RLS: SET LOCAL/set_config GUCs are transaction-scoped and are cleared
+        # by this commit. Re-set them in case any future code adds a query after
+        # this point (matches the convention in product.py, purchase.py, expense.py).
+        await async_set_rls_gucs_after_commit(db, current_user)
     except Exception:
         await db.rollback()
         logging.exception("create_payment failed")

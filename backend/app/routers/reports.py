@@ -8,7 +8,7 @@
 #   - Raw SQL via text() for all reads (never ORM for GET)
 #   - Success/error response via success_response() / error_response()
 #   - business_id extracted from current_user (JWT) — never from request body
-#   - Permission gated via require_permission_with_rls()
+#   - Permission gated via require_permission()
 #   - COALESCE on all aggregates to prevent null propagation
 #   - generate_series for time-series zero-fill
 #   - Dashboard.financial permission gates revenue/cost/profit figures
@@ -21,16 +21,27 @@
 #   sales.view               → gates sales reports (soft check)
 #   purchases.view           → gates purchase reports (soft check)
 
+# ── ASYNC MIGRATION NOTE (2026-07) ──────────────────────────────────────────
+#
+# This router was migrated from sync SQLAlchemy (psycopg2) to async
+# (asyncpg).  Key patterns:
+#
+#   - Session → AsyncSession (get_async_db dependency)
+#   - db.execute(...) → await db.execute(...)
+#   - require_permission_with_rls → require_permission (auth middleware
+#     sets GUCs via set_config in verify_token)
+#   - No db.commit() in read-only report endpoints (GUCs not needed)
+#   - mv_refresh: refresh_dashboard_mvs → refresh_dashboard_mvs_async
+
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from sqlalchemy.exc import OperationalError
-from app.database import get_db
-from app.middleware.rbac import require_permission_with_rls
+from app.database import get_async_db
+from app.middleware.rbac import require_permission
 from app.utils.timestamp import fmt_ts
 from app.utils.response import success_response, error_response
-from app.utils.mv_refresh import refresh_dashboard_mvs
+from app.utils.mv_refresh import refresh_dashboard_mvs, refresh_dashboard_mvs_async
 from datetime import datetime, timedelta, timezone
 
 router = APIRouter(prefix="/v1/reports", tags=["Reports"])
@@ -72,11 +83,11 @@ def _date_col(table_alias: str, col: str, date_from: Optional[str], date_to: Opt
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/summary")
-def get_report_summary(
+async def get_report_summary(
     date_from: Optional[str] = Query(None, description="ISO date — sales/purchases/expenses from"),
     date_to:   Optional[str] = Query(None, description="ISO date — sales/purchases/expenses to"),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
@@ -92,7 +103,7 @@ def get_report_summary(
     use_mv = not date_from and not date_to
 
     if use_mv:
-        row = db.execute(text("""
+        row = await db.execute(text("""
             SELECT
                 total_revenue             AS total_sales,
                 total_purchase_amount     AS total_purchases,
@@ -109,11 +120,12 @@ def get_report_summary(
                 inventory_value
             FROM mv_dashboard_summary
             WHERE business_id = CAST(:bid AS uuid)
-        """), {"bid": bid}).fetchone()
+        """), {"bid": bid})
+        row = result.fetchone()
 
     # Fallback to live query if MV empty (brand-new business) or date range provided
     if not use_mv or row is None:
-        row = db.execute(text(f"""
+        row = await db.execute(text(f"""
             SELECT
                 COALESCE((SELECT SUM(sales_final_amount) FROM sales s
                            WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {date_where_s}), 0) AS total_sales,
@@ -155,7 +167,8 @@ def get_report_summary(
                            ) sub), 0) AS outstanding_receivables,
                 COALESCE((SELECT SUM(prod_stock_qty * prod_cost_price) FROM products
                            WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false), 0) AS inventory_value
-        """), params).fetchone()
+        """), params)
+        row = result.fetchone()
 
     total_sales = float(row.total_sales) if row else 0
     total_purchases = float(row.total_purchases) if row else 0
@@ -185,9 +198,9 @@ def get_report_summary(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @router.post("/refresh")
-def refresh_materialized_views(
-    current_user: dict = Depends(require_permission_with_rls("staff.manage")),
-    db: Session = Depends(get_db)
+async def refresh_materialized_views(
+    current_user: dict = Depends(require_permission("staff.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Refresh all report materialized views concurrently.
     Admin-only — requires staff.manage permission.
@@ -197,7 +210,7 @@ def refresh_materialized_views(
     trigger an expensive full-database refresh at will. The auto-refresh
     on the dashboard endpoint (5-min staleness check) is sufficient.
     """
-    refresh_dashboard_mvs(db, force=False)
+    await refresh_dashboard_mvs_async(db, force=False)
     return success_response({"message": "Materialized views refreshed"})
 
 
@@ -206,13 +219,13 @@ def refresh_materialized_views(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/sales/trend")
-def get_sales_trend(
+async def get_sales_trend(
     period: str = "monthly",
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     tz_offset_minutes: int = Query(0),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """Revenue over time — daily (weekly), monthly, yearly.
     Uses generate_series for zero-fill, returns revenue + invoice count."""
@@ -291,7 +304,7 @@ def get_sales_trend(
     )
 
     if use_mv_trend:
-        rows = db.execute(text("""
+        rows = await db.execute(text("""
             SELECT
                 gs AS bucket,
                 COALESCE(m.invoice_count, 0) AS invoice_count,
@@ -300,9 +313,10 @@ def get_sales_trend(
             LEFT JOIN mv_sales_trend_monthly m
               ON m.business_id = CAST(:bid AS uuid) AND m.year_month = gs
             ORDER BY gs
-        """), {"bid": bid, "user_start": user_start_month, "user_end": user_end_month}).fetchall()
+        """), {"bid": bid, "user_start": user_start_month, "user_end": user_end_month})
+        rows = result.fetchall()
     else:
-        rows = db.execute(text(f"""
+        rows = await db.execute(text(f"""
             WITH aggregated AS (
                 SELECT
                     {group_expr} AS bucket,
@@ -321,7 +335,8 @@ def get_sales_trend(
             FROM {fill_series}
             LEFT JOIN aggregated a ON a.bucket = gs
             ORDER BY gs
-        """), params).fetchall()
+        """), params)
+        rows = result.fetchall()
 
     result = []
     for r in rows:
@@ -344,18 +359,18 @@ def get_sales_trend(
 
 
 @router.get("/sales/by-customer")
-def get_sales_by_customer(
+async def get_sales_by_customer(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             c.cust_id,
             c.cust_name,
@@ -371,7 +386,8 @@ def get_sales_by_customer(
           {date_where}
         GROUP BY c.cust_id, c.cust_name
         ORDER BY total_amount DESC
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     return success_response([
         {
@@ -387,11 +403,11 @@ def get_sales_by_customer(
 
 
 @router.get("/sales/by-product")
-def get_sales_by_product(
+async def get_sales_by_product(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
@@ -401,7 +417,7 @@ def get_sales_by_product(
 
     profit_col = ", COALESCE(SUM(si.sale_item_subtotal - (si.sale_item_quantity * COALESCE(si.sale_item_cost_price_at_sale, p.prod_cost_price))), 0) AS profit" if show_profit else ""
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             p.prod_id,
             p.prod_name,
@@ -418,7 +434,8 @@ def get_sales_by_product(
           {date_where}
         GROUP BY p.prod_id, p.prod_name, c.category_name
         ORDER BY total_revenue DESC
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     result = []
     for r in rows:
@@ -437,18 +454,18 @@ def get_sales_by_product(
 
 
 @router.get("/sales/by-category")
-def get_sales_by_category(
+async def get_sales_by_category(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             c.category_id,
             c.category_name,
@@ -464,7 +481,8 @@ def get_sales_by_category(
           {date_where}
         GROUP BY c.category_id, c.category_name
         ORDER BY total_revenue DESC
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     return success_response([
         {
@@ -479,18 +497,18 @@ def get_sales_by_category(
 
 
 @router.get("/sales/by-payment-method")
-def get_sales_by_payment_method(
+async def get_sales_by_payment_method(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             COALESCE(NULLIF(s.sales_payment_method, ''), 'unknown') AS payment_method,
             COUNT(s.sales_id) AS invoice_count,
@@ -501,7 +519,8 @@ def get_sales_by_payment_method(
           {date_where}
         GROUP BY s.sales_payment_method
         ORDER BY total_amount DESC
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     return success_response([
         {
@@ -514,18 +533,18 @@ def get_sales_by_payment_method(
 
 
 @router.get("/sales/invoice-status")
-def get_sales_invoice_status(
+async def get_sales_invoice_status(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
-    row = db.execute(text(f"""
+    row = await db.execute(text(f"""
         SELECT
             COUNT(*) AS total,
             COUNT(*) FILTER (WHERE sales_payment_status = 'paid') AS paid_count,
@@ -538,7 +557,8 @@ def get_sales_invoice_status(
         WHERE s.business_id = CAST(:bid AS uuid)
           AND s.is_deleted = false
           {date_where}
-    """), {"bid": bid, **dp}).fetchone()
+    """), {"bid": bid, **dp})
+    row = result.fetchone()
 
     return success_response({
         "total": int(row.total) if row else 0,
@@ -556,18 +576,18 @@ def get_sales_invoice_status(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/purchases/summary")
-def get_purchase_summary(
+async def get_purchase_summary(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("pr", "pur_created_at", date_from, date_to)
 
-    row = db.execute(text(f"""
+    row = await db.execute(text(f"""
         SELECT
             COUNT(*) AS total_purchases,
             COALESCE(SUM(pur_final_amount), 0) AS total_amount,
@@ -582,7 +602,8 @@ def get_purchase_summary(
         WHERE pr.business_id = CAST(:bid AS uuid)
           AND pr.is_deleted = false
           {date_where}
-    """), {"bid": bid, **dp}).fetchone()
+    """), {"bid": bid, **dp})
+    row = result.fetchone()
 
     return success_response({
         "total_purchases": int(row.total_purchases) if row else 0,
@@ -598,13 +619,13 @@ def get_purchase_summary(
 
 
 @router.get("/purchases/trend")
-def get_purchase_trend(
+async def get_purchase_trend(
     period: str = "monthly",
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     tz_offset_minutes: int = Query(0),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
@@ -658,7 +679,7 @@ def get_purchase_trend(
             fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 year') AS gs"
         group_expr = "date_trunc('year', pr.pur_created_at + (:loc_offset * INTERVAL '1 minute'))"
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         WITH aggregated AS (
             SELECT
                 {group_expr} AS bucket,
@@ -677,7 +698,8 @@ def get_purchase_trend(
         FROM {fill_series}
         LEFT JOIN aggregated a ON a.bucket = gs
         ORDER BY gs
-    """), params).fetchall()
+    """), params)
+    rows = result.fetchall()
 
     result = []
     for r in rows:
@@ -695,18 +717,18 @@ def get_purchase_trend(
 
 
 @router.get("/purchases/by-supplier")
-def get_purchases_by_supplier(
+async def get_purchases_by_supplier(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("pr", "pur_created_at", date_from, date_to)
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             sp.supp_id,
             sp.supp_name,
@@ -721,7 +743,8 @@ def get_purchases_by_supplier(
           {date_where}
         GROUP BY sp.supp_id, sp.supp_name
         ORDER BY total_amount DESC
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     return success_response([
         {
@@ -736,18 +759,18 @@ def get_purchases_by_supplier(
 
 
 @router.get("/purchases/by-product")
-def get_purchases_by_product(
+async def get_purchases_by_product(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("pr", "pur_created_at", date_from, date_to)
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             p.prod_id,
             p.prod_name,
@@ -761,7 +784,8 @@ def get_purchases_by_product(
           {date_where}
         GROUP BY p.prod_id, p.prod_name
         ORDER BY total_amount DESC
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     return success_response([
         {
@@ -775,18 +799,18 @@ def get_purchases_by_product(
 
 
 @router.get("/purchases/tax-summary")
-def get_purchase_tax_summary(
+async def get_purchase_tax_summary(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("pr", "pur_created_at", date_from, date_to)
 
-    row = db.execute(text(f"""
+    row = await db.execute(text(f"""
         SELECT
             COALESCE(SUM(pur_tax_total), 0) AS total_tax,
             COALESCE(SUM(pur_cgst_total), 0) AS total_cgst,
@@ -796,7 +820,8 @@ def get_purchase_tax_summary(
         WHERE pr.business_id = CAST(:bid AS uuid)
           AND pr.is_deleted = false
           {date_where}
-    """), {"bid": bid, **dp}).fetchone()
+    """), {"bid": bid, **dp})
+    row = result.fetchone()
 
     return success_response({
         "total_tax": float(row.total_tax) if can_financial else None,
@@ -811,11 +836,11 @@ def get_purchase_tax_summary(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/profit/gross")
-def get_gross_profit(
+async def get_gross_profit(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
@@ -826,7 +851,7 @@ def get_gross_profit(
         })
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
-    row = db.execute(text(f"""
+    row = await db.execute(text(f"""
         SELECT
             COALESCE(SUM(si.sale_item_subtotal), 0) AS total_revenue,
             COALESCE(SUM(si.sale_item_quantity * COALESCE(si.sale_item_cost_price_at_sale, p.prod_cost_price)), 0) AS total_cost
@@ -836,7 +861,8 @@ def get_gross_profit(
         WHERE s.business_id = CAST(:bid AS uuid)
           AND s.is_deleted = false
           {date_where}
-    """), {"bid": bid, **dp}).fetchone()
+    """), {"bid": bid, **dp})
+    row = result.fetchone()
 
     revenue = float(row.total_revenue) if row else 0
     cost = float(row.total_cost) if row else 0
@@ -852,18 +878,18 @@ def get_gross_profit(
 
 
 @router.get("/profit/by-product")
-def get_profit_by_product(
+async def get_profit_by_product(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     show_profit = "view_product_profit" in perms and "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             p.prod_id,
             p.prod_name,
@@ -878,7 +904,8 @@ def get_profit_by_product(
           {date_where}
         GROUP BY p.prod_id, p.prod_name
         ORDER BY revenue DESC
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     result = []
     for r in rows:
@@ -901,18 +928,18 @@ def get_profit_by_product(
 
 
 @router.get("/profit/by-category")
-def get_profit_by_category(
+async def get_profit_by_category(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     show_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             c.category_id,
             COALESCE(c.category_name, 'Uncategorized') AS category_name,
@@ -927,7 +954,8 @@ def get_profit_by_category(
           {date_where}
         GROUP BY c.category_id, c.category_name
         ORDER BY revenue DESC
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     result = []
     for r in rows:
@@ -949,18 +977,18 @@ def get_profit_by_category(
 
 
 @router.get("/profit/by-customer")
-def get_profit_by_customer(
+async def get_profit_by_customer(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     show_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             c.cust_id,
             c.cust_name,
@@ -977,7 +1005,8 @@ def get_profit_by_customer(
           {date_where}
         GROUP BY c.cust_id, c.cust_name
         ORDER BY revenue DESC
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     result = []
     for r in rows:
@@ -1000,13 +1029,13 @@ def get_profit_by_customer(
 
 
 @router.get("/profit/trend")
-def get_profit_trend(
+async def get_profit_trend(
     period: str = "monthly",
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     tz_offset_minutes: int = Query(0),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
@@ -1062,7 +1091,7 @@ def get_profit_trend(
             fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 year') AS gs"
         group_expr = "date_trunc('year', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))"
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         WITH aggregated AS (
             SELECT
                 {group_expr} AS bucket,
@@ -1083,7 +1112,8 @@ def get_profit_trend(
         FROM {fill_series}
         LEFT JOIN aggregated a ON a.bucket = gs
         ORDER BY gs
-    """), params).fetchall()
+    """), params)
+    rows = result.fetchall()
 
     result = []
     for r in rows:
@@ -1113,15 +1143,15 @@ def get_profit_trend(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/inventory/valuation")
-def get_inventory_valuation(
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+async def get_inventory_valuation(
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     show_profit = "view_product_profit" in perms
 
-    rows = db.execute(text("""
+    rows = await db.execute(text("""
         SELECT
             p.prod_id,
             p.prod_name,
@@ -1136,7 +1166,8 @@ def get_inventory_valuation(
         WHERE p.business_id = CAST(:bid AS uuid)
           AND p.is_deleted = false
         ORDER BY stock_value DESC
-    """), {"bid": bid}).fetchall()
+    """), {"bid": bid})
+    rows = result.fetchall()
 
     total_value = 0
     result = []
@@ -1165,16 +1196,16 @@ def get_inventory_valuation(
 
 
 @router.get("/inventory/movement-summary")
-def get_inventory_movement_summary(
+async def get_inventory_movement_summary(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     date_where, dp = _date_col("sm", "move_created_at", date_from, date_to)
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             sm.move_type,
             COUNT(*) AS movement_count,
@@ -1184,7 +1215,8 @@ def get_inventory_movement_summary(
           {date_where}
         GROUP BY sm.move_type
         ORDER BY movement_count DESC
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     return success_response([
         {
@@ -1197,23 +1229,24 @@ def get_inventory_movement_summary(
 
 
 @router.get("/inventory/stock-flow")
-def get_stock_flow(
+async def get_stock_flow(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     date_where, dp = _date_col("sm", "move_created_at", date_from, date_to)
 
-    row = db.execute(text(f"""
+    row = await db.execute(text(f"""
         SELECT
             COALESCE(SUM(sm.move_qty) FILTER (WHERE sm.move_qty > 0), 0) AS stock_in,
             COALESCE(SUM(ABS(sm.move_qty)) FILTER (WHERE sm.move_qty < 0), 0) AS stock_out
         FROM stock_movements sm
         WHERE sm.business_id = CAST(:bid AS uuid)
           {date_where}
-    """), {"bid": bid, **dp}).fetchone()
+    """), {"bid": bid, **dp})
+    row = result.fetchone()
 
     return success_response({
         "stock_in": int(row.stock_in) if row else 0,
@@ -1223,17 +1256,17 @@ def get_stock_flow(
 
 
 @router.get("/inventory/moving-products")
-def get_moving_products(
+async def get_moving_products(
     period: str = "monthly",
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     days = {"weekly": 7, "monthly": 30, "quarterly": 90, "yearly": 365}
     lookback = days.get(period, 30)
 
     # Fast-moving: most sale qty in period
-    fast = db.execute(text("""
+    fast = await db.execute(text("""
         SELECT
             p.prod_id,
             p.prod_name,
@@ -1248,10 +1281,11 @@ def get_moving_products(
         GROUP BY p.prod_id, p.prod_name, p.prod_stock_qty
         ORDER BY qty_sold DESC
         LIMIT 20
-    """), {"bid": bid, "days": lookback}).fetchall()
+    """), {"bid": bid, "days": lookback})
+    fast = result.fetchall()
 
     # Slow-moving: products with low sale qty relative to stock
-    slow = db.execute(text("""
+    slow = await db.execute(text("""
         SELECT
             p.prod_id,
             p.prod_name,
@@ -1270,10 +1304,11 @@ def get_moving_products(
         HAVING COALESCE(SUM(si.sale_item_quantity), 0) <= 2
         ORDER BY qty_sold ASC, p.prod_stock_qty DESC
         LIMIT 20
-    """), {"bid": bid, "days": lookback}).fetchall()
+    """), {"bid": bid, "days": lookback})
+    slow = result.fetchall()
 
     # Dead stock: no movement at all
-    dead = db.execute(text("""
+    dead = await db.execute(text("""
         SELECT
             p.prod_id,
             p.prod_name,
@@ -1292,7 +1327,8 @@ def get_moving_products(
           )
         ORDER BY p.prod_stock_qty DESC
         LIMIT 20
-    """), {"bid": bid, "days": lookback}).fetchall()
+    """), {"bid": bid, "days": lookback})
+    dead = result.fetchall()
 
     return success_response({
         "fast_moving": [
@@ -1315,19 +1351,19 @@ def get_moving_products(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/customers/top")
-def get_top_customers(
+async def get_top_customers(
     limit: int = Query(10, ge=1, le=100),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             c.cust_id,
             c.cust_name,
@@ -1344,7 +1380,8 @@ def get_top_customers(
         GROUP BY c.cust_id, c.cust_name, c.cust_phone
         ORDER BY total_spent DESC
         LIMIT :limit
-    """), {"bid": bid, "limit": limit, **dp}).fetchall()
+    """), {"bid": bid, "limit": limit, **dp})
+    rows = result.fetchall()
 
     return success_response([
         {
@@ -1361,15 +1398,15 @@ def get_top_customers(
 
 
 @router.get("/customers/{cust_id}/history")
-def get_customer_purchase_history(
+async def get_customer_purchase_history(
     cust_id: str,
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
 
     # Customer summary
-    cust_row = db.execute(text("""
+    cust_row = await db.execute(text("""
         SELECT
             c.cust_name, c.cust_phone, c.cust_email,
             c.cust_address, c.cust_state
@@ -1377,13 +1414,14 @@ def get_customer_purchase_history(
         WHERE c.cust_id = CAST(:cust_id AS uuid)
           AND c.business_id = CAST(:bid AS uuid)
           AND c.is_deleted = false
-    """), {"cust_id": cust_id, "bid": bid}).fetchone()
+    """), {"cust_id": cust_id, "bid": bid})
+    cust_row = result.fetchone()
 
     if not cust_row:
         return success_response(None)
 
     # Sales history
-    sales = db.execute(text("""
+    sales = await db.execute(text("""
         SELECT
             s.sales_id, s.invoice_no, s.sales_final_amount,
             s.sales_discount, s.tax_total,
@@ -1394,10 +1432,11 @@ def get_customer_purchase_history(
           AND s.business_id = CAST(:bid AS uuid)
           AND s.is_deleted = false
         ORDER BY s.sales_created_at DESC
-    """), {"cust_id": cust_id, "bid": bid}).fetchall()
+    """), {"cust_id": cust_id, "bid": bid})
+    sales = result.fetchall()
 
     # Payment history
-    payments = db.execute(text("""
+    payments = await db.execute(text("""
         SELECT
             pay.payment_id, pay.payment_amount, pay.payment_method,
             pay.payment_status, pay.payment_paid_at, s.invoice_no
@@ -1407,9 +1446,10 @@ def get_customer_purchase_history(
           AND pay.business_id = CAST(:bid AS uuid)
           AND pay.is_active = true
         ORDER BY pay.payment_paid_at DESC
-    """), {"cust_id": cust_id, "bid": bid}).fetchall()
+    """), {"cust_id": cust_id, "bid": bid})
+    payments = result.fetchall()
 
-    totals = db.execute(text("""
+    totals = await db.execute(text("""
         SELECT
             COUNT(*) AS total_invoices,
             COALESCE(SUM(sales_final_amount), 0) AS total_amount,
@@ -1419,7 +1459,8 @@ def get_customer_purchase_history(
         WHERE customer_id = CAST(:cust_id AS uuid)
           AND business_id = CAST(:bid AS uuid)
           AND is_deleted = false
-    """), {"cust_id": cust_id, "bid": bid}).fetchone()
+    """), {"cust_id": cust_id, "bid": bid})
+    totals = result.fetchone()
 
     return success_response({
         "customer": {
@@ -1464,15 +1505,15 @@ def get_customer_purchase_history(
 
 
 @router.get("/customers/lifetime-value")
-def get_customer_lifetime_value(
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+async def get_customer_lifetime_value(
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
 
-    rows = db.execute(text("""
+    rows = await db.execute(text("""
         SELECT
             c.cust_id,
             c.cust_name,
@@ -1489,7 +1530,8 @@ def get_customer_lifetime_value(
         GROUP BY c.cust_id, c.cust_name, c.cust_phone
         HAVING COUNT(DISTINCT s.sales_id) >= 2
         ORDER BY total_spent DESC
-    """), {"bid": bid}).fetchall()
+    """), {"bid": bid})
+    rows = result.fetchall()
 
     result = []
     for r in rows:
@@ -1511,15 +1553,15 @@ def get_customer_lifetime_value(
 
 
 @router.get("/customers/outstanding")
-def get_customer_outstanding(
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+async def get_customer_outstanding(
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
 
-    rows = db.execute(text("""
+    rows = await db.execute(text("""
         SELECT
             c.cust_id,
             c.cust_name,
@@ -1535,7 +1577,8 @@ def get_customer_outstanding(
           AND s.sales_payment_status IN ('pending', 'partial')
         GROUP BY c.cust_id, c.cust_name, c.cust_phone
         ORDER BY total_outstanding DESC
-    """), {"bid": bid}).fetchall()
+    """), {"bid": bid})
+    rows = result.fetchall()
 
     return success_response([
         {
@@ -1554,19 +1597,19 @@ def get_customer_outstanding(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/suppliers/top")
-def get_top_suppliers(
+async def get_top_suppliers(
     limit: int = Query(10, ge=1, le=100),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("pr", "pur_created_at", date_from, date_to)
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             sp.supp_id,
             sp.supp_name,
@@ -1582,7 +1625,8 @@ def get_top_suppliers(
         GROUP BY sp.supp_id, sp.supp_name, sp.supp_phone
         ORDER BY total_spend DESC
         LIMIT :limit
-    """), {"bid": bid, "limit": limit, **dp}).fetchall()
+    """), {"bid": bid, "limit": limit, **dp})
+    rows = result.fetchall()
 
     return success_response([
         {
@@ -1598,22 +1642,23 @@ def get_top_suppliers(
 
 
 @router.get("/suppliers/{supp_id}/history")
-def get_supplier_purchase_history(
+async def get_supplier_purchase_history(
     supp_id: str,
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
 
-    supp_row = db.execute(text("""
+    supp_row = await db.execute(text("""
         SELECT supp_name, supp_phone, supp_email FROM suppliers
         WHERE supp_id = CAST(:supp_id AS uuid) AND business_id = CAST(:bid AS uuid) AND is_deleted = false
-    """), {"supp_id": supp_id, "bid": bid}).fetchone()
+    """), {"supp_id": supp_id, "bid": bid})
+    supp_row = result.fetchone()
 
     if not supp_row:
         return success_response(None)
 
-    purchases = db.execute(text("""
+    purchases = await db.execute(text("""
         SELECT
             pr.pur_id, pr.pur_final_amount, pr.pur_discount,
             pr.pur_tax_total, pr.pur_payment_status, pr.pur_created_at
@@ -1622,9 +1667,10 @@ def get_supplier_purchase_history(
           AND pr.business_id = CAST(:bid AS uuid)
           AND pr.is_deleted = false
         ORDER BY pr.pur_created_at DESC
-    """), {"supp_id": supp_id, "bid": bid}).fetchall()
+    """), {"supp_id": supp_id, "bid": bid})
+    purchases = result.fetchall()
 
-    totals = db.execute(text("""
+    totals = await db.execute(text("""
         SELECT
             COUNT(*) AS total_purchases,
             COALESCE(SUM(pur_final_amount), 0) AS total_amount,
@@ -1634,7 +1680,8 @@ def get_supplier_purchase_history(
         WHERE supp_id = CAST(:supp_id AS uuid)
           AND business_id = CAST(:bid AS uuid)
           AND is_deleted = false
-    """), {"supp_id": supp_id, "bid": bid}).fetchone()
+    """), {"supp_id": supp_id, "bid": bid})
+    totals = result.fetchone()
 
     return success_response({
         "supplier": {
@@ -1663,15 +1710,15 @@ def get_supplier_purchase_history(
 
 
 @router.get("/suppliers/spend-analysis")
-def get_supplier_spend_analysis(
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+async def get_supplier_spend_analysis(
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
 
-    rows = db.execute(text("""
+    rows = await db.execute(text("""
         SELECT
             sp.supp_id,
             sp.supp_name,
@@ -1689,7 +1736,8 @@ def get_supplier_spend_analysis(
           AND sp.is_deleted = false
         GROUP BY sp.supp_id, sp.supp_name
         ORDER BY total_spend DESC
-    """), {"bid": bid}).fetchall()
+    """), {"bid": bid})
+    rows = result.fetchall()
 
     return success_response([
         {
@@ -1711,18 +1759,18 @@ def get_supplier_spend_analysis(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/expenses/by-category")
-def get_expenses_by_category(
+async def get_expenses_by_category(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("e", "expense_date", date_from, date_to)
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             COALESCE(NULLIF(e.expense_category, ''), 'other') AS category,
             COUNT(*) AS expense_count,
@@ -1733,7 +1781,8 @@ def get_expenses_by_category(
           {date_where}
         GROUP BY e.expense_category
         ORDER BY total_amount DESC
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     return success_response([
         {
@@ -1746,12 +1795,12 @@ def get_expenses_by_category(
 
 
 @router.get("/expenses/trend")
-def get_expense_trend(
+async def get_expense_trend(
     period: str = "monthly",
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
@@ -1804,7 +1853,7 @@ def get_expense_trend(
             fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 year') AS gs"
         group_expr = "date_trunc('year', e.expense_date)"
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         WITH aggregated AS (
             SELECT
                 {group_expr} AS bucket,
@@ -1823,7 +1872,8 @@ def get_expense_trend(
         FROM {fill_series}
         LEFT JOIN aggregated a ON a.bucket = gs
         ORDER BY gs
-    """), params).fetchall()
+    """), params)
+    rows = result.fetchall()
 
     result = []
     for r in rows:
@@ -1841,18 +1891,18 @@ def get_expense_trend(
 
 
 @router.get("/expenses/distribution")
-def get_expense_distribution(
+async def get_expense_distribution(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("e", "expense_date", date_from, date_to)
 
-    row = db.execute(text(f"""
+    row = await db.execute(text(f"""
         SELECT
             COALESCE(SUM(e.expense_amount), 0) AS total_expenses,
             COUNT(*) AS total_count
@@ -1860,9 +1910,10 @@ def get_expense_distribution(
         WHERE e.business_id = CAST(:bid AS uuid)
           AND e.is_deleted = false
           {date_where}
-    """), {"bid": bid, **dp}).fetchone()
+    """), {"bid": bid, **dp})
+    row = result.fetchone()
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             COALESCE(NULLIF(e.expense_category, ''), 'other') AS category,
             COALESCE(SUM(e.expense_amount), 0) AS amount,
@@ -1873,7 +1924,8 @@ def get_expense_distribution(
           {date_where}
         GROUP BY e.expense_category
         ORDER BY amount DESC
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     total = float(row.total_expenses) if row and can_financial else 0
 
@@ -1897,18 +1949,18 @@ def get_expense_distribution(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/tax/collected")
-def get_tax_collected(
+async def get_tax_collected(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
-    row = db.execute(text(f"""
+    row = await db.execute(text(f"""
         SELECT
             COALESCE(SUM(s.tax_total), 0) AS total_tax,
             COALESCE(SUM(s.cgst_total), 0) AS total_cgst,
@@ -1918,7 +1970,8 @@ def get_tax_collected(
         WHERE s.business_id = CAST(:bid AS uuid)
           AND s.is_deleted = false
           {date_where}
-    """), {"bid": bid, **dp}).fetchone()
+    """), {"bid": bid, **dp})
+    row = result.fetchone()
 
     return success_response({
         "total_tax": float(row.total_tax) if can_financial else None,
@@ -1929,18 +1982,18 @@ def get_tax_collected(
 
 
 @router.get("/tax/paid")
-def get_tax_paid(
+async def get_tax_paid(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("pr", "pur_created_at", date_from, date_to)
 
-    row = db.execute(text(f"""
+    row = await db.execute(text(f"""
         SELECT
             COALESCE(SUM(pr.pur_tax_total), 0) AS total_tax,
             COALESCE(SUM(pr.pur_cgst_total), 0) AS total_cgst,
@@ -1950,7 +2003,8 @@ def get_tax_paid(
         WHERE pr.business_id = CAST(:bid AS uuid)
           AND pr.is_deleted = false
           {date_where}
-    """), {"bid": bid, **dp}).fetchone()
+    """), {"bid": bid, **dp})
+    row = result.fetchone()
 
     return success_response({
         "total_tax": float(row.total_tax) if can_financial else None,
@@ -1961,11 +2015,11 @@ def get_tax_paid(
 
 
 @router.get("/tax/liability")
-def get_tax_liability(
+async def get_tax_liability(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
@@ -1979,13 +2033,14 @@ def get_tax_liability(
     ds, ps = _date_col("s", "sales_created_at", date_from, date_to)
     dp, pp = _date_col("pr", "pur_created_at", date_from, date_to)
 
-    row = db.execute(text(f"""
+    row = await db.execute(text(f"""
         SELECT
             COALESCE((SELECT SUM(tax_total) FROM sales s
                        WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {ds}), 0) AS collected,
             COALESCE((SELECT SUM(pur_tax_total) FROM purchases pr
                        WHERE pr.business_id = CAST(:bid AS uuid) AND pr.is_deleted = false {dp}), 0) AS paid
-    """), {"bid": bid, **ps, **pp}).fetchone()
+    """), {"bid": bid, **ps, **pp})
+    row = result.fetchone()
 
     collected = float(row.collected) if row else 0
     paid = float(row.paid) if row else 0
@@ -1998,17 +2053,17 @@ def get_tax_liability(
 
 
 @router.get("/tax/by-rate")
-def get_tax_by_rate(
+async def get_tax_by_rate(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
     # Sales tax by GST rate
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             si.gst_rate,
             COUNT(DISTINCT si.sale_item_id) AS item_count,
@@ -2021,7 +2076,8 @@ def get_tax_by_rate(
           {date_where}
         GROUP BY si.gst_rate
         ORDER BY si.gst_rate
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     return success_response([
         {
@@ -2039,18 +2095,18 @@ def get_tax_by_rate(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/returns/sales")
-def get_sales_returns_summary(
+async def get_sales_returns_summary(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("sr", "return_created_at", date_from, date_to)
 
-    row = db.execute(text(f"""
+    row = await db.execute(text(f"""
         SELECT
             COUNT(*) AS total_returns,
             COALESCE(SUM(return_amount), 0) AS total_amount,
@@ -2060,9 +2116,10 @@ def get_sales_returns_summary(
         FROM sales_returns sr
         WHERE sr.business_id = CAST(:bid AS uuid)
           {date_where}
-    """), {"bid": bid, **dp}).fetchone()
+    """), {"bid": bid, **dp})
+    row = result.fetchone()
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT return_reason, COUNT(*) AS count
         FROM sales_returns sr
         WHERE sr.business_id = CAST(:bid AS uuid)
@@ -2070,7 +2127,8 @@ def get_sales_returns_summary(
         GROUP BY return_reason
         ORDER BY count DESC
 
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     return success_response({
         "summary": {
@@ -2087,18 +2145,18 @@ def get_sales_returns_summary(
     })
 
 @router.get("/returns/purchases")
-def get_purchase_returns_summary(
+async def get_purchase_returns_summary(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("pr", "return_created_at", date_from, date_to)
 
-    row = db.execute(text(f"""
+    row = await db.execute(text(f"""
         SELECT
             COUNT(*) AS total_returns,
             COALESCE(SUM(return_amount), 0) AS total_amount,
@@ -2108,7 +2166,8 @@ def get_purchase_returns_summary(
         FROM purchase_returns pr
         WHERE pr.business_id = CAST(:bid AS uuid)
           {date_where}
-    """), {"bid": bid, **dp}).fetchone()
+    """), {"bid": bid, **dp})
+    row = result.fetchone()
 
     return success_response({
         "total_returns": int(row.total_returns) if row else 0,
@@ -2120,12 +2179,12 @@ def get_purchase_returns_summary(
 
 
 @router.get("/returns/trend")
-def get_returns_trend(
+async def get_returns_trend(
     period: str = "monthly",
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
@@ -2146,7 +2205,7 @@ def get_returns_trend(
         fill_series = "generate_series(date_trunc('year', CURRENT_DATE - INTERVAL '4 years'), date_trunc('year', CURRENT_DATE + INTERVAL '1 year'), INTERVAL '1 year') AS gs"
         group_expr = "date_trunc('year', r.return_created_at)"
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         WITH sales_ret AS (
             SELECT {group_expr} AS bucket, COUNT(*) AS return_count, COALESCE(SUM(return_amount), 0) AS return_amount
             FROM sales_returns r
@@ -2169,7 +2228,8 @@ def get_returns_trend(
         LEFT JOIN sales_ret sr ON sr.bucket = gs
         LEFT JOIN purchase_ret prr ON prr.bucket = gs
         ORDER BY gs
-    """), params).fetchall()
+    """), params)
+    rows = result.fetchall()
 
     result = []
     for r in rows:
@@ -2193,11 +2253,11 @@ def get_returns_trend(
 
 
 @router.get("/returns/impact")
-def get_returns_profit_impact(
+async def get_returns_profit_impact(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
@@ -2207,7 +2267,7 @@ def get_returns_profit_impact(
     date_where, dp = _date_col("sr", "return_created_at", date_from, date_to)
 
     # Sales returns — cost of returned goods
-    row = db.execute(text(f"""
+    row = await db.execute(text(f"""
         SELECT
             COALESCE(SUM(sr.return_amount), 0) AS sales_return_value,
             COALESCE(SUM(sri.return_qty * sri.original_unit_price), 0) AS sales_return_cost
@@ -2216,18 +2276,20 @@ def get_returns_profit_impact(
         WHERE sr.business_id = CAST(:bid AS uuid)
           AND sr.return_status = 'approved'
           {date_where}
-    """), {"bid": bid, **dp}).fetchone()
+    """), {"bid": bid, **dp})
+    row = result.fetchone()
 
     dp2, pp2 = _date_col("prr", "return_created_at", date_from, date_to)
 
-    row2 = db.execute(text(f"""
+    row2 = await db.execute(text(f"""
         SELECT
             COALESCE(SUM(prr.return_amount), 0) AS purchase_return_value
         FROM purchase_returns prr
         WHERE prr.business_id = CAST(:bid AS uuid)
           AND prr.return_status = 'approved'
           {dp2}
-    """), {"bid": bid, **pp2}).fetchone()
+    """), {"bid": bid, **pp2})
+    row2 = result.fetchone()
 
     sales_return_value = float(row.sales_return_value) if row else 0
     purchase_return_value = float(row2.purchase_return_value) if row2 else 0
@@ -2244,12 +2306,12 @@ def get_returns_profit_impact(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/payments/collections")
-def get_payment_collections(
+async def get_payment_collections(
     period: str = "monthly",
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
@@ -2300,7 +2362,7 @@ def get_payment_collections(
             fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 year') AS gs"
         group_expr = "date_trunc('year', pay.payment_paid_at)"
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         WITH aggregated AS (
             SELECT
                 {group_expr} AS bucket,
@@ -2319,7 +2381,8 @@ def get_payment_collections(
         FROM {fill_series}
         LEFT JOIN aggregated a ON a.bucket = gs
         ORDER BY gs
-    """), params).fetchall()
+    """), params)
+    rows = result.fetchall()
 
     result = []
     for r in rows:
@@ -2337,15 +2400,15 @@ def get_payment_collections(
 
 
 @router.get("/payments/outstanding")
-def get_outstanding_receivables(
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+async def get_outstanding_receivables(
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
 
-    rows = db.execute(text("""
+    rows = await db.execute(text("""
         SELECT
             s.sales_id, s.invoice_no, c.cust_name,
             s.sales_final_amount, s.sales_payment_status,
@@ -2358,7 +2421,8 @@ def get_outstanding_receivables(
           AND s.is_deleted = false
           AND s.sales_payment_status IN ('pending', 'partial')
         ORDER BY balance DESC
-    """), {"bid": bid}).fetchall()
+    """), {"bid": bid})
+    rows = result.fetchall()
 
     total_outstanding = 0
     data = []
@@ -2383,18 +2447,18 @@ def get_outstanding_receivables(
 
 
 @router.get("/payments/by-method")
-def get_payments_by_method(
+async def get_payments_by_method(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("pay", "payment_paid_at", date_from, date_to)
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             COALESCE(NULLIF(pay.payment_method, ''), 'unknown') AS method,
             COUNT(pay.payment_id) AS payment_count,
@@ -2405,7 +2469,8 @@ def get_payments_by_method(
           {date_where}
         GROUP BY pay.payment_method
         ORDER BY total_amount DESC
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     total = sum(float(r.total_amount) for r in rows) if can_financial else 0
 
@@ -2421,15 +2486,15 @@ def get_payments_by_method(
 
 
 @router.get("/payments/partial")
-def get_partial_payments(
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+async def get_partial_payments(
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
 
-    rows = db.execute(text("""
+    rows = await db.execute(text("""
         SELECT
             s.sales_id, s.invoice_no, c.cust_name,
             s.sales_final_amount, s.sales_payment_status,
@@ -2445,7 +2510,8 @@ def get_partial_payments(
           AND s.sales_payment_status = 'partial'
           AND s.is_deleted = false
         ORDER BY pay.payment_paid_at DESC
-    """), {"bid": bid}).fetchall()
+    """), {"bid": bid})
+    rows = result.fetchall()
 
     return success_response([
         {
@@ -2468,12 +2534,12 @@ def get_partial_payments(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/audit/user-activities")
-def get_user_activities(
+async def get_user_activities(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     user_id: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
@@ -2488,7 +2554,7 @@ def get_user_activities(
         user_filter = " AND al.user_id = CAST(:user_id AS uuid)"
         params["user_id"] = user_id
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             al.audit_id, al.user_id, al.action_type,
             al.table_name, al.record_id,
@@ -2501,7 +2567,8 @@ def get_user_activities(
           {user_filter}
         ORDER BY al.created_at DESC
         LIMIT 500
-    """), params).fetchall()
+    """), params)
+    rows = result.fetchall()
 
     return success_response([
         {
@@ -2520,11 +2587,11 @@ def get_user_activities(
 
 
 @router.get("/audit/login-activities")
-def get_login_activities(
+async def get_login_activities(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
@@ -2533,7 +2600,7 @@ def get_login_activities(
 
     date_where, dp = _date_col("al", "created_at", date_from, date_to)
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             al.audit_id, al.user_id, al.created_at,
             COALESCE(p.full_name, 'System') AS user_name
@@ -2544,7 +2611,8 @@ def get_login_activities(
           {date_where}
         ORDER BY al.created_at DESC
         LIMIT 200
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     return success_response([
         {
@@ -2558,12 +2626,12 @@ def get_login_activities(
 
 
 @router.get("/audit/data-changes")
-def get_data_changes(
+async def get_data_changes(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     table_name: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
@@ -2578,7 +2646,7 @@ def get_data_changes(
         table_filter = " AND al.table_name = :table_name"
         params["table_name"] = table_name
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             al.audit_id, al.user_id, al.action_type,
             al.table_name, al.record_id, al.old_data, al.new_data,
@@ -2591,7 +2659,8 @@ def get_data_changes(
           {table_filter}
         ORDER BY al.created_at DESC
         LIMIT 500
-    """), params).fetchall()
+    """), params)
+    rows = result.fetchall()
 
     return success_response([
         {
@@ -2622,11 +2691,11 @@ def get_data_changes(
 # ──────────────────────────────────────────────────────────────────────
 
 @router.get("/audit/exports")
-def get_export_activities(
+async def get_export_activities(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
-    current_user: dict = Depends(require_permission_with_rls("reports.view")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
@@ -2635,7 +2704,7 @@ def get_export_activities(
 
     date_where, dp = _date_col("al", "created_at", date_from, date_to)
 
-    rows = db.execute(text(f"""
+    rows = await db.execute(text(f"""
         SELECT
             al.audit_id, al.user_id, al.table_name,
             al.old_data, al.new_data, al.created_at,
@@ -2647,7 +2716,8 @@ def get_export_activities(
           {date_where}
         ORDER BY al.created_at DESC
         LIMIT 200
-    """), {"bid": bid, **dp}).fetchall()
+    """), {"bid": bid, **dp})
+    rows = result.fetchall()
 
     return success_response([
         {

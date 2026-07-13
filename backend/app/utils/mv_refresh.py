@@ -3,6 +3,7 @@ import os
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import OperationalError
 from time import time
 
@@ -55,6 +56,31 @@ def refresh_dashboard_mvs(db: Session, force: bool = False) -> None:
             "Materialized view refresh failed (dashboard will serve stale data): %s", e
         )
         db.rollback()
+
+
+async def refresh_dashboard_mvs_async(db: AsyncSession, force: bool = False) -> None:
+    """Async version of refresh_dashboard_mvs for use with AsyncSession."""
+    global _last_refresh
+
+    now = time()
+    if not force:
+        if os.getenv("REDIS_URL"):
+            if not _try_acquire_refresh_lock():
+                return
+        else:
+            if (now - _last_refresh) < _STALE_AFTER_SECONDS:
+                return
+
+    try:
+        await db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_SUMMARY}"))
+        await db.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_TREND}"))
+        await db.commit()
+        _last_refresh = time()
+    except OperationalError as e:
+        logging.warning(
+            "Materialized view refresh failed (dashboard will serve stale data): %s", e
+        )
+        await db.rollback()
 
 
 def refresh_dashboard_mvs_background() -> None:

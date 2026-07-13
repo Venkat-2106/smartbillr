@@ -2,12 +2,12 @@ import logging
 from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
 
-def activate_subscription(db: Session, provider_object: dict, provider: str):
+async def activate_subscription(db: AsyncSession, provider_object: dict, provider: str):
     """
     Activate a subscription after a successful payment webhook.
 
@@ -26,10 +26,11 @@ def activate_subscription(db: Session, provider_object: dict, provider: str):
         logger.error("Webhook missing order_id for provider=%s", provider)
         return
 
-    payment_row = db.execute(
+    result = await db.execute(
         text("SELECT * FROM subscription_payments WHERE provider = :p AND provider_order_id = :oid"),
         {"p": provider, "oid": order_id},
-    ).fetchone()
+    )
+    payment_row = result.fetchone()
 
     if not payment_row:
         logger.error("Webhook for unknown order_id=%s provider=%s", order_id, provider)
@@ -39,10 +40,11 @@ def activate_subscription(db: Session, provider_object: dict, provider: str):
         logger.info("Duplicate webhook for payment_id=%s, already paid", payment_row.payment_id)
         return
 
-    plan = db.execute(
+    result = await db.execute(
         text("SELECT * FROM plans WHERE plan_id = :pid"),
         {"pid": str(payment_row.plan_id)},
-    ).fetchone()
+    )
+    plan = result.fetchone()
 
     if not plan:
         logger.error("Plan not found for plan_id=%s", payment_row.plan_id)
@@ -59,7 +61,7 @@ def activate_subscription(db: Session, provider_object: dict, provider: str):
             "Amount mismatch on payment_id=%s: expected %s got %s",
             payment_row.payment_id, payment_row.amount, paid_amount,
         )
-        db.execute(
+        await db.execute(
             text("""
                 UPDATE subscription_payments
                 SET status = 'failed', failure_reason = 'amount_mismatch', updated_by_webhook_at = now()
@@ -67,7 +69,7 @@ def activate_subscription(db: Session, provider_object: dict, provider: str):
             """),
             {"pid": str(payment_row.payment_id)},
         )
-        db.commit()
+        await db.commit()
         return  # do NOT activate — flag for manual review
 
     now = datetime.now(timezone.utc)
@@ -79,7 +81,7 @@ def activate_subscription(db: Session, provider_object: dict, provider: str):
     else:
         period_end = now + timedelta(days=30)
 
-    db.execute(
+    await db.execute(
         text("""
             UPDATE businesses SET
                 payment_status = 'paid',
@@ -101,7 +103,7 @@ def activate_subscription(db: Session, provider_object: dict, provider: str):
         },
     )
 
-    db.execute(
+    await db.execute(
         text("""
             UPDATE subscription_payments SET
                 status = 'paid',
@@ -113,7 +115,7 @@ def activate_subscription(db: Session, provider_object: dict, provider: str):
         {"now": now, "ppid": provider_payment_id, "pid": str(payment_row.payment_id)},
     )
 
-    db.commit()
+    await db.commit()
 
     # Invalidate caches so the user's NEXT request sees the new plan immediately
     try:
@@ -134,7 +136,7 @@ def activate_subscription(db: Session, provider_object: dict, provider: str):
     )
 
 
-def handle_payment_failure(db: Session, provider_object: dict, provider: str):
+async def handle_payment_failure(db: AsyncSession, provider_object: dict, provider: str):
     """Handle a failed payment — record the failure, don't touch businesses table."""
     if provider == "razorpay":
         order_id = provider_object.get("order_id")
@@ -146,7 +148,7 @@ def handle_payment_failure(db: Session, provider_object: dict, provider: str):
     if not order_id:
         return
 
-    db.execute(
+    await db.execute(
         text("""
             UPDATE subscription_payments
             SET status = 'failed', failure_reason = :reason, updated_by_webhook_at = now()
@@ -154,5 +156,5 @@ def handle_payment_failure(db: Session, provider_object: dict, provider: str):
         """),
         {"p": provider, "oid": order_id, "reason": failure_reason},
     )
-    db.commit()
+    await db.commit()
     logger.info("Payment failure recorded: provider=%s order_id=%s", provider, order_id)

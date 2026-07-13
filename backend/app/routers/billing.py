@@ -1,14 +1,29 @@
+# app/routers/billing.py
+#
+# ── ASYNC MIGRATION NOTE (2026-07) ──────────────────────────────────────────
+#
+# This router was migrated from sync SQLAlchemy (psycopg2) to async
+# (asyncpg).  Key patterns:
+#
+#   - Session → AsyncSession (get_async_db dependency)
+#   - db.execute(...) → await db.execute(...)
+#   - db.commit() → await db.commit()
+#   - require_permission_with_rls → require_permission (auth middleware
+#     sets GUCs via set_config in verify_token)
+#   - verify_token_with_rls → verify_token (same reason)
+#   - activation.py functions are now async
+
 import os
 import json
 import logging
 
 from fastapi import APIRouter, Depends, Request, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
-from app.database import get_db
-from app.middleware.rbac import require_permission_with_rls
-from app.middleware.rbac import verify_token_with_rls
+from app.database import get_async_db
+from app.middleware.rbac import require_permission
+from app.middleware.auth import verify_token
 from app.utils.response import success_response, error_response
 from app.schemas.billing import (
     CheckoutRequest,
@@ -16,7 +31,8 @@ from app.schemas.billing import (
     PlanOut,
     ChangePlanRequest,
 )
-from app.services.billing import razorpay_client, stripe_client, activation
+from app.services.billing import razorpay_client, stripe_client
+from app.services.billing import activation
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +44,11 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 # ── Plans ────────────────────────────────────────────────────────────────────
 
 @router.get("/plans")
-def list_plans(db: Session = Depends(get_db)):
-    rows = db.execute(
+async def list_plans(db: AsyncSession = Depends(get_async_db)):
+    result = await db.execute(
         text("SELECT * FROM plans WHERE is_active = true ORDER BY sort_order")
-    ).fetchall()
+    )
+    rows = result.fetchall()
     plans = [dict(r._mapping) for r in rows]
     for p in plans:
         if p.get("feature_limits") and isinstance(p["feature_limits"], str):
@@ -41,8 +58,8 @@ def list_plans(db: Session = Depends(get_db)):
 
 # ── Checkout ─────────────────────────────────────────────────────────────────
 
-def _record_pending_payment(db, bid, plan_id, provider, order_id, amount, currency):
-    result = db.execute(
+async def _record_pending_payment(db, bid, plan_id, provider, order_id, amount, currency):
+    result = await db.execute(
         text("""
             INSERT INTO subscription_payments (business_id, plan_id, provider, provider_order_id, amount, currency, status)
             VALUES (:bid, :plan_id, :provider, :order_id, :amount, :currency, 'created')
@@ -50,14 +67,15 @@ def _record_pending_payment(db, bid, plan_id, provider, order_id, amount, curren
         """),
         {"bid": bid, "plan_id": plan_id, "provider": provider, "order_id": order_id,
          "amount": amount, "currency": currency},
-    ).fetchone()
-    db.commit()
-    return str(result.payment_id)
+    )
+    row = result.fetchone()
+    await db.commit()
+    return str(row.payment_id)
 
 
-def _find_existing_checkout(db, bid, plan_id):
+async def _find_existing_checkout(db, bid, plan_id):
     """Return an existing 'created' checkout for this business+plan within the last 10 minutes, or None."""
-    row = db.execute(
+    result = await db.execute(
         text("""
             SELECT payment_id, provider, provider_order_id, amount, currency
             FROM subscription_payments
@@ -69,7 +87,8 @@ def _find_existing_checkout(db, bid, plan_id):
             LIMIT 1
         """),
         {"bid": bid, "plan_id": plan_id},
-    ).fetchone()
+    )
+    row = result.fetchone()
     if not row:
         return None
     return {
@@ -82,36 +101,38 @@ def _find_existing_checkout(db, bid, plan_id):
 
 
 @router.post("/checkout")
-def create_checkout(
+async def create_checkout(
     payload: CheckoutRequest,
-    current_user: dict = Depends(verify_token_with_rls),
-    db: Session = Depends(get_db),
+    current_user: dict = Depends(verify_token),
+    db: AsyncSession = Depends(get_async_db),
 ):
     # NOTE: Uses verify_token directly (not require_permission) because
     # expired/trial businesses must be able to reach checkout to pay.
     # The subscription middleware/dependency would block them otherwise.
     bid = current_user["business_id"]
 
-    plan = db.execute(
+    result = await db.execute(
         text("SELECT * FROM plans WHERE plan_code = :code AND is_active = true"),
         {"code": payload.plan_code},
-    ).fetchone()
+    )
+    plan = result.fetchone()
     if not plan:
         return error_response("Plan not found", 404)
 
     if payload.billing_cycle and plan.billing_cycle != payload.billing_cycle:
         return error_response("Billing cycle mismatch for this plan", 400)
 
-    business = db.execute(
+    result = await db.execute(
         text("SELECT business_country_code, business_email FROM businesses WHERE business_id = CAST(:bid AS uuid)"),
         {"bid": bid},
-    ).fetchone()
+    )
+    business = result.fetchone()
     if not business:
         return error_response("Business not found", 404)
 
     is_india = (business.business_country_code or "").upper() == "IN"
 
-    existing = _find_existing_checkout(db, bid, str(plan.plan_id))
+    existing = await _find_existing_checkout(db, bid, str(plan.plan_id))
     if existing:
         if existing["provider"] == "razorpay":
             return success_response({
@@ -146,7 +167,7 @@ def create_checkout(
             notes={"business_id": bid, "plan_code": plan.plan_code},
         )
 
-        payment_id = _record_pending_payment(
+        payment_id = await _record_pending_payment(
             db, bid, str(plan.plan_id), "razorpay", order["id"],
             float(plan.price_inr), "INR",
         )
@@ -173,7 +194,7 @@ def create_checkout(
             customer_email=business.business_email,
         )
 
-        payment_id = _record_pending_payment(
+        payment_id = await _record_pending_payment(
             db, bid, str(plan.plan_id), "stripe", session["id"],
             float(plan.price_usd), "USD",
         )
@@ -188,14 +209,14 @@ def create_checkout(
 # ── Status polling ───────────────────────────────────────────────────────────
 
 @router.get("/checkout/{payment_id}/status")
-def checkout_status(
+async def checkout_status(
     payment_id: str,
-    current_user: dict = Depends(verify_token_with_rls),
-    db: Session = Depends(get_db),
+    current_user: dict = Depends(verify_token),
+    db: AsyncSession = Depends(get_async_db),
 ):
     # NOTE: Uses verify_token directly — expired businesses must be able to
     # poll checkout status while completing payment.
-    row = db.execute(
+    result = await db.execute(
         text("""
             SELECT payment_id, status, provider, provider_order_id
             FROM subscription_payments
@@ -203,7 +224,8 @@ def checkout_status(
               AND business_id = CAST(:bid AS uuid)
         """),
         {"pid": payment_id, "bid": current_user["business_id"]},
-    ).fetchone()
+    )
+    row = result.fetchone()
 
     if not row:
         return error_response("Payment not found", 404)
@@ -217,7 +239,7 @@ def checkout_status(
 # ── Webhooks (no JWT auth — security via signature verification) ─────────────
 
 @router.post("/webhooks/razorpay")
-async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
+async def razorpay_webhook(request: Request, db: AsyncSession = Depends(get_async_db)):
     body = await request.body()
     signature = request.headers.get("X-Razorpay-Signature", "")
     secret = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
@@ -230,7 +252,7 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
     event_type = payload.get("event", "")
 
     # Idempotency check
-    inserted = db.execute(
+    result = await db.execute(
         text("""
             INSERT INTO subscription_events (provider, provider_event_id, event_type, payload)
             VALUES ('razorpay', :eid, :etype, CAST(:payload AS jsonb))
@@ -238,24 +260,25 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
             RETURNING event_id
         """),
         {"eid": event_id, "etype": event_type, "payload": json.dumps(payload)},
-    ).fetchone()
-    db.commit()
+    )
+    inserted = result.fetchone()
+    await db.commit()
 
     if inserted is None:
         return success_response({"status": "already_processed"})
 
     if event_type == "payment.captured":
         payment_entity = payload.get("payload", {}).get("payment", {}).get("entity", {})
-        activation.activate_subscription(db, payment_entity, provider="razorpay")
+        await activation.activate_subscription(db, payment_entity, provider="razorpay")
     elif event_type == "payment.failed":
         payment_entity = payload.get("payload", {}).get("payment", {}).get("entity", {})
-        activation.handle_payment_failure(db, payment_entity, provider="razorpay")
+        await activation.handle_payment_failure(db, payment_entity, provider="razorpay")
 
     return success_response({"status": "ok"})
 
 
 @router.post("/webhooks/stripe")
-async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
+async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_async_db)):
     body = await request.body()
     sig_header = request.headers.get("stripe-signature", "")
     webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET", "")
@@ -269,7 +292,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     event_type = event.get("type", "")
 
     # Idempotency check
-    inserted = db.execute(
+    result = await db.execute(
         text("""
             INSERT INTO subscription_events (provider, provider_event_id, event_type, payload)
             VALUES ('stripe', :eid, :etype, CAST(:payload AS jsonb))
@@ -277,8 +300,9 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             RETURNING event_id
         """),
         {"eid": event_id, "etype": event_type, "payload": json.dumps(event)},
-    ).fetchone()
-    db.commit()
+    )
+    inserted = result.fetchone()
+    await db.commit()
 
     if inserted is None:
         return success_response({"status": "already_processed"})
@@ -286,9 +310,9 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     data_object = event.get("data", {}).get("object", {})
 
     if event_type == "checkout.session.completed":
-        activation.activate_subscription(db, data_object, provider="stripe")
+        await activation.activate_subscription(db, data_object, provider="stripe")
     elif event_type == "invoice.payment_failed":
-        activation.handle_payment_failure(db, data_object, provider="stripe")
+        await activation.handle_payment_failure(db, data_object, provider="stripe")
 
     return success_response({"status": "ok"})
 
@@ -296,14 +320,14 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 # ── Cancel subscription ──────────────────────────────────────────────────────
 
 @router.post("/cancel")
-def cancel_subscription(
-    current_user: dict = Depends(require_permission_with_rls("settings.manage")),
-    db: Session = Depends(get_db),
+async def cancel_subscription(
+    current_user: dict = Depends(require_permission("settings.manage")),
+    db: AsyncSession = Depends(get_async_db),
 ):
     bid = current_user["business_id"]
-    db.execute(
+    await db.execute(
         text("UPDATE businesses SET auto_renew = false WHERE business_id = :bid"),
         {"bid": bid},
     )
-    db.commit()
+    await db.commit()
     return success_response({"message": "Auto-renewal disabled. Access continues until your current period ends."})

@@ -79,7 +79,7 @@ async def refresh_dashboard_mvs_async(db: AsyncSession, force: bool = False) -> 
     try:
         from app.database import async_engine
         async with async_engine.connect() as conn:
-            conn = conn.execution_options(isolation_level="AUTOCOMMIT")
+            conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
             await conn.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_SUMMARY}"))
             await conn.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {MV_TREND}"))
         _last_refresh = time()

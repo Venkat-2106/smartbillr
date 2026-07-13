@@ -25,6 +25,7 @@ class PurchaseReturn(Base):
     return_amount     = Column(Numeric(10,2), default=0)
     return_created_at = Column(TIMESTAMP,   nullable=True, server_default=text("now()"))
     created_by        = Column(UUID(as_uuid=True), nullable=True)
+    updated_by        = Column(UUID(as_uuid=True), ForeignKey("profiles.id"), nullable=True)
     updated_at        = Column(TIMESTAMP,   nullable=True)
 
 

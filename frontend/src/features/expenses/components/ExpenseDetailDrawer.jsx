@@ -28,6 +28,7 @@ const CATEGORY_LABELS = {
 }
 
 function buildExpensePrintHTML(business, expense) {
+  const country = business?.business_country_code || 'IN'
   const metaFields = [
     { label: 'Category', value: CATEGORY_LABELS[expense.expense_category] || expense.expense_category || '—' },
     { label: 'Amount', value: formatCurrency(expense.expense_amount, country) },

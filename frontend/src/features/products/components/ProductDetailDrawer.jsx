@@ -57,6 +57,7 @@ function DirectionBadge({ direction, qty }) {
 //   - The "Audit Information" section still shows (it's not profit data)
 //   - The Price History table is omitted entirely
 function buildProductPrintHTML(business, product, detail, summary, stockHistory, priceHistory, showProfit) {
+  const country = business?.business_country_code || 'IN'
   const p = detail || product
 
   // Product meta (category, tax, etc.) — no profit data here

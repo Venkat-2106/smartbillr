@@ -47,7 +47,7 @@ export function DrawerOverlay({ open, onClick }) {
 }
 
 // ── Progress bar component ────────────────────────────────────────────────────
-function PaymentProgressBar({ paid, total }) {
+function PaymentProgressBar({ paid, total, country }) {
   const pct = total > 0 ? Math.min(100, (paid / total) * 100) : 0
   const isComplete = pct >= 100
 
@@ -200,7 +200,7 @@ export default function PaymentHistoryDrawer({ saleId, onClose, onRecorded, isRe
                 />
               </div>
 
-              <PaymentProgressBar paid={data.total_paid} total={data.sale_final_amount} />
+              <PaymentProgressBar paid={data.total_paid} total={data.sale_final_amount} country={country} />
 
               {data.remaining_balance > 0 && (
                 <div style={{

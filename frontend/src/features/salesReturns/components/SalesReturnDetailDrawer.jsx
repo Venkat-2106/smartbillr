@@ -40,6 +40,7 @@ function StatusBadge({ status }) {
 }
 
 function buildReturnPrintHTML(business, detail) {
+  const country = business?.business_country_code || 'IN'
   const metaFields = [
     { label: 'Invoice No', value: detail.invoice_no || '—' },
       { label: 'Amount', value: formatCurrency(detail.return_amount, country) },

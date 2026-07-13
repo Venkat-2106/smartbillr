@@ -61,6 +61,7 @@ function StatCard({ label, value, color }) {
 // ── Main drawer ───────────────────────────────────────────────────────────────
 // ── Print builder ─────────────────────────────────────────────────────────────
 function buildCategoryPrintHTML(business, category, detail, summary, products) {
+  const country = business?.business_country_code || 'IN'
   const metaFields = [
     { label: 'Total Products', value: String(summary.total_products ?? 0) },
     { label: 'Stock Value',    value: formatCurrency(summary.total_stock_value ?? 0, country) },

@@ -1,14 +1,37 @@
+# app/routers/sales_return.py
+#
+# ── ASYNC MIGRATION NOTE (2026-07) ──────────────────────────────────────────
+#
+# This router was migrated from sync SQLAlchemy (psycopg2) to async
+# (asyncpg).  Key patterns to be aware of:
+#
+#   - All Session usage → AsyncSession (get_async_db dependency).
+#   - db.execute(...) → await db.execute(...).
+#   - paginate() → paginate_async() (avoids opening a second sync conn).
+#   - SET LOCAL with bind params is NOT supported by asyncpg (server-side
+#     binding sends $1 which SET grammar rejects).  All GUC-setting uses
+#     set_config() instead — see middleware/rbac.py for the canonical pattern.
+#   - Every await db.commit() must be followed by
+#     await async_set_rls_gucs_after_commit(db, current_user) when further
+#     queries follow in the same request.  set_config(is_local=true) values
+#     are transaction-scoped and are cleared by Postgres on commit.
+#
+# NOTE: This file does NOT use bulk_stock_adjust.py.  Sales return restocking
+# is handled entirely by the DB trigger fn_sales_return_stock (AFTER UPDATE
+# on sales_returns).  No manual Python stock-adjustment logic is needed here.
+#
+
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import func, text
-from app.database import get_db
-from app.middleware.rbac import require_permission_with_rls, set_rls_gucs_after_commit
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
+from app.database import get_async_db
+from app.middleware.rbac import require_permission, async_set_rls_gucs_after_commit
 from app.models.sales_return import SalesReturn
 from app.models.sale import Sale
 from app.schemas.sales_return import SalesReturnCreate, SalesReturnUpdate
 from app.utils.response import success_response, error_response
-from app.utils.pagination import paginate, pagination_response
+from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 import logging
 from decimal import Decimal
@@ -22,8 +45,8 @@ router = APIRouter(prefix="/v1/sales-returns", tags=["Sales Returns"])
 # FIX: Now reads from sales_return_items (the table the DB triggers use),
 #      not return_items (the orphan table that has no trigger connection).
 # ─────────────────────────────────────────
-def fetch_return_items(db: Session, return_id: str):
-    return db.execute(
+async def fetch_return_items(db: AsyncSession, return_id: str):
+    return (await db.execute(
         text("""
             SELECT sri.return_item_id, sri.product_id,
                    p.prod_name AS product_name,
@@ -34,7 +57,7 @@ def fetch_return_items(db: Session, return_id: str):
             WHERE sri.return_id = CAST(:rid AS uuid)
         """),
         {"rid": return_id}
-    ).fetchall()
+    )).fetchall()
 
 
 # ─────────────────────────────────────────
@@ -83,14 +106,14 @@ def return_item_to_dict(row):
 # FIX: Now queries sales_return_items and uses sale_item_id for lookups,
 #      matching the DB trigger's validation logic exactly.
 # ─────────────────────────────────────────
-def validate_return_items(db: Session, sale_id: str, business_id: str, items, exclude_return_id: str = None):
+async def validate_return_items(db: AsyncSession, sale_id: str, business_id: str, items, exclude_return_id: str = None):
     # Batch Step 1 → Fetch ALL sale items for this sale in one query
     prod_ids = [str(item.product_id) for item in items]
     sale_item_map = {}
     already_returned_map = {}
 
     if prod_ids:
-        rows = db.execute(
+        rows = (await db.execute(
             text("""
                 SELECT si.product_id, si.sale_item_id, si.sale_item_quantity,
                        si.sale_item_unit_price, p.prod_name
@@ -103,7 +126,7 @@ def validate_return_items(db: Session, sale_id: str, business_id: str, items, ex
             # BUG FIX: asyncpg expects a Python list for array params, not a
             # manually-formatted "{uuid1,uuid2}" string (causes DataError).
             {"sale_id": sale_id, "bid": business_id, "pids": prod_ids}
-        ).fetchall()
+        )).fetchall()
         sale_item_map = {str(r.product_id): r for r in rows}
 
         # Batch Step 2 → Fetch ALL already-returned quantities in one GROUP BY query
@@ -122,7 +145,7 @@ def validate_return_items(db: Session, sale_id: str, business_id: str, items, ex
             q += " AND sr.return_id != CAST(:return_id AS uuid)"
             params["return_id"] = exclude_return_id
         q += " GROUP BY sri.product_id"
-        for row in db.execute(text(q), params).fetchall():
+        for row in (await db.execute(text(q), params)).fetchall():
             already_returned_map[str(row.product_id)] = float(row.total_returned)
 
     for item in items:
@@ -159,27 +182,30 @@ def validate_return_items(db: Session, sale_id: str, business_id: str, items, ex
 #      stock restocking when status changes to 'approved'.
 # ─────────────────────────────────────────
 @router.post("/")
-def create_sales_return(
+async def create_sales_return(
     data: SalesReturnCreate,
-    current_user: dict = Depends(require_permission_with_rls("sales_returns.manage")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("sales_returns.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
     user_id = current_user["user_id"]
 
     try:
         # Step 1 → Validate sale exists
-        sale = db.query(Sale).filter(
-            Sale.sales_id == data.sale_id,
-            Sale.business_id == business_id,
-            Sale.is_deleted == False
-        ).first()
+        result = await db.execute(
+            select(Sale).where(
+                Sale.sales_id == data.sale_id,
+                Sale.business_id == business_id,
+                Sale.is_deleted == False
+            )
+        )
+        sale = result.scalar_one_or_none()
 
         if not sale:
             return error_response("Sale not found", status_code=404)
 
         # Step 2 → Validate return items
-        error = validate_return_items(db=db, sale_id=str(data.sale_id), business_id=business_id, items=data.items)
+        error = await validate_return_items(db=db, sale_id=str(data.sale_id), business_id=business_id, items=data.items)
         if error:
             return error_response(error, status_code=400)
 
@@ -191,7 +217,7 @@ def create_sales_return(
         sale_item_rows = {}
         if data.items:
             prod_ids = [str(item.product_id) for item in data.items]
-            rows = db.execute(
+            rows = (await db.execute(
                 text("""
                     SELECT product_id, sale_item_id, sale_item_quantity, sale_item_unit_price
                     FROM sale_items
@@ -201,7 +227,7 @@ def create_sales_return(
                 # BUG FIX: asyncpg expects a Python list for array params, not a
                 # manually-formatted "{uuid1,uuid2}" string (causes DataError).
                 {"sale_id": str(data.sale_id), "pids": prod_ids}
-            ).fetchall()
+            )).fetchall()
             sale_item_rows = {str(r.product_id): r for r in rows}
 
         for item in data.items:
@@ -225,7 +251,7 @@ def create_sales_return(
         # Step 4 → Insert sales return header
         new_return_id = str(uuid.uuid4())
 
-        db.execute(
+        await db.execute(
             text("""
                 INSERT INTO sales_returns (
                     return_id, business_id, sale_id,
@@ -274,7 +300,7 @@ def create_sales_return(
                 params[f"{tag}_oq"]  = calc["original_qty"]
                 params[f"{tag}_oup"] = str(calc["original_unit_price"])
 
-            db.execute(text(f"""
+            await db.execute(text(f"""
                 INSERT INTO sales_return_items (
                     return_item_id, return_id, sale_item_id,
                     product_id, return_qty, unit_price,
@@ -282,16 +308,17 @@ def create_sales_return(
                 ) VALUES {", ".join(value_clauses)}
             """), params)
 
-        db.commit()
+        await db.commit()
 
         # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
-        set_rls_gucs_after_commit(db, current_user)
+        await async_set_rls_gucs_after_commit(db, current_user)
 
-        return_row = db.query(SalesReturn).filter(
-            SalesReturn.return_id == new_return_id
-        ).first()
+        result = await db.execute(
+            select(SalesReturn).where(SalesReturn.return_id == new_return_id)
+        )
+        return_row = result.scalar_one_or_none()
 
-        item_rows = fetch_return_items(db, new_return_id)
+        item_rows = await fetch_return_items(db, new_return_id)
 
         return success_response({
             "message": "Sales return created successfully",
@@ -299,7 +326,7 @@ def create_sales_return(
         }, status_code=201)
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logging.exception(e)
         return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
@@ -308,10 +335,10 @@ def create_sales_return(
 # GET /sales-returns → Get all sales returns
 # ─────────────────────────────────────────
 @router.get("/")
-def get_all_sales_returns(
-    current_user: dict = Depends(require_permission_with_rls("sales_returns.manage")),
-    db: Session = Depends(get_db),
-    pagination: dict = Depends(paginate),
+async def get_all_sales_returns(
+    current_user: dict = Depends(require_permission("sales_returns.manage")),
+    db: AsyncSession = Depends(get_async_db),
+    pagination: dict = Depends(paginate_async),
     search: Optional[str] = Query(default=None),
     status: Optional[str] = Query(default=None),
     sort_by: Optional[str] = Query(default="return_created_at"),
@@ -363,14 +390,14 @@ def get_all_sales_returns(
         ORDER BY {order_col} {order_dir}
         OFFSET :offset LIMIT :limit
     """
-    returns = db.execute(text(list_sql), params).fetchall()
+    returns = (await db.execute(text(list_sql), params)).fetchall()
     total = returns[0].total_count if returns else 0
 
     # BATCH: fetch all return items for this page in one query
     ret_ids = [str(r.return_id) for r in returns]
     all_items = []
     if ret_ids:
-        all_items = db.execute(
+        all_items = (await db.execute(
             text("""
                 SELECT return_item_id, return_id, product_id,
                        return_qty, unit_price AS refund_amount,
@@ -381,7 +408,7 @@ def get_all_sales_returns(
             # BUG FIX: asyncpg expects a Python list for array params, not a
             # manually-formatted "{uuid1,uuid2}" string (causes DataError).
             {"ids": ret_ids}
-        ).fetchall()
+        )).fetchall()
 
     items_by_ret = {}
     for it in all_items:
@@ -402,22 +429,25 @@ def get_all_sales_returns(
 # GET /sales-returns/{return_id} → Get one
 # ─────────────────────────────────────────
 @router.get("/{return_id}")
-def get_sales_return(
+async def get_sales_return(
     return_id: str,
-    current_user: dict = Depends(require_permission_with_rls("sales_returns.manage")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("sales_returns.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    sales_return = db.query(SalesReturn).filter(
-        SalesReturn.return_id == return_id,
-        SalesReturn.business_id == business_id
-    ).first()
+    result = await db.execute(
+        select(SalesReturn).where(
+            SalesReturn.return_id == return_id,
+            SalesReturn.business_id == business_id
+        )
+    )
+    sales_return = result.scalar_one_or_none()
 
     if not sales_return:
         return error_response("Sales return not found", status_code=404)
 
-    items = fetch_return_items(db, return_id)
+    items = await fetch_return_items(db, return_id)
     return success_response(return_to_dict(sales_return, items))
 
 
@@ -428,19 +458,22 @@ def get_sales_return(
 # When status rolls back from 'approved', it reverses the stock addition.
 # ─────────────────────────────────────────
 @router.put("/{return_id}")
-def update_sales_return(
+async def update_sales_return(
     return_id: str,
     data: SalesReturnUpdate,
-    current_user: dict = Depends(require_permission_with_rls("sales_returns.manage")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("sales_returns.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
     user_id     = current_user["user_id"]
 
-    sales_return = db.query(SalesReturn).filter(
-        SalesReturn.return_id == return_id,
-        SalesReturn.business_id == business_id
-    ).first()
+    result = await db.execute(
+        select(SalesReturn).where(
+            SalesReturn.return_id == return_id,
+            SalesReturn.business_id == business_id
+        )
+    )
+    sales_return = result.scalar_one_or_none()
 
     if not sales_return:
         return error_response("Sales return not found", status_code=404)
@@ -450,7 +483,7 @@ def update_sales_return(
 
     try:
         if data.return_status == "approved":
-            item_rows = fetch_return_items(db, return_id)
+            item_rows = await fetch_return_items(db, return_id)
 
             class ItemLike:
                 def __init__(self, product_id, return_qty, refund_amount):
@@ -463,7 +496,7 @@ def update_sales_return(
                 for row in item_rows
             ]
 
-            error = validate_return_items(
+            error = await validate_return_items(
                 db=db,
                 sale_id=str(sales_return.sale_id),
                 business_id=business_id,
@@ -474,7 +507,7 @@ def update_sales_return(
                 return error_response(error, status_code=400)
 
         # Update status, restock, and approval fields — DB triggers fire automatically
-        db.execute(
+        await db.execute(
             text("""
                 UPDATE sales_returns
                 SET return_status = :status,
@@ -493,12 +526,11 @@ def update_sales_return(
             }
         )
 
-        db.commit()
+        await db.commit()
         # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
-        set_rls_gucs_after_commit(db, current_user)
-        db.refresh(sales_return)
+        await async_set_rls_gucs_after_commit(db, current_user)
 
-        items = fetch_return_items(db, return_id)
+        items = await fetch_return_items(db, return_id)
 
         return success_response({
             "message": f"Sales return {data.return_status} successfully",
@@ -506,7 +538,7 @@ def update_sales_return(
         })
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logging.exception(e)
         return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
@@ -517,18 +549,21 @@ def update_sales_return(
 # (not yet actioned) are safe to delete.
 # ─────────────────────────────────────────
 @router.delete("/{return_id}")
-def delete_sales_return(
+async def delete_sales_return(
     return_id: str,
-    current_user: dict = Depends(require_permission_with_rls("sales_returns.manage")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("sales_returns.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
     # Step 1 → Check the return exists and belongs to this business
-    sales_return = db.query(SalesReturn).filter(
-        SalesReturn.return_id == return_id,
-        SalesReturn.business_id == business_id
-    ).first()
+    result = await db.execute(
+        select(SalesReturn).where(
+            SalesReturn.return_id == return_id,
+            SalesReturn.business_id == business_id
+        )
+    )
+    sales_return = result.scalar_one_or_none()
 
     if not sales_return:
         return error_response("Sales return not found", status_code=404)
@@ -543,7 +578,7 @@ def delete_sales_return(
 
     try:
         # Step 3 → Delete return items first (FK constraint)
-        db.execute(
+        await db.execute(
             text("""
                 DELETE FROM sales_return_items
                 WHERE return_id   = CAST(:return_id AS uuid)
@@ -553,7 +588,7 @@ def delete_sales_return(
         )
 
         # Step 4 → Delete the return header
-        db.execute(
+        await db.execute(
             text("""
                 DELETE FROM sales_returns
                 WHERE return_id = CAST(:return_id AS uuid)
@@ -562,10 +597,10 @@ def delete_sales_return(
             {"return_id": return_id, "bid": business_id}
         )
 
-        db.commit()
+        await db.commit()
         return success_response({"message": "Sales return deleted successfully"})
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logging.exception(e)
         return error_response("An unexpected error occurred. Please try again.", status_code=500)

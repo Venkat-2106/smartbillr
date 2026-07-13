@@ -40,7 +40,7 @@ const DEFAULT_VALUES = {
   expense_notes: '',
 }
 
-function buildColumns(canManage, onEdit, onDelete) {
+function buildColumns(canManage, onEdit, onDelete, country) {
   const catLabels = ALLOWED_CATEGORIES.reduce((acc, c) => {
     acc[c.value] = c.label
     return acc
@@ -258,8 +258,8 @@ export default function ExpensesPage() {
   }
 
   const columns = useMemo(
-    () => buildColumns(canManage, handleOpenEdit, handleDeleteClick),
-    [canManage]
+    () => buildColumns(canManage, handleOpenEdit, handleDeleteClick, country),
+    [canManage, country]
   )
 
   function handleDateChange(field, value) {

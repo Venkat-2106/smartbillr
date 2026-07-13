@@ -1,12 +1,28 @@
 # app/routers/category.py
+#
+# ── ASYNC MIGRATION NOTE (2026-07) ──────────────────────────────────────────
+#
+# This router was migrated from sync SQLAlchemy (psycopg2) to async
+# (asyncpg).  Key patterns to be aware of:
+#
+#   - All Session usage → AsyncSession (get_async_db dependency).
+#   - db.execute(...) → await db.execute(...).
+#   - paginate() → paginate_async() (avoids opening a second sync conn).
+#   - SET LOCAL with bind params is NOT supported by asyncpg (server-side
+#     binding sends $1 which SET grammar rejects).  All GUC-setting uses
+#     set_config() instead — see middleware/rbac.py for the canonical pattern.
+#   - Every await db.commit() must be followed by
+#     await async_set_rls_gucs_after_commit(db, current_user) when further
+#     queries follow in the same request.  set_config(is_local=true) values
+#     are transaction-scoped and are cleared by Postgres on commit.
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import func, text
-from app.database import get_db
-from app.middleware.rbac import require_permission_with_rls, set_rls_gucs_after_commit
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select, text
+from app.database import get_async_db
+from app.middleware.rbac import require_permission, async_set_rls_gucs_after_commit
 from app.utils.response import success_response, error_response
-from app.utils.pagination import paginate, pagination_response
+from app.utils.pagination import paginate_async, pagination_response
 from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryResponse
 from app.models.category import Category
 from app.utils.timestamp import fmt_ts
@@ -23,17 +39,20 @@ router = APIRouter(
 # POST /categories → Create new category
 # ══════════════════════════════════════════════════════════════════
 @router.post("/")
-def create_category(
+async def create_category(
     payload: CategoryCreate,
-    current_user: dict = Depends(require_permission_with_rls("products.edit")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("products.edit")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     # Block duplicate category names within the same business (case-insensitive)
-    existing = db.query(Category).filter(
-        Category.business_id   == current_user["business_id"],
-        func.lower(Category.category_name) == payload.category_name.lower(),
-        Category.is_deleted    == False
-    ).first()
+    result = await db.execute(
+        select(Category).where(
+            Category.business_id   == current_user["business_id"],
+            func.lower(Category.category_name) == payload.category_name.lower(),
+            Category.is_deleted    == False
+        )
+    )
+    existing = result.scalar_one_or_none()
 
     if existing:
         return error_response("Category with this name already exists", 400)
@@ -50,14 +69,14 @@ def create_category(
 
     cat_id = str(new_category.category_id)
     biz_id = str(new_category.business_id)
-    db.commit()
+    await db.commit()
 
     # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
-    set_rls_gucs_after_commit(db, current_user)
+    await async_set_rls_gucs_after_commit(db, current_user)
 
     # Refresh timestamps via raw SQL with explicit business_id filter (RLS bypass).
     # SQLAlchemy ORM's refresh() fails because RLS policies block the implicit SELECT.
-    row = db.execute(
+    row = (await db.execute(
         text("""
             SELECT created_at, updated_at
             FROM categories
@@ -65,13 +84,13 @@ def create_category(
               AND business_id  = CAST(:bid AS uuid)
         """),
         {"cid": cat_id, "bid": biz_id}
-    ).fetchone()
+    )).fetchone()
 
     # Fetch the creator's name so the table shows it immediately after creation
-    creator_name = db.execute(
+    creator_name = (await db.execute(
         text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
         {"uid": str(current_user["user_id"])}
-    ).scalar()
+    )).scalar()
 
     return success_response({
         "category_id":     cat_id,
@@ -96,10 +115,10 @@ def create_category(
 #   sort_dir     — asc | desc
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
-def get_categories(
-    current_user: dict          = Depends(require_permission_with_rls("products.view")),
-    pagination:   dict          = Depends(paginate),
-    db:           Session       = Depends(get_db),
+async def get_categories(
+    current_user: dict          = Depends(require_permission("products.view")),
+    pagination:   dict          = Depends(paginate_async),
+    db:           AsyncSession  = Depends(get_async_db),
     search:       Optional[str] = Query(default=None, description="Search by category name"),
     updated_from: Optional[str] = Query(default=None, description="Filter updated_at >= YYYY-MM-DD"),
     updated_to:   Optional[str] = Query(default=None, description="Filter updated_at <= YYYY-MM-DD"),
@@ -137,7 +156,7 @@ def get_categories(
         extra_where += " AND c.updated_at <= :updated_to"
         params["updated_to"] = updated_to
 
-    rows = db.execute(
+    rows = (await db.execute(
         text(f"""
             SELECT
                 c.category_id, c.business_id, c.category_name,
@@ -156,7 +175,7 @@ def get_categories(
             OFFSET :offset LIMIT :limit
         """),
         params
-    ).fetchall()
+    )).fetchall()
 
     total = rows[0].total_count if rows else 0
 
@@ -190,15 +209,15 @@ def get_categories(
 # GET /categories/{category_id} → Category detail WITH product list
 # ══════════════════════════════════════════════════════════════════
 @router.get("/{category_id}/")
-def get_category(
+async def get_category(
     category_id:  str,
-    current_user: dict = Depends(require_permission_with_rls("products.view")),
-    db:           Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("products.view")),
+    db:           AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
     # Raw SQL with two LEFT JOINs to get creator name + last updater name in one query
-    cat_row = db.execute(
+    cat_row = (await db.execute(
         text("""
             SELECT
                 c.category_id, c.business_id, c.category_name, c.is_deleted,
@@ -214,12 +233,12 @@ def get_category(
               AND c.is_deleted   = false
         """),
         {"cid": category_id, "bid": str(business_id)}
-    ).fetchone()
+    )).fetchone()
 
     if not cat_row:
         return error_response("Category not found", 404)
 
-    product_rows = db.execute(
+    product_rows = (await db.execute(
         text("""
             SELECT
                 prod_id, prod_name, prod_sell_price, prod_cost_price,
@@ -232,7 +251,7 @@ def get_category(
             ORDER BY prod_name ASC
         """),
         {"cid": category_id, "bid": str(business_id)}
-    ).fetchall()
+    )).fetchall()
 
     products          = []
     total_stock_value = 0.0
@@ -290,29 +309,35 @@ def get_category(
 # DB triggers automatically set updated_at + updated_by on commit
 # ══════════════════════════════════════════════════════════════════
 @router.put("/{category_id}/")
-def update_category(
+async def update_category(
     category_id: str,
     payload: CategoryUpdate,
-    current_user: dict = Depends(require_permission_with_rls("products.edit")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("products.edit")),
+    db: AsyncSession = Depends(get_async_db)
 ):
-    category = db.query(Category).filter(
-        Category.category_id == category_id,
-        Category.business_id == current_user["business_id"],
-        Category.is_deleted  == False
-    ).first()
+    result = await db.execute(
+        select(Category).where(
+            Category.category_id == category_id,
+            Category.business_id == current_user["business_id"],
+            Category.is_deleted  == False
+        )
+    )
+    category = result.scalar_one_or_none()
 
     if not category:
         return error_response("Category not found", 404)
 
     # Block duplicate names (excluding this category itself)
     if payload.category_name:
-        existing = db.query(Category).filter(
-            Category.business_id   == current_user["business_id"],
-            Category.category_id   != category_id,
-            func.lower(Category.category_name) == payload.category_name.lower(),
-            Category.is_deleted    == False
-        ).first()
+        result = await db.execute(
+            select(Category).where(
+                Category.business_id   == current_user["business_id"],
+                Category.category_id   != category_id,
+                func.lower(Category.category_name) == payload.category_name.lower(),
+                Category.is_deleted    == False
+            )
+        )
+        existing = result.scalar_one_or_none()
 
         if existing:
             return error_response("Category with this name already exists", 400)
@@ -323,13 +348,13 @@ def update_category(
 
     cat_id = str(category.category_id)
     biz_id = str(category.business_id)
-    db.commit()
+    await db.commit()
 
     # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
-    set_rls_gucs_after_commit(db, current_user)
+    await async_set_rls_gucs_after_commit(db, current_user)
 
     # Re-fetch row after commit
-    row = db.execute(
+    row = (await db.execute(
         text("""
             SELECT category_name, created_at, updated_at, updated_by
             FROM categories
@@ -337,17 +362,17 @@ def update_category(
               AND business_id  = CAST(:bid AS uuid)
         """),
         {"cid": cat_id, "bid": biz_id}
-    ).fetchone()
+    )).fetchone()
 
     if not row:
         return error_response("Category not found after update", 500)
 
     updated_by_name = None
     if row.updated_by:
-        updated_by_name = db.execute(
+        updated_by_name = (await db.execute(
             text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
             {"uid": str(row.updated_by)}
-        ).scalar()
+        )).scalar()
 
     return success_response({
         "category_id":     cat_id,
@@ -365,24 +390,27 @@ def update_category(
 # DELETE /categories/{category_id} → Soft delete with CASCADE
 # ══════════════════════════════════════════════════════════════════
 @router.delete("/{category_id}/")
-def delete_category(
+async def delete_category(
     category_id: str,
-    current_user: dict = Depends(require_permission_with_rls("products.edit")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("products.edit")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    category = db.query(Category).filter(
-        Category.category_id == category_id,
-        Category.business_id == business_id,
-        Category.is_deleted  == False
-    ).first()
+    result = await db.execute(
+        select(Category).where(
+            Category.category_id == category_id,
+            Category.business_id == business_id,
+            Category.is_deleted  == False
+        )
+    )
+    category = result.scalar_one_or_none()
 
     if not category:
         return error_response("Category not found", 404)
 
     # Step 1 — Count active products that will be deactivated
-    affected_count_row = db.execute(
+    affected_count_row = (await db.execute(
         text("""
             SELECT COUNT(*) AS cnt
             FROM products
@@ -391,12 +419,12 @@ def delete_category(
               AND is_deleted   = false
         """),
         {"cid": category_id, "bid": business_id}
-    ).fetchone()
+    )).fetchone()
 
     affected_count = int(affected_count_row.cnt) if affected_count_row else 0
 
     # Step 2 — Soft-delete all active products under this category
-    db.execute(
+    await db.execute(
         text("""
             UPDATE products
             SET is_deleted = true,
@@ -411,7 +439,7 @@ def delete_category(
     # Step 3 — Soft-delete the category itself
     # updated_by is auto-set by DB trigger trg_categories_updated_by
     category.is_deleted = True
-    db.commit()
+    await db.commit()
 
     return success_response({
         "message":              "Category deleted successfully",

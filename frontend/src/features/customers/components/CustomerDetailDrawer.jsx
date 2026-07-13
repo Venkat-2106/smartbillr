@@ -81,7 +81,7 @@ function StatCard({ label, value, color }) {
 }
 
 // ── SaleCard ──────────────────────────────────────────────────────────────────
-const SaleCard = memo(function SaleCard({ sale }) {
+const SaleCard = memo(function SaleCard({ sale, currencyCountry }) {
   const statusColor = paymentStatusColor(sale.payment_summary?.current_status)
   return (
     <div style={{ background: 'var(--bg-page)', border: '1.5px solid var(--border)', borderRadius: 12, padding: 14 }}>
@@ -406,7 +406,7 @@ export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManag
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {salesHistory.map(sale => (
-                  <SaleCard key={sale.sales_id} sale={sale} />
+                  <SaleCard key={sale.sales_id} sale={sale} currencyCountry={currencyCountry} />
                 ))}
               </div>
               {pagination && (

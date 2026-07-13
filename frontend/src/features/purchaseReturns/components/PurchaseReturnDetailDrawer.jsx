@@ -39,6 +39,7 @@ function StatusBadge({ status }) {
 }
 
 function buildReturnPrintHTML(business, detail) {
+  const country = business?.business_country_code || 'IN'
   const metaFields = [
     { label: 'Supplier', value: detail.supp_name || '—' },
     { label: 'Amount', value: formatCurrency(detail.return_amount, country) },

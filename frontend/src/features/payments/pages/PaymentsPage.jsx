@@ -41,7 +41,7 @@ const METHOD_LABEL = {
 }
 
 // ── Column definitions ────────────────────────────────────────────────────────
-function buildColumns(onRowClick) {
+function buildColumns(onRowClick, country) {
   return [
     {
       key:      'invoice_no',
@@ -200,8 +200,8 @@ export default function PaymentsPage() {
   const [selectedSaleId, setSelectedSaleId] = useState(null)
 
   const columns = useMemo(
-    () => buildColumns(setSelectedSaleId),
-    [] // eslint-disable-line react-hooks/exhaustive-deps
+    () => buildColumns(setSelectedSaleId, country),
+    [country] // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   function handleDateChange(field, value) {

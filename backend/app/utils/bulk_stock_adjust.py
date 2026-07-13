@@ -9,13 +9,13 @@ Replaces per-item N+1 UPDATE + INSERT loops with:
 import uuid
 import logging
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
 
-def bulk_check_and_reduce_stock(
-    db: Session,
+async def bulk_check_and_reduce_stock(
+    db: AsyncSession,
     *,
     business_id: str,
     user_id: str,
@@ -41,15 +41,15 @@ def bulk_check_and_reduce_stock(
         check_parts.append(f"CAST(:{tag} AS uuid)")
         check_params[tag] = pid
 
-    rows = db.execute(text(f"""
+    rows = (await db.execute(text(f"""
         SELECT prod_id, prod_stock_qty
         FROM   products
         WHERE  prod_id     IN ({", ".join(check_parts)})
           AND  business_id = CAST(:bid AS uuid)
-    """), check_params).fetchall()
+    """), check_params)).fetchall()
 
     if len(rows) != len(product_ids):
-        db.rollback()
+        await db.rollback()
         found = {str(r.prod_id) for r in rows}
         missing = [pid for pid in product_ids if pid not in found]
         return f"Products not found: {', '.join(missing)}"
@@ -65,14 +65,14 @@ def bulk_check_and_reduce_stock(
         prev_stock_map[pid] = cur
 
     if insufficient:
-        db.rollback()
+        await db.rollback()
         return "; ".join(insufficient)
 
     # ── 2. Bulk UPDATE stock qty (single statement) ───────────────────────
     product_ids_tuple = ", ".join(
         f"(CAST('{pid}' AS uuid), {qty_map[pid]})" for pid in product_ids
     )
-    db.execute(text(f"""
+    await db.execute(text(f"""
         UPDATE products AS p
         SET    prod_stock_qty = p.prod_stock_qty - v.qty,
                updated_by     = CAST(:uid AS uuid)
@@ -98,7 +98,7 @@ def bulk_check_and_reduce_stock(
         params[f"{tag}_ps"]     = prev_stock_map[pid]
         params[f"{tag}_notes"]  = f"{movement_notes_prefix} {reference_id}"
 
-    db.execute(text(f"""
+    await db.execute(text(f"""
         INSERT INTO stock_movements (
             move_id, product_id, business_id, move_type,
             move_qty, move_prev_stock,

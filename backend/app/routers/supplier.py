@@ -1,5 +1,21 @@
 # app/routers/supplier.py
 #
+# ── ASYNC MIGRATION NOTE (2026-07) ──────────────────────────────────────────
+#
+# This router was migrated from sync SQLAlchemy (psycopg2) to async
+# (asyncpg).  Key patterns to be aware of:
+#
+#   - All Session usage → AsyncSession (get_async_db dependency).
+#   - db.execute(...) → await db.execute(...).
+#   - paginate() → paginate_async() (avoids opening a second sync conn).
+#   - SET LOCAL with bind params is NOT supported by asyncpg (server-side
+#     binding sends $1 which SET grammar rejects).  All GUC-setting uses
+#     set_config() instead — see middleware/rbac.py for the canonical pattern.
+#   - Every await db.commit() must be followed by
+#     await async_set_rls_gucs_after_commit(db, current_user) when further
+#     queries follow in the same request.  set_config(is_local=true) values
+#     are transaction-scoped and are cleared by Postgres on commit.
+#
 # SCALABILITY UPDATE:
 #   GET /suppliers/ now accepts the same server-side filter params as
 #   GET /customers/ and GET /categories/.
@@ -19,17 +35,17 @@
 #   the pagination total always reflects the filtered result set.
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
-from app.database import get_db
-from app.middleware.rbac import require_permission_with_rls, set_rls_gucs_after_commit
+from app.database import get_async_db
+from app.middleware.rbac import require_permission, async_set_rls_gucs_after_commit
 from app.models.supplier import Supplier
 from app.schemas.supplier import SupplierCreate, SupplierUpdate
 from app.utils.response import success_response, error_response
-from app.utils.pagination import paginate, pagination_response
+from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
-from app.utils.usage_limits import check_create_allowed, fetch_subscription_type
+from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 from typing import Optional
 
 router = APIRouter(prefix="/v1/suppliers", tags=["Suppliers"])
@@ -61,25 +77,28 @@ def supplier_to_dict(s, last_updated_by=None) -> dict:
 # POST /suppliers → Create new supplier
 # ══════════════════════════════════════════════════════════════════
 @router.post("/")
-def create_supplier(
+async def create_supplier(
     data:         SupplierCreate,
-    current_user: dict = Depends(require_permission_with_rls("suppliers.manage")),
-    db:           Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("suppliers.manage")),
+    db:           AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
     # ── Subscription tier limit check ─────────────────────────────────────────
-    sub_type = current_user.get("subscription_type") or fetch_subscription_type(db, business_id)
-    allowed, msg = check_create_allowed(db, business_id, sub_type, "max_suppliers", "suppliers")
+    sub_type = current_user.get("subscription_type") or await fetch_subscription_type_async(db, business_id)
+    allowed, msg = await check_create_allowed_async(db, business_id, sub_type, "max_suppliers", "suppliers")
     if not allowed:
         return error_response(msg, status_code=403)
 
     if data.supp_phone:
-        existing = db.query(Supplier).filter(
-            Supplier.business_id == business_id,
-            Supplier.supp_phone  == data.supp_phone,
-            Supplier.is_deleted  == False
-        ).first()
+        result = await db.execute(
+            select(Supplier).where(
+                Supplier.business_id == business_id,
+                Supplier.supp_phone  == data.supp_phone,
+                Supplier.is_deleted  == False
+            )
+        )
+        existing = result.scalar_one_or_none()
         if existing:
             return error_response("Supplier with this phone already exists", 400)
 
@@ -97,18 +116,18 @@ def create_supplier(
 
     db.add(new_supplier)
     try:
-        db.commit()
+        await db.commit()
     except IntegrityError:
-        db.rollback()
+        await db.rollback()
         return error_response("Supplier with this phone already exists", 400)
     # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
-    set_rls_gucs_after_commit(db, current_user)
-    db.refresh(new_supplier)
+    await async_set_rls_gucs_after_commit(db, current_user)
+    await db.refresh(new_supplier)
 
-    creator_name = db.execute(
+    creator_name = (await db.execute(
         text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
         {"uid": str(current_user["user_id"])}
-    ).scalar()
+    )).scalar()
 
     return success_response({
         "message":  "Supplier created successfully",
@@ -125,12 +144,12 @@ def create_supplier(
 # path segment, not a UUID.
 # ══════════════════════════════════════════════════════════════════
 @router.get("/lean")
-def get_suppliers_lean(
-    current_user: dict = Depends(require_permission_with_rls("suppliers.manage")),
-    db:           Session = Depends(get_db)
+async def get_suppliers_lean(
+    current_user: dict = Depends(require_permission("suppliers.manage")),
+    db:           AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
-    rows = db.execute(
+    rows = (await db.execute(
         text("""
             SELECT supp_id, supp_name, supp_phone, supp_state
             FROM   suppliers
@@ -139,7 +158,7 @@ def get_suppliers_lean(
             ORDER  BY supp_name ASC
         """),
         {"bid": business_id}
-    ).fetchall()
+    )).fetchall()
 
     return success_response([
         {
@@ -162,10 +181,10 @@ def get_suppliers_lean(
 # the same WHERE clause so pagination totals are always accurate.
 # ══════════════════════════════════════════════════════════════════
 @router.get("/")
-def get_all_suppliers(
-    current_user: dict          = Depends(require_permission_with_rls("suppliers.manage")),
-    db:           Session       = Depends(get_db),
-    pagination:   dict          = Depends(paginate),
+async def get_all_suppliers(
+    current_user: dict          = Depends(require_permission("suppliers.manage")),
+    db:           AsyncSession  = Depends(get_async_db),
+    pagination:   dict          = Depends(paginate_async),
     search:       Optional[str] = Query(default=None, description="Search by name, phone, or email"),
     phone:        Optional[str] = Query(default=None, description="Exact phone match (for purchase form auto-fill)"),
     updated_from: Optional[str] = Query(default=None, description="Filter updated_at >= YYYY-MM-DD"),
@@ -220,7 +239,7 @@ def get_all_suppliers(
         extra_where += " AND s.updated_at <= :updated_to"
         params["updated_to"] = updated_to
 
-    rows = db.execute(
+    rows = (await db.execute(
         text(f"""
             SELECT
                 s.supp_id, s.business_id,
@@ -241,7 +260,7 @@ def get_all_suppliers(
             OFFSET :offset LIMIT :limit
         """),
         params
-    ).fetchall()
+    )).fetchall()
 
     total = rows[0].total_count if rows else 0
 
@@ -274,21 +293,24 @@ def get_all_suppliers(
 # Used by purchase creation form for quick single-record lookup.
 # ══════════════════════════════════════════════════════════════════
 @router.get("/search/phone")
-def search_supplier_by_phone(
+async def search_supplier_by_phone(
     phone:        str,
-    current_user: dict = Depends(require_permission_with_rls("suppliers.manage")),
-    db:           Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("suppliers.manage")),
+    db:           AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
     if not phone or not phone.strip():
         return error_response("Phone number is required", 400)
 
-    supplier = db.query(Supplier).filter(
-        Supplier.business_id == business_id,
-        Supplier.supp_phone  == phone.strip(),
-        Supplier.is_deleted  == False
-    ).first()
+    result = await db.execute(
+        select(Supplier).where(
+            Supplier.business_id == business_id,
+            Supplier.supp_phone  == phone.strip(),
+            Supplier.is_deleted  == False
+        )
+    )
+    supplier = result.scalar_one_or_none()
 
     if not supplier:
         return error_response(
@@ -302,18 +324,21 @@ def search_supplier_by_phone(
 # GET /suppliers/{supp_id} → Single supplier by ID
 # ══════════════════════════════════════════════════════════════════
 @router.get("/{supp_id}")
-def get_supplier(
+async def get_supplier(
     supp_id:      str,
-    current_user: dict = Depends(require_permission_with_rls("suppliers.manage")),
-    db:           Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("suppliers.manage")),
+    db:           AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    supplier = db.query(Supplier).filter(
-        Supplier.supp_id     == supp_id,
-        Supplier.business_id == business_id,
-        Supplier.is_deleted  == False
-    ).first()
+    result = await db.execute(
+        select(Supplier).where(
+            Supplier.supp_id     == supp_id,
+            Supplier.business_id == business_id,
+            Supplier.is_deleted  == False
+        )
+    )
+    supplier = result.scalar_one_or_none()
 
     if not supplier:
         return error_response("Supplier not found", 404)
@@ -325,30 +350,36 @@ def get_supplier(
 # PUT /suppliers/{supp_id} → Update supplier
 # ══════════════════════════════════════════════════════════════════
 @router.put("/{supp_id}")
-def update_supplier(
+async def update_supplier(
     supp_id:      str,
     data:         SupplierUpdate,
-    current_user: dict = Depends(require_permission_with_rls("suppliers.manage")),
-    db:           Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("suppliers.manage")),
+    db:           AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    supplier = db.query(Supplier).filter(
-        Supplier.supp_id     == supp_id,
-        Supplier.business_id == business_id,
-        Supplier.is_deleted  == False
-    ).first()
+    result = await db.execute(
+        select(Supplier).where(
+            Supplier.supp_id     == supp_id,
+            Supplier.business_id == business_id,
+            Supplier.is_deleted  == False
+        )
+    )
+    supplier = result.scalar_one_or_none()
 
     if not supplier:
         return error_response("Supplier not found", 404)
 
     if data.supp_phone:
-        existing = db.query(Supplier).filter(
-            Supplier.business_id == business_id,
-            Supplier.supp_id     != supp_id,
-            Supplier.supp_phone  == data.supp_phone,
-            Supplier.is_deleted  == False
-        ).first()
+        result = await db.execute(
+            select(Supplier).where(
+                Supplier.business_id == business_id,
+                Supplier.supp_id     != supp_id,
+                Supplier.supp_phone  == data.supp_phone,
+                Supplier.is_deleted  == False
+            )
+        )
+        existing = result.scalar_one_or_none()
         if existing:
             return error_response("Supplier with this phone already exists", 400)
 
@@ -363,18 +394,18 @@ def update_supplier(
     # updated_by is auto-set by DB trigger trg_suppliers_updated_by
 
     try:
-        db.commit()
+        await db.commit()
     except IntegrityError:
-        db.rollback()
+        await db.rollback()
         return error_response("Supplier with this phone already exists", 400)
     # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
-    set_rls_gucs_after_commit(db, current_user)
-    db.refresh(supplier)
+    await async_set_rls_gucs_after_commit(db, current_user)
+    await db.refresh(supplier)
 
-    updated_by_name = db.execute(
+    updated_by_name = (await db.execute(
         text("SELECT full_name FROM profiles WHERE id = CAST(:uid AS uuid)"),
         {"uid": str(supplier.updated_by)}
-    ).scalar()
+    )).scalar()
 
     return success_response({
         "message":  "Supplier updated successfully",
@@ -386,24 +417,27 @@ def update_supplier(
 # DELETE /suppliers/{supp_id} → Soft delete
 # ══════════════════════════════════════════════════════════════════
 @router.delete("/{supp_id}")
-def delete_supplier(
+async def delete_supplier(
     supp_id:      str,
-    current_user: dict = Depends(require_permission_with_rls("suppliers.manage")),
-    db:           Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("suppliers.manage")),
+    db:           AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    supplier = db.query(Supplier).filter(
-        Supplier.supp_id     == supp_id,
-        Supplier.business_id == business_id,
-        Supplier.is_deleted  == False
-    ).first()
+    result = await db.execute(
+        select(Supplier).where(
+            Supplier.supp_id     == supp_id,
+            Supplier.business_id == business_id,
+            Supplier.is_deleted  == False
+        )
+    )
+    supplier = result.scalar_one_or_none()
 
     if not supplier:
         return error_response("Supplier not found", 404)
 
     supplier.is_deleted = True
     # updated_by is auto-set by DB trigger trg_suppliers_updated_by
-    db.commit()
+    await db.commit()
 
     return success_response({"message": "Supplier deleted successfully"})

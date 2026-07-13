@@ -1,13 +1,32 @@
+# app/routers/purchase_return.py
+#
+# ── ASYNC MIGRATION NOTE (2026-07) ──────────────────────────────────────────
+#
+# This router was migrated from sync SQLAlchemy (psycopg2) to async
+# (asyncpg).  Key patterns to be aware of:
+#
+#   - All Session usage → AsyncSession (get_async_db dependency).
+#   - db.execute(...) → await db.execute(...).
+#   - paginate() → paginate_async() (avoids opening a second sync conn).
+#   - SET LOCAL with bind params is NOT supported by asyncpg (server-side
+#     binding sends $1 which SET grammar rejects).  All GUC-setting uses
+#     set_config() instead — see middleware/rbac.py for the canonical pattern.
+#   - Every await db.commit() must be followed by
+#     await async_set_rls_gucs_after_commit(db, current_user) when further
+#     queries follow in the same request.  set_config(is_local=true) values
+#     are transaction-scoped and are cleared by Postgres on commit.
+#
+
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import func, text
-from app.database import get_db
-from app.middleware.rbac import require_permission_with_rls, set_rls_gucs_after_commit
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
+from app.database import get_async_db
+from app.middleware.rbac import require_permission, async_set_rls_gucs_after_commit
 from app.models.purchase_return import PurchaseReturn
 from app.schemas.purchase_return import PurchaseReturnCreate, PurchaseReturnUpdate
 from app.utils.response import success_response, error_response
-from app.utils.pagination import paginate, pagination_response
+from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.bulk_stock_adjust import bulk_check_and_reduce_stock
 from decimal import Decimal
@@ -20,8 +39,8 @@ router = APIRouter(prefix="/v1/purchase-returns", tags=["Purchase Returns"])
 # ─────────────────────────────────────────────
 # HELPER — fetch return items with product name
 # ─────────────────────────────────────────────
-def fetch_return_items(db: Session, return_id: str):
-    return db.execute(text("""
+async def fetch_return_items(db: AsyncSession, return_id: str):
+    return (await db.execute(text("""
         SELECT
             pri.return_item_id,
             pri.return_id,
@@ -33,7 +52,7 @@ def fetch_return_items(db: Session, return_id: str):
         FROM purchase_return_items pri
         JOIN products p ON p.prod_id = pri.product_id
         WHERE pri.return_id = CAST(:rid AS uuid)
-    """), {"rid": return_id}).fetchall()
+    """), {"rid": return_id})).fetchall()
 
 
 # ─────────────────────────────────────────────
@@ -84,8 +103,8 @@ def return_item_to_dict(row):
 #   2. refund_amount <= original purchase unit price
 #   3. return_qty <= (purchased_qty - already_returned_qty)
 # ─────────────────────────────────────────────
-def validate_return_items(
-    db: Session,
+async def validate_return_items(
+    db: AsyncSession,
     pur_id: str,
     business_id: str,
     items,
@@ -95,7 +114,7 @@ def validate_return_items(
     prod_ids = [str(item.product_id) for item in items]
     purchase_items = {}
     if prod_ids:
-        rows = db.execute(text("""
+        rows = (await db.execute(text("""
             SELECT pi.product_id, pi.pur_item_qty, pi.item_unit_price, p.prod_name
             FROM purchase_items pi
             JOIN products p ON p.prod_id = pi.product_id
@@ -106,7 +125,7 @@ def validate_return_items(
             # BUG FIX: asyncpg expects a Python list for array params, not a
             # manually-formatted "{uuid1,uuid2}" string (causes DataError).
             "pids": prod_ids
-        }).fetchall()
+        })).fetchall()
         for row in rows:
             purchase_items[str(row.product_id)] = row
 
@@ -133,7 +152,7 @@ def validate_return_items(
             q += " AND pr.return_id != CAST(:exclude_id AS uuid)"
             params["exclude_id"] = exclude_return_id
         q += " GROUP BY pri.product_id"
-        for row in db.execute(text(q), params).fetchall():
+        for row in (await db.execute(text(q), params)).fetchall():
             already_returned_map[str(row.product_id)] = int(row.total_returned)
 
     for item in items:
@@ -169,17 +188,17 @@ def validate_return_items(
 # POST /purchase-returns → Create a return
 # ─────────────────────────────────────────────
 @router.post("/")
-def create_purchase_return(
+async def create_purchase_return(
     data: PurchaseReturnCreate,
-    current_user: dict = Depends(require_permission_with_rls("purchase_returns.manage")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("purchase_returns.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
     user_id     = current_user["user_id"]
 
     try:
         # Step 1 → Check purchase exists and belongs to this business
-        purchase = db.execute(text("""
+        purchase = (await db.execute(text("""
             SELECT pur_id, pur_payment_status
             FROM purchases
             WHERE pur_id       = CAST(:pur_id AS uuid)
@@ -188,13 +207,13 @@ def create_purchase_return(
         """), {
             "pur_id":      str(data.pur_id),
             "business_id": str(business_id)
-        }).fetchone()
+        })).fetchone()
 
         if not purchase:
             return error_response("Purchase not found", status_code=404)
 
         # Step 2 → Validate each return item
-        error = validate_return_items(
+        error = await validate_return_items(
             db, str(data.pur_id), str(business_id), data.items
         )
         if error:
@@ -216,7 +235,7 @@ def create_purchase_return(
                 f"Invalid status. Allowed: {allowed_statuses}", 400
             )
 
-        db.execute(text("""
+        await db.execute(text("""
             INSERT INTO purchase_returns (
                 return_id, business_id, pur_id,
                 return_reason, return_status,
@@ -246,7 +265,7 @@ def create_purchase_return(
         # Step 5 → Insert each return item
         # NOTE: return_item_subtotal is a DB generated column — do NOT insert it
         for item in data.items:
-            db.execute(text("""
+            await db.execute(text("""
                 INSERT INTO purchase_return_items
                     (return_item_id, return_id, product_id,
                      return_qty, refund_amount, business_id)
@@ -271,7 +290,7 @@ def create_purchase_return(
         # return header, return items, and stock updates are all one atomic
         # transaction. If stock update fails, nothing is committed.
         if data.return_status == "approved" and data.restock:
-            stock_err = bulk_check_and_reduce_stock(
+            stock_err = await bulk_check_and_reduce_stock(
                 db,
                 business_id=str(business_id),
                 user_id=str(user_id),
@@ -281,11 +300,11 @@ def create_purchase_return(
                 movement_notes_prefix="Stock reduced from purchase return",
             )
             if stock_err:
-                db.rollback()
+                await db.rollback()
                 return error_response(stock_err, status_code=400)
 
             # Mark stock_updated = true on the header
-            db.execute(text("""
+            await db.execute(text("""
                 UPDATE purchase_returns
                 SET stock_updated = true,
                     approved_by   = CAST(:approved_by AS uuid),
@@ -298,17 +317,18 @@ def create_purchase_return(
                 "business_id":  str(business_id)
             })
 
-        db.commit()
+        await db.commit()
 
         # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
-        set_rls_gucs_after_commit(db, current_user)
+        await async_set_rls_gucs_after_commit(db, current_user)
 
         # Step 7 → Fetch and return full record
 
-        return_row = db.query(PurchaseReturn).filter(
-            PurchaseReturn.return_id == new_return_id
-        ).first()
-        item_rows = fetch_return_items(db, new_return_id)
+        result = await db.execute(
+            select(PurchaseReturn).where(PurchaseReturn.return_id == new_return_id)
+        )
+        return_row = result.scalar_one_or_none()
+        item_rows = await fetch_return_items(db, new_return_id)
 
         return success_response({
             "message": "Purchase return created successfully",
@@ -316,7 +336,7 @@ def create_purchase_return(
         }, status_code=201)
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logging.exception(e)
         return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
@@ -325,10 +345,10 @@ def create_purchase_return(
 # GET /purchase-returns → List all (paginated)
 # ─────────────────────────────────────────────
 @router.get("/")
-def get_all_purchase_returns(
-    current_user: dict = Depends(require_permission_with_rls("purchase_returns.manage")),
-    db: Session = Depends(get_db),
-    pagination: dict = Depends(paginate),
+async def get_all_purchase_returns(
+    current_user: dict = Depends(require_permission("purchase_returns.manage")),
+    db: AsyncSession = Depends(get_async_db),
+    pagination: dict = Depends(paginate_async),
     search: Optional[str] = Query(default=None),
     status: Optional[str] = Query(default=None),
     sort_by: Optional[str] = Query(default="return_created_at"),
@@ -381,23 +401,21 @@ def get_all_purchase_returns(
         ORDER BY {order_col} {order_dir}
         OFFSET :offset LIMIT :limit
     """
-    returns = db.execute(text(list_sql), params).fetchall()
+    returns = (await db.execute(text(list_sql), params)).fetchall()
     total = returns[0].total_count if returns else 0
 
     # BATCH: fetch all return items in one query
     ret_ids = [str(r.return_id) for r in returns]
     all_items = []
     if ret_ids:
-        all_items = db.execute(text("""
+        all_items = (await db.execute(text("""
             SELECT pri.return_item_id, pri.return_id, pri.product_id,
                    p.prod_name AS product_name,
                    pri.return_qty, pri.refund_amount, pri.return_item_subtotal
             FROM purchase_return_items pri
             JOIN products p ON p.prod_id = pri.product_id
             WHERE pri.return_id = ANY(CAST(:ids AS uuid[]))
-        # BUG FIX: asyncpg expects a Python list for array params, not a
-        # manually-formatted "{uuid1,uuid2}" string (causes DataError).
-        """), {"ids": ret_ids}).fetchall()
+        """), {"ids": ret_ids})).fetchall()
 
     items_by_ret = {}
     for it in all_items:
@@ -418,22 +436,25 @@ def get_all_purchase_returns(
 # GET /purchase-returns/{return_id} → Single return
 # ─────────────────────────────────────────────
 @router.get("/{return_id}")
-def get_purchase_return(
+async def get_purchase_return(
     return_id: str,
-    current_user: dict = Depends(require_permission_with_rls("purchase_returns.manage")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("purchase_returns.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    purchase_return = db.query(PurchaseReturn).filter(
-        PurchaseReturn.return_id == return_id,
-        PurchaseReturn.business_id == business_id
-    ).first()
+    result = await db.execute(
+        select(PurchaseReturn).where(
+            PurchaseReturn.return_id == return_id,
+            PurchaseReturn.business_id == business_id
+        )
+    )
+    purchase_return = result.scalar_one_or_none()
 
     if not purchase_return:
         return error_response("Purchase return not found", status_code=404)
 
-    items = fetch_return_items(db, return_id)
+    items = await fetch_return_items(db, return_id)
     return success_response(return_to_dict(purchase_return, items))
 
 
@@ -443,11 +464,11 @@ def get_purchase_return(
 # (goods physically left your warehouse back to supplier)
 # ─────────────────────────────────────────────
 @router.put("/{return_id}")
-def update_purchase_return(
+async def update_purchase_return(
     return_id: str,
     data: PurchaseReturnUpdate,
-    current_user: dict = Depends(require_permission_with_rls("purchase_returns.manage")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("purchase_returns.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
     user_id     = current_user["user_id"]
@@ -460,10 +481,13 @@ def update_purchase_return(
         )
 
     # Fetch existing return
-    purchase_return = db.query(PurchaseReturn).filter(
-        PurchaseReturn.return_id == return_id,
-        PurchaseReturn.business_id == business_id
-    ).first()
+    result = await db.execute(
+        select(PurchaseReturn).where(
+            PurchaseReturn.return_id == return_id,
+            PurchaseReturn.business_id == business_id
+        )
+    )
+    purchase_return = result.scalar_one_or_none()
 
     if not purchase_return:
         return error_response("Purchase return not found", status_code=404)
@@ -484,7 +508,7 @@ def update_purchase_return(
         # If approving → validate quantities again then handle stock
         if data.return_status == "approved":
 
-            item_rows = fetch_return_items(db, return_id)
+            item_rows = await fetch_return_items(db, return_id)
 
             # Convert DB rows into objects validate_return_items can read
             class ItemLike:
@@ -498,7 +522,7 @@ def update_purchase_return(
                 for row in item_rows
             ]
 
-            error = validate_return_items(
+            error = await validate_return_items(
                 db, str(purchase_return.pur_id),
                 str(business_id), items_to_validate,
                 exclude_return_id=return_id
@@ -508,7 +532,7 @@ def update_purchase_return(
 
             # Reduce stock only if restock=true
             if data.restock:
-                stock_err = bulk_check_and_reduce_stock(
+                stock_err = await bulk_check_and_reduce_stock(
                     db,
                     business_id=str(business_id),
                     user_id=str(user_id),
@@ -518,11 +542,11 @@ def update_purchase_return(
                     movement_notes_prefix="Stock reduced from purchase return",
                 )
                 if stock_err:
-                    db.rollback()
+                    await db.rollback()
                     return error_response(stock_err, status_code=400)
 
         # Update the return header
-        db.execute(text("""
+        await db.execute(text("""
             UPDATE purchase_returns
             SET return_status   = :status,
                 restock         = :restock,
@@ -546,16 +570,17 @@ def update_purchase_return(
             "business_id":     str(business_id)
         })
 
-        db.commit()
+        await db.commit()
 
         # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
-        set_rls_gucs_after_commit(db, current_user)
+        await async_set_rls_gucs_after_commit(db, current_user)
 
         # Refresh and return updated record
-        purchase_return = db.query(PurchaseReturn).filter(
-            PurchaseReturn.return_id == return_id
-        ).first()
-        items = fetch_return_items(db, return_id)
+        result = await db.execute(
+            select(PurchaseReturn).where(PurchaseReturn.return_id == return_id)
+        )
+        purchase_return = result.scalar_one_or_none()
+        items = await fetch_return_items(db, return_id)
 
         return success_response({
             "message": f"Purchase return {data.return_status} successfully",
@@ -563,7 +588,7 @@ def update_purchase_return(
         })
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logging.exception(e)
         return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
@@ -573,17 +598,20 @@ def update_purchase_return(
 # Only pending returns can be deleted
 # ─────────────────────────────────────────────
 @router.delete("/{return_id}")
-def delete_purchase_return(
+async def delete_purchase_return(
     return_id: str,
-    current_user: dict = Depends(require_permission_with_rls("purchase_returns.manage")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("purchase_returns.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
 
-    purchase_return = db.query(PurchaseReturn).filter(
-        PurchaseReturn.return_id == return_id,
-        PurchaseReturn.business_id == business_id
-    ).first()
+    result = await db.execute(
+        select(PurchaseReturn).where(
+            PurchaseReturn.return_id == return_id,
+            PurchaseReturn.business_id == business_id
+        )
+    )
+    purchase_return = result.scalar_one_or_none()
 
     if not purchase_return:
         return error_response("Purchase return not found", status_code=404)
@@ -598,7 +626,7 @@ def delete_purchase_return(
 
     try:
         # Delete items first (FK constraint)
-        db.execute(text("""
+        await db.execute(text("""
             DELETE FROM purchase_return_items
             WHERE return_id   = CAST(:return_id AS uuid)
               AND business_id = CAST(:business_id AS uuid)
@@ -608,7 +636,7 @@ def delete_purchase_return(
         })
 
         # Delete header
-        db.execute(text("""
+        await db.execute(text("""
             DELETE FROM purchase_returns
             WHERE return_id   = CAST(:return_id AS uuid)
               AND business_id = CAST(:business_id AS uuid)
@@ -617,12 +645,12 @@ def delete_purchase_return(
             "business_id": str(business_id)
         })
 
-        db.commit()
+        await db.commit()
         return success_response(
             {"message": "Purchase return deleted successfully"}
         )
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logging.exception(e)
         return error_response("An unexpected error occurred. Please try again.", status_code=500)

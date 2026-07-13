@@ -19,6 +19,7 @@ class SalesReturn(Base):
     # FIX: DB type is timestamp without time zone — was incorrectly String
     return_created_at = Column(DateTime, nullable=True)
     created_by = Column(UUID(as_uuid=True), nullable=True)
+    updated_by = Column(UUID(as_uuid=True), ForeignKey("profiles.id"), nullable=True)
 
     # FIX: Added all missing columns that exist in DB
     # The trigger fn_sales_return_stock reads and writes stock_updated — critical for correct behavior

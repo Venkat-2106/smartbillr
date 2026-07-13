@@ -17,7 +17,7 @@ import SalesReturnDetailDrawer from '../components/SalesReturnDetailDrawer'
 const STATUS_VARIANT = { pending: 'warning', approved: 'success', rejected: 'danger' }
 const STATUS_LABEL = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' }
 
-function buildColumns(canManage, onDelete) {
+function buildColumns(canManage, onDelete, country) {
   return [
     {
       key: 'return_created_at',
@@ -174,8 +174,8 @@ export default function SalesReturnsPage() {
   }
 
   const columns = useMemo(
-    () => buildColumns(canManage, handleDeleteClick),
-    [canManage]
+    () => buildColumns(canManage, handleDeleteClick, country),
+    [canManage, country]
   )
 
   function handleDateChange(field, value) {

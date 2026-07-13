@@ -32,6 +32,8 @@
 #     sets GUCs via set_config in verify_token)
 #   - No db.commit() in read-only report endpoints (GUCs not needed)
 #   - mv_refresh: refresh_dashboard_mvs → refresh_dashboard_mvs_async
+#   - The variable assigned from await db.execute(...) must be reused for
+#     .fetchone()/.fetchall() — never reference a stale name (e.g. "result").
 
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
@@ -1415,7 +1417,7 @@ async def get_customer_purchase_history(
           AND c.business_id = CAST(:bid AS uuid)
           AND c.is_deleted = false
     """), {"cust_id": cust_id, "bid": bid})
-    cust_row = row.fetchone()
+    cust_row = cust_row.fetchone()
 
     if not cust_row:
         return success_response(None)
@@ -1653,7 +1655,7 @@ async def get_supplier_purchase_history(
         SELECT supp_name, supp_phone, supp_email FROM suppliers
         WHERE supp_id = CAST(:supp_id AS uuid) AND business_id = CAST(:bid AS uuid) AND is_deleted = false
     """), {"supp_id": supp_id, "bid": bid})
-    supp_row = row.fetchone()
+    supp_row = supp_row.fetchone()
 
     if not supp_row:
         return success_response(None)

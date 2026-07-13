@@ -12,14 +12,13 @@
 #   SubscriptionMiddleware excludes /v1/superadmin/* paths.
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from datetime import datetime, timezone
 from typing import Optional
 
-from app.database import get_db
-from app.middleware.auth import clear_user_cache, clear_business_users_cache
-from app.middleware.rbac import verify_super_admin_with_rls
+from app.database import get_async_db
+from app.middleware.auth import clear_user_cache, clear_business_users_cache, verify_super_admin
 from app.utils.response import success_response, error_response
 from app.schemas.business import SubscriptionUpdate, VALID_PAYMENT_STATUSES, VALID_SUBSCRIPTION_TYPES
 
@@ -51,17 +50,17 @@ def _parse_dt(val):
 # ─── POST /superadmin/logout — Logout with revocation ───────────────────────
 
 @router.post("/logout")
-def super_admin_logout(
-    current_user: dict = Depends(verify_super_admin_with_rls),
-    db: Session = Depends(get_db),
+async def super_admin_logout(
+    current_user: dict = Depends(verify_super_admin),
+    db: AsyncSession = Depends(get_async_db),
 ):
     user_id = current_user["user_id"]
     now = datetime.now(timezone.utc)
-    db.execute(
+    await db.execute(
         text("UPDATE super_admins SET last_logout_at = :now WHERE user_id = :uid"),
         {"now": now, "uid": user_id},
     )
-    db.commit()
+    await db.commit()
     clear_user_cache(user_id)
     return success_response({"message": "Logged out successfully"})
 
@@ -69,14 +68,14 @@ def super_admin_logout(
 # ─── GET /superadmin/businesses — List all businesses (paginated, sortable) ──
 
 @router.get("/businesses")
-def list_businesses(
+async def list_businesses(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=1000),
     sort_by: str = Query(default="created_at"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
     search: Optional[str] = Query(default=None),
-    current_user: dict = Depends(verify_super_admin_with_rls),
-    db: Session = Depends(get_db),
+    current_user: dict = Depends(verify_super_admin),
+    db: AsyncSession = Depends(get_async_db),
 ):
     if sort_by not in SORTABLE_WHITELIST:
         return error_response(f"Invalid sort_by. Allowed: {', '.join(sorted(SORTABLE_WHITELIST))}", 400)
@@ -94,7 +93,7 @@ def list_businesses(
     where_sql = " AND ".join(where_clauses)
 
     count_sql = f"SELECT COUNT(*) FROM businesses b WHERE {where_sql}"
-    total = db.execute(text(count_sql), params).scalar() or 0
+    total = (await db.execute(text(count_sql), params)).scalar() or 0
 
     offset = (page - 1) * limit
     params["offset"] = offset
@@ -118,7 +117,7 @@ def list_businesses(
         ORDER BY b.{safe_sort_col} {safe_sort_dir}
         OFFSET :offset LIMIT :limit
     """
-    rows = db.execute(text(list_sql), params).fetchall()
+    rows = (await db.execute(text(list_sql), params)).fetchall()
 
     items = []
     for row in rows:
@@ -153,12 +152,12 @@ def list_businesses(
 # ─── GET /superadmin/businesses/{id} — Single business detail w/ owner ───────
 
 @router.get("/businesses/{business_id}")
-def get_business(
+async def get_business(
     business_id: str,
-    current_user: dict = Depends(verify_super_admin_with_rls),
-    db: Session = Depends(get_db),
+    current_user: dict = Depends(verify_super_admin),
+    db: AsyncSession = Depends(get_async_db),
 ):
-    row = db.execute(
+    row = (await db.execute(
         text("""
             SELECT
                 b.business_id,
@@ -189,7 +188,7 @@ def get_business(
             LIMIT 1
         """),
         {"bid": business_id},
-    ).fetchone()
+    )).fetchone()
 
     if not row:
         return error_response("Business not found", 404)
@@ -224,16 +223,16 @@ def get_business(
 # ─── PATCH /superadmin/businesses/{id}/subscription — Change plan/tier ───────
 
 @router.patch("/businesses/{business_id}/subscription")
-def update_business_subscription(
+async def update_business_subscription(
     business_id: str,
     payload: SubscriptionUpdate,
-    current_user: dict = Depends(verify_super_admin_with_rls),
-    db: Session = Depends(get_db),
+    current_user: dict = Depends(verify_super_admin),
+    db: AsyncSession = Depends(get_async_db),
 ):
-    existing = db.execute(
+    existing = (await db.execute(
         text("SELECT business_id FROM businesses WHERE business_id = :bid AND (is_deleted = false OR is_deleted IS NULL) LIMIT 1"),
         {"bid": business_id},
-    ).fetchone()
+    )).fetchone()
 
     if not existing:
         return error_response("Business not found", 404)
@@ -253,13 +252,13 @@ def update_business_subscription(
     update_data["bid"] = business_id
 
     try:
-        db.execute(
+        await db.execute(
             text(f"UPDATE businesses SET {set_clause} WHERE business_id = :bid AND (is_deleted = false OR is_deleted IS NULL)"),
             update_data,
         )
-        db.commit()
+        await db.commit()
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         import logging
         logging.exception(e)
         return error_response("Failed to update subscription", 500)
@@ -275,28 +274,28 @@ class StatusUpdate:
 
 
 @router.patch("/businesses/{business_id}/status")
-def update_business_status(
+async def update_business_status(
     business_id: str,
     is_active: bool = Query(..., description="true = activate, false = suspend"),
-    current_user: dict = Depends(verify_super_admin_with_rls),
-    db: Session = Depends(get_db),
+    current_user: dict = Depends(verify_super_admin),
+    db: AsyncSession = Depends(get_async_db),
 ):
-    existing = db.execute(
+    existing = (await db.execute(
         text("SELECT business_id, is_active FROM businesses WHERE business_id = :bid AND (is_deleted = false OR is_deleted IS NULL) LIMIT 1"),
         {"bid": business_id},
-    ).fetchone()
+    )).fetchone()
 
     if not existing:
         return error_response("Business not found", 404)
 
     try:
-        db.execute(
+        await db.execute(
             text("UPDATE businesses SET is_active = :active WHERE business_id = :bid"),
             {"active": is_active, "bid": business_id},
         )
-        db.commit()
+        await db.commit()
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         import logging
         logging.exception(e)
         return error_response("Failed to update business status", 500)

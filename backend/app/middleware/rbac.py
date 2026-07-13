@@ -350,3 +350,12 @@ def set_superadmin_rls_gucs_after_commit(db: Session, current_user: dict) -> Non
     """Re-set super-admin RLS GUCs after db.commit()."""
     db.execute(_SET_RLS_SQL, {"uid": str(current_user["user_id"])})
     db.execute(text("SET LOCAL app.is_super_admin = 'true'"))
+
+
+async def async_set_superadmin_rls_gucs_after_commit(db: AsyncSession, current_user: dict) -> None:
+    """Re-set super-admin RLS GUCs on an async session after await db.commit()."""
+    await db.execute(
+        text("SELECT set_config('app.current_user_id', :uid, true)"),
+        {"uid": str(current_user["user_id"])},
+    )
+    await db.execute(text("SELECT set_config('app.is_super_admin', 'true', true)"))

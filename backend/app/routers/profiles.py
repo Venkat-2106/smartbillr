@@ -10,10 +10,10 @@
 #   to decide whether to show or hide — no extra API calls needed.
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from app.database import get_db
-from app.middleware.rbac import verify_token_with_rls
+from app.database import get_async_db
+from app.middleware.auth import verify_token
 from app.dependencies.subscription import verify_subscription
 from app.utils.response import success_response, error_response
 import logging
@@ -23,10 +23,10 @@ router = APIRouter(prefix="/v1/profiles", tags=["Profiles"])
 
 # ─── GET /profiles/me ─────────────────────────────────────────────────────────
 @router.get("/me")
-def get_my_profile(
+async def get_my_profile(
     _sub: None = Depends(verify_subscription),
-    current_user: dict = Depends(verify_token_with_rls),
-    db: Session = Depends(get_db),
+    current_user: dict = Depends(verify_token),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Returns the logged-in user's full profile including:
@@ -40,7 +40,7 @@ def get_my_profile(
         user_id     = current_user["user_id"]
         business_id = current_user["business_id"]
 
-        result = db.execute(
+        result = (await db.execute(
             text("""
                 SELECT
                     p.id,
@@ -58,7 +58,7 @@ def get_my_profile(
                 LIMIT 1
             """),
             {"user_id": user_id, "business_id": business_id}
-        ).fetchone()
+        )).fetchone()
 
         if not result:
             return error_response("Profile not found", 404)
@@ -93,12 +93,12 @@ def get_my_profile(
 # exists. Prevents email enumeration attacks. The frontend calls this before
 # Supabase's resetPasswordForEmail() as a mild timing obfuscation layer.
 @router.get("/check-email")
-def check_email_exists(
+async def check_email_exists(
     email: str = Query(..., description="Email address to check"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     try:
-        db.execute(
+        await db.execute(
             text("""
                 SELECT id FROM profiles
                 WHERE LOWER(email) = LOWER(:email)
@@ -106,7 +106,7 @@ def check_email_exists(
                 LIMIT 1
             """),
             {"email": email.strip()}
-        ).fetchone()
+        )
 
         return success_response({
             "message": "If this email is registered, you'll receive reset instructions."

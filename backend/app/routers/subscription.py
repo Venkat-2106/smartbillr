@@ -1,15 +1,16 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone, timedelta
-import time
+import asyncio
+import httpx
 import uuid
 import os
 import logging
 
-from app.database import get_db
-from app.middleware.rbac import verify_token_with_rls, verify_super_admin_with_rls
+from app.database import get_async_db
+from app.middleware.auth import verify_token, verify_super_admin
 from app.utils.response import success_response, error_response
 from app.schemas.business import (
     BusinessCreate,
@@ -54,40 +55,40 @@ def _get_supabase_admin_headers():
     }
 
 
-def _create_supabase_auth_user(email: str, password: str, full_name: str) -> dict:
-    import httpx
+async def _create_supabase_auth_user(email: str, password: str, full_name: str) -> dict:
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         raise ValueError("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing in .env")
-    response = httpx.post(
-        f"{SUPABASE_URL}/auth/v1/admin/users",
-        headers=_get_supabase_admin_headers(),
-        json={
-            "email": email,
-            "password": password,
-            "email_confirm": True,
-            "user_metadata": {"full_name": full_name},
-        },
-        timeout=10,
-    )
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{SUPABASE_URL}/auth/v1/admin/users",
+            headers=_get_supabase_admin_headers(),
+            json={
+                "email": email,
+                "password": password,
+                "email_confirm": True,
+                "user_metadata": {"full_name": full_name},
+            },
+            timeout=10,
+        )
     if response.status_code not in (200, 201):
         detail = response.json().get("message") or response.text
         raise ValueError(f"Supabase Auth error: {detail}")
     return response.json()
 
 
-def _delete_supabase_auth_user(auth_user_id: str, email: str | None = None):
-    import httpx
+async def _delete_supabase_auth_user(auth_user_id: str, email: str | None = None):
     for attempt in range(2):
         try:
-            httpx.delete(
-                f"{SUPABASE_URL}/auth/v1/admin/users/{auth_user_id}",
-                headers=_get_supabase_admin_headers(),
-                timeout=10,
-            )
+            async with httpx.AsyncClient() as client:
+                await client.delete(
+                    f"{SUPABASE_URL}/auth/v1/admin/users/{auth_user_id}",
+                    headers=_get_supabase_admin_headers(),
+                    timeout=10,
+                )
             return
         except Exception as e:
             if attempt == 0:
-                time.sleep(1)
+                await asyncio.sleep(1)
                 continue
             logging.critical(
                 "ORPHANED SUPABASE AUTH USER — manual cleanup required. "
@@ -99,39 +100,39 @@ def _delete_supabase_auth_user(auth_user_id: str, email: str | None = None):
 # ─── POST /v1/business — Self-service tenant registration ──────────────────────
 
 @reg_router.post("/business", status_code=201)
-def register_business(
+async def register_business(
     payload: BusinessCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     now = datetime.now(timezone.utc)
     business_id = str(uuid.uuid4())
     trial_end = now + timedelta(days=30)
 
-    existing = db.execute(
+    existing = (await db.execute(
         text("SELECT id FROM profiles WHERE LOWER(email) = LOWER(:email) LIMIT 1"),
         {"email": payload.owner_email},
-    ).fetchone()
+    )).fetchone()
     if existing:
         return error_response("This email is already registered", 400)
 
     if payload.business_name:
-        existing_name = db.execute(
+        existing_name = (await db.execute(
             text("SELECT business_id FROM businesses WHERE LOWER(business_name) = LOWER(:name) AND (is_deleted = false OR is_deleted IS NULL) LIMIT 1"),
             {"name": payload.business_name},
-        ).fetchone()
+        )).fetchone()
         if existing_name:
             return error_response("A business with this name already exists", 400)
 
     if payload.gstin:
-        existing_gst = db.execute(
+        existing_gst = (await db.execute(
             text("SELECT business_id FROM businesses WHERE gstin = :gstin AND (is_deleted = false OR is_deleted IS NULL) LIMIT 1"),
             {"gstin": payload.gstin},
-        ).fetchone()
+        )).fetchone()
         if existing_gst:
             return error_response("This GSTIN is already registered", 400)
 
     try:
-        auth_user = _create_supabase_auth_user(
+        auth_user = await _create_supabase_auth_user(
             payload.owner_email, payload.owner_password, payload.owner_name
         )
         auth_user_id = auth_user["id"]
@@ -143,10 +144,10 @@ def register_business(
         # Set session GUCs so RLS policies allow the INSERTs below.
         # The registering user is not yet authenticated via verify_token(),
         # so we set the GUCs directly from the freshly created auth user.
-        db.execute(text("SET LOCAL app.current_user_id = :uid"), {"uid": auth_user_id})
-        db.execute(text("SET LOCAL app.current_business_id = :bid"), {"bid": business_id})
+        await db.execute(text("SELECT set_config('app.current_user_id', :uid, true)"), {"uid": auth_user_id})
+        await db.execute(text("SELECT set_config('app.current_business_id', :bid, true)"), {"bid": business_id})
 
-        db.execute(
+        await db.execute(
             text("""
                 INSERT INTO businesses (
                     business_id, business_name, business_email, business_phone,
@@ -182,7 +183,7 @@ def register_business(
         # NOTE: purchase_counter / customer_counter are set by server_default
         # in migration f2g3h4i5j6k7. Deliberately omitted here to avoid
         # PostgreSQL 42703 errors if the migration hasn't been applied.
-        db.execute(
+        await db.execute(
             text("""
                 INSERT INTO business_counters (business_id, invoice_counter)
                 VALUES (:bid, 0)
@@ -190,13 +191,13 @@ def register_business(
             {"bid": business_id},
         )
 
-        role_row = db.execute(
+        role_row = (await db.execute(
             text("SELECT id FROM roles WHERE name = 'admin' LIMIT 1")
-        ).fetchone()
+        )).fetchone()
         if not role_row:
             raise ValueError("Admin role not found in roles table")
 
-        db.execute(
+        await db.execute(
             text("""
                 INSERT INTO profiles (id, business_id, full_name, email, role, role_id, is_active)
                 VALUES (:id, :business_id, :full_name, :email, 'admin', :role_id, :is_active_val)
@@ -211,19 +212,19 @@ def register_business(
             },
         )
 
-        db.commit()
+        await db.commit()
 
     except IntegrityError as e:
-        db.rollback()
-        _delete_supabase_auth_user(auth_user_id, payload.owner_email)
+        await db.rollback()
+        await _delete_supabase_auth_user(auth_user_id, payload.owner_email)
         err_str = str(e.orig).lower()
         if "idx_businesses_name_unique" in err_str:
             return error_response("A business with this name already exists.", 409)
         return error_response("Registration failed. Please try again.", 500)
 
     except Exception as e:
-        db.rollback()
-        _delete_supabase_auth_user(auth_user_id, payload.owner_email)
+        await db.rollback()
+        await _delete_supabase_auth_user(auth_user_id, payload.owner_email)
         logging.exception(e)
         return error_response("Registration failed. Please try again.", 500)
 
@@ -242,14 +243,14 @@ def register_business(
 # ─── GET /v1/businesses/me/subscription — Get my subscription status ──────────
 
 @sub_router.get("/me/subscription")
-def get_my_subscription(
-    current_user: dict = Depends(verify_token_with_rls),
-    db: Session = Depends(get_db),
+async def get_my_subscription(
+    current_user: dict = Depends(verify_token),
+    db: AsyncSession = Depends(get_async_db),
 ):
     bid = current_user["business_id"]
     now = datetime.now(timezone.utc)
 
-    row = db.execute(
+    row = (await db.execute(
         text("""
             SELECT
                 payment_status, subscription_type,
@@ -261,7 +262,7 @@ def get_my_subscription(
             LIMIT 1
         """),
         {"bid": bid},
-    ).fetchone()
+    )).fetchone()
 
     if not row:
         return error_response("Business not found", 404)
@@ -306,19 +307,19 @@ def get_my_subscription(
 # ─── PATCH /v1/admin/businesses/{business_id}/subscription — Super Admin ─────
 
 @admin_router.patch("/businesses/{business_id}/subscription")
-def update_subscription(
+async def update_subscription(
     business_id: str,
     payload: SubscriptionUpdate,
-    current_user: dict = Depends(verify_super_admin_with_rls),
-    db: Session = Depends(get_db),
+    current_user: dict = Depends(verify_super_admin),
+    db: AsyncSession = Depends(get_async_db),
 ):
     ALLOWED_COLUMNS = {"payment_status", "subscription_type", "subscription_start_at",
                        "subscription_end_at", "is_active"}
 
-    existing = db.execute(
+    existing = (await db.execute(
         text("SELECT business_id FROM businesses WHERE business_id = :bid AND (is_deleted = false OR is_deleted IS NULL) LIMIT 1"),
         {"bid": business_id},
-    ).fetchone()
+    )).fetchone()
 
     if not existing:
         return error_response("Business not found", 404)
@@ -335,13 +336,13 @@ def update_subscription(
     update_data["bid"] = business_id
 
     try:
-        db.execute(
+        await db.execute(
             text(f"UPDATE businesses SET {set_clause} WHERE business_id = :bid AND (is_deleted = false OR is_deleted IS NULL)"),
             update_data,
         )
-        db.commit()
+        await db.commit()
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logging.exception(e)
         return error_response("Failed to update subscription", 500)
 
@@ -351,11 +352,11 @@ def update_subscription(
 # ─── GET /v1/admin/businesses — List all businesses (Super Admin) ───────────
 
 @admin_router.get("/businesses")
-def list_all_businesses(
-    current_user: dict = Depends(verify_super_admin_with_rls),
-    db: Session = Depends(get_db),
+async def list_all_businesses(
+    current_user: dict = Depends(verify_super_admin),
+    db: AsyncSession = Depends(get_async_db),
 ):
-    rows = db.execute(
+    rows = (await db.execute(
         text("""
             SELECT
                 business_id, business_name, business_email,
@@ -367,7 +368,7 @@ def list_all_businesses(
             WHERE (is_deleted = false OR is_deleted IS NULL)
             ORDER BY created_at DESC
         """),
-    ).fetchall()
+    )).fetchall()
 
     businesses = []
     for row in rows:

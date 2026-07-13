@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
 from typing import Optional
-from app.database import get_db
-from app.middleware.rbac import require_permission_with_rls, set_rls_gucs_after_commit
+from app.database import get_async_db
+from app.middleware.rbac import require_permission, async_set_rls_gucs_after_commit
 from app.utils.response import success_response, error_response
-from app.utils.pagination import paginate, pagination_response
+from app.utils.pagination import paginate_async, pagination_response
 from app.schemas.business import BusinessCreate, BusinessUpdate, BusinessResponse
 from app.models.business import Business
 from app.utils.timestamp import fmt_ts
@@ -18,14 +18,17 @@ router = APIRouter(
 
 # ─── GET MY BUSINESS ───────────────────────────────────────────
 @router.get("/me")
-def get_my_business(
-    current_user: dict = Depends(require_permission_with_rls("dashboard.view")),
-    db: Session = Depends(get_db)
+async def get_my_business(
+    current_user: dict = Depends(require_permission("dashboard.view")),
+    db: AsyncSession = Depends(get_async_db)
 ):
-    business = db.query(Business).filter(
-        Business.business_id == current_user["business_id"],
-        Business.is_deleted == False
-    ).first()
+    result = await db.execute(
+        select(Business).where(
+            Business.business_id == current_user["business_id"],
+            Business.is_deleted == False
+        )
+    )
+    business = result.scalar_one_or_none()
 
     if not business:
         return error_response("Business not found", 404)
@@ -35,15 +38,18 @@ def get_my_business(
 
 # ─── UPDATE MY BUSINESS ────────────────────────────────────────
 @router.put("/me")
-def update_my_business(
+async def update_my_business(
     payload: BusinessUpdate,
-    current_user: dict = Depends(require_permission_with_rls("settings.manage")),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(require_permission("settings.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
-    business = db.query(Business).filter(
-        Business.business_id == current_user["business_id"],
-        Business.is_deleted == False
-    ).first()
+    result = await db.execute(
+        select(Business).where(
+            Business.business_id == current_user["business_id"],
+            Business.is_deleted == False
+        )
+    )
+    business = result.scalar_one_or_none()
 
     if not business:
         return error_response("Business not found", 404)
@@ -53,19 +59,19 @@ def update_my_business(
     for field, value in update_data.items():
         setattr(business, field, value)
 
-    db.commit()
-    set_rls_gucs_after_commit(db, current_user)
-    db.refresh(business)
+    await db.commit()
+    await async_set_rls_gucs_after_commit(db, current_user)
+    await db.refresh(business)
 
     return success_response(BusinessResponse.from_orm(business).dict())
 
 
 # ─── GET ALL STAFF OF MY BUSINESS ──────────────────────────────
 @router.get("/staff")
-def get_staff(
-    current_user: dict = Depends(require_permission_with_rls("settings.manage")),
-    db: Session = Depends(get_db),
-    pagination: dict = Depends(paginate),
+async def get_staff(
+    current_user: dict = Depends(require_permission("settings.manage")),
+    db: AsyncSession = Depends(get_async_db),
+    pagination: dict = Depends(paginate_async),
     search: Optional[str] = Query(default=None),
     is_active: Optional[bool] = Query(default=None),
 ):
@@ -83,7 +89,7 @@ def get_staff(
         params["is_active"] = is_active
 
     count_sql = f"SELECT COUNT(*) FROM profiles WHERE business_id = :business_id {extra_where}"
-    total = db.execute(text(count_sql), params).scalar() or 0
+    total = (await db.execute(text(count_sql), params)).scalar() or 0
 
     params["offset"] = pagination["offset"]
     params["limit"] = pagination["limit"]
@@ -95,7 +101,7 @@ def get_staff(
         ORDER BY created_at ASC
         OFFSET :offset LIMIT :limit
     """
-    rows = db.execute(text(list_sql), params).fetchall()
+    rows = (await db.execute(text(list_sql), params)).fetchall()
     staff_list = [{"id": str(r.id), "full_name": r.full_name, "role": r.role,
                    "is_active": r.is_active, "created_at": fmt_ts(r.created_at)} for r in rows]
 

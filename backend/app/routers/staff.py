@@ -13,19 +13,19 @@
 #   5. Returns the new profile
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import func, text
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 import httpx
 import os
 import re
 
-from app.database import get_db
-from app.middleware.rbac import require_permission_with_rls
+from app.database import get_async_db
+from app.middleware.rbac import require_permission
 from app.middleware.auth import clear_user_cache
 from app.utils.response import success_response, error_response
-from app.utils.pagination import paginate, pagination_response
+from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.staff_limits import get_staff_limits
 import logging
@@ -79,7 +79,7 @@ def get_supabase_admin_headers():
     }
 
 
-def create_supabase_auth_user(email: str, password: str, full_name: str) -> dict:
+async def create_supabase_auth_user(email: str, password: str, full_name: str) -> dict:
     """
     Call Supabase Auth Admin API to create a new auth user.
     Returns the created user dict including id.
@@ -88,17 +88,18 @@ def create_supabase_auth_user(email: str, password: str, full_name: str) -> dict
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         raise ValueError("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing in .env")
 
-    response = httpx.post(
-        f"{SUPABASE_URL}/auth/v1/admin/users",
-        headers=get_supabase_admin_headers(),
-        json={
-            "email":            email,
-            "password":         password,
-            "email_confirm":    True,        # skip email verification for staff
-            "user_metadata":    {"full_name": full_name},
-        },
-        timeout=10,
-    )
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{SUPABASE_URL}/auth/v1/admin/users",
+            headers=get_supabase_admin_headers(),
+            json={
+                "email":            email,
+                "password":         password,
+                "email_confirm":    True,        # skip email verification for staff
+                "user_metadata":    {"full_name": full_name},
+            },
+            timeout=10,
+        )
 
     if response.status_code not in (200, 201):
         detail = response.json().get("message") or response.text
@@ -107,25 +108,26 @@ def create_supabase_auth_user(email: str, password: str, full_name: str) -> dict
     return response.json()
 
 
-def delete_supabase_auth_user(auth_user_id: str):
+async def delete_supabase_auth_user(auth_user_id: str):
     """
     Delete a Supabase Auth user by id.
     Called on rollback if profile insert fails after auth user creation.
     """
-    httpx.delete(
-        f"{SUPABASE_URL}/auth/v1/admin/users/{auth_user_id}",
-        headers=get_supabase_admin_headers(),
-        timeout=10,
-    )
+    async with httpx.AsyncClient() as client:
+        await client.delete(
+            f"{SUPABASE_URL}/auth/v1/admin/users/{auth_user_id}",
+            headers=get_supabase_admin_headers(),
+            timeout=10,
+        )
 
 
 # ── POST /staff — Create new staff/manager account ───────────────────────────
 
 @router.post("")
-def create_staff(
+async def create_staff(
     body:         CreateStaffRequest,
-    current_user: dict    = Depends(require_permission_with_rls("staff.manage")),
-    db:           Session = Depends(get_db),
+    current_user: dict    = Depends(require_permission("staff.manage")),
+    db:           AsyncSession = Depends(get_async_db),
 ):
     business_id = current_user["business_id"]
 
@@ -135,7 +137,7 @@ def create_staff(
 
     # Prevent creating another admin (only one admin per business)
     if body.role == "admin":
-        existing_admin = db.execute(
+        existing_admin = (await db.execute(
             text("""
                 SELECT id FROM profiles
                 WHERE business_id = :business_id
@@ -144,25 +146,25 @@ def create_staff(
                 LIMIT 1
             """),
             {"business_id": business_id}
-        ).fetchone()
+        )).fetchone()
         if existing_admin:
             return error_response("A business can only have one admin account", 400)
 
     # Check email not already used in this business
-    existing = db.execute(
+    existing = (await db.execute(
         text("""
             SELECT id FROM profiles
             WHERE LOWER(email) = LOWER(:email)
               AND business_id = :business_id
         """),
         {"email": body.email, "business_id": business_id}
-    ).fetchone()
+    )).fetchone()
     if existing:
         return error_response("This email is already registered in your business", 400)
 
     # ── Subscription tier limit check ────────────────────────────────────
     if body.role in ("staff", "manager"):
-        biz_row = db.execute(
+        biz_row = (await db.execute(
             text("""
                 SELECT subscription_type
                 FROM businesses
@@ -171,7 +173,7 @@ def create_staff(
                 LIMIT 1
             """),
             {"bid": str(business_id)}
-        ).fetchone()
+        )).fetchone()
 
         if not biz_row:
             return error_response("Business not found", 404)
@@ -188,7 +190,7 @@ def create_staff(
             )
 
         if role_limit is not None:
-            current_count = db.execute(
+            current_count = (await db.execute(
                 text("""
                     SELECT COUNT(*) FROM profiles
                     WHERE business_id = CAST(:bid AS uuid)
@@ -196,7 +198,7 @@ def create_staff(
                       AND is_active = true
                 """),
                 {"bid": str(business_id), "role": body.role}
-            ).scalar() or 0
+            )).scalar() or 0
 
             if current_count >= role_limit:
                 upgrade_tier = "Pro" if subscription_type == "monthly" else "a higher plan"
@@ -211,7 +213,7 @@ def create_staff(
 
     # Step 1: Create Supabase Auth user
     try:
-        auth_user = create_supabase_auth_user(body.email, body.password, body.full_name)
+        auth_user = await create_supabase_auth_user(body.email, body.password, body.full_name)
     except ValueError as e:
         logging.exception(e)
         return error_response("An unexpected error occurred. Please try again.", status_code=400)
@@ -220,16 +222,16 @@ def create_staff(
 
     # Step 2: Insert into profiles using auth user id as profiles.id
     try:
-        role_row = db.execute(
+        role_row = (await db.execute(
             text("SELECT id FROM roles WHERE name = :role LIMIT 1"),
             {"role": body.role}
-        ).fetchone()
+        )).fetchone()
 
         if not role_row:
-            delete_supabase_auth_user(auth_user_id)
+            await delete_supabase_auth_user(auth_user_id)
             return error_response(f"Role '{body.role}' not found in roles table", 500)
 
-        db.execute(
+        await db.execute(
             text("""
                 INSERT INTO profiles (id, business_id, full_name, email, role, role_id, is_active)
                 VALUES (:id, :business_id, :full_name, :email, :role, :role_id, true)
@@ -243,12 +245,12 @@ def create_staff(
                 "role_id":     role_row.id,
             }
         )
-        db.commit()
+        await db.commit()
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         # Rollback: delete the Supabase auth user we just created
-        delete_supabase_auth_user(auth_user_id)
+        await delete_supabase_auth_user(auth_user_id)
         logging.exception(e)
         return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
@@ -265,10 +267,10 @@ def create_staff(
 # ── GET /staff — List all staff in this business (paginated) ──────────────────
 
 @router.get("")
-def list_staff(
-    current_user: dict    = Depends(require_permission_with_rls("staff.manage")),
-    db:           Session = Depends(get_db),
-    pagination:   dict    = Depends(paginate),
+async def list_staff(
+    current_user: dict    = Depends(require_permission("staff.manage")),
+    db:           AsyncSession = Depends(get_async_db),
+    pagination:   dict    = Depends(paginate_async),
     search:       Optional[str] = Query(default=None),
     is_active:    Optional[bool] = Query(default=None),
 ):
@@ -291,7 +293,7 @@ def list_staff(
         WHERE p.business_id = :business_id
         {extra_where}
     """
-    total = db.execute(text(count_sql), params).scalar() or 0
+    total = (await db.execute(text(count_sql), params)).scalar() or 0
 
     params["offset"] = pagination["offset"]
     params["limit"] = pagination["limit"]
@@ -312,7 +314,7 @@ def list_staff(
         ORDER BY p.created_at ASC
         OFFSET :offset LIMIT :limit
     """
-    rows = db.execute(text(list_sql), params).fetchall()
+    rows = (await db.execute(text(list_sql), params)).fetchall()
 
     staff_list = [
         {
@@ -333,21 +335,21 @@ def list_staff(
 
 # ── GET /staff/summary → KPI cards for staff page ───────────────────
 @router.get("/summary")
-def get_staff_summary_kpi(
-    current_user: dict = Depends(require_permission_with_rls("staff.manage")),
-    db: Session = Depends(get_db)
+async def get_staff_summary_kpi(
+    current_user: dict = Depends(require_permission("staff.manage")),
+    db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
 
-    biz_row = db.execute(
+    biz_row = (await db.execute(
         text("SELECT subscription_type FROM businesses WHERE business_id = CAST(:bid AS uuid) LIMIT 1"),
         {"bid": bid}
-    ).fetchone()
+    )).fetchone()
 
     subscription_type = biz_row.subscription_type if biz_row else "trial"
     limits = get_staff_limits(subscription_type)
 
-    counts = db.execute(text("""
+    counts = (await db.execute(text("""
         SELECT
             COUNT(*)                                    AS total_count,
             COUNT(*) FILTER (WHERE is_active = true)   AS active_count,
@@ -355,7 +357,7 @@ def get_staff_summary_kpi(
             COUNT(*) FILTER (WHERE role = 'manager' AND is_active = true) AS manager_count
         FROM profiles
         WHERE business_id = CAST(:bid AS uuid)
-    """), {"bid": bid}).fetchone()
+    """), {"bid": bid})).fetchone()
 
     return success_response({
         "total_count":     int(counts.total_count),
@@ -373,11 +375,11 @@ def get_staff_summary_kpi(
 # ── PATCH /staff/{id} — Update staff name, role, or active status ─────────────
 
 @router.patch("/{staff_id}")
-def update_staff(
+async def update_staff(
     staff_id:     str,
     body:         UpdateStaffRequest,
-    current_user: dict    = Depends(require_permission_with_rls("staff.manage")),
-    db:           Session = Depends(get_db),
+    current_user: dict    = Depends(require_permission("staff.manage")),
+    db:           AsyncSession = Depends(get_async_db),
 ):
     business_id = current_user["business_id"]
 
@@ -386,13 +388,13 @@ def update_staff(
         return error_response("You cannot edit your own account from here", 400)
 
     # Confirm staff belongs to this business
-    existing = db.execute(
+    existing = (await db.execute(
         text("""
             SELECT id, role FROM profiles
             WHERE id = :id AND business_id = :business_id
         """),
         {"id": staff_id, "business_id": business_id}
-    ).fetchone()
+    )).fetchone()
 
     if not existing:
         return error_response("Staff member not found", 404)
@@ -407,10 +409,10 @@ def update_staff(
         if body.role not in VALID_ROLES:
             return error_response(f"Invalid role. Must be one of: {', '.join(VALID_ROLES)}", 400)
         updates["role"] = body.role
-        role_row = db.execute(
+        role_row = (await db.execute(
             text("SELECT id FROM roles WHERE name = :role LIMIT 1"),
             {"role": body.role}
-        ).fetchone()
+        )).fetchone()
         if role_row:
             updates["role_id"] = role_row.id
 
@@ -422,17 +424,17 @@ def update_staff(
 
     try:
         updates["business_id"] = business_id
-        db.execute(
+        await db.execute(
             text(f"UPDATE profiles SET {set_clause} WHERE id = :id AND business_id = :business_id"),
             updates
         )
-        db.commit()
+        await db.commit()
 
         clear_user_cache(staff_id)
         from app.middleware.subscription import clear_subscription_user_cache
         clear_subscription_user_cache(staff_id)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logging.exception(e)
         return error_response("An unexpected error occurred. Please try again.", status_code=500)
 
@@ -442,39 +444,39 @@ def update_staff(
 # ── DELETE /staff/{id} — Deactivate (soft delete) ────────────────────────────
 
 @router.delete("/{staff_id}")
-def deactivate_staff(
+async def deactivate_staff(
     staff_id:     str,
-    current_user: dict    = Depends(require_permission_with_rls("staff.manage")),
-    db:           Session = Depends(get_db),
+    current_user: dict    = Depends(require_permission("staff.manage")),
+    db:           AsyncSession = Depends(get_async_db),
 ):
     business_id = current_user["business_id"]
 
     if staff_id == current_user["user_id"]:
         return error_response("You cannot deactivate your own account", 400)
 
-    existing = db.execute(
+    existing = (await db.execute(
         text("""
             SELECT id FROM profiles
             WHERE id = :id AND business_id = :business_id AND is_active = true
         """),
         {"id": staff_id, "business_id": business_id}
-    ).fetchone()
+    )).fetchone()
 
     if not existing:
         return error_response("Active staff member not found", 404)
 
     try:
-        db.execute(
+        await db.execute(
             text("UPDATE profiles SET is_active = false WHERE id = :id AND business_id = :business_id"),
             {"id": staff_id, "business_id": business_id}
         )
-        db.commit()
+        await db.commit()
 
         clear_user_cache(staff_id)
         from app.middleware.subscription import clear_subscription_user_cache
         clear_subscription_user_cache(staff_id)
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logging.exception(e)
         return error_response("An unexpected error occurred. Please try again.", status_code=500)
 

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useId } from 'react'
 
 const W = 600, H = 180, PAD_L = 56, PAD_R = 20, PAD_T = 20, PAD_B = 40
 const chartW = W - PAD_L - PAD_R
@@ -20,7 +20,8 @@ export default function LineChart({ data = [], accentColor, areaColor, loading, 
   }, [points])
 
   const accent = accentColor || 'var(--accent-600)'
-  const fillId = `lineFill_${Math.random().toString(36).slice(2)}`
+  const rawId = useId()
+  const fillId = `lineFill_${rawId.replace(/:/g, '')}`
 
   function smoothPath(pts) {
     if (pts.length < 2) return ''

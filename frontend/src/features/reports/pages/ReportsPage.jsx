@@ -1,21 +1,21 @@
 import { useState, useMemo, useCallback, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePermissions } from '../../../shared/hooks/usePermissions'
-import { SectionSkeleton } from './components/shared'
+import { SectionSkeleton } from '../components/shared'
 
 // ─── Lazy-loaded sections ─────────────────────────────────────────────────────
-const SummarySection = lazy(() => import('./sections/SummarySection'))
-const SalesSection = lazy(() => import('./sections/SalesSection'))
-const PurchasesSection = lazy(() => import('./sections/PurchasesSection'))
-const ProfitSection = lazy(() => import('./sections/ProfitSection'))
-const InventorySection = lazy(() => import('./sections/InventorySection'))
-const CustomersSection = lazy(() => import('./sections/CustomersSection'))
-const SuppliersSection = lazy(() => import('./sections/SuppliersSection'))
-const ExpensesSection = lazy(() => import('./sections/ExpensesSection'))
-const TaxSection = lazy(() => import('./sections/TaxSection'))
-const ReturnsSection = lazy(() => import('./sections/ReturnsSection'))
-const PaymentsSection = lazy(() => import('./sections/PaymentsSection'))
-const AuditSection = lazy(() => import('./sections/AuditSection'))
+const SummarySection = lazy(() => import('../sections/SummarySection'))
+const SalesSection = lazy(() => import('../sections/SalesSection'))
+const PurchasesSection = lazy(() => import('../sections/PurchasesSection'))
+const ProfitSection = lazy(() => import('../sections/ProfitSection'))
+const InventorySection = lazy(() => import('../sections/InventorySection'))
+const CustomersSection = lazy(() => import('../sections/CustomersSection'))
+const SuppliersSection = lazy(() => import('../sections/SuppliersSection'))
+const ExpensesSection = lazy(() => import('../sections/ExpensesSection'))
+const TaxSection = lazy(() => import('../sections/TaxSection'))
+const ReturnsSection = lazy(() => import('../sections/ReturnsSection'))
+const PaymentsSection = lazy(() => import('../sections/PaymentsSection'))
+const AuditSection = lazy(() => import('../sections/AuditSection'))
 
 // ─── Tab Config ────────────────────────────────────────────────────────────────
 const _S = (d) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d}</svg>

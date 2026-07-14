@@ -46,6 +46,7 @@ async def bulk_check_and_reduce_stock(
         FROM   products
         WHERE  prod_id     IN ({", ".join(check_parts)})
           AND  business_id = CAST(:bid AS uuid)
+        FOR UPDATE
     """), check_params)).fetchall()
 
     if len(rows) != len(product_ids):

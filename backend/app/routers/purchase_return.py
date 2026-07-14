@@ -120,6 +120,7 @@ async def validate_return_items(
             JOIN products p ON p.prod_id = pi.product_id
             WHERE pi.pur_id = CAST(:pur_id AS uuid)
               AND pi.product_id = ANY(CAST(:pids AS uuid[]))
+            FOR UPDATE OF pi
         """), {
             "pur_id": pur_id,
             # BUG FIX: asyncpg expects a Python list for array params, not a

@@ -715,17 +715,17 @@ kbd kbd { border: none; padding: 0; background: none; box-shadow: none; }
 }
 
 /* ─── Landing page responsive ────────────────────────────────── */
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .landing-hero-inner { grid-template-columns: 1fr !important; text-align: center; gap: 40px !important; }
   .landing-hero-inner p { margin-left: auto !important; margin-right: auto !important; }
   .landing-hero-inner > div:first-child { display: flex; flex-direction: column; align-items: center; }
   .landing-hero-visual { max-width: 520px; margin: 0 auto; }
-  .landing-features-grid { grid-template-columns: repeat(2, 1fr) !important; }
-  .landing-why-inner { grid-template-columns: 1fr !important; gap: 40px !important; text-align: center; }
-  .landing-why-inner p { margin-left: auto !important; margin-right: auto !important; }
-  .landing-why-inner > div:first-child { display: flex; flex-direction: column; align-items: center; }
+  .landing-hero-inner h1 { font-size: 2.6rem !important; }
   .landing-preview-grid { grid-template-columns: repeat(2, 1fr) !important; }
   .landing-footer-grid { grid-template-columns: 1fr 1fr !important; gap: 32px !important; }
+}
+@media (max-width: 900px) {
+  #features-detail > div > div:last-child { grid-template-columns: 1fr 1fr 1fr !important; }
 }
 @media (max-width: 768px) {
   .landing-hero-inner h1 { font-size: 2.2rem !important; }
@@ -733,13 +733,13 @@ kbd kbd { border: none; padding: 0; background: none; box-shadow: none; }
   .landing-nav-buttons { display: none !important; }
   .landing-nav-hamburger { display: block !important; }
   .landing-hero-inner { padding-top: 100px !important; padding-bottom: 60px !important; }
+  #features-detail > div > div:last-child { grid-template-columns: 1fr 1fr !important; }
 }
 @media (max-width: 640px) {
-  .landing-features-grid { grid-template-columns: 1fr !important; }
-  .landing-why-list { grid-template-columns: 1fr !important; }
+  .landing-hero-inner h1 { font-size: 1.8rem !important; }
+  #features > div > div:last-child { grid-template-columns: 1fr !important; }
+  #features-detail > div > div:last-child { grid-template-columns: 1fr !important; }
   .landing-preview-grid { grid-template-columns: 1fr !important; }
-  .landing-contact-grid { grid-template-columns: 1fr !important; max-width: 400px !important; }
   .landing-footer-grid { grid-template-columns: 1fr !important; text-align: center; }
   .landing-footer-grid > div:first-child { display: flex; flex-direction: column; align-items: center; }
-  .landing-hero-inner h1 { font-size: 1.7rem !important; }
 }

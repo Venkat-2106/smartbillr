@@ -4,8 +4,10 @@ import LandingHero from '../components/LandingHero'
 import LandingFeatures from '../components/LandingFeatures'
 import LandingWhy from '../components/LandingWhy'
 import LandingPreview from '../components/LandingPreview'
-import LandingContact from '../components/LandingContact'
-import FeedbackSection from '../components/FeedbackSection'
+import PremiumFeatures from '../components/PremiumFeatures'
+import TrustSection from '../components/TrustSection'
+import FaqSection from '../components/FaqSection'
+import FinalCta from '../components/FinalCta'
 import LandingFooter from '../components/LandingFooter'
 
 export default function LandingPage() {
@@ -28,8 +30,10 @@ export default function LandingPage() {
         <LandingFeatures />
         <LandingWhy />
         <LandingPreview />
-        <LandingContact />
-        <FeedbackSection />
+        <PremiumFeatures />
+        <TrustSection />
+        <FaqSection />
+        <FinalCta />
       </main>
       <LandingFooter />
     </div>

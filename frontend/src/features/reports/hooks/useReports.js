@@ -234,12 +234,16 @@ export function useCustomerLifetimeValue() {
   })
 }
 
-export function useCustomerOutstanding() {
+export function useCustomerOutstanding(page = 1) {
   return useQuery({
-    queryKey: ['customer-outstanding'],
-    queryFn: api.fetchCustomerOutstanding,
+    queryKey: ['customer-outstanding', page],
+    queryFn: () => api.fetchCustomerOutstanding({ page }),
     staleTime: DEFAULT_STALE,
-    select: (data) => data?.items ?? [],
+    placeholderData: (prev) => prev,
+    select: (data) => ({
+      items: data?.items ?? [],
+      pagination: data?.pagination ?? null,
+    }),
   })
 }
 
@@ -409,12 +413,16 @@ export function usePaymentsByMethod(dateFrom, dateTo) {
   })
 }
 
-export function usePartialPayments() {
+export function usePartialPayments(page = 1) {
   return useQuery({
-    queryKey: ['partial-payments'],
-    queryFn: api.fetchPartialPayments,
+    queryKey: ['partial-payments', page],
+    queryFn: () => api.fetchPartialPayments({ page }),
     staleTime: DEFAULT_STALE,
-    select: (data) => data?.items ?? [],
+    placeholderData: (prev) => prev,
+    select: (data) => ({
+      items: data?.items ?? [],
+      pagination: data?.pagination ?? null,
+    }),
   })
 }
 

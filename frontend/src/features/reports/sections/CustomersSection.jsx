@@ -1,4 +1,5 @@
-import { BentoCard } from '../../../shared/components'
+import { useState } from 'react'
+import { BentoCard, Pagination } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import useAuthStore from '../../../store/authStore'
 import { useTopCustomers, useCustomerOutstanding } from '../hooks/useReports'
@@ -6,7 +7,8 @@ import { SectionTitle, InfoCard, DataTable } from '../components/shared'
 
 export default function CustomersSection({ dateFrom, dateTo }) {
   const topCustomers = useTopCustomers(dateFrom, dateTo)
-  const outstanding = useCustomerOutstanding()
+  const [outstandingPage, setOutstandingPage] = useState(1)
+  const outstanding = useCustomerOutstanding(outstandingPage)
   const business = useAuthStore(st => st.business)
   const country = business?.business_country_code || 'IN'
 
@@ -27,7 +29,8 @@ export default function CustomersSection({ dateFrom, dateTo }) {
             { key: 'cust_name', label: 'Customer', bold: true },
             { key: 'unpaid_invoices', label: 'Unpaid', align: 'center' },
             { key: 'total_outstanding', label: 'Amount', align: 'right', format: v => formatCurrency(v, country) },
-          ]} data={Array.isArray(outstanding.data) ? outstanding.data : []} loading={outstanding.isLoading} />
+          ]} data={outstanding.data?.items ?? []} loading={outstanding.isLoading} />
+          <Pagination pagination={outstanding.data?.pagination} onPageChange={setOutstandingPage} />
         </InfoCard>
       </div>
     </BentoCard>

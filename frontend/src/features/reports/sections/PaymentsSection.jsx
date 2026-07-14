@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { BentoCard, LineChart, DonutChart } from '../../../shared/components'
+import { BentoCard, LineChart, DonutChart, Pagination } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import useAuthStore from '../../../store/authStore'
 import { usePaymentCollections, useOutstandingReceivables, usePaymentsByMethod, usePartialPayments } from '../hooks/useReports'
@@ -7,10 +7,11 @@ import { StatCard, SectionTitle, ChartCard, InfoCard, DataTable } from '../compo
 
 export default function PaymentsSection({ dateFrom, dateTo }) {
   const [period, setPeriod] = useState('monthly')
+  const [partialPage, setPartialPage] = useState(1)
   const collections = usePaymentCollections(period, dateFrom, dateTo)
   const outstanding = useOutstandingReceivables()
   const byMethod = usePaymentsByMethod(dateFrom, dateTo)
-  const partial = usePartialPayments()
+  const partial = usePartialPayments(partialPage)
   const business = useAuthStore(st => st.business)
   const country = business?.business_country_code || 'IN'
 
@@ -47,7 +48,8 @@ export default function PaymentsSection({ dateFrom, dateTo }) {
           { key: 'invoice_total', label: 'Total', align: 'right', format: v => formatCurrency(v, country) },
           { key: 'cumulative_paid', label: 'Paid', align: 'right', format: v => formatCurrency(v, country) },
           { key: 'remaining', label: 'Remaining', align: 'right', format: v => formatCurrency(v, country) },
-        ]} data={Array.isArray(partial.data) ? partial.data : []} loading={partial.isLoading} />
+        ]} data={partial.data?.items ?? []} loading={partial.isLoading} />
+        <Pagination pagination={partial.data?.pagination} onPageChange={setPartialPage} />
       </InfoCard>
     </BentoCard>
   )

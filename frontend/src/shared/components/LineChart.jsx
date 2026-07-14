@@ -20,6 +20,9 @@ export default function LineChart({ data = [], accentColor, areaColor, loading, 
   }, [points])
 
   const accent = accentColor || 'var(--accent-600)'
+  // Why useId: Math.random() produced new gradient IDs every render, causing
+  // unnecessary SVG <defs> recreation. useId() gives a stable per-instance ID.
+  // Colons (invalid in url() refs) are stripped for SVG compatibility.
   const rawId = useId()
   const fillId = `lineFill_${rawId.replace(/:/g, '')}`
 

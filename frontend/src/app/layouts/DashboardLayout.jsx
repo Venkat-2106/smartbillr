@@ -11,6 +11,16 @@ import CommandPalette from '../../shared/components/CommandPalette'
 import ShortcutHelp from '../../shared/components/ShortcutHelp'
 import SubscriptionBanner from '../../features/subscription/components/SubscriptionBanner'
 
+// ── Static SVG icons (hoisted to module scope) ──────────────────────────────────
+// Why: Inline JSX SVGs are re-created as new element trees on every render.
+// Hoisting them here creates a single stable reference, eliminating unnecessary
+// DOM reconciliation and GC pressure in this layout (rendered on every route).
+//
+// Skipped (intentionally left inline — dynamic content):
+//   • ThemePanel accent checkmark — `color: a.hex` depends on the loop variable
+//   • NavItem `d={item.icon}` — path data comes from the nav config via .map()
+//   • BottomNav `d={item.icon}` — same as NavItem, path data is loop-dependent
+
 const LogoSvg = (
   <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
     <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -58,6 +68,215 @@ const MoonIcon = (
     <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
   </svg>
 )
+
+// ── Static style objects (hoisted from JSX) ──
+// Why: Inline style objects re-created every render produce new references,
+// causing unnecessary re-renders in memoised children. A single module-level
+// constant gives React a stable reference to skip reconciliation.
+
+const logoContainerStyle = { display: 'flex', alignItems: 'center', gap: 10 }
+
+const logoIconBoxStyle = {
+  width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+  background: 'var(--accent-600)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+}
+
+const logoBrandStyle = {
+  fontSize: '0.9rem', fontWeight: 700, letterSpacing: '-0.3px',
+  color: 'var(--sb-text-primary)', whiteSpace: 'nowrap',
+}
+
+const themePanelContainerStyle = {
+  position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 200,
+  width: 240, background: 'var(--bg-card)', border: '1px solid var(--border)',
+  borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-elevated)',
+  padding: '16px', animation: 'scaleIn 0.18s var(--ease-spring) both',
+}
+
+const panelSectionLabel = {
+  fontSize: 11, fontWeight: 600, color: 'var(--text-muted)',
+  letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10,
+}
+
+const themeBtnRowStyle = { display: 'flex', gap: 6, marginBottom: 18 }
+
+const accentListStyle = { display: 'flex', flexDirection: 'column', gap: 5 }
+
+const dialogOverlayStyle = {
+  position: 'fixed', inset: 0, zIndex: 999,
+  background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  animation: 'fadeIn 0.15s var(--ease-out)',
+}
+
+const dialogCardStyle = {
+  background: 'var(--bg-card)', border: '1px solid var(--border)',
+  borderRadius: 'var(--r-2xl)', padding: '28px', width: '100%', maxWidth: 360,
+  boxShadow: 'var(--shadow-elevated)', animation: 'scaleIn 0.2s var(--ease-spring)',
+}
+
+const dialogIconBoxStyle = {
+  width: 44, height: 44, borderRadius: 12,
+  background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18,
+}
+
+const dialogTextStyle = { fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6 }
+
+const dialogDividerStyle = { height: 1, background: 'var(--border)', margin: '20px 0' }
+
+const dialogBtnRowStyle = { display: 'flex', gap: 8 }
+
+const dialogActionBtnStyle = { flex: 1, height: 38 }
+
+const rootContainerStyle = {
+  display: 'flex', height: '100vh', overflow: 'hidden',
+  fontFamily: "'Inter', -apple-system, sans-serif",
+  background: 'var(--bg-page)',
+}
+
+const mobileOverlayStyle = {
+  position: 'fixed', inset: 0, zIndex: 99,
+  background: 'rgba(0,0,0,0.5)',
+  backdropFilter: 'blur(4px)',
+  animation: 'fadeIn 0.15s var(--ease-out)',
+}
+
+const sidebarToggleBtnStyle = {
+  background: 'rgba(255,255,255,0.04)',
+  border: '1px solid rgba(255,255,255,0.07)',
+  borderRadius: 7, width: 26, height: 26, cursor: 'pointer',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  color: 'var(--sb-text-muted)', flexShrink: 0,
+}
+
+const workspaceBadgeStyle = {
+  margin: '12px 10px 4px',
+  background: 'rgba(255,255,255,0.03)',
+  border: '1px solid rgba(255,255,255,0.06)',
+  borderRadius: 10, padding: '9px 10px',
+  display: 'flex', alignItems: 'center', gap: 9,
+}
+
+const workspaceAvatarStyle = {
+  width: 24, height: 24, borderRadius: 6,
+  background: 'var(--accent-600)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  fontSize: '0.6rem', fontWeight: 800, color: '#fff', flexShrink: 0,
+}
+
+const workspaceNameStyle = {
+  fontSize: '0.7rem', fontWeight: 600, color: 'var(--sb-text-primary)',
+  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0,
+}
+
+const workspaceLabelStyle = { fontSize: '0.58rem', color: 'var(--sb-text-muted)', margin: 0 }
+
+const onlineDotStyle = {
+  width: 6, height: 6, borderRadius: '50%', background: '#22C55E', flexShrink: 0,
+}
+
+const navSectionLabelStyle = {
+  fontSize: '0.58rem', fontWeight: 700, color: 'var(--sb-text-section)',
+  textTransform: 'uppercase', letterSpacing: '0.08em',
+  padding: '16px 10px 6px', margin: 0,
+}
+
+const userRowStyle = { display: 'flex', alignItems: 'center', gap: 8 }
+
+const userAvatarStyle = {
+  width: 32, height: 32, borderRadius: 8,
+  background: 'var(--accent-600)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  fontSize: '0.68rem', fontWeight: 700, color: '#fff', flexShrink: 0,
+}
+
+const userNameStyle = {
+  fontSize: '0.72rem', fontWeight: 600, color: 'var(--sb-text-primary)',
+  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+  margin: 0, textTransform: 'capitalize',
+}
+
+const userRoleStyle = { fontSize: '0.6rem', color: 'var(--sb-text-muted)', margin: 0 }
+
+const signOutBtnStyle = {
+  background: 'rgba(239,68,68,0.08)',
+  border: '1px solid rgba(239,68,68,0.12)',
+  borderRadius: 7, width: 28, height: 28, cursor: 'pointer',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  color: '#F87171', flexShrink: 0,
+  transition: 'background 0.13s',
+}
+
+const collapsedFooterCenterStyle = { display: 'flex', justifyContent: 'center' }
+
+const collapsedAvatarStyle = {
+  width: 32, height: 32, borderRadius: 8,
+  background: 'var(--accent-600)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  fontSize: '0.68rem', fontWeight: 700, color: '#fff', cursor: 'pointer',
+}
+
+const shortcutsHintStyle = {
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+  marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--sb-border)',
+}
+
+const kbdStyle = {
+  fontFamily: "'JetBrains Mono', monospace", fontSize: 9, fontWeight: 600,
+  padding: '1px 4px', borderRadius: 3,
+  border: '1px solid rgba(255,255,255,0.1)',
+  background: 'rgba(255,255,255,0.04)', color: 'var(--sb-text-muted)',
+}
+
+const topbarLeftGroupStyle = { display: 'flex', alignItems: 'center', gap: 12 }
+
+const hamburgerBtnStyle = {
+  background: 'transparent',
+  border: 'none',
+  width: 34, height: 34,
+  cursor: 'pointer',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  color: 'var(--text-secondary)',
+}
+
+const notificationDotStyle = {
+  position: 'absolute', top: 8, right: 9,
+  width: 5, height: 5, background: 'var(--accent-600)',
+  borderRadius: '50%',
+  border: '1.5px solid var(--topbar-bg)',
+}
+
+const topbarDividerStyle = { width: 1, height: 18, background: 'var(--border)' }
+
+const profilePillStyle = {
+  display: 'flex', alignItems: 'center', gap: 8,
+  background: 'var(--bg-subtle)',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+  padding: '3px 10px 3px 3px',
+  cursor: 'pointer',
+}
+
+const profilePillAvatarStyle = {
+  width: 26, height: 26, borderRadius: 6,
+  background: 'var(--accent-600)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  fontSize: '0.6rem', fontWeight: 700, color: '#fff',
+}
+
+const profilePillNameStyle = {
+  fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-primary)', textTransform: 'capitalize',
+}
+
+const loadingFallbackStyle = { padding: '3rem', display: 'flex', justifyContent: 'center' }
+
+const spinnerStyle = {
+  width: 32, height: 32, border: '3px solid var(--border)',
+  borderTopColor: 'var(--accent-600)', borderRadius: '50%',
+  animation: 'spin 0.7s linear infinite',
+}
 
 const THEME_KEY  = 'sb-theme'
 const ACCENT_KEY = 'sb-accent'
@@ -141,19 +360,12 @@ const BOTTOM_NAV_ITEMS = [
 
 function Logo({ collapsed }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{
-        width: 28, height: 28, borderRadius: 8, flexShrink: 0,
-        background: 'var(--accent-600)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
+    <div style={logoContainerStyle}>
+      <div style={logoIconBoxStyle}>
         {LogoSvg}
       </div>
       {!collapsed && (
-        <span style={{
-          fontSize: '0.9rem', fontWeight: 700, letterSpacing: '-0.3px',
-          color: 'var(--sb-text-primary)', whiteSpace: 'nowrap',
-        }}>
+        <span style={logoBrandStyle}>
           Smart<span style={{ color: 'var(--accent-400)' }}>Billr</span>
         </span>
       )}
@@ -169,16 +381,11 @@ function ThemePanel({ theme, setTheme, accent, setAccent, onClose }) {
     return () => document.removeEventListener('mousedown', h)
   }, [onClose])
   return (
-    <div ref={ref} style={{
-      position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 200,
-      width: 240, background: 'var(--bg-card)', border: '1px solid var(--border)',
-      borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-elevated)',
-      padding: '16px', animation: 'scaleIn 0.18s var(--ease-spring) both',
-    }}>
-      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+    <div ref={ref} style={themePanelContainerStyle}>
+      <p style={panelSectionLabel}>
         Theme
       </p>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 18 }}>
+      <div style={themeBtnRowStyle}>
         {['light','dark'].map(t => (
           <button
             key={t}
@@ -199,10 +406,10 @@ function ThemePanel({ theme, setTheme, accent, setAccent, onClose }) {
           </button>
         ))}
       </div>
-      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+      <p style={panelSectionLabel}>
         Accent
       </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <div style={accentListStyle}>
         {ACCENT_OPTIONS.map(a => (
           <button
             key={a.id}
@@ -239,35 +446,22 @@ function LogoutDialog({ onConfirm, onCancel }) {
       role="dialog"
       aria-modal="true"
       aria-label="Sign out confirmation"
-      style={{
-        position: 'fixed', inset: 0, zIndex: 999,
-        background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        animation: 'fadeIn 0.15s var(--ease-out)',
-      }}
+      style={dialogOverlayStyle}
     >
-      <div onClick={e => e.stopPropagation()} style={{
-        background: 'var(--bg-card)', border: '1px solid var(--border)',
-        borderRadius: 'var(--r-2xl)', padding: '28px', width: '100%', maxWidth: 360,
-        boxShadow: 'var(--shadow-elevated)', animation: 'scaleIn 0.2s var(--ease-spring)',
-      }}>
-        <div style={{
-          width: 44, height: 44, borderRadius: 12,
-          background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18,
-        }}>
+      <div onClick={e => e.stopPropagation()} style={dialogCardStyle}>
+        <div style={dialogIconBoxStyle}>
           {LogoutIcon}
         </div>
         <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
           Sign out of SmartBillr?
         </h3>
-        <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+        <p style={dialogTextStyle}>
           You'll be returned to the login screen.
         </p>
-        <div style={{ height: 1, background: 'var(--border)', margin: '20px 0' }} />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onCancel} className="btn btn-secondary" style={{ flex: 1, height: 38 }}>Cancel</button>
-          <button onClick={onConfirm} className="btn btn-danger" style={{ flex: 1, height: 38 }}>Sign out</button>
+        <div style={dialogDividerStyle} />
+        <div style={dialogBtnRowStyle}>
+          <button onClick={onCancel} className="btn btn-secondary" style={dialogActionBtnStyle}>Cancel</button>
+          <button onClick={onConfirm} className="btn btn-danger" style={dialogActionBtnStyle}>Sign out</button>
         </div>
       </div>
     </div>
@@ -478,11 +672,7 @@ export default function DashboardLayout() {
   const W = isMobile ? FULL : (collapsed ? SLIM : FULL)
 
   return (
-    <div style={{
-      display: 'flex', height: '100vh', overflow: 'hidden',
-      fontFamily: "'Inter', -apple-system, sans-serif",
-      background: 'var(--bg-page)',
-    }}>
+    <div style={rootContainerStyle}>
       <style>{`
         .sb-icon-btn { transition: background-color .13s, color .13s; }
         .sb-icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
@@ -495,12 +685,7 @@ export default function DashboardLayout() {
           onClick={() => setMobileOpen(false)}
           role="presentation"
           aria-hidden={true}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 99,
-            background: 'rgba(0,0,0,0.5)',
-            backdropFilter: 'blur(4px)',
-            animation: 'fadeIn 0.15s var(--ease-out)',
-          }}
+          style={mobileOverlayStyle}
         />
       )}
 
@@ -539,13 +724,7 @@ export default function DashboardLayout() {
               <button
                 onClick={() => setMobileOpen(false)}
                 aria-label="Close sidebar"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.07)',
-                  borderRadius: 7, width: 26, height: 26, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'var(--sb-text-muted)', flexShrink: 0,
-                }}
+                style={sidebarToggleBtnStyle}
               >
                 {CloseXIcon}
               </button>
@@ -560,13 +739,7 @@ export default function DashboardLayout() {
               <button
                 onClick={() => setCollapsed(true)}
                 aria-label="Collapse sidebar"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.07)',
-                  borderRadius: 7, width: 26, height: 26, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'var(--sb-text-muted)', flexShrink: 0,
-                }}
+                style={sidebarToggleBtnStyle}
               >
                 {ChevronLeftIcon}
               </button>
@@ -576,28 +749,17 @@ export default function DashboardLayout() {
 
         {/* Workspace badge */}
         {!collapsed && (
-          <div style={{
-            margin: '12px 10px 4px',
-            background: 'rgba(255,255,255,0.03)',
-            border: '1px solid rgba(255,255,255,0.06)',
-            borderRadius: 10, padding: '9px 10px',
-            display: 'flex', alignItems: 'center', gap: 9,
-          }}>
-            <div style={{
-              width: 24, height: 24, borderRadius: 6,
-              background: 'var(--accent-600)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '0.6rem', fontWeight: 800, color: '#fff', flexShrink: 0,
-            }}>
+          <div style={workspaceBadgeStyle}>
+            <div style={workspaceAvatarStyle}>
               {businessName[0]?.toUpperCase()}
             </div>
             <div style={{ overflow: 'hidden', flex: 1 }}>
-              <p style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--sb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', margin: 0 }}>
+              <p style={workspaceNameStyle}>
                 {businessName}
               </p>
-              <p style={{ fontSize: '0.58rem', color: 'var(--sb-text-muted)', margin: 0 }}>Workspace</p>
+              <p style={workspaceLabelStyle}>Workspace</p>
             </div>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#22C55E', flexShrink: 0 }} />
+            <div style={onlineDotStyle} />
           </div>
         )}
 
@@ -613,11 +775,7 @@ export default function DashboardLayout() {
           {visibleNav.map(section => (
             <div key={section.label} style={{ marginBottom: 2 }}>
               {!collapsed && (
-                <p style={{
-                  fontSize: '0.58rem', fontWeight: 700, color: 'var(--sb-text-section)',
-                  textTransform: 'uppercase', letterSpacing: '0.08em',
-                  padding: '16px 10px 6px', margin: 0,
-                }}>
+                <p style={navSectionLabelStyle}>
                   {section.label}
                 </p>
               )}
@@ -635,66 +793,37 @@ export default function DashboardLayout() {
           borderTop: '1px solid var(--sb-border)', flexShrink: 0,
         }}>
           {(!collapsed || isMobile) ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: 8,
-                background: 'var(--accent-600)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '0.68rem', fontWeight: 700, color: '#fff', flexShrink: 0,
-              }}>
+            <div style={userRowStyle}>
+              <div style={userAvatarStyle}>
                 {initials}
               </div>
               <div style={{ flex: 1, overflow: 'hidden' }}>
-                <p style={{
-                  fontSize: '0.72rem', fontWeight: 600, color: 'var(--sb-text-primary)',
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                  margin: 0, textTransform: 'capitalize',
-                }}>
+                <p style={userNameStyle}>
                   {userName}
                 </p>
-                <p style={{ fontSize: '0.6rem', color: 'var(--sb-text-muted)', margin: 0 }}>
+                <p style={userRoleStyle}>
                   {userRole}
                 </p>
               </div>
               <button
                 onClick={() => setShowLogout(true)}
                 aria-label="Sign out"
-                style={{
-                  background: 'rgba(239,68,68,0.08)',
-                  border: '1px solid rgba(239,68,68,0.12)',
-                  borderRadius: 7, width: 28, height: 28, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#F87171', flexShrink: 0,
-                  transition: 'background 0.13s',
-                }}
+                style={signOutBtnStyle}
               >
                 {FooterSignOutIcon}
               </button>
             </div>
           ) : (
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: 8,
-                background: 'var(--accent-600)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '0.68rem', fontWeight: 700, color: '#fff', cursor: 'pointer',
-              }} title={userName} role="button" tabIndex={0}>
+            <div style={collapsedFooterCenterStyle}>
+              <div style={collapsedAvatarStyle} title={userName} role="button" tabIndex={0}>
                 {initials}
               </div>
             </div>
           )}
           {!collapsed && (
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-              marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--sb-border)',
-            }}>
+            <div style={shortcutsHintStyle}>
               <span style={{ fontSize: '0.6rem', color: 'var(--sb-text-muted)' }}>
-                Press <kbd style={{
-                  fontFamily: "'JetBrains Mono', monospace", fontSize: 9, fontWeight: 600,
-                  padding: '1px 4px', borderRadius: 3,
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  background: 'rgba(255,255,255,0.04)', color: 'var(--sb-text-muted)',
-                }}>?</kbd> for shortcuts
+                Press <kbd style={kbdStyle}>?</kbd> for shortcuts
               </span>
             </div>
           )}
@@ -722,19 +851,12 @@ export default function DashboardLayout() {
           padding: isMobile ? '0 16px' : '0 28px',
           position: 'sticky', top: 0, zIndex: 50,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={topbarLeftGroupStyle}>
             {isMobile && (
               <button
                 onClick={() => setMobileOpen(true)}
                 aria-label="Open sidebar"
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  width: 34, height: 34,
-                  cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'var(--text-secondary)',
-                }}
+                style={hamburgerBtnStyle}
               >
                 {HamburgerIcon}
               </button>
@@ -753,15 +875,10 @@ export default function DashboardLayout() {
 
             <IconButton aria-label="Notifications">
               {BellIcon}
-              <span style={{
-                position: 'absolute', top: 8, right: 9,
-                width: 5, height: 5, background: 'var(--accent-600)',
-                borderRadius: '50%',
-                border: '1.5px solid var(--topbar-bg)',
-              }} />
+              <span style={notificationDotStyle} />
             </IconButton>
 
-            <div style={{ width: 1, height: 18, background: 'var(--border)' }} />
+            <div style={topbarDividerStyle} />
 
             <div style={{ position: 'relative' }}>
               <IconButton onClick={() => setShowTheme(v => !v)} aria-label="Toggle theme">
@@ -770,24 +887,12 @@ export default function DashboardLayout() {
               {showTheme && <ThemePanel theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} onClose={handleThemeClose} />}
             </div>
 
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              background: 'var(--bg-subtle)',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              padding: '3px 10px 3px 3px',
-              cursor: 'pointer',
-            }}>
-              <div style={{
-                width: 26, height: 26, borderRadius: 6,
-                background: 'var(--accent-600)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '0.6rem', fontWeight: 700, color: '#fff',
-              }}>
+            <div style={profilePillStyle}>
+              <div style={profilePillAvatarStyle}>
                 {initials}
               </div>
               {!isMobile && (
-                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-primary)', textTransform: 'capitalize' }}>
+                <span style={profilePillNameStyle}>
                   {userName}
                 </span>
               )}
@@ -805,8 +910,8 @@ export default function DashboardLayout() {
           overflowY: 'auto', overflowX: 'hidden',
         }}>
           <div className="fade-up"><ErrorBoundary><Suspense fallback={
-            <div style={{ padding: '3rem', display: 'flex', justifyContent: 'center' }}>
-              <div style={{ width: 32, height: 32, border: '3px solid var(--border)', borderTopColor: 'var(--accent-600)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+            <div style={loadingFallbackStyle}>
+              <div style={spinnerStyle} />
             </div>
           }><Outlet /></Suspense></ErrorBoundary></div>
         </main>

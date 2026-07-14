@@ -38,7 +38,11 @@ import { useStock, useStockMovements, useStockAlerts } from '../hooks/useStock'
 import AdjustStockModal from '../components/AdjustStockModal'
 import { useStockAlertRead } from '../hooks/useStock'
 
-// ── Static SVG icons (hoisted from JSX) ────────────────────────────────────────
+// ── Static SVG icons (hoisted to module scope) ──────────────────────────────────
+// Why: Inline JSX SVGs are re-created as new element trees on every render.
+// Hoisting them here creates a single stable reference, eliminating unnecessary
+// DOM reconciliation and GC pressure across this heavy page.
+// Note: No icons were skipped — all 12 are fully static (zero dynamic content).
 const PackageIconSm = (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />

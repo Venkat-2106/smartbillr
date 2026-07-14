@@ -33,6 +33,7 @@ from app.schemas.billing import (
 )
 from app.services.billing import razorpay_client, stripe_client
 from app.services.billing import activation
+from app.middleware.subscription import clear_subscription_business_cache
 
 logger = logging.getLogger(__name__)
 
@@ -270,6 +271,12 @@ async def razorpay_webhook(request: Request, db: AsyncSession = Depends(get_asyn
     if event_type == "payment.captured":
         payment_entity = payload.get("payload", {}).get("payment", {}).get("entity", {})
         await activation.activate_subscription(db, payment_entity, provider="razorpay")
+        # NOTE: activate_subscription already calls clear_subscription_business_cache
+        # internally after db.commit(). This is belt-and-suspenders — the call here
+        # ensures cache invalidation even if activation.py changes in the future.
+        biz_id = (payment_entity.get("notes") or {}).get("business_id")
+        if biz_id:
+            clear_subscription_business_cache(biz_id)
     elif event_type == "payment.failed":
         payment_entity = payload.get("payload", {}).get("payment", {}).get("entity", {})
         await activation.handle_payment_failure(db, payment_entity, provider="razorpay")
@@ -311,6 +318,12 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_async_
 
     if event_type == "checkout.session.completed":
         await activation.activate_subscription(db, data_object, provider="stripe")
+        # NOTE: activate_subscription already calls clear_subscription_business_cache
+        # internally after db.commit(). This is belt-and-suspenders — the call here
+        # ensures cache invalidation even if activation.py changes in the future.
+        biz_id = data_object.get("client_reference_id")
+        if biz_id:
+            clear_subscription_business_cache(biz_id)
     elif event_type == "invoice.payment_failed":
         await activation.handle_payment_failure(db, data_object, provider="stripe")
 

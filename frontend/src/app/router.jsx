@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Spinner } from '../shared/components'
 import DashboardLayout from './layouts/DashboardLayout'
@@ -41,6 +41,15 @@ const AdminBusinessDetailPage = React.lazy(() => import('../features/admin/pages
 export default function AppRouter() {
   return (
     <BrowserRouter>
+      {/* Outer Suspense boundary for lazy routes that don't live inside
+          DashboardLayout (which has its own local Suspense around <Outlet/>).
+          This covers: PricingPage, BillingSuccessPage, AdminLoginPage,
+          DashboardLayoutAdmin → AdminBusinessesPage / AdminBusinessDetailPage. */}
+      <Suspense fallback={
+        <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Spinner />
+        </div>
+      }>
       <Routes>
 
         {/* Public routes — no auth needed */}
@@ -216,6 +225,7 @@ export default function AppRouter() {
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
 
       </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

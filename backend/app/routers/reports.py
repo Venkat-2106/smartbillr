@@ -43,6 +43,7 @@ from app.database import get_async_db
 from app.middleware.rbac import require_permission
 from app.utils.timestamp import fmt_ts
 from app.utils.response import success_response, error_response
+from app.utils.pagination import paginate_async, pagination_response
 from app.utils.mv_refresh import refresh_dashboard_mvs, refresh_dashboard_mvs_async
 from datetime import datetime, timedelta, timezone
 
@@ -1268,6 +1269,7 @@ async def get_moving_products(
     lookback = days.get(period, 30)
 
     # Fast-moving: most sale qty in period
+    # Intentionally fixed LIMIT 20 — dashboard widget, not a bug.
     fast = await db.execute(text("""
         SELECT
             p.prod_id,
@@ -1287,6 +1289,7 @@ async def get_moving_products(
     fast = fast.fetchall()
 
     # Slow-moving: products with low sale qty relative to stock
+    # Intentionally fixed LIMIT 20 — dashboard widget, not a bug.
     slow = await db.execute(text("""
         SELECT
             p.prod_id,
@@ -1310,6 +1313,7 @@ async def get_moving_products(
     slow = slow.fetchall()
 
     # Dead stock: no movement at all
+    # Intentionally fixed LIMIT 20 — dashboard widget, not a bug.
     dead = await db.execute(text("""
         SELECT
             p.prod_id,
@@ -1403,7 +1407,8 @@ async def get_top_customers(
 async def get_customer_purchase_history(
     cust_id: str,
     current_user: dict = Depends(require_permission("reports.view")),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    pagination: dict = Depends(paginate_async),
 ):
     bid = current_user["business_id"]
 
@@ -1422,7 +1427,15 @@ async def get_customer_purchase_history(
     if not cust_row:
         return success_response(None)
 
-    # Sales history
+    # Sales history (paginated)
+    sales_total = (await db.execute(text("""
+        SELECT COUNT(*) AS cnt
+        FROM sales s
+        WHERE s.customer_id = CAST(:cust_id AS uuid)
+          AND s.business_id = CAST(:bid AS uuid)
+          AND s.is_deleted = false
+    """), {"cust_id": cust_id, "bid": bid})).fetchone().cnt
+
     sales = await db.execute(text("""
         SELECT
             s.sales_id, s.invoice_no, s.sales_final_amount,
@@ -1434,10 +1447,21 @@ async def get_customer_purchase_history(
           AND s.business_id = CAST(:bid AS uuid)
           AND s.is_deleted = false
         ORDER BY s.sales_created_at DESC
-    """), {"cust_id": cust_id, "bid": bid})
+        LIMIT :limit OFFSET :offset
+    """), {"cust_id": cust_id, "bid": bid,
+            "limit": pagination["limit"], "offset": pagination["offset"]})
     sales = sales.fetchall()
 
-    # Payment history
+    # Payment history (paginated)
+    payments_total = (await db.execute(text("""
+        SELECT COUNT(*) AS cnt
+        FROM payments pay
+        JOIN sales s ON s.sales_id = pay.sale_id
+        WHERE s.customer_id = CAST(:cust_id AS uuid)
+          AND pay.business_id = CAST(:bid AS uuid)
+          AND pay.is_active = true
+    """), {"cust_id": cust_id, "bid": bid})).fetchone().cnt
+
     payments = await db.execute(text("""
         SELECT
             pay.payment_id, pay.payment_amount, pay.payment_method,
@@ -1448,7 +1472,9 @@ async def get_customer_purchase_history(
           AND pay.business_id = CAST(:bid AS uuid)
           AND pay.is_active = true
         ORDER BY pay.payment_paid_at DESC
-    """), {"cust_id": cust_id, "bid": bid})
+        LIMIT :limit OFFSET :offset
+    """), {"cust_id": cust_id, "bid": bid,
+            "limit": pagination["limit"], "offset": pagination["offset"]})
     payments = payments.fetchall()
 
     totals = await db.execute(text("""
@@ -1479,8 +1505,8 @@ async def get_customer_purchase_history(
             "outstanding": float(totals.total_amount - totals.paid_amount) if totals else 0,
             "last_purchase_date": str(totals.last_purchase_date) if (totals and totals.last_purchase_date) else None,
         },
-        "sales_history": [
-            {
+        "sales_history": pagination_response(
+            [{
                 "sales_id": str(r.sales_id),
                 "invoice_no": r.invoice_no,
                 "amount": float(r.sales_final_amount),
@@ -1489,31 +1515,45 @@ async def get_customer_purchase_history(
                 "payment_status": r.sales_payment_status,
                 "payment_method": r.sales_payment_method,
                 "created_at": str(r.sales_created_at),
-            }
-            for r in sales
-        ],
-        "payment_history": [
-            {
+            } for r in sales],
+            sales_total, pagination["page"], pagination["limit"],
+            capped=pagination["_capped"],
+        ),
+        "payment_history": pagination_response(
+            [{
                 "payment_id": str(r.payment_id),
                 "invoice_no": r.invoice_no,
                 "amount": float(r.payment_amount),
                 "method": r.payment_method,
                 "status": r.payment_status,
                 "paid_at": str(r.payment_paid_at),
-            }
-            for r in payments
-        ],
+            } for r in payments],
+            payments_total, pagination["page"], pagination["limit"],
+            capped=pagination["_capped"],
+        ),
     })
 
 
 @router.get("/customers/lifetime-value")
 async def get_customer_lifetime_value(
     current_user: dict = Depends(require_permission("reports.view")),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    pagination: dict = Depends(paginate_async),
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
+
+    total = (await db.execute(text("""
+        SELECT COUNT(*) AS cnt
+        FROM customers c
+        JOIN sales s ON s.customer_id = c.cust_id
+        WHERE c.business_id = CAST(:bid AS uuid)
+          AND c.is_deleted = false
+          AND s.is_deleted = false
+        GROUP BY c.cust_id
+        HAVING COUNT(DISTINCT s.sales_id) >= 2
+    """), {"bid": bid})).fetchone().cnt
 
     rows = await db.execute(text("""
         SELECT
@@ -1532,12 +1572,13 @@ async def get_customer_lifetime_value(
         GROUP BY c.cust_id, c.cust_name, c.cust_phone
         HAVING COUNT(DISTINCT s.sales_id) >= 2
         ORDER BY total_spent DESC
-    """), {"bid": bid})
+        LIMIT :limit OFFSET :offset
+    """), {"bid": bid, "limit": pagination["limit"], "offset": pagination["offset"]})
     rows = rows.fetchall()
 
     result = []
     for r in rows:
-        total = float(r.total_spent) if can_financial else None
+        total_spent = float(r.total_spent) if can_financial else None
         count = int(r.invoice_count)
         avg_value = round(float(r.total_spent) / count, 2) if can_financial and count > 0 else None
         result.append({
@@ -1545,23 +1586,42 @@ async def get_customer_lifetime_value(
             "cust_name": r.cust_name,
             "cust_phone": r.cust_phone,
             "invoice_count": count,
-            "total_spent": total,
+            "total_spent": total_spent,
             "avg_invoice_value": avg_value,
             "first_purchase": str(r.first_purchase) if r.first_purchase else None,
             "last_purchase": str(r.last_purchase) if r.last_purchase else None,
         })
 
-    return success_response(result)
+    return success_response(pagination_response(
+        result, total, pagination["page"], pagination["limit"],
+        capped=pagination["_capped"],
+    ))
 
 
 @router.get("/customers/outstanding")
 async def get_customer_outstanding(
     current_user: dict = Depends(require_permission("reports.view")),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    pagination: dict = Depends(paginate_async),
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
+
+    total = (await db.execute(text("""
+        SELECT COUNT(*) AS cnt
+        FROM (
+            SELECT c.cust_id
+            FROM sales s
+            JOIN customers c ON c.cust_id = s.customer_id
+            LEFT JOIN payments pay ON pay.sale_id = s.sales_id AND pay.is_active = true
+            WHERE s.business_id = CAST(:bid AS uuid)
+              AND s.is_deleted = false
+              AND c.is_deleted = false
+              AND s.sales_payment_status IN ('pending', 'partial')
+            GROUP BY c.cust_id
+        ) sub
+    """), {"bid": bid})).fetchone().cnt
 
     rows = await db.execute(text("""
         SELECT
@@ -1579,11 +1639,12 @@ async def get_customer_outstanding(
           AND s.sales_payment_status IN ('pending', 'partial')
         GROUP BY c.cust_id, c.cust_name, c.cust_phone
         ORDER BY total_outstanding DESC
-    """), {"bid": bid})
+        LIMIT :limit OFFSET :offset
+    """), {"bid": bid, "limit": pagination["limit"], "offset": pagination["offset"]})
     rows = rows.fetchall()
 
-    return success_response([
-        {
+    return success_response(pagination_response(
+        [{
             "cust_id": str(r.cust_id),
             "cust_name": r.cust_name,
             "cust_phone": r.cust_phone,
@@ -1591,7 +1652,7 @@ async def get_customer_outstanding(
             "total_outstanding": float(r.total_outstanding) if can_financial else None,
         }
         for r in rows
-    ])
+    ], total, pagination["page"], pagination["limit"], capped=pagination["_capped"]))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1647,7 +1708,8 @@ async def get_top_suppliers(
 async def get_supplier_purchase_history(
     supp_id: str,
     current_user: dict = Depends(require_permission("reports.view")),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    pagination: dict = Depends(paginate_async),
 ):
     bid = current_user["business_id"]
 
@@ -1660,6 +1722,14 @@ async def get_supplier_purchase_history(
     if not supp_row:
         return success_response(None)
 
+    purchases_total = (await db.execute(text("""
+        SELECT COUNT(*) AS cnt
+        FROM purchases pr
+        WHERE pr.supp_id = CAST(:supp_id AS uuid)
+          AND pr.business_id = CAST(:bid AS uuid)
+          AND pr.is_deleted = false
+    """), {"supp_id": supp_id, "bid": bid})).fetchone().cnt
+
     purchases = await db.execute(text("""
         SELECT
             pr.pur_id, pr.pur_final_amount, pr.pur_discount,
@@ -1669,7 +1739,9 @@ async def get_supplier_purchase_history(
           AND pr.business_id = CAST(:bid AS uuid)
           AND pr.is_deleted = false
         ORDER BY pr.pur_created_at DESC
-    """), {"supp_id": supp_id, "bid": bid})
+        LIMIT :limit OFFSET :offset
+    """), {"supp_id": supp_id, "bid": bid,
+            "limit": pagination["limit"], "offset": pagination["offset"]})
     purchases = purchases.fetchall()
 
     totals = await db.execute(text("""
@@ -1697,28 +1769,37 @@ async def get_supplier_purchase_history(
             "first_purchase": str(totals.first_purchase) if (totals and totals.first_purchase) else None,
             "last_purchase": str(totals.last_purchase) if (totals and totals.last_purchase) else None,
         },
-        "purchases": [
-            {
+        "purchases": pagination_response(
+            [{
                 "pur_id": str(r.pur_id),
                 "amount": float(r.pur_final_amount),
                 "discount": float(r.pur_discount),
                 "tax": float(r.pur_tax_total),
                 "payment_status": r.pur_payment_status,
                 "created_at": str(r.pur_created_at),
-            }
-            for r in purchases
-        ],
+            } for r in purchases],
+            purchases_total, pagination["page"], pagination["limit"],
+            capped=pagination["_capped"],
+        ),
     })
 
 
 @router.get("/suppliers/spend-analysis")
 async def get_supplier_spend_analysis(
     current_user: dict = Depends(require_permission("reports.view")),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    pagination: dict = Depends(paginate_async),
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
+
+    total = (await db.execute(text("""
+        SELECT COUNT(*) AS cnt
+        FROM suppliers sp
+        WHERE sp.business_id = CAST(:bid AS uuid)
+          AND sp.is_deleted = false
+    """), {"bid": bid})).fetchone().cnt
 
     rows = await db.execute(text("""
         SELECT
@@ -1738,11 +1819,12 @@ async def get_supplier_spend_analysis(
           AND sp.is_deleted = false
         GROUP BY sp.supp_id, sp.supp_name
         ORDER BY total_spend DESC
-    """), {"bid": bid})
+        LIMIT :limit OFFSET :offset
+    """), {"bid": bid, "limit": pagination["limit"], "offset": pagination["offset"]})
     rows = rows.fetchall()
 
-    return success_response([
-        {
+    return success_response(pagination_response(
+        [{
             "supp_id": str(r.supp_id),
             "supp_name": r.supp_name,
             "total_purchases": int(r.total_purchases),
@@ -1753,7 +1835,7 @@ async def get_supplier_spend_analysis(
             "last_purchase": str(r.last_purchase) if r.last_purchase else None,
         }
         for r in rows
-    ])
+    ], total, pagination["page"], pagination["limit"], capped=pagination["_capped"]))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2404,11 +2486,20 @@ async def get_payment_collections(
 @router.get("/payments/outstanding")
 async def get_outstanding_receivables(
     current_user: dict = Depends(require_permission("reports.view")),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    pagination: dict = Depends(paginate_async),
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
+
+    invoices_total = (await db.execute(text("""
+        SELECT COUNT(*) AS cnt
+        FROM sales s
+        WHERE s.business_id = CAST(:bid AS uuid)
+          AND s.is_deleted = false
+          AND s.sales_payment_status IN ('pending', 'partial')
+    """), {"bid": bid})).fetchone().cnt
 
     rows = await db.execute(text("""
         SELECT
@@ -2423,7 +2514,8 @@ async def get_outstanding_receivables(
           AND s.is_deleted = false
           AND s.sales_payment_status IN ('pending', 'partial')
         ORDER BY balance DESC
-    """), {"bid": bid})
+        LIMIT :limit OFFSET :offset
+    """), {"bid": bid, "limit": pagination["limit"], "offset": pagination["offset"]})
     rows = rows.fetchall()
 
     total_outstanding = 0
@@ -2443,8 +2535,11 @@ async def get_outstanding_receivables(
 
     return success_response({
         "total_outstanding": total_outstanding if can_financial else None,
-        "total_invoices": len(data),
-        "invoices": data,
+        "total_invoices": invoices_total,
+        "invoices": pagination_response(
+            data, invoices_total, pagination["page"], pagination["limit"],
+            capped=pagination["_capped"],
+        ),
     })
 
 
@@ -2490,11 +2585,22 @@ async def get_payments_by_method(
 @router.get("/payments/partial")
 async def get_partial_payments(
     current_user: dict = Depends(require_permission("reports.view")),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    pagination: dict = Depends(paginate_async),
 ):
     bid = current_user["business_id"]
     perms = current_user.get("permissions", set())
     can_financial = "dashboard.financial" in perms
+
+    total = (await db.execute(text("""
+        SELECT COUNT(*) AS cnt
+        FROM payments pay
+        JOIN sales s ON s.sales_id = pay.sale_id
+        WHERE pay.business_id = CAST(:bid AS uuid)
+          AND pay.is_active = true
+          AND s.sales_payment_status = 'partial'
+          AND s.is_deleted = false
+    """), {"bid": bid})).fetchone().cnt
 
     rows = await db.execute(text("""
         SELECT
@@ -2512,11 +2618,12 @@ async def get_partial_payments(
           AND s.sales_payment_status = 'partial'
           AND s.is_deleted = false
         ORDER BY pay.payment_paid_at DESC
-    """), {"bid": bid})
+        LIMIT :limit OFFSET :offset
+    """), {"bid": bid, "limit": pagination["limit"], "offset": pagination["offset"]})
     rows = rows.fetchall()
 
-    return success_response([
-        {
+    return success_response(pagination_response(
+        [{
             "sales_id": str(r.sales_id),
             "invoice_no": r.invoice_no,
             "cust_name": r.cust_name,
@@ -2528,7 +2635,7 @@ async def get_partial_payments(
             "last_payment_date": str(r.payment_paid_at) if r.payment_paid_at else None,
         }
         for r in rows
-    ])
+    ], total, pagination["page"], pagination["limit"], capped=pagination["_capped"]))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2556,6 +2663,7 @@ async def get_user_activities(
         user_filter = " AND al.user_id = CAST(:user_id AS uuid)"
         params["user_id"] = user_id
 
+    # Intentionally fixed LIMIT 500 — audit trail page-size cap, not a bug.
     rows = await db.execute(text(f"""
         SELECT
             al.audit_id, al.user_id, al.action_type,
@@ -2602,6 +2710,7 @@ async def get_login_activities(
 
     date_where, dp = _date_col("al", "created_at", date_from, date_to)
 
+    # Intentionally fixed LIMIT 200 — audit trail page-size cap, not a bug.
     rows = await db.execute(text(f"""
         SELECT
             al.audit_id, al.user_id, al.created_at,
@@ -2648,6 +2757,7 @@ async def get_data_changes(
         table_filter = " AND al.table_name = :table_name"
         params["table_name"] = table_name
 
+    # Intentionally fixed LIMIT 500 — audit trail page-size cap, not a bug.
     rows = await db.execute(text(f"""
         SELECT
             al.audit_id, al.user_id, al.action_type,
@@ -2706,6 +2816,7 @@ async def get_export_activities(
 
     date_where, dp = _date_col("al", "created_at", date_from, date_to)
 
+    # Intentionally fixed LIMIT 200 — audit trail page-size cap, not a bug.
     rows = await db.execute(text(f"""
         SELECT
             al.audit_id, al.user_id, al.table_name,

@@ -217,6 +217,11 @@ export function useCustomerHistory(custId) {
     queryFn: () => api.fetchCustomerHistory(custId),
     enabled: !!custId,
     staleTime: DEFAULT_STALE,
+    select: (data) => ({
+      ...data,
+      sales_history: data?.sales_history?.items ?? [],
+      payment_history: data?.payment_history?.items ?? [],
+    }),
   })
 }
 
@@ -225,6 +230,7 @@ export function useCustomerLifetimeValue() {
     queryKey: ['customer-ltv'],
     queryFn: api.fetchCustomerLifetimeValue,
     staleTime: DEFAULT_STALE,
+    select: (data) => data?.items ?? [],
   })
 }
 
@@ -233,6 +239,7 @@ export function useCustomerOutstanding() {
     queryKey: ['customer-outstanding'],
     queryFn: api.fetchCustomerOutstanding,
     staleTime: DEFAULT_STALE,
+    select: (data) => data?.items ?? [],
   })
 }
 
@@ -254,6 +261,10 @@ export function useSupplierHistory(suppId) {
     queryFn: () => api.fetchSupplierHistory(suppId),
     enabled: !!suppId,
     staleTime: DEFAULT_STALE,
+    select: (data) => ({
+      ...data,
+      purchases: data?.purchases?.items ?? [],
+    }),
   })
 }
 
@@ -262,6 +273,7 @@ export function useSupplierSpendAnalysis() {
     queryKey: ['supplier-spend'],
     queryFn: api.fetchSupplierSpendAnalysis,
     staleTime: DEFAULT_STALE,
+    select: (data) => data?.items ?? [],
   })
 }
 
@@ -382,6 +394,10 @@ export function useOutstandingReceivables() {
     queryKey: ['outstanding-receivables'],
     queryFn: api.fetchOutstandingReceivables,
     staleTime: DEFAULT_STALE,
+    select: (data) => ({
+      ...data,
+      invoices: data?.invoices?.items ?? [],
+    }),
   })
 }
 
@@ -398,6 +414,7 @@ export function usePartialPayments() {
     queryKey: ['partial-payments'],
     queryFn: api.fetchPartialPayments,
     staleTime: DEFAULT_STALE,
+    select: (data) => data?.items ?? [],
   })
 }
 

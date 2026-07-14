@@ -41,6 +41,9 @@ async def bulk_check_and_reduce_stock(
         check_parts.append(f"CAST(:{tag} AS uuid)")
         check_params[tag] = pid
 
+    # TOCTOU FIX: FOR UPDATE serializes concurrent transactions on these
+    # product rows so two requests can't both read stale stock and pass
+    # the "enough stock" check simultaneously.
     rows = (await db.execute(text(f"""
         SELECT prod_id, prod_stock_qty
         FROM   products

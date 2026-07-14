@@ -80,24 +80,24 @@ export const fetchMovingProducts = (params) =>
 export const fetchTopCustomers = (params) =>
   api.get('/reports/customers/top', { params: p(params) }).then(r => r.data)
 
-export const fetchCustomerHistory = (custId) =>
-  api.get(`/reports/customers/${custId}/history`).then(r => r.data)
+export const fetchCustomerHistory = (custId, params) =>
+  api.get(`/reports/customers/${custId}/history`, { params: p(params) }).then(r => r.data)
 
-export const fetchCustomerLifetimeValue = () =>
-  api.get('/reports/customers/lifetime-value').then(r => r.data)
+export const fetchCustomerLifetimeValue = (params) =>
+  api.get('/reports/customers/lifetime-value', { params: p(params) }).then(r => r.data)
 
-export const fetchCustomerOutstanding = () =>
-  api.get('/reports/customers/outstanding').then(r => r.data)
+export const fetchCustomerOutstanding = (params) =>
+  api.get('/reports/customers/outstanding', { params: p(params) }).then(r => r.data)
 
 // 7. Supplier Reports
 export const fetchTopSuppliers = (params) =>
   api.get('/reports/suppliers/top', { params: p(params) }).then(r => r.data)
 
-export const fetchSupplierHistory = (suppId) =>
-  api.get(`/reports/suppliers/${suppId}/history`).then(r => r.data)
+export const fetchSupplierHistory = (suppId, params) =>
+  api.get(`/reports/suppliers/${suppId}/history`, { params: p(params) }).then(r => r.data)
 
-export const fetchSupplierSpendAnalysis = () =>
-  api.get('/reports/suppliers/spend-analysis').then(r => r.data)
+export const fetchSupplierSpendAnalysis = (params) =>
+  api.get('/reports/suppliers/spend-analysis', { params: p(params) }).then(r => r.data)
 
 // 8. Expense Reports
 export const fetchExpensesByCategory = (params) =>
@@ -139,14 +139,14 @@ export const fetchReturnsImpact = (params) =>
 export const fetchPaymentCollections = (params) =>
   api.get('/reports/payments/collections', { params: p(params) }).then(r => r.data)
 
-export const fetchOutstandingReceivables = () =>
-  api.get('/reports/payments/outstanding').then(r => r.data)
+export const fetchOutstandingReceivables = (params) =>
+  api.get('/reports/payments/outstanding', { params: p(params) }).then(r => r.data)
 
 export const fetchPaymentsByMethod = (params) =>
   api.get('/reports/payments/by-method', { params: p(params) }).then(r => r.data)
 
-export const fetchPartialPayments = () =>
-  api.get('/reports/payments/partial').then(r => r.data)
+export const fetchPartialPayments = (params) =>
+  api.get('/reports/payments/partial', { params: p(params) }).then(r => r.data)
 
 // 12. Audit Reports (Admin only)
 export const fetchUserActivities = (params) =>

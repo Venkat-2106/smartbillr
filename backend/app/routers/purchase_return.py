@@ -114,6 +114,9 @@ async def validate_return_items(
     prod_ids = [str(item.product_id) for item in items]
     purchase_items = {}
     if prod_ids:
+        # TOCTOU FIX: FOR UPDATE OF pi serializes concurrent return-creation
+        # requests on the same purchase_items rows so two requests can't both
+        # read stale "already returned" totals and exceed the purchased quantity.
         rows = (await db.execute(text("""
             SELECT pi.product_id, pi.pur_item_qty, pi.item_unit_price, p.prod_name
             FROM purchase_items pi

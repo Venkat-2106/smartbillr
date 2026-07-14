@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import toast from 'react-hot-toast'
@@ -772,7 +772,11 @@ export default function DashboardLayout() {
           paddingBottom: isMobile ? 'calc(1.25rem + 3.5rem)' : '1.5rem',
           overflowY: 'auto', overflowX: 'hidden',
         }}>
-          <div className="fade-up"><ErrorBoundary><Outlet /></ErrorBoundary></div>
+          <div className="fade-up"><ErrorBoundary><Suspense fallback={
+            <div style={{ padding: '3rem', display: 'flex', justifyContent: 'center' }}>
+              <div style={{ width: 32, height: 32, border: '3px solid var(--border)', borderTopColor: 'var(--accent-600)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+            </div>
+          }><Outlet /></Suspense></ErrorBoundary></div>
         </main>
       </div>
 

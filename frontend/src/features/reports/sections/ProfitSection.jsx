@@ -1,8 +1,7 @@
 import { useState, useMemo } from 'react'
 import { BentoCard, LineChart, BarChart, EmptyState } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
-import useAuthStore from '../../../store/authStore'
-import { useGrossProfit, useProfitByProduct, useProfitByCategory, useProfitByCustomer, useProfitTrend } from '../hooks/useReports'
+import { useGrossProfit, useProfitByProduct, useProfitByCategory, useProfitByCustomer, useProfitTrend, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, ChartCard, InfoCard } from '../components/shared'
 
 export default function ProfitSection({ dateFrom, dateTo }) {
@@ -12,8 +11,7 @@ export default function ProfitSection({ dateFrom, dateTo }) {
   const byCategory = useProfitByCategory(dateFrom, dateTo)
   const byCustomer = useProfitByCustomer(dateFrom, dateTo)
   const trend = useProfitTrend(period, dateFrom, dateTo)
-  const business = useAuthStore(st => st.business)
-  const country = business?.business_country_code || 'IN'
+  const country = useReportCountry()
 
   const trendData = useMemo(() => {
     if (!Array.isArray(trend.data)) return []

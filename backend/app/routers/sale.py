@@ -140,8 +140,8 @@ async def create_sale(
             await handle_stock_overrides(db, business_id, user_id, new_sale_id, override_items)
 
         await insert_sale_items(db, business_id, new_sale_id, data.items, product_cache)
-        await update_sale_tax_totals(db, new_sale_id)
-        await auto_record_payment(db, business_id, new_sale_id, data, total_amount)
+        final_amount = await update_sale_tax_totals(db, new_sale_id)
+        await auto_record_payment(db, business_id, new_sale_id, data, final_amount)
 
         await db.commit()
         # RLS: SET LOCAL/set_config GUCs are transaction-scoped and are cleared
@@ -289,7 +289,6 @@ async def handle_sale_status_patch(
             db=db,
             business_id=current_user["business_id"],
             sale_id=sales_id,
-            sale_final=sale_final,
             payment_amount=paid_input,
             payment_method="adjustment" if already_paid > 0 else (sale.sales_payment_method or "cash"),
             new_status=derived_status,
@@ -308,7 +307,6 @@ async def handle_sale_status_patch(
                 db=db,
                 business_id=current_user["business_id"],
                 sale_id=sales_id,
-                sale_final=sale_final,
                 payment_amount=remaining,
                 payment_method="adjustment",
                 new_status="paid",

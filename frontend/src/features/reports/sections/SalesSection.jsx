@@ -1,8 +1,7 @@
 import { useState, useMemo } from 'react'
 import { BentoCard, LineChart, BarChart, DonutChart } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
-import useAuthStore from '../../../store/authStore'
-import { useSalesTrend, useSalesByCustomer, useSalesByProduct, useSalesByPaymentMethod, useSalesInvoiceStatus } from '../hooks/useReports'
+import { useSalesTrend, useSalesByCustomer, useSalesByProduct, useSalesByPaymentMethod, useSalesInvoiceStatus, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, ChartCard, InfoCard, DataTable } from '../components/shared'
 
 export default function SalesSection({ dateFrom, dateTo }) {
@@ -12,8 +11,7 @@ export default function SalesSection({ dateFrom, dateTo }) {
   const byProduct = useSalesByProduct(dateFrom, dateTo)
   const byPayment = useSalesByPaymentMethod(dateFrom, dateTo)
   const invoiceStatus = useSalesInvoiceStatus(dateFrom, dateTo)
-  const business = useAuthStore(st => st.business)
-  const country = business?.business_country_code || 'IN'
+  const country = useReportCountry()
 
   const trendData = useMemo(() => {
     if (!Array.isArray(trend.data)) return []

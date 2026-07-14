@@ -1,15 +1,13 @@
 import { useMemo } from 'react'
 import { BentoCard, BarChart } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
-import useAuthStore from '../../../store/authStore'
-import { useTopSuppliers, useSupplierSpendAnalysis } from '../hooks/useReports'
+import { useTopSuppliers, useSupplierSpendAnalysis, useReportCountry } from '../hooks/useReports'
 import { SectionTitle, InfoCard, DataTable } from '../components/shared'
 
 export default function SuppliersSection({ dateFrom, dateTo }) {
   const topSuppliers = useTopSuppliers(dateFrom, dateTo)
   const spend = useSupplierSpendAnalysis()
-  const business = useAuthStore(st => st.business)
-  const country = business?.business_country_code || 'IN'
+  const country = useReportCountry()
 
   return (
     <BentoCard>

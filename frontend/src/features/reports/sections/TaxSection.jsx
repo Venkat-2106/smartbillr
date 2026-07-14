@@ -1,8 +1,7 @@
 import { BentoCard } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { getTaxLabel } from '../../../shared/utils/formatTax'
-import useAuthStore from '../../../store/authStore'
-import { useTaxCollected, useTaxPaid, useTaxLiability, useTaxByRate } from '../hooks/useReports'
+import { useTaxCollected, useTaxPaid, useTaxLiability, useTaxByRate, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, InfoCard, DataTable } from '../components/shared'
 
 export default function TaxSection({ dateFrom, dateTo }) {
@@ -10,8 +9,7 @@ export default function TaxSection({ dateFrom, dateTo }) {
   const paid = useTaxPaid(dateFrom, dateTo)
   const liability = useTaxLiability(dateFrom, dateTo)
   const byRate = useTaxByRate(dateFrom, dateTo)
-  const business = useAuthStore(st => st.business)
-  const country = business?.business_country_code || 'IN'
+  const country = useReportCountry()
 
   const totalCollected = collected.data?.total_tax ?? 0
   const totalPaid = paid.data?.total_tax ?? 0

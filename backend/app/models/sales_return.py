@@ -28,3 +28,4 @@ class SalesReturn(Base):
     approved_by = Column(UUID(as_uuid=True), nullable=True)
     approved_at = Column(DateTime, nullable=True)
     rejected_reason = Column(Text, nullable=True)
+    updated_at = Column(DateTime, nullable=True)

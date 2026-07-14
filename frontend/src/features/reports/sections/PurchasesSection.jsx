@@ -2,8 +2,7 @@ import { useState, useMemo } from 'react'
 import { BentoCard, LineChart, BarChart } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { getTaxLabel } from '../../../shared/utils/formatTax'
-import useAuthStore from '../../../store/authStore'
-import { usePurchaseSummary, usePurchaseTrend, usePurchasesBySupplier, usePurchasesByProduct, usePurchaseTaxSummary } from '../hooks/useReports'
+import { usePurchaseSummary, usePurchaseTrend, usePurchasesBySupplier, usePurchasesByProduct, usePurchaseTaxSummary, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, ChartCard, InfoCard } from '../components/shared'
 
 export default function PurchasesSection({ dateFrom, dateTo }) {
@@ -13,8 +12,7 @@ export default function PurchasesSection({ dateFrom, dateTo }) {
   const bySupplier = usePurchasesBySupplier(dateFrom, dateTo)
   const byProduct = usePurchasesByProduct(dateFrom, dateTo)
   const taxSummary = usePurchaseTaxSummary(dateFrom, dateTo)
-  const business = useAuthStore(st => st.business)
-  const country = business?.business_country_code || 'IN'
+  const country = useReportCountry()
 
   const trendData = useMemo(() => {
     if (!Array.isArray(trend.data)) return []

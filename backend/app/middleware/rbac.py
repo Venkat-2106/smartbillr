@@ -51,8 +51,8 @@ from fastapi import HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from app.database import get_db
-from app.middleware.auth import verify_token, verify_super_admin
+from app.database import get_db, get_async_db
+from app.middleware.auth import verify_token, verify_super_admin, verify_super_admin_token
 from app.dependencies.subscription import verify_subscription
 
 
@@ -359,3 +359,24 @@ async def async_set_superadmin_rls_gucs_after_commit(db: AsyncSession, current_u
         {"uid": str(current_user["user_id"])},
     )
     await db.execute(text("SELECT set_config('app.is_super_admin', 'true', true)"))
+
+
+async def verify_super_admin_with_rls_async(
+    current_user: dict = Depends(verify_super_admin_token),
+    db: AsyncSession = Depends(get_async_db),
+) -> dict:
+    """
+    Async-safe verify_super_admin — sets super-admin RLS GUCs on the async
+    db session (app.current_user_id + app.is_super_admin).
+
+    Use this in async superadmin routers (replaces the sync
+    verify_super_admin_with_rls in async contexts).
+    """
+    await db.execute(
+        text("SELECT set_config('app.current_user_id', :uid, true)"),
+        {"uid": str(current_user["user_id"])},
+    )
+    await db.execute(
+        text("SELECT set_config('app.is_super_admin', 'true', true)")
+    )
+    return current_user

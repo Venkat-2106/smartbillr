@@ -195,7 +195,6 @@ async def create_payment(
             db              = db,
             business_id     = business_id,
             sale_id         = str(data.sale_id),
-            sale_final      = sale_final,
             payment_amount  = new_payment,
             payment_method  = data.payment_method or "cash",
             new_status      = new_status,

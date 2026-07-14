@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { BentoCard, EmptyState } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
-import useAuthStore from '../../../store/authStore'
-import { useInventoryValuation, useInventoryMovementSummary, useStockFlow, useMovingProducts } from '../hooks/useReports'
+import { useInventoryValuation, useInventoryMovementSummary, useStockFlow, useMovingProducts, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, InfoCard } from '../components/shared'
 
 export default function InventorySection({ dateFrom, dateTo }) {
@@ -11,8 +10,7 @@ export default function InventorySection({ dateFrom, dateTo }) {
   const movementSummary = useInventoryMovementSummary(dateFrom, dateTo)
   const stockFlow = useStockFlow(dateFrom, dateTo)
   const moving = useMovingProducts(movementPeriod)
-  const business = useAuthStore(st => st.business)
-  const country = business?.business_country_code || 'IN'
+  const country = useReportCountry()
 
   const mv = movementSummary.data
   const sf = stockFlow.data

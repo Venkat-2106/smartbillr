@@ -1,16 +1,14 @@
 import { useState } from 'react'
 import { BentoCard, Pagination } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
-import useAuthStore from '../../../store/authStore'
-import { useTopCustomers, useCustomerOutstanding } from '../hooks/useReports'
+import { useTopCustomers, useCustomerOutstanding, useReportCountry } from '../hooks/useReports'
 import { SectionTitle, InfoCard, DataTable } from '../components/shared'
 
 export default function CustomersSection({ dateFrom, dateTo }) {
   const topCustomers = useTopCustomers(dateFrom, dateTo)
   const [outstandingPage, setOutstandingPage] = useState(1)
   const outstanding = useCustomerOutstanding(outstandingPage)
-  const business = useAuthStore(st => st.business)
-  const country = business?.business_country_code || 'IN'
+  const country = useReportCountry()
 
   return (
     <BentoCard>

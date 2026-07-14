@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react'
+import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Spinner } from '../shared/components'
 import DashboardLayout from './layouts/DashboardLayout'
@@ -41,11 +41,6 @@ const AdminBusinessDetailPage = React.lazy(() => import('../features/admin/pages
 export default function AppRouter() {
   return (
     <BrowserRouter>
-      <Suspense fallback={
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-          <Spinner size={32} />
-        </div>
-      }>
       <Routes>
 
         {/* Public routes — no auth needed */}
@@ -221,7 +216,6 @@ export default function AppRouter() {
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
 
       </Routes>
-      </Suspense>
     </BrowserRouter>
   )
 }

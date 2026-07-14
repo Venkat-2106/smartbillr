@@ -1,8 +1,7 @@
 import { useState, useMemo } from 'react'
 import { BentoCard, LineChart } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
-import useAuthStore from '../../../store/authStore'
-import { useSalesReturns, usePurchaseReturns, useReturnsTrend, useReturnsImpact } from '../hooks/useReports'
+import { useSalesReturns, usePurchaseReturns, useReturnsTrend, useReturnsImpact, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, ChartCard, InfoCard, DataTable } from '../components/shared'
 
 export default function ReturnsSection({ dateFrom, dateTo }) {
@@ -11,8 +10,7 @@ export default function ReturnsSection({ dateFrom, dateTo }) {
   const purchaseReturns = usePurchaseReturns(dateFrom, dateTo)
   const trend = useReturnsTrend(period, dateFrom, dateTo)
   const impact = useReturnsImpact(dateFrom, dateTo)
-  const business = useAuthStore(st => st.business)
-  const country = business?.business_country_code || 'IN'
+  const country = useReportCountry()
 
   const sr = salesReturns.data
   const pr = purchaseReturns.data

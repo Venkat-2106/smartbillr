@@ -1,8 +1,7 @@
 import { useState, useMemo } from 'react'
 import { BentoCard, LineChart, DonutChart } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
-import useAuthStore from '../../../store/authStore'
-import { useExpensesByCategory, useExpenseTrend, useExpenseDistribution } from '../hooks/useReports'
+import { useExpensesByCategory, useExpenseTrend, useExpenseDistribution, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, ChartCard, InfoCard, DataTable } from '../components/shared'
 
 export default function ExpensesSection({ dateFrom, dateTo }) {
@@ -10,8 +9,7 @@ export default function ExpensesSection({ dateFrom, dateTo }) {
   const byCategory = useExpensesByCategory(dateFrom, dateTo)
   const trend = useExpenseTrend(period, dateFrom, dateTo)
   const distribution = useExpenseDistribution(dateFrom, dateTo)
-  const business = useAuthStore(st => st.business)
-  const country = business?.business_country_code || 'IN'
+  const country = useReportCountry()
 
   const trendData = useMemo(() => {
     if (!Array.isArray(trend.data)) return []

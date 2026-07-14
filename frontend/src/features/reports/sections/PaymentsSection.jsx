@@ -1,8 +1,7 @@
 import { useState, useMemo } from 'react'
 import { BentoCard, LineChart, DonutChart, Pagination } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
-import useAuthStore from '../../../store/authStore'
-import { usePaymentCollections, useOutstandingReceivables, usePaymentsByMethod, usePartialPayments } from '../hooks/useReports'
+import { usePaymentCollections, useOutstandingReceivables, usePaymentsByMethod, usePartialPayments, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, ChartCard, InfoCard, DataTable } from '../components/shared'
 
 export default function PaymentsSection({ dateFrom, dateTo }) {
@@ -12,8 +11,7 @@ export default function PaymentsSection({ dateFrom, dateTo }) {
   const outstanding = useOutstandingReceivables()
   const byMethod = usePaymentsByMethod(dateFrom, dateTo)
   const partial = usePartialPayments(partialPage)
-  const business = useAuthStore(st => st.business)
-  const country = business?.business_country_code || 'IN'
+  const country = useReportCountry()
 
   const trendData = useMemo(() => {
     if (!Array.isArray(collections.data)) return []

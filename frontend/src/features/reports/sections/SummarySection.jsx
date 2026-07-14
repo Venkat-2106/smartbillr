@@ -1,14 +1,12 @@
 import { useMemo } from 'react'
 import { BentoCard } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
-import useAuthStore from '../../../store/authStore'
-import { useReportSummary } from '../hooks/useReports'
+import { useReportSummary, useReportCountry } from '../hooks/useReports'
 import { StatCard, SkeletonCard, SectionTitle } from '../components/shared'
 
 export default function SummarySection({ dateFrom, dateTo }) {
   const { data: s, isLoading, isError } = useReportSummary(dateFrom, dateTo)
-  const business = useAuthStore(st => st.business)
-  const country = business?.business_country_code || 'IN'
+  const country = useReportCountry()
 
   const cards = useMemo(() => {
     if (!s) return []

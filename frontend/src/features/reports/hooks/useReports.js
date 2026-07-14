@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import * as api from '../api/reportsApi'
+import useAuthStore from '../../../store/authStore'
 
 // ─── Shared query defaults ──────────────────────────────────────────────────
 const DEFAULT_STALE = 5 * 60 * 1000
@@ -9,6 +10,11 @@ function dateParams(dateFrom, dateTo) {
   if (dateFrom) p.date_from = dateFrom
   if (dateTo) p.date_to = dateTo
   return p
+}
+
+export function useReportCountry() {
+  const business = useAuthStore(st => st.business)
+  return business?.business_country_code || 'IN'
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

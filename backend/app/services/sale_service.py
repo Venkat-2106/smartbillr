@@ -177,8 +177,8 @@ async def insert_sale_items(db: AsyncSession, business_id: str, new_sale_id: str
     )
 
 
-async def update_sale_tax_totals(db: AsyncSession, new_sale_id: str):
-    await db.execute(
+async def update_sale_tax_totals(db: AsyncSession, new_sale_id: str) -> Decimal:
+    result = await db.execute(
         text("""
             UPDATE sales
             SET
@@ -196,32 +196,23 @@ async def update_sale_tax_totals(db: AsyncSession, new_sale_id: str):
                 WHERE sale_id = CAST(:sid AS uuid)
             ) x
             WHERE sales_id = CAST(:sid AS uuid)
+            RETURNING sales_final_amount
         """),
         {"sid": new_sale_id}
     )
+    row = result.fetchone()
+    return Decimal(str(row.sales_final_amount)) if row and row.sales_final_amount else Decimal("0")
 
 
-async def auto_record_payment(db: AsyncSession, business_id: str, new_sale_id: str, data: SaleCreate, total_amount: Decimal):
+async def auto_record_payment(db: AsyncSession, business_id: str, new_sale_id: str, data: SaleCreate, final_amount: Decimal):
     if data.sales_payment_status not in ("paid", "partial"):
         return
-
-    result = await db.execute(
-        text("SELECT sales_final_amount FROM sales WHERE sales_id = CAST(:sid AS uuid)"),
-        {"sid": new_sale_id}
-    )
-    sale_row = result.fetchone()
-    final_amount = (
-        Decimal(str(sale_row.sales_final_amount))
-        if sale_row and sale_row.sales_final_amount
-        else total_amount
-    )
 
     if data.sales_payment_status == "paid":
         await record_payment_and_sync_async(
             db=db,
             business_id=business_id,
             sale_id=new_sale_id,
-            sale_final=final_amount,
             payment_amount=final_amount,
             payment_method=data.sales_payment_method or "cash",
             new_status="paid",
@@ -234,7 +225,6 @@ async def auto_record_payment(db: AsyncSession, business_id: str, new_sale_id: s
                 db=db,
                 business_id=business_id,
                 sale_id=new_sale_id,
-                sale_final=final_amount,
                 payment_amount=final_amount,
                 payment_method=data.sales_payment_method or "cash",
                 new_status="paid",
@@ -245,7 +235,6 @@ async def auto_record_payment(db: AsyncSession, business_id: str, new_sale_id: s
                 db=db,
                 business_id=business_id,
                 sale_id=new_sale_id,
-                sale_final=final_amount,
                 payment_amount=paid.quantize(Decimal("0.01")),
                 payment_method=data.sales_payment_method or "cash",
                 new_status="partial",

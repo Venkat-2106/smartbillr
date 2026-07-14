@@ -310,8 +310,9 @@ async def verify_token(
     """
     FastAPI dependency — runs on every protected endpoint.
 
-    PERFORMANCE: Single DB query fetches business_id + role + all permissions
-    together. STRING_AGG collapses multiple permission rows into one CSV string
+    PERFORMANCE: Single DB query fetches profile, role, permissions,
+    last_logout_at, and business is_active together via LEFT JOIN.
+    STRING_AGG collapses multiple permission rows into one CSV string
     which we split in Python. Saves 1 DB round trip per API call vs before.
 
     Returns:
@@ -358,7 +359,7 @@ async def verify_token(
         cached_val["subscription_type"] = getattr(request.state, "subscription_type", None)
         return {**cached_val, "token_iat": token_iat}
 
-    # ── Cache miss — single DB query fetches profile + role + permissions + last_logout_at ──
+    # ── Cache miss — single DB query fetches profile + role + permissions + last_logout_at + business status ──
     # NOTE: SQLAlchemy's text() only recognizes its own ":name" bind-parameter
     # syntax — it compiles that to whatever the driver needs ($1, $2, ... for
     # asyncpg) automatically. Writing "$1" literally inside text() is NOT a
@@ -384,7 +385,8 @@ async def verify_token(
                 p.full_name,
                 r.name                                      AS role,
                 STRING_AGG(perm.code, ',')                  AS permissions_csv,
-                p.last_logout_at
+                p.last_logout_at,
+                b.is_active                                 AS business_is_active
             FROM profiles p
             LEFT JOIN roles r
                 ON r.id = p.role_id
@@ -392,9 +394,11 @@ async def verify_token(
                 ON rp.role_id = p.role_id
             LEFT JOIN permissions perm
                 ON perm.id = rp.permission_id
+            LEFT JOIN businesses b
+                ON b.business_id = p.business_id
             WHERE p.id        = :uid
               AND p.is_active = true
-            GROUP BY p.business_id, p.full_name, r.name, p.last_logout_at
+            GROUP BY p.business_id, p.full_name, r.name, p.last_logout_at, b.is_active
             LIMIT 1
         """),
         {"uid": user_id}
@@ -403,19 +407,14 @@ async def verify_token(
     if result is None:
         raise HTTPException(status_code=403, detail="User not found or inactive")
 
-    # ── Now that we know the business_id, set the GUC and check suspension ──
-    await db.execute(text("SELECT set_config('app.current_business_id', :bid, true)"), {"bid": str(result.business_id)})
-
-    business_active = (await db.execute(
-        text("SELECT is_active FROM businesses WHERE business_id = CAST(:bid AS uuid) LIMIT 1"),
-        {"bid": str(result.business_id)}
-    )).scalar()
-
-    if not business_active:
+    if not result.business_is_active:
         raise HTTPException(
             status_code=403,
             detail="Your business account has been suspended. Contact support.",
         )
+
+    # ── Now that we know the business_id, set the GUC ──
+    await db.execute(text("SELECT set_config('app.current_business_id', :bid, true)"), {"bid": str(result.business_id)})
 
     # ── Token revocation check ────────────────────────────────────────────
     # If the user has logged out since this token was issued, reject it.

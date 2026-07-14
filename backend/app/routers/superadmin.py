@@ -5,7 +5,7 @@
 # path parameters.
 #
 # SECURITY:
-#   All routes use Depends(verify_super_admin_with_rls) which authenticates via JWT
+#   All routes use Depends(verify_super_admin_with_rls_async) which authenticates via JWT
 #   + super_admins table lookup. It does NOT query profiles, does NOT carry
 #   a business_id, and does NOT pass require_permission() checks.
 #
@@ -18,7 +18,9 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from app.database import get_async_db
-from app.middleware.auth import clear_user_cache, clear_business_users_cache, verify_super_admin
+from app.middleware.auth import clear_user_cache, clear_business_users_cache
+from app.middleware.rbac import verify_super_admin_with_rls_async
+from app.middleware.subscription import clear_subscription_business_cache
 from app.utils.response import success_response, error_response
 from app.schemas.business import SubscriptionUpdate, VALID_PAYMENT_STATUSES, VALID_SUBSCRIPTION_TYPES
 
@@ -51,7 +53,7 @@ def _parse_dt(val):
 
 @router.post("/logout")
 async def super_admin_logout(
-    current_user: dict = Depends(verify_super_admin),
+    current_user: dict = Depends(verify_super_admin_with_rls_async),
     db: AsyncSession = Depends(get_async_db),
 ):
     user_id = current_user["user_id"]
@@ -74,7 +76,7 @@ async def list_businesses(
     sort_by: str = Query(default="created_at"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
     search: Optional[str] = Query(default=None),
-    current_user: dict = Depends(verify_super_admin),
+    current_user: dict = Depends(verify_super_admin_with_rls_async),
     db: AsyncSession = Depends(get_async_db),
 ):
     if sort_by not in SORTABLE_WHITELIST:
@@ -154,7 +156,7 @@ async def list_businesses(
 @router.get("/businesses/{business_id}")
 async def get_business(
     business_id: str,
-    current_user: dict = Depends(verify_super_admin),
+    current_user: dict = Depends(verify_super_admin_with_rls_async),
     db: AsyncSession = Depends(get_async_db),
 ):
     row = (await db.execute(
@@ -226,7 +228,7 @@ async def get_business(
 async def update_business_subscription(
     business_id: str,
     payload: SubscriptionUpdate,
-    current_user: dict = Depends(verify_super_admin),
+    current_user: dict = Depends(verify_super_admin_with_rls_async),
     db: AsyncSession = Depends(get_async_db),
 ):
     existing = (await db.execute(
@@ -277,7 +279,7 @@ class StatusUpdate:
 async def update_business_status(
     business_id: str,
     is_active: bool = Query(..., description="true = activate, false = suspend"),
-    current_user: dict = Depends(verify_super_admin),
+    current_user: dict = Depends(verify_super_admin_with_rls_async),
     db: AsyncSession = Depends(get_async_db),
 ):
     existing = (await db.execute(
@@ -301,6 +303,7 @@ async def update_business_status(
         return error_response("Failed to update business status", 500)
 
     clear_business_users_cache(business_id)
+    clear_subscription_business_cache(business_id)
 
     action = "activated" if is_active else "suspended"
     return success_response({"message": f"Business {action} successfully"})

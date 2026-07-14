@@ -251,6 +251,7 @@ export default function SalesPage() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <ExportButton onFetch={handleExport} filename="sales" columns={SALES_CSV_COLUMNS} />
           {canCreate && (
             <Button variant="primary" onClick={() => navigate('/sales/new')} data-shortcut="new">
               + New Invoice
@@ -340,15 +341,12 @@ export default function SalesPage() {
             </button>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <DateRangeFilter
-            label="Invoice Date"
-            from={dateFrom}
-            to={dateTo}
-            onChange={handleDateChange}
-          />
-          <ExportButton onFetch={handleExport} filename="sales" columns={SALES_CSV_COLUMNS} />
-        </div>
+        <DateRangeFilter
+          label="Invoice Date"
+          from={dateFrom}
+          to={dateTo}
+          onChange={handleDateChange}
+        />
       </div>
 
       {isError && (

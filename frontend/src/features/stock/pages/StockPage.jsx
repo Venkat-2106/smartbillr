@@ -387,6 +387,24 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
 
   return (
     <>
+      {/* PAGE HEADER */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: 24, flexWrap: 'wrap', gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
+            Stock
+          </h1>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
+            Inventory overview and stock management
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <ExportButton onFetch={handleExport} filename="stock" columns={csvColumns} />
+        </div>
+      </div>
+
       {/* METRIC CARDS */}
       <div style={{
         display: 'grid',
@@ -491,8 +509,6 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
             <option value="true">Active Only</option>
             <option value="false">Inactive Only</option>
           </select>
-
-          <ExportButton onFetch={handleExport} filename="stock" columns={csvColumns} />
         </div>
       </div>
 

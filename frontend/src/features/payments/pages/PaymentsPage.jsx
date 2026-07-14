@@ -226,6 +226,13 @@ export default function PaymentsPage() {
             Track payment collections, invoices, and outstanding balances
           </p>
         </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <ExportButton
+            onFetch={handleExport}
+            filename="payments"
+            columns={PAYMENT_CSV_COLUMNS}
+          />
+        </div>
       </div>
 
       {/* METRIC CARDS */}
@@ -308,19 +315,12 @@ export default function PaymentsPage() {
             </button>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <ExportButton
-            onFetch={handleExport}
-            filename="payments"
-            columns={PAYMENT_CSV_COLUMNS}
-          />
-          <DateRangeFilter
-            label="Last Payment"
-            from={dateFrom}
-            to={dateTo}
-            onChange={handleDateChange}
-          />
-        </div>
+        <DateRangeFilter
+          label="Last Payment"
+          from={dateFrom}
+          to={dateTo}
+          onChange={handleDateChange}
+        />
       </div>
 
       {/* ERROR BANNER */}

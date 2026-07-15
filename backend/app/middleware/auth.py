@@ -349,7 +349,7 @@ async def verify_token(
                 detail="Session expired. Please log in again."
             )
         # SECURITY: Reject if the business was suspended since caching.
-        if not cached_val.get("business_is_active", True):
+        if cached_val.get("business_is_active") is False:
             raise HTTPException(
                 status_code=403,
                 detail="Your business account has been suspended. Contact support.",
@@ -409,7 +409,10 @@ async def verify_token(
     if result is None:
         raise HTTPException(status_code=403, detail="User not found or inactive")
 
-    if not result.business_is_active:
+    # Use `is False` instead of `not` to avoid false-positive suspension
+    # when the LEFT JOIN returns NULL (e.g. if RLS still blocks the row).
+    # NULL means "could not determine", not "suspended".
+    if result.business_is_active is False:
         raise HTTPException(
             status_code=403,
             detail="Your business account has been suspended. Contact support.",
@@ -440,7 +443,7 @@ async def verify_token(
         "role":             result.role or "staff",
         "permissions":      permissions,
         "last_logout_at":   last_logout_epoch,
-        "business_is_active": True,
+        "business_is_active": result.business_is_active,
         "token_iat":        token_iat,
         "subscription_type": getattr(request.state, "subscription_type", None),
     }

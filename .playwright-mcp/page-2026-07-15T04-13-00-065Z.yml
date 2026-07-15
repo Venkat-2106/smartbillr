@@ -1,0 +1,15 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - heading "Super Admin" [level=1] [ref=e9]
+      - paragraph [ref=e10]: Platform administration console
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - generic [ref=e13]: Email
+        - textbox "admin@example.com" [ref=e14]
+      - generic [ref=e15]:
+        - generic [ref=e16]: Password
+        - textbox "••••••••" [ref=e17]
+      - button "Sign in" [active] [ref=e18] [cursor=pointer]
+    - generic [ref=e19]: Back to business login
+  - status [ref=e25]: Email and password are required

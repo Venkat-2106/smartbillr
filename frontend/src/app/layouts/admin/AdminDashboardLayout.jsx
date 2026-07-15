@@ -99,7 +99,7 @@ export default function AdminDashboardLayout() {
       </aside>
 
       <main style={{
-        flex: 1, overflowY: 'auto', padding: '1.5rem 2rem',
+        flex: 1, minHeight: 0, overflowY: 'auto', padding: '1.5rem 2rem',
         background: '#0F172A',
       }}>
         <Outlet />

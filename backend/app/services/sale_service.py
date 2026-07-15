@@ -98,50 +98,60 @@ async def create_sale_header(db: AsyncSession, business_id: str, user_id: str, n
 
 
 async def handle_stock_overrides(db: AsyncSession, business_id: str, user_id: str, new_sale_id: str, override_items: list):
-    for ov in override_items:
-        product = ov["product"]
+    if not override_items:
+        return
+
+    # 1. Bulk UPDATE products — single round trip for all overrides
+    values_clause = ", ".join(
+        f"(CAST(:pid_{i} AS uuid), :shortfall_{i})"
+        for i in range(len(override_items))
+    )
+    update_params = {"business_id": business_id}
+    for i, ov in enumerate(override_items):
+        update_params[f"pid_{i}"] = str(ov["product"].prod_id)
+        update_params[f"shortfall_{i}"] = ov["requested_qty"] - ov["available_qty"]
+
+    await db.execute(
+        text(f"""
+            UPDATE products
+            SET prod_stock_qty = products.prod_stock_qty + v.shortfall
+            FROM (VALUES {values_clause}) AS v(prod_id, shortfall)
+            WHERE products.prod_id = v.prod_id
+              AND products.business_id = CAST(:business_id AS uuid)
+        """),
+        update_params
+    )
+
+    # 2. Multi-row INSERT into stock_movements — single round trip for all overrides
+    insert_values = ", ".join(
+        f"(CAST(:mid_{i} AS uuid), CAST(:bid AS uuid), CAST(:pid_{i} AS uuid), "
+        f":mtype_{i}, :mqty_{i}, :mprev_{i}, CAST(:sref AS uuid), :mnotes_{i}, CAST(:cby AS uuid))"
+        for i in range(len(override_items))
+    )
+    insert_params = {"bid": business_id, "sref": new_sale_id, "cby": user_id}
+    for i, ov in enumerate(override_items):
+        shortfall = ov["requested_qty"] - ov["available_qty"]
         avail = ov["available_qty"]
-        shortfall = ov["requested_qty"] - avail
-
-        await db.execute(
-            text("""
-                UPDATE products
-                SET prod_stock_qty = prod_stock_qty + :shortfall
-                WHERE prod_id = CAST(:product_id AS uuid)
-            """),
-            {"shortfall": shortfall, "product_id": str(product.prod_id)}
+        insert_params[f"mid_{i}"] = str(uuid.uuid4())
+        insert_params[f"pid_{i}"] = str(ov["product"].prod_id)
+        insert_params[f"mtype_{i}"] = "stock_override"
+        insert_params[f"mqty_{i}"] = shortfall
+        insert_params[f"mprev_{i}"] = avail
+        insert_params[f"mnotes_{i}"] = (
+            f"System-generated stock increase to allow a sale exceeding available inventory — "
+            f"{shortfall} unit(s) added (stock was {avail}, needed {ov['requested_qty']})"
         )
 
-        await db.execute(
-            text("""
-                INSERT INTO stock_movements (
-                    business_id, product_id,
-                    move_type, move_qty, move_prev_stock,
-                    sale_reference_id, move_notes, move_created_by
-                ) VALUES (
-                    CAST(:business_id AS uuid),
-                    CAST(:product_id AS uuid),
-                    'stock_override',
-                    :move_qty,
-                    :move_prev_stock,
-                    CAST(:sale_ref AS uuid),
-                    :move_notes,
-                    CAST(:created_by AS uuid)
-                )
-            """),
-            {
-                "business_id": business_id,
-                "product_id": str(product.prod_id),
-                "move_qty": shortfall,
-                "move_prev_stock": avail,
-                "sale_ref": new_sale_id,
-                "move_notes": (
-                    f"System-generated stock increase to allow a sale exceeding available inventory — "
-                    f"{shortfall} unit(s) added (stock was {avail}, needed {ov['requested_qty']})"
-                ),
-                "created_by": user_id,
-            }
-        )
+    await db.execute(
+        text(f"""
+            INSERT INTO stock_movements (
+                move_id, business_id, product_id,
+                move_type, move_qty, move_prev_stock,
+                sale_reference_id, move_notes, move_created_by
+            ) VALUES {insert_values}
+        """),
+        insert_params
+    )
 
 
 async def insert_sale_items(db: AsyncSession, business_id: str, new_sale_id: str, items, product_cache: dict):

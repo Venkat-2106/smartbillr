@@ -890,8 +890,6 @@ async def update_product(
     # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
     await async_set_rls_gucs_after_commit(db, current_user)
 
-    await db.refresh(product)
-
     row = await get_product_with_profit(db, product.prod_id, business_id)
 
     return success_response({

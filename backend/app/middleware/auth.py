@@ -354,8 +354,10 @@ async def verify_token(
                 status_code=403,
                 detail="Your business account has been suspended. Contact support.",
             )
-        await db.execute(text("SELECT set_config('app.current_user_id', :uid, true)"), {"uid": user_id})
-        await db.execute(text("SELECT set_config('app.current_business_id', :bid, true)"), {"bid": cached_val["business_id"]})
+        await db.execute(
+            text("SELECT set_config('app.current_user_id', :uid, true), set_config('app.current_business_id', :bid, true)"),
+            {"uid": user_id, "bid": cached_val["business_id"]}
+        )
         cached_val["subscription_type"] = getattr(request.state, "subscription_type", None)
         return {**cached_val, "token_iat": token_iat}
 

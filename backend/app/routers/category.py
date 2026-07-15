@@ -215,6 +215,7 @@ async def get_category(
     db:           AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
+    show_profit = "view_product_profit" in current_user.get("permissions", set())
 
     # Raw SQL with two LEFT JOINs to get creator name + last updater name in one query
     cat_row = (await db.execute(
@@ -258,15 +259,18 @@ async def get_category(
 
     for p in product_rows:
         is_low_stock  = p.prod_stock_qty <= p.prod_low_stock_alert
-        stock_value   = float(p.prod_cost_price) * p.prod_stock_qty
-        total_stock_value += stock_value
+        if show_profit:
+            stock_value = float(p.prod_cost_price) * p.prod_stock_qty
+            total_stock_value += stock_value
+        else:
+            stock_value = None
 
         products.append({
             "prod_id":              str(p.prod_id),
             "prod_name":            p.prod_name,
             "prod_sell_price":      float(p.prod_sell_price),
-            "prod_cost_price":      float(p.prod_cost_price),
-            "prod_profit":          float(p.prod_profit) if p.prod_profit is not None else None,
+            "prod_cost_price":      float(p.prod_cost_price) if show_profit else None,
+            "prod_profit":          float(p.prod_profit) if (show_profit and p.prod_profit is not None) else None,
             "prod_stock_qty":       p.prod_stock_qty,
             "prod_low_stock_alert": p.prod_low_stock_alert,
             "tax_rate":             float(p.tax_rate) if p.tax_rate else 0,
@@ -274,7 +278,7 @@ async def get_category(
             "barcode":              p.barcode,
             "unit":                 p.unit,
             "is_low_stock":         is_low_stock,
-            "stock_value":          round(stock_value, 2),
+            "stock_value":          round(stock_value, 2) if show_profit else None,
             "prod_created_at":      fmt_ts(p.prod_created_at),
             "updated_at":           fmt_ts(p.updated_at)
         })
@@ -298,7 +302,7 @@ async def get_category(
             "total_products":     total_products,
             "low_stock_count":    low_stock_count,
             "out_of_stock_count": out_of_stock,
-            "total_stock_value":  round(total_stock_value, 2)
+            "total_stock_value":  round(total_stock_value, 2) if show_profit else None
         },
         "products": products
     })

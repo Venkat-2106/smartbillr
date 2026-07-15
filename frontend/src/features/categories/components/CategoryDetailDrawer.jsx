@@ -22,6 +22,7 @@ import {
   triggerPrint,
 } from '../../../shared/utils/printUtils'
 import useAuthStore from '../../../store/authStore'
+import { usePermissions } from '../../../shared/hooks/usePermissions'
 
 // ── Stock status badge ────────────────────────────────────────────────────────
 function StockBadge({ qty, lowAlert }) {
@@ -60,7 +61,7 @@ function StatCard({ label, value, color }) {
 
 // ── Main drawer ───────────────────────────────────────────────────────────────
 // ── Print builder ─────────────────────────────────────────────────────────────
-function buildCategoryPrintHTML(business, category, detail, summary, products) {
+function buildCategoryPrintHTML(business, category, detail, summary, products, showProfit) {
   const country = business?.business_country_code || 'IN'
   const metaFields = [
     { label: 'Total Products', value: String(summary.total_products ?? 0) },
@@ -80,7 +81,7 @@ function buildCategoryPrintHTML(business, category, detail, summary, products) {
   const prodCols = [
     { label: 'Product Name',   key: 'prod_name',         align: 'left' },
     { label: 'Sell Price',     key: 'prod_sell_price',   align: 'right', format: v => formatCurrency(v, country) },
-    { label: 'Cost Price',     key: 'prod_cost_price',   align: 'right', format: v => formatCurrency(v, country) },
+    ...(showProfit ? [{ label: 'Cost Price', key: 'prod_cost_price', align: 'right', format: v => formatCurrency(v, country) }] : []),
     { label: 'Stock',          key: 'prod_stock_qty',    align: 'center' },
     { label: 'Unit',           key: 'unit',              align: 'center' },
     { label: 'Status',         key: '_status',           align: 'center', format: (_, row) => {
@@ -120,6 +121,8 @@ export default function CategoryDetailDrawer({ category, onClose }) {
   const [printHovered, setPrintHovered] = useState(false)
   const business  = useAuthStore(s => s.business)
   const country   = business?.business_country_code || 'IN'
+  const { can } = usePermissions()
+  const canViewProfit = can('view_product_profit')
   const { data, isLoading, isError } = useQuery({
     queryKey: ['category', category?.category_id],
     queryFn:  () => fetchCategory(category.category_id),
@@ -135,7 +138,7 @@ export default function CategoryDetailDrawer({ category, onClose }) {
   function handlePrint() {
     if (!category) return
     const business = useAuthStore.getState().business
-    const html = buildCategoryPrintHTML(business, category, detail, summary, products)
+    const html = buildCategoryPrintHTML(business, category, detail, summary, products, canViewProfit)
     triggerPrint(html)
   }
 

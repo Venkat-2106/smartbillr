@@ -231,12 +231,9 @@ async def async_set_rls_gucs(db: AsyncSession, current_user: dict) -> None:
     ordinary function call that does accept real bind parameters.
     """
     await db.execute(
-        text("SELECT set_config('app.current_user_id', :uid, true)"),
-        {"uid": str(current_user["user_id"])},
-    )
-    await db.execute(
-        text("SELECT set_config('app.current_business_id', :bid, true)"),
-        {"bid": str(current_user["business_id"])},
+        text("SELECT set_config('app.current_user_id', :uid, true), "
+             "set_config('app.current_business_id', :bid, true)"),
+        {"uid": str(current_user["user_id"]), "bid": str(current_user["business_id"])},
     )
 
 
@@ -373,10 +370,8 @@ async def verify_super_admin_with_rls_async(
     verify_super_admin_with_rls in async contexts).
     """
     await db.execute(
-        text("SELECT set_config('app.current_user_id', :uid, true)"),
+        text("SELECT set_config('app.current_user_id', :uid, true), "
+             "set_config('app.is_super_admin', 'true', true)"),
         {"uid": str(current_user["user_id"])},
-    )
-    await db.execute(
-        text("SELECT set_config('app.is_super_admin', 'true', true)")
     )
     return current_user

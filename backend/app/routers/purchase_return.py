@@ -266,10 +266,10 @@ async def create_purchase_return(
             "created_by":    str(user_id)
         })
 
-        # Step 5 → Insert each return item
+        # Step 5 → Insert all return items in one round trip
         # NOTE: return_item_subtotal is a DB generated column — do NOT insert it
-        for item in data.items:
-            await db.execute(text("""
+        await db.execute(
+            text("""
                 INSERT INTO purchase_return_items
                     (return_item_id, return_id, product_id,
                      return_qty, refund_amount, business_id)
@@ -280,14 +280,19 @@ async def create_purchase_return(
                     :return_qty, :refund_amount,
                     CAST(:business_id AS uuid)
                 )
-            """), {
-                "return_item_id": str(uuid.uuid4()),
-                "return_id":      new_return_id,
-                "product_id":     str(item.product_id),
-                "return_qty":     item.return_qty,
-                "refund_amount":  str(item.refund_amount),
-                "business_id":    str(business_id)
-            })
+            """),
+            [
+                {
+                    "return_item_id": str(uuid.uuid4()),
+                    "return_id":      new_return_id,
+                    "product_id":     str(item.product_id),
+                    "return_qty":     item.return_qty,
+                    "refund_amount":  str(item.refund_amount),
+                    "business_id":    str(business_id)
+                }
+                for item in data.items
+            ]
+        )
 
         # Step 6 → If created as approved + restock → reduce stock immediately
         # NOTE: db.commit() intentionally moved to AFTER Step 6 so that the

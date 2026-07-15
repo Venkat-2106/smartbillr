@@ -4,6 +4,18 @@ from starlette.responses import Response
 import os
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+_connect_src = f"'self' {SUPABASE_URL}" if SUPABASE_URL else "'self'"
+CSP_HEADER_VALUE = (
+    "default-src 'self'; "
+    f"connect-src {_connect_src}; "
+    "script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; "
+    "font-src 'self'; "
+    "frame-ancestors 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'"
+)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -16,18 +28,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
 
-        connect_src = f"'self' {SUPABASE_URL}" if SUPABASE_URL else "'self'"
-        csp = (
-            "default-src 'self'; "
-            f"connect-src {connect_src}; "
-            "script-src 'self'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; "
-            "font-src 'self'; "
-            "frame-ancestors 'none'; "
-            "base-uri 'self'; "
-            "form-action 'self'"
-        )
-        response.headers["Content-Security-Policy"] = csp
+        response.headers["Content-Security-Policy"] = CSP_HEADER_VALUE
 
         return response

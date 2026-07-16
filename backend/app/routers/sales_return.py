@@ -525,23 +525,25 @@ async def update_sales_return(
                 return error_response(error, status_code=400)
 
         # Update status, restock, and approval fields — DB triggers fire automatically
+        restock_provided = data.restock is not None
         await db.execute(
             text("""
                 UPDATE sales_returns
                 SET return_status = :status,
-                    restock = :restock,
+                    restock = CASE WHEN :restock_provided THEN :restock ELSE restock END,
                     approved_by = CASE WHEN :status = 'approved' THEN CAST(:approved_by AS uuid) ELSE approved_by END,
                     approved_at = CASE WHEN :status = 'approved' THEN NOW() ELSE approved_at END,
-                    stock_updated = CASE WHEN :status = 'approved' AND :restock = true THEN true ELSE stock_updated END
+                    stock_updated = CASE WHEN :status = 'approved' AND :restock_provided AND :restock = true THEN true ELSE stock_updated END
                 WHERE return_id = CAST(:return_id AS uuid)
                   AND business_id = CAST(:bid AS uuid)
             """),
             {
-                "status":      data.return_status,
-                "restock":     data.restock,
-                "approved_by": str(user_id),
-                "return_id":   return_id,
-                "bid":         business_id
+                "status":             data.return_status,
+                "restock":            data.restock,
+                "restock_provided":   restock_provided,
+                "approved_by":        str(user_id),
+                "return_id":          return_id,
+                "bid":                business_id
             }
         )
 

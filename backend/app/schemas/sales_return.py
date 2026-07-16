@@ -67,7 +67,7 @@ class SalesReturnCreate(BaseModel):
 
 class SalesReturnUpdate(BaseModel):
     return_status: str
-    restock:       Optional[bool] = False
+    restock:       Optional[bool] = None
 
     @field_validator("return_status")
     @classmethod

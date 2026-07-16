@@ -28,7 +28,7 @@
 # removes stale alerts for products now above their threshold.
 # ─────────────────────────────────────────────────────────────────────────────
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, File, UploadFile
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
@@ -41,6 +41,8 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
 from app.utils.queries import fetch_stock_kpi_counts_async
 from app.utils.timestamp import fmt_ts
+from app.utils.bulk_import import parse_csv_file, validate_rows, chunk_list
+from app.schemas.validators import strip_and_escape_html
 import uuid
 import logging
 
@@ -557,6 +559,246 @@ async def adjust_stock(
         await db.rollback()
         logging.exception(e)
         return error_response("An unexpected error occurred. Please try again.", status_code=500)
+
+
+# ══════════════════════════════════════════════════════════════════
+# POST /stock/import → Bulk import stock adjustments from CSV
+# ══════════════════════════════════════════════════════════════════
+@router.post("/import")
+async def import_stock_adjustments(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(require_permission("stock.adjust")),
+    db: AsyncSession = Depends(get_async_db)
+):
+    business_id = current_user["business_id"]
+    user_id = current_user["user_id"]
+
+    # ── 1. Parse CSV ──────────────────────────────────────────────────────────
+    file_bytes = await file.read()
+    rows, parse_error = parse_csv_file(file_bytes)
+    if parse_error:
+        return error_response(parse_error, 400)
+
+    # ── 2. Row transform: validate & transform each row ────────────────────────
+    def row_transform(row: dict, row_num: int):
+        # Product identification (at least one required)
+        product_id = (row.get("product_id") or row.get("prod_id") or row.get("Product ID") or "").strip() or None
+        barcode = (row.get("barcode") or row.get("Barcode") or "").strip() or None
+        prod_name = (row.get("prod_name") or row.get("product_name") or row.get("Product Name") or "").strip() or None
+
+        if not product_id and not barcode and not prod_name:
+            return None, "one of product_id, barcode, or product_name is required"
+
+        # Adjustment type (default: set)
+        adj_type_raw = (row.get("adjustment_type") or row.get("type") or row.get("Type") or "set").strip().lower()
+        if adj_type_raw not in ("add", "remove", "set"):
+            adj_type_raw = "set"  # default to safe option
+
+        # Quantity (always positive)
+        qty_raw = row.get("qty") or row.get("quantity") or row.get("Qty") or row.get("Quantity")
+        if not qty_raw:
+            return None, "qty is required"
+        try:
+            qty = int(float(qty_raw))
+            if qty <= 0:
+                return None, "qty must be a positive number"
+        except ValueError:
+            return None, "invalid qty value"
+
+        # Optional notes
+        notes = (row.get("move_notes") or row.get("notes") or row.get("Notes") or "").strip() or None
+        if notes:
+            notes = strip_and_escape_html(notes)
+
+        return {
+            "product_id": product_id,
+            "barcode": barcode,
+            "prod_name": prod_name,
+            "adjustment_type": adj_type_raw,
+            "qty": qty,
+            "move_notes": notes,
+            "_row_number": row_num
+        }, None
+
+    valid_rows, errors = validate_rows(rows, row_transform)
+
+    # ── 3. Resolve products (batch) ────────────────────────────────────────────
+    # Build lookup maps: product_id -> (prod_id, stock_qty, prod_name)
+    #                    barcode   -> (prod_id, stock_qty, prod_name)
+    #                    name      -> (prod_id, stock_qty, prod_name)
+    product_map = {}
+
+    # Resolve by product_id
+    pid_list = [r["product_id"] for r in valid_rows if r.get("product_id")]
+    if pid_list:
+        placeholders = ", ".join([f":pid_{i}" for i in range(len(pid_list))])
+        params = {"bid": business_id}
+        for i, pid in enumerate(pid_list):
+            params[f"pid_{i}"] = pid
+
+        existing = (await db.execute(text(f"""
+            SELECT prod_id::text, prod_stock_qty, prod_name
+            FROM products
+            WHERE prod_id::text IN ({placeholders})
+              AND business_id = CAST(:bid AS uuid)
+              AND is_deleted = false
+        """), params)).fetchall()
+        for r in existing:
+            product_map[str(r.prod_id)] = (str(r.prod_id), r.prod_stock_qty, r.prod_name)
+
+    # Resolve by barcode
+    barcode_list = [r["barcode"] for r in valid_rows if r.get("barcode") and not r.get("product_id")]
+    if barcode_list:
+        placeholders = ", ".join([f":bc_{i}" for i in range(len(barcode_list))])
+        params = {"bid": business_id}
+        for i, bc in enumerate(barcode_list):
+            params[f"bc_{i}"] = bc
+
+        existing = (await db.execute(text(f"""
+            SELECT prod_id::text, barcode, prod_stock_qty, prod_name
+            FROM products
+            WHERE barcode IN ({placeholders})
+              AND business_id = CAST(:bid AS uuid)
+              AND is_deleted = false
+        """), params)).fetchall()
+        for r in existing:
+            product_map[r.barcode or str(r.prod_id)] = (str(r.prod_id), r.prod_stock_qty, r.prod_name)
+
+    # Resolve by product name
+    name_list = [r["prod_name"] for r in valid_rows if r.get("prod_name") and not r.get("product_id") and not r.get("barcode")]
+    if name_list:
+        placeholders = ", ".join([f":nm_{i}" for i in range(len(name_list))])
+        params = {"bid": business_id}
+        for i, nm in enumerate(name_list):
+            params[f"nm_{i}"] = nm
+
+        existing = (await db.execute(text(f"""
+            SELECT prod_id::text, prod_name, prod_stock_qty
+            FROM products
+            WHERE prod_name IN ({placeholders})
+              AND business_id = CAST(:bid AS uuid)
+              AND is_deleted = false
+        """), params)).fetchall()
+        for r in existing:
+            key = r.prod_name
+            if key not in product_map and str(r.prod_id) not in product_map:
+                product_map[key] = (str(r.prod_id), r.prod_stock_qty, r.prod_name or key)
+
+    # ── 4. Process adjustments ────────────────────────────────────────────────
+    processed = 0
+    adjustment_errors = []
+
+    for chunk in chunk_list(valid_rows):
+        for row in chunk:
+            row_num = row.pop("_row_number")
+            pid = row.get("product_id")
+            barcode = row.get("barcode")
+            prod_name = row.get("prod_name")
+            adj_type = row["adjustment_type"]
+            qty = row["qty"]
+            notes = row.get("move_notes") or f"CSV bulk {adj_type} adjustment"
+
+            # Resolve product
+            lookup_key = pid or barcode or prod_name or None
+            if not lookup_key or lookup_key not in product_map:
+                adjustment_errors.append({"row": row_num, "message": f"product not found"})
+                continue
+
+            (resolved_pid, prev_stock, resolved_name) = product_map[lookup_key]
+
+            try:
+                # ── Lock for update (serializes concurrent adjustments) ──
+                prod_row = (await db.execute(text("""
+                    SELECT prod_stock_qty, prod_name FROM products
+                    WHERE prod_id = CAST(:pid AS uuid)
+                      AND business_id = CAST(:bid AS uuid)
+                      AND is_deleted = false
+                    FOR UPDATE
+                """), {"pid": resolved_pid, "bid": business_id})).fetchone()
+
+                if not prod_row:
+                    adjustment_errors.append({"row": row_num, "message": f"product deleted during import"})
+                    continue
+
+                prev_stock = prod_row.prod_stock_qty
+                resolved_name = prod_row.prod_name
+
+                # Calculate new stock and move_qty
+                if adj_type == "add":
+                    new_stock = prev_stock + qty
+                    move_qty = qty
+                elif adj_type == "remove":
+                    if qty > prev_stock:
+                        adjustment_errors.append({
+                            "row": row_num,
+                            "message": f"cannot remove {qty} from '{resolved_name}' — only {prev_stock} in stock"
+                        })
+                        continue
+                    new_stock = prev_stock - qty
+                    move_qty = -qty
+                else:  # "set"
+                    new_stock = qty
+                    move_qty = qty - prev_stock
+                    if new_stock == prev_stock:
+                        # No change needed — skip silently
+                        processed += 1
+                        continue
+
+                # Update product stock
+                await db.execute(text("""
+                    UPDATE products
+                    SET prod_stock_qty = :new_stock,
+                        updated_by = CAST(:uid AS uuid)
+                    WHERE prod_id = CAST(:pid AS uuid)
+                      AND business_id = CAST(:bid AS uuid)
+                """), {"new_stock": new_stock, "pid": resolved_pid, "bid": business_id, "uid": user_id})
+
+                # Insert stock movement
+                new_move_id = str(uuid.uuid4())
+                await db.execute(text("""
+                    INSERT INTO stock_movements (
+                        move_id, business_id, product_id,
+                        move_type, move_qty,
+                        move_prev_stock,
+                        move_notes, move_created_by
+                    ) VALUES (
+                        CAST(:mid AS uuid), CAST(:bid AS uuid), CAST(:pid AS uuid),
+                        :move_type, :move_qty,
+                        :move_prev_stock,
+                        :move_notes, CAST(:uid AS uuid)
+                    )
+                """), {
+                    "mid": new_move_id, "bid": business_id, "pid": resolved_pid,
+                    "move_type": "adjustment", "move_qty": move_qty,
+                    "move_prev_stock": prev_stock,
+                    "move_notes": notes, "uid": user_id
+                })
+
+                # Cleanup stale alerts
+                await cleanup_product_alerts(db, business_id, resolved_pid)
+                processed += 1
+
+                # Update the product_map with new stock for subsequent rows in same import
+                product_map[lookup_key] = (resolved_pid, new_stock, resolved_name)
+
+            except Exception as e:
+                adjustment_errors.append({"row": row_num, "message": str(e)})
+
+        await db.commit()
+        await async_set_rls_gucs_after_commit(db, current_user)
+
+    all_errors = errors + adjustment_errors
+
+    return success_response({
+        "message": f"Import completed: {processed} adjustments processed, {len(all_errors)} errors",
+        "summary": {
+            "total_rows": len(rows),
+            "valid_rows": len(valid_rows),
+            "processed": processed,
+            "errors": len(all_errors)
+        },
+        "errors": all_errors
+    })
 
 
 # ─────────────────────────────────────────

@@ -26,13 +26,13 @@ import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
 import {
   Button, Input, Modal, Table, SearchBar,
   Pagination, ConfirmDialog,
-  FormField, StateDropdown, ExportButton,
+  FormField, StateDropdown, ExportButton, ImportButton,
   DateRangeFilter, EmptyState,
   MetricCard, BentoCard, UpgradePrompt,
 } from '../../../shared/components'
 
 import { selectStyle, textareaStyle } from '../../../shared/components/FormField'
-import { CUSTOMER_CSV_COLUMNS }       from '../../../shared/utils/csvExport'
+import { CUSTOMER_CSV_COLUMNS, CUSTOMER_IMPORT_TEMPLATE }       from '../../../shared/utils/csvExport'
 import { COUNTRIES }                  from '../../../shared/data/countries'
 import { formatCurrency }             from '../../../shared/utils/formatCurrency'
 import { formatDate }                 from '../../../shared/utils/formatDate'
@@ -428,6 +428,13 @@ export default function CustomersPage() {
             filename="customers"
             columns={CUSTOMER_CSV_COLUMNS}
           />
+          {canManage && (
+            <ImportButton
+              endpoint="/v1/customers/import"
+              title="Customers"
+              columns={CUSTOMER_IMPORT_TEMPLATE}
+            />
+          )}
           <Button
             variant="primary"
             leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}

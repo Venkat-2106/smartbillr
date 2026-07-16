@@ -8,14 +8,14 @@ import PurchaseDetailDrawer, { DrawerOverlay }
   from '../components/PurchaseDetailDrawer'
 import {
   Table, Badge, SearchBar, Button,
-  Pagination, DateRangeFilter, ExportButton,
+  Pagination, DateRangeFilter, ExportButton, ImportButton,
   EmptyState, BentoCard, MetricCard,
   ConfirmDialog, UpgradePrompt,
 } from '../../../shared/components'
 import { selectStyle } from '../../../shared/components/FormField'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate } from '../../../shared/utils/formatDate'
-import { PURCHASE_CSV_COLUMNS } from '../../../shared/utils/csvExport'
+import { PURCHASE_CSV_COLUMNS, PURCHASE_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport'
 
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' }
 const STATUS_LABEL = { paid: 'Paid', partial: 'Partial', pending: 'Unpaid' }
@@ -221,6 +221,13 @@ export default function PurchasesPage() {
             filename="purchases"
             columns={PURCHASE_CSV_COLUMNS}
           />
+          {canCreate && (
+            <ImportButton
+              endpoint="/v1/purchases/import"
+              title="Purchases"
+              columns={PURCHASE_IMPORT_TEMPLATE}
+            />
+          )}
           {canCreate && (
             <Button variant="primary" onClick={() => navigate('/purchases/new')}>
               + New Purchase

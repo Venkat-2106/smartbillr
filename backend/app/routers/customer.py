@@ -29,7 +29,7 @@
 #     are transaction-scoped and are cleared by Postgres on commit.
 # ─────────────────────────────────────────────────────────────────────────────
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, select
 from sqlalchemy.exc import IntegrityError
@@ -41,7 +41,10 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list
+from app.schemas.validators import strip_and_escape_html
 from typing import Optional
+import uuid
 
 router = APIRouter(prefix="/v1/customers", tags=["Customers"])
 
@@ -124,6 +127,170 @@ async def create_customer(
         "message":  "Customer created successfully",
         "customer": customer_to_dict(new_customer, last_updated_by=creator_name)
     }, status_code=201)
+
+
+# ══════════════════════════════════════════════════════════════════
+# POST /customers/import → Bulk import customers from CSV
+# ══════════════════════════════════════════════════════════════════
+@router.post("/import")
+async def import_customers(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(require_permission("customers.manage")),
+    db: AsyncSession = Depends(get_async_db)
+):
+    business_id = current_user["business_id"]
+    user_id = current_user["user_id"]
+
+    # ── 1. Parse CSV ──────────────────────────────────────────────────────────
+    file_bytes = await file.read()
+    rows, parse_error = parse_csv_file(file_bytes)
+    if parse_error:
+        return error_response(parse_error, 400)
+
+    # ── 2. Row transform: validate & sanitize each row ────────────────────────
+    def row_transform(row: dict, row_num: int):
+        # Required field: cust_name
+        name = (row.get("cust_name") or row.get("name") or row.get("Customer Name") or "").strip()
+        if not name:
+            return None, "cust_name is required"
+
+        # Optional fields with sanitization
+        phone = (row.get("cust_phone") or row.get("phone") or row.get("Phone") or "").strip() or None
+        email = (row.get("cust_email") or row.get("email") or row.get("Email") or "").strip() or None
+        address = (row.get("cust_address") or row.get("address") or row.get("Address") or "").strip() or None
+        state = (row.get("cust_state") or row.get("state") or row.get("State") or "").strip() or None
+        country_code = (row.get("cust_country_code") or row.get("country_code") or row.get("Country Code") or "").strip() or None
+        tax_number = (row.get("cust_tax_number") or row.get("tax_number") or row.get("Tax Number") or "").strip() or None
+
+        # Sanitize all string fields (same as CustomerCreate validators)
+        name = strip_and_escape_html(name)
+        if phone:
+            phone = strip_and_escape_html(phone)
+        if email:
+            email = strip_and_escape_html(email)
+        if address:
+            address = strip_and_escape_html(address)
+        if state:
+            state = strip_and_escape_html(state)
+        if country_code:
+            country_code = strip_and_escape_html(country_code)
+        if tax_number:
+            tax_number = strip_and_escape_html(tax_number)
+
+        # Validate email format if provided
+        if email and "@" not in email:
+            return None, "invalid email format"
+
+        return {
+            "cust_name": name,
+            "cust_phone": phone,
+            "cust_email": email,
+            "cust_address": address,
+            "cust_state": state,
+            "cust_country_code": country_code,
+            "cust_tax_number": tax_number,
+            "_row_number": row_num
+        }, None
+
+    valid_rows, errors = validate_rows(rows, row_transform)
+
+    # ── 3. Check bulk create tier limit ───────────────────────────────────────
+    sub_type = current_user.get("subscription_type") or await fetch_subscription_type_async(db, business_id)
+    allowed_count, limit_msg = await check_bulk_create_allowed(
+        db, business_id, sub_type, "max_customers", "customers", len(valid_rows)
+    )
+    if allowed_count == 0:
+        return error_response(limit_msg, 403)
+
+    # Trim valid_rows to allowed_count if partial import
+    if allowed_count < len(valid_rows):
+        valid_rows = valid_rows[:allowed_count]
+        errors.append({"row": 0, "message": limit_msg})
+
+    # ── 4. Fetch existing phones for duplicate detection (single query) ───────
+    existing_phones = {}
+    if valid_rows:
+        phone_list = [r["cust_phone"] for r in valid_rows if r.get("cust_phone")]
+        if phone_list:
+            placeholders = ", ".join([f":phone_{i}" for i in range(len(phone_list))])
+            params = {"bid": business_id}
+            for i, p in enumerate(phone_list):
+                params[f"phone_{i}"] = p
+
+            existing_rows = (await db.execute(text(f"""
+                SELECT cust_id, cust_phone
+                FROM customers
+                WHERE business_id = CAST(:bid AS uuid)
+                  AND cust_phone IN ({placeholders})
+                  AND is_deleted = false
+            """), params)).fetchall()
+
+            for r in existing_rows:
+                existing_phones[r.cust_phone] = str(r.cust_id)
+
+    # ── 5. Upsert in chunks ───────────────────────────────────────────────────
+    created = 0
+    updated = 0
+    upsert_errors = []
+
+    for chunk in chunk_list(valid_rows):
+        for row in chunk:
+            row_num = row.pop("_row_number")
+            phone = row.get("cust_phone")
+
+            try:
+                if phone and phone in existing_phones:
+                    # UPDATE existing
+                    cust_id = existing_phones[phone]
+                    await db.execute(text("""
+                        UPDATE customers
+                        SET cust_name = :name,
+                            cust_email = :email,
+                            cust_address = :address,
+                            cust_state = :state,
+                            cust_country_code = :country_code,
+                            cust_tax_number = :tax_number,
+                            updated_by = CAST(:uid AS uuid)
+                        WHERE cust_id = CAST(:cid AS uuid)
+                          AND business_id = CAST(:bid AS uuid)
+                    """), {**row, "cid": cust_id, "bid": business_id, "uid": user_id})
+                    updated += 1
+                else:
+                    # INSERT new
+                    new_cust_id = str(uuid.uuid4())
+                    await db.execute(text("""
+                        INSERT INTO customers (
+                            cust_id, business_id, cust_name, cust_phone, cust_email,
+                            cust_address, cust_state, cust_country_code, cust_tax_number,
+                            updated_by
+                        ) VALUES (
+                            CAST(:cid AS uuid), CAST(:bid AS uuid), :name, :phone, :email,
+                            :address, :state, :country_code, :tax_number,
+                            CAST(:uid AS uuid)
+                        )
+                    """), {**row, "cid": new_cust_id, "bid": business_id, "uid": user_id})
+                    if phone:
+                        existing_phones[phone] = new_cust_id  # prevent dup within same import
+                    created += 1
+            except Exception as e:
+                upsert_errors.append({"row": row_num, "message": str(e)})
+
+        await db.commit()
+        await async_set_rls_gucs_after_commit(db, current_user)
+
+    all_errors = errors + upsert_errors
+
+    return success_response({
+        "message": f"Import completed: {created} created, {updated} updated, {len(all_errors)} errors",
+        "summary": {
+            "total_rows": len(rows),
+            "valid_rows": len(valid_rows),
+            "created": created,
+            "updated": updated,
+            "errors": len(all_errors)
+        },
+        "errors": all_errors
+    })
 
 
 # ══════════════════════════════════════════════════════════════════

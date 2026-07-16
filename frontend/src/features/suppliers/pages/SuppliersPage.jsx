@@ -14,11 +14,11 @@ import SupplierDetailDrawer from '../components/SupplierDetailDrawer';
 import {
   Button, Modal, Table, EmptyState, SearchBar,
   Pagination, ConfirmDialog, PageHeader, FormField,
-  DateRangeFilter, ExportButton, StateDropdown, UpgradePrompt,
+  DateRangeFilter, ExportButton, ImportButton, StateDropdown, UpgradePrompt,
 } from '../../../shared/components';
 import useAuthStore from '../../../store/authStore';
 import { selectStyle, textareaStyle } from '../../../shared/components/FormField';
-import { SUPPLIER_CSV_COLUMNS } from '../../../shared/utils/csvExport';
+import { SUPPLIER_CSV_COLUMNS, SUPPLIER_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport';
 import { usePermissions } from '../../../shared/hooks/usePermissions';
 import { formatDate } from '../../../shared/utils/formatDate';
 import { COUNTRIES } from '../../../shared/data/countries';
@@ -227,6 +227,13 @@ export default function SuppliersPage() {
               filename="suppliers"
               columns={SUPPLIER_CSV_COLUMNS}
             />
+            {canManage && (
+              <ImportButton
+                endpoint="/v1/suppliers/import"
+                title="Suppliers"
+                columns={SUPPLIER_IMPORT_TEMPLATE}
+              />
+            )}
             {canManage && (
               <Button
                 variant="primary"

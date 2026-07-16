@@ -29,10 +29,11 @@ import {
   Input,
   SearchBar,
   ExportButton,
+  ImportButton,
   DateRangeFilter
 } from '../../../shared/components'
 
-import { CATEGORY_CSV_COLUMNS } from '../../../shared/utils/csvExport'
+import { CATEGORY_CSV_COLUMNS, CATEGORY_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport'
 import { usePermissions }        from '../../../shared/hooks/usePermissions'
 import { formatDate }            from '../../../shared/utils/formatDate'
 
@@ -235,6 +236,13 @@ export default function CategoriesPage() {
               filename="categories"
               columns={CATEGORY_CSV_COLUMNS}
             />
+            {canManage && (
+            <ImportButton
+              endpoint="/v1/categories/import"
+              title="Categories"
+              columns={CATEGORY_IMPORT_TEMPLATE}
+            />
+            )}
             {canManage && (
               <Button
                 variant="primary"

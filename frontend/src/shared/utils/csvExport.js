@@ -400,3 +400,112 @@ export const STOCK_CSV_COLUMNS_NO_PROFIT = [
   { key: 'updated_at',            label: 'Last Updated',
     format: (val) => formatDateCSV(val) },
 ];
+
+// ─── IMPORT TEMPLATE DOWNLOADER ────────────────────────────────────────────────
+// Generates a header-only CSV for each module so users can fill it in
+// and upload it via the Import button.
+
+export function downloadTemplateCsv(filename, columns) {
+  const headerRow = columns.map(col => escapeCsvCell(col.label)).join(',');
+  const csvString = headerRow + '\r\n';
+
+  const BOM = '\uFEFF';
+  const blob = new Blob([BOM + csvString], { type: 'text/csv;charset=utf-8;' });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${filename}_template.csv`;
+  link.style.display = 'none';
+
+  document.body.appendChild(link);
+  link.click();
+
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+// ─── IMPORT TEMPLATE COLUMN CONFIGS ─────────────────────────────────────────────
+// These match the CSV columns accepted by the backend /import endpoints.
+// They use the PRIMARY KEY names (the first column name the backend reads).
+
+/** Import template for Categories */
+export const CATEGORY_IMPORT_TEMPLATE = [
+  { key: 'category_name', label: 'Category Name' },
+];
+
+/** Import template for Customers */
+export const CUSTOMER_IMPORT_TEMPLATE = [
+  { key: 'cust_name',         label: 'Customer Name' },
+  { key: 'cust_phone',        label: 'Phone' },
+  { key: 'cust_email',        label: 'Email' },
+  { key: 'cust_address',      label: 'Address' },
+  { key: 'cust_state',        label: 'State' },
+  { key: 'cust_country_code', label: 'Country Code' },
+  { key: 'cust_tax_number',   label: 'Tax / GST Number' },
+];
+
+/** Import template for Suppliers */
+export const SUPPLIER_IMPORT_TEMPLATE = [
+  { key: 'supp_name',         label: 'Supplier Name' },
+  { key: 'supp_phone',        label: 'Phone' },
+  { key: 'supp_email',        label: 'Email' },
+  { key: 'supp_address',      label: 'Address' },
+  { key: 'supp_state',        label: 'State' },
+  { key: 'supp_country_code', label: 'Country' },
+  { key: 'supp_tax_number',   label: 'Tax Number' },
+];
+
+/** Import template for Products */
+export const PRODUCT_IMPORT_TEMPLATE = [
+  { key: 'prod_name',           label: 'Product Name' },
+  { key: 'category_name',       label: 'Category' },
+  { key: 'prod_sell_price',     label: 'Sell Price' },
+  { key: 'prod_cost_price',     label: 'Cost Price' },
+  { key: 'prod_mrp',            label: 'MRP' },
+  { key: 'prod_stock_qty',      label: 'Stock Qty' },
+  { key: 'prod_low_stock_alert',label: 'Low Stock Alert' },
+  { key: 'tax_rate',            label: 'Tax Rate %' },
+  { key: 'tax_code',            label: 'Tax Code' },
+  { key: 'barcode',             label: 'Barcode' },
+  { key: 'unit',                label: 'Unit' },
+];
+
+/** Import template for Stock */
+export const STOCK_IMPORT_TEMPLATE = [
+  { key: 'product_id',       label: 'Product ID' },
+  { key: 'barcode',          label: 'Barcode' },
+  { key: 'prod_name',        label: 'Product Name' },
+  { key: 'adjustment_type',  label: 'Type (add/remove/set)' },
+  { key: 'qty',              label: 'Quantity' },
+  { key: 'move_notes',       label: 'Notes' },
+];
+
+/** Import template for Purchases */
+export const PURCHASE_IMPORT_TEMPLATE = [
+  { key: 'supp_phone',      label: 'Supplier Phone' },
+  { key: 'supp_name',       label: 'Supplier Name' },
+  { key: 'prod_name',       label: 'Product Name' },
+  { key: 'barcode',         label: 'Barcode' },
+  { key: 'qty',             label: 'Quantity' },
+  { key: 'unit_price',      label: 'Unit Price' },
+  { key: 'discount',        label: 'Discount' },
+  { key: 'payment_status',  label: 'Payment Status (pending/paid/partial)' },
+  { key: 'notes',           label: 'Notes' },
+];
+
+/** Import template for Sales */
+export const SALES_IMPORT_TEMPLATE = [
+  { key: 'cust_phone',           label: 'Customer Phone' },
+  { key: 'cust_name',            label: 'Customer Name' },
+  { key: 'prod_name',            label: 'Product Name' },
+  { key: 'barcode',              label: 'Barcode' },
+  { key: 'qty',                  label: 'Quantity' },
+  { key: 'unit_price',           label: 'Unit Price' },
+  { key: 'discount',             label: 'Discount' },
+  { key: 'payment_method',       label: 'Payment Method (cash/upi/card/bank/split)' },
+  { key: 'payment_status',       label: 'Payment Status (pending/paid/partial)' },
+  { key: 'paid_amount',          label: 'Paid Amount' },
+  { key: 'allow_stock_override', label: 'Allow Stock Override (true/false)' },
+  { key: 'invoice_no',           label: 'Invoice No' },
+];

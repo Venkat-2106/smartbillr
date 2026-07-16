@@ -20,6 +20,7 @@ import {
   Pagination,
   SearchBar,
   ExportButton,
+  ImportButton,
   DateRangeFilter,
   MetricCard,
   BentoCard,
@@ -27,7 +28,7 @@ import {
   selectStyle,
 } from '../../../shared/components'
 
-import { STOCK_CSV_COLUMNS, STOCK_CSV_COLUMNS_NO_PROFIT } from '../../../shared/utils/csvExport'
+import { STOCK_CSV_COLUMNS, STOCK_CSV_COLUMNS_NO_PROFIT, STOCK_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport'
 import { usePermissions }  from '../../../shared/hooks/usePermissions'
 import { formatDate }      from '../../../shared/utils/formatDate'
 import { formatCurrency }  from '../../../shared/utils/formatCurrency'
@@ -402,6 +403,11 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <ExportButton onFetch={handleExport} filename="stock" columns={csvColumns} />
+          <ImportButton
+            endpoint="/v1/stock/import"
+            title="Stock"
+            columns={STOCK_IMPORT_TEMPLATE}
+          />
         </div>
       </div>
 

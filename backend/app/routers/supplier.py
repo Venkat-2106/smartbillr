@@ -34,7 +34,7 @@
 #   The COUNT query uses the same WHERE clauses as the data query so that
 #   the pagination total always reflects the filtered result set.
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
@@ -46,7 +46,10 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list
+from app.schemas.validators import strip_and_escape_html
 from typing import Optional
+import uuid
 
 router = APIRouter(prefix="/v1/suppliers", tags=["Suppliers"])
 
@@ -133,6 +136,152 @@ async def create_supplier(
         "message":  "Supplier created successfully",
         "supplier": supplier_to_dict(new_supplier, last_updated_by=creator_name)
     }, status_code=201)
+
+
+# ══════════════════════════════════════════════════════════════════
+# POST /suppliers/import → Bulk import suppliers from CSV
+# ══════════════════════════════════════════════════════════════════
+@router.post("/import")
+async def import_suppliers(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(require_permission("suppliers.manage")),
+    db: AsyncSession = Depends(get_async_db)
+):
+    business_id = current_user["business_id"]
+    user_id = current_user["user_id"]
+
+    # ── 1. Parse CSV ──────────────────────────────────────────────────────────
+    file_bytes = await file.read()
+    rows, parse_error = parse_csv_file(file_bytes)
+    if parse_error:
+        return error_response(parse_error, 400)
+
+    # ── 2. Validate & transform rows ──────────────────────────────────────────
+    def row_transform(row: dict, row_num: int):
+        name = strip_and_escape_html(row.get("supp_name", "")).strip()
+        phone = strip_and_escape_html(row.get("supp_phone", "")).strip() if row.get("supp_phone") else None
+        email = strip_and_escape_html(row.get("supp_email", "")).strip() if row.get("supp_email") else None
+        address = strip_and_escape_html(row.get("supp_address", "")).strip() if row.get("supp_address") else None
+        state = strip_and_escape_html(row.get("supp_state", "")).strip() if row.get("supp_state") else None
+        country_code = strip_and_escape_html(row.get("supp_country_code", "")).strip() if row.get("supp_country_code") else None
+        tax_number = strip_and_escape_html(row.get("supp_tax_number", "")).strip() if row.get("supp_tax_number") else None
+
+        if not name:
+            return None, "supplier name is required"
+        if phone and "@" in phone:  # simple sanity check
+            return None, "phone appears to be an email"
+        if email and "@" not in email:
+            return None, "invalid email format"
+
+        return {
+            "supp_name": name,
+            "supp_phone": phone,
+            "supp_email": email,
+            "supp_address": address,
+            "supp_state": state,
+            "supp_country_code": country_code,
+            "supp_tax_number": tax_number,
+            "_row_number": row_num
+        }, None
+
+    valid_rows, errors = validate_rows(rows, row_transform)
+
+    # ── 3. Check bulk create tier limit ───────────────────────────────────────
+    sub_type = current_user.get("subscription_type") or await fetch_subscription_type_async(db, business_id)
+    allowed_count, limit_msg = await check_bulk_create_allowed(
+        db, business_id, sub_type, "max_suppliers", "suppliers", len(valid_rows)
+    )
+    if allowed_count == 0:
+        return error_response(limit_msg, 403)
+
+    # Trim valid_rows to allowed_count if partial import
+    if allowed_count < len(valid_rows):
+        valid_rows = valid_rows[:allowed_count]
+        errors.append({"row": 0, "message": limit_msg})
+
+    # ── 4. Fetch existing phones for duplicate detection (single query) ───────
+    existing_phones = {}
+    if valid_rows:
+        phone_list = [r["supp_phone"] for r in valid_rows if r.get("supp_phone")]
+        if phone_list:
+            placeholders = ", ".join([f":phone_{i}" for i in range(len(phone_list))])
+            params = {"bid": business_id}
+            for i, p in enumerate(phone_list):
+                params[f"phone_{i}"] = p
+
+            existing_rows = (await db.execute(text(f"""
+                SELECT supp_id, supp_phone
+                FROM suppliers
+                WHERE business_id = CAST(:bid AS uuid)
+                  AND supp_phone IN ({placeholders})
+                  AND is_deleted = false
+            """), params)).fetchall()
+
+            for r in existing_rows:
+                existing_phones[r.supp_phone] = str(r.supp_id)
+
+    # ── 5. Upsert in chunks ───────────────────────────────────────────────────
+    created = 0
+    updated = 0
+    upsert_errors = []
+
+    for chunk in chunk_list(valid_rows):
+        for row in chunk:
+            row_num = row.pop("_row_number")
+            phone = row.get("supp_phone")
+
+            try:
+                if phone and phone in existing_phones:
+                    # UPDATE existing
+                    supp_id = existing_phones[phone]
+                    await db.execute(text("""
+                        UPDATE suppliers
+                        SET supp_name = :name,
+                            supp_email = :email,
+                            supp_address = :address,
+                            supp_state = :state,
+                            supp_country_code = :country_code,
+                            supp_tax_number = :tax_number
+                        WHERE supp_id = CAST(:sid AS uuid)
+                          AND business_id = CAST(:bid AS uuid)
+                    """), {**row, "sid": supp_id, "bid": business_id})
+                    updated += 1
+                else:
+                    # INSERT new
+                    new_supp_id = str(uuid.uuid4())
+                    await db.execute(text("""
+                        INSERT INTO suppliers (
+                            supp_id, business_id, supp_name, supp_phone, supp_email,
+                            supp_address, supp_state, supp_country_code, supp_tax_number,
+                            updated_by
+                        ) VALUES (
+                            CAST(:sid AS uuid), CAST(:bid AS uuid), :name, :phone, :email,
+                            :address, :state, :country_code, :tax_number,
+                            CAST(:uid AS uuid)
+                        )
+                    """), {**row, "sid": new_supp_id, "bid": business_id, "uid": user_id})
+                    if phone:
+                        existing_phones[phone] = new_supp_id  # prevent dup within same import
+                    created += 1
+            except Exception as e:
+                upsert_errors.append({"row": row_num, "message": str(e)})
+
+        await db.commit()
+        await async_set_rls_gucs_after_commit(db, current_user)
+
+    all_errors = errors + upsert_errors
+
+    return success_response({
+        "message": f"Import completed: {created} created, {updated} updated, {len(all_errors)} errors",
+        "summary": {
+            "total_rows": len(rows),
+            "valid_rows": len(valid_rows),
+            "created": created,
+            "updated": updated,
+            "errors": len(all_errors)
+        },
+        "errors": all_errors
+    })
 
 
 # ══════════════════════════════════════════════════════════════════

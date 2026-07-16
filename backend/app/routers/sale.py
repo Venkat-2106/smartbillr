@@ -38,7 +38,7 @@
 #   uses bulk FROM (VALUES ...) UPDATE for efficiency.
 # ─────────────────────────────────────────────────────────────────────────────
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, File, UploadFile
 from fastapi import Body
 from pydantic import BaseModel, field_validator
 from typing import Optional
@@ -72,6 +72,8 @@ from app.services.sale_service import (
 from app.utils.payment_helpers import record_payment_and_sync_async, calculate_payment_status
 from app.utils.currency import get_currency_symbol
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list
+from app.schemas.validators import strip_and_escape_html
 import uuid
 
 router = APIRouter(prefix="/v1/sales", tags=["Sales"])
@@ -159,6 +161,361 @@ async def create_sale(
     except Exception as e:
         await db.rollback()
         return error_response(parse_sale_error(str(e)), 500)
+
+
+# ══════════════════════════════════════════════════════════════════
+# POST /sales/import → Bulk import sales from CSV
+#
+# Each CSV row creates a single-item sale. Customer and product are
+# resolved by phone/name and name/barcode respectively.
+# Tax calculation is handled by DB triggers (fn_sale_stock_movement).
+# Invoice numbers are generated via the business_counters sequence.
+# ══════════════════════════════════════════════════════════════════
+@router.post("/import")
+async def import_sales(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(require_permission("sales.create")),
+    db: AsyncSession = Depends(get_async_db)
+):
+    business_id = current_user["business_id"]
+    user_id = current_user["user_id"]
+
+    # ── 1. Parse CSV ──────────────────────────────────────────────────────────
+    file_bytes = await file.read()
+    rows, parse_error = parse_csv_file(file_bytes)
+    if parse_error:
+        return error_response(parse_error, 400)
+
+    # ── 2. Row transform: validate & transform each row ────────────────────────
+    def row_transform(row: dict, row_num: int):
+        # Customer identification (optional — walk-in sales allowed)
+        cust_phone = (row.get("cust_phone") or row.get("customer_phone") or row.get("Phone") or "").strip() or None
+        cust_name = (row.get("cust_name") or row.get("customer_name") or row.get("Customer Name") or "").strip() or None
+
+        # Product identification (required)
+        prod_name = (row.get("prod_name") or row.get("product_name") or row.get("Product Name") or "").strip()
+        barcode = (row.get("barcode") or row.get("Barcode") or "").strip() or None
+
+        if not prod_name and not barcode:
+            return None, "product_name or barcode is required"
+
+        # Quantities & prices (required)
+        qty_raw = row.get("qty") or row.get("quantity") or row.get("Qty") or row.get("Quantity")
+        unit_price_raw = row.get("unit_price") or row.get("price") or row.get("Unit Price") or row.get("Price")
+
+        if not qty_raw:
+            return None, "quantity is required"
+        if not unit_price_raw:
+            return None, "unit_price is required"
+
+        try:
+            qty = int(float(qty_raw))
+            unit_price = Decimal(str(float(unit_price_raw)))
+            if qty <= 0:
+                return None, "quantity must be positive"
+            if unit_price <= 0:
+                return None, "unit_price must be positive"
+        except (ValueError, TypeError):
+            return None, "invalid quantity or unit_price"
+
+        # Optional fields
+        discount_raw = row.get("discount") or row.get("Discount") or "0"
+        payment_method = (row.get("payment_method") or row.get("Payment Method") or "cash").strip().lower()
+        payment_status = (row.get("payment_status") or row.get("Payment Status") or "pending").strip().lower()
+        paid_amount_raw = row.get("paid_amount") or row.get("Paid Amount")
+        allow_stock_override_raw = (row.get("allow_stock_override") or row.get("Override") or "false").strip().lower()
+        invoice_no = (row.get("invoice_no") or row.get("Invoice No") or "").strip() or None
+
+        try:
+            discount = Decimal(str(float(discount_raw)))
+            if discount < 0:
+                discount = Decimal("0")
+        except (ValueError, TypeError):
+            discount = Decimal("0")
+
+        paid_amount = None
+        if paid_amount_raw and paid_amount_raw.strip():
+            try:
+                paid_amount = Decimal(str(float(paid_amount_raw)))
+                if paid_amount <= 0:
+                    paid_amount = None
+            except (ValueError, TypeError):
+                pass
+
+        # Validate enums
+        if payment_method not in ("cash", "upi", "card", "bank", "split"):
+            payment_method = "cash"
+
+        if payment_status not in ("pending", "paid", "partial"):
+            payment_status = "pending"
+
+        allow_stock_override = allow_stock_override_raw in ("true", "yes", "1")
+
+        # Sanitize strings
+        if cust_phone:
+            cust_phone = strip_and_escape_html(cust_phone)
+        if cust_name:
+            cust_name = strip_and_escape_html(cust_name)
+        if prod_name:
+            prod_name = strip_and_escape_html(prod_name)
+        if barcode:
+            barcode = strip_and_escape_html(barcode)
+        if invoice_no:
+            invoice_no = strip_and_escape_html(invoice_no)
+
+        return {
+            "cust_phone": cust_phone, "cust_name": cust_name,
+            "prod_name": prod_name, "barcode": barcode,
+            "qty": qty, "unit_price": str(unit_price),
+            "discount": str(discount),
+            "payment_method": payment_method,
+            "payment_status": payment_status,
+            "paid_amount": str(paid_amount) if paid_amount else None,
+            "allow_stock_override": allow_stock_override,
+            "invoice_no": invoice_no,
+            "_row_number": row_num
+        }, None
+
+    valid_rows, errors = validate_rows(rows, row_transform)
+
+    # ── 3. Check bulk create tier limit ───────────────────────────────────────
+    sub_type = current_user.get("subscription_type") or await fetch_subscription_type_async(db, business_id)
+    allowed_count, limit_msg = await check_bulk_create_allowed(
+        db, business_id, sub_type, "max_sales_per_month", "sales", len(valid_rows)
+    )
+    if allowed_count == 0:
+        return error_response(limit_msg, 403)
+
+    if allowed_count < len(valid_rows):
+        valid_rows = valid_rows[:allowed_count]
+        errors.append({"row": 0, "message": limit_msg})
+
+    # ── 4. Pre-resolve customers and products ─────────────────────────────────
+    # Customer by phone
+    cust_map = {}
+    phone_list = list(set(r["cust_phone"] for r in valid_rows if r.get("cust_phone")))
+    if phone_list:
+        placeholders = ", ".join([f":cp_{i}" for i in range(len(phone_list))])
+        params = {"bid": business_id}
+        for i, cp in enumerate(phone_list):
+            params[f"cp_{i}"] = cp
+
+        cust_rows = (await db.execute(text(f"""
+            SELECT cust_id::text, cust_phone, cust_name, cust_state, cust_country_code
+            FROM customers
+            WHERE business_id = CAST(:bid AS uuid)
+              AND cust_phone IN ({placeholders})
+              AND is_deleted = false
+        """), params)).fetchall()
+
+        for r in cust_rows:
+            key = r.cust_phone or str(r.cust_id)
+            cust_map[key] = str(r.cust_id)
+
+    # Customer by name (fallback)
+    name_list = list(set(r["cust_name"] for r in valid_rows if r.get("cust_name") and not r.get("cust_phone")))
+    if name_list:
+        placeholders = ", ".join([f":cn_{i}" for i in range(len(name_list))])
+        params = {"bid": business_id}
+        for i, cn in enumerate(name_list):
+            params[f"cn_{i}"] = cn
+
+        cust_rows = (await db.execute(text(f"""
+            SELECT cust_id::text, cust_name
+            FROM customers
+            WHERE business_id = CAST(:bid AS uuid)
+              AND cust_name IN ({placeholders})
+              AND is_deleted = false
+        """), params)).fetchall()
+
+        for r in cust_rows:
+            key = r.cust_name
+            if key not in cust_map:
+                cust_map[key] = str(r.cust_id)
+
+    # Product lookup
+    product_map = {}
+    prod_name_list = list(set(r["prod_name"] for r in valid_rows if r.get("prod_name")))
+    barcode_list = list(set(r["barcode"] for r in valid_rows if r.get("barcode") and not r.get("prod_name")))
+
+    if prod_name_list:
+        placeholders = ", ".join([f":pn_{i}" for i in range(len(prod_name_list))])
+        params = {"bid": business_id}
+        for i, pn in enumerate(prod_name_list):
+            params[f"pn_{i}"] = pn
+
+        prod_rows = (await db.execute(text(f"""
+            SELECT prod_id::text, prod_name, prod_stock_qty, prod_sell_price
+            FROM products
+            WHERE business_id = CAST(:bid AS uuid)
+              AND prod_name IN ({placeholders})
+              AND is_deleted = false
+        """), params)).fetchall()
+
+        for r in prod_rows:
+            product_map[r.prod_name] = {
+                "prod_id": str(r.prod_id),
+                "stock_qty": r.prod_stock_qty,
+                "prod_sell_price": float(r.prod_sell_price)
+            }
+
+    if barcode_list:
+        placeholders = ", ".join([f":pb_{i}" for i in range(len(barcode_list))])
+        params = {"bid": business_id}
+        for i, pb in enumerate(barcode_list):
+            params[f"pb_{i}"] = pb
+
+        prod_rows = (await db.execute(text(f"""
+            SELECT prod_id::text, barcode, prod_name, prod_stock_qty, prod_sell_price
+            FROM products
+            WHERE business_id = CAST(:bid AS uuid)
+              AND barcode IN ({placeholders})
+              AND is_deleted = false
+        """), params)).fetchall()
+
+        for r in prod_rows:
+            key = r.barcode or r.prod_name
+            product_map[key] = {
+                "prod_id": str(r.prod_id),
+                "stock_qty": r.prod_stock_qty,
+                "prod_sell_price": float(r.prod_sell_price)
+            }
+
+    # ── 5. Create sales ───────────────────────────────────────────────────────
+    created = 0
+    sale_errors = []
+
+    for chunk in chunk_list(valid_rows):
+        for row in chunk:
+            row_num = row.pop("_row_number")
+
+            # Resolve customer
+            cust_id = None
+            if row.get("cust_phone"):
+                cust_id = cust_map.get(row["cust_phone"])
+            elif row.get("cust_name"):
+                cust_id = cust_map.get(row["cust_name"])
+
+            # Resolve product
+            prod_key = row.get("prod_name") or row.get("barcode")
+            prod_info = product_map.get(prod_key) if prod_key else None
+            if not prod_info:
+                sale_errors.append({"row": row_num, "message": "product not found"})
+                continue
+
+            try:
+                unit_price = Decimal(row["unit_price"])
+                qty = row["qty"]
+                discount = Decimal(row.get("discount", "0"))
+                payment_method = row.get("payment_method", "cash")
+                payment_status = row.get("payment_status", "pending")
+                paid_amount = Decimal(row["paid_amount"]) if row.get("paid_amount") else None
+                allow_override = row.get("allow_stock_override", False)
+                invoice_no = row.get("invoice_no")
+
+                # ── Stock validation ──
+                if not allow_override and prod_info["stock_qty"] < qty:
+                    sale_errors.append({
+                        "row": row_num,
+                        "message": f"insufficient stock for product — need {qty} but only {prod_info['stock_qty']} available"
+                    })
+                    continue
+
+                # ── Calculate total ──
+                total_amount = unit_price * qty
+
+                # ── Generate invoice number (unless provided) ──
+                if not invoice_no:
+                    invoice_no = await generate_invoice_number(db, business_id)
+
+                new_sale_id = str(uuid.uuid4())
+                new_item_id = str(uuid.uuid4())
+
+                # ── Create sale directly via raw SQL (reuses patterns from create_sale + purchase import) ──
+                await db.execute(text("""
+                    INSERT INTO sales (
+                        sales_id, business_id, customer_id,
+                        invoice_no, sales_total_amount, sales_discount,
+                        sales_payment_method, sales_payment_status, created_by
+                    ) VALUES (
+                        CAST(:sid AS uuid), CAST(:bid AS uuid), CAST(:cid AS uuid),
+                        :inv_no, :total_amount, :discount,
+                        :pay_method, :pay_status, CAST(:uid AS uuid)
+                    )
+                """), {
+                    "sid": new_sale_id, "bid": business_id,
+                    "cid": cust_id, "inv_no": invoice_no,
+                    "total_amount": str(total_amount), "discount": str(discount),
+                    "pay_method": payment_method, "pay_status": payment_status,
+                    "uid": user_id
+                })
+
+                # ── Insert sale item (DB triggers handle tax/stock) ──
+                await db.execute(text("""
+                    INSERT INTO sale_items (
+                        sale_item_id, business_id, sale_id, product_id,
+                        sale_item_quantity, sale_item_unit_price
+                    ) VALUES (
+                        CAST(:iid AS uuid), CAST(:bid AS uuid), CAST(:sid AS uuid),
+                        CAST(:pid AS uuid), :qty, :unit_price
+                    )
+                """), {
+                    "iid": new_item_id, "bid": business_id,
+                    "sid": new_sale_id, "pid": prod_info["prod_id"],
+                    "qty": qty, "unit_price": str(unit_price)
+                })
+
+                # ── Auto-record payment if status is not pending ──
+                if payment_status in ("paid", "partial"):
+                    pay_sale_full = total_amount - discount
+                    pay_amount = paid_amount if paid_amount else pay_sale_full
+                    pay_type = "partial" if payment_status == "partial" else "paid"
+
+                    new_pay_id = str(uuid.uuid4())
+                    await db.execute(text("""
+                        INSERT INTO payments (
+                            payment_id, business_id, sale_id,
+                            payment_amount, payment_method,
+                            cumulative_paid, payment_status,
+                            payment_note
+                        ) VALUES (
+                            CAST(:pid AS uuid), CAST(:bid AS uuid), CAST(:sid AS uuid),
+                            :amount, :method,
+                            :cumulative_paid, :status,
+                            :note
+                        )
+                    """), {
+                        "pid": new_pay_id, "bid": business_id,
+                        "sid": new_sale_id,
+                        "amount": str(pay_amount), "method": payment_method,
+                        "cumulative_paid": str(pay_amount), "status": pay_type,
+                        "note": "Auto-recorded from CSV bulk import"
+                    })
+
+                # Update local stock cache for subsequent rows
+                new_stock = prod_info["stock_qty"] - qty
+                product_map[prod_key]["stock_qty"] = max(0, new_stock)
+
+                created += 1
+
+            except Exception as e:
+                sale_errors.append({"row": row_num, "message": str(e)})
+
+        await db.commit()
+        await async_set_rls_gucs_after_commit(db, current_user)
+
+    all_errors = errors + sale_errors
+
+    return success_response({
+        "message": f"Import completed: {created} sales created, {len(all_errors)} errors",
+        "summary": {
+            "total_rows": len(rows),
+            "valid_rows": len(valid_rows),
+            "created": created,
+            "errors": len(all_errors)
+        },
+        "errors": all_errors
+    })
 
 
 @router.get("/")

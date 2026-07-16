@@ -53,11 +53,12 @@ import {
   Pagination,
   SearchBar,
   ExportButton,
+  ImportButton,
   MetricCard,
   BentoCard,
 } from '../../../shared/components'
 
-import { PRODUCT_CSV_COLUMNS, PRODUCT_CSV_COLUMNS_NO_PROFIT } from '../../../shared/utils/csvExport'
+import { PRODUCT_CSV_COLUMNS, PRODUCT_CSV_COLUMNS_NO_PROFIT, PRODUCT_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport'
 import { usePermissions }       from '../../../shared/hooks/usePermissions'
 import { formatDate }           from '../../../shared/utils/formatDate'
 import { formatCurrency }       from '../../../shared/utils/formatCurrency'
@@ -795,6 +796,13 @@ export default function ProductsPage() {
             filename="products"
             columns={csvColumns}
           />
+          {canManage && (
+            <ImportButton
+              endpoint="/v1/products/import"
+              title="Products"
+              columns={PRODUCT_IMPORT_TEMPLATE}
+            />
+          )}
           {canManage && (
             <Button
               variant="primary"

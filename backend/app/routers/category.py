@@ -16,7 +16,7 @@
 #     queries follow in the same request.  set_config(is_local=true) values
 #     are transaction-scoped and are cleared by Postgres on commit.
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select, text
 from app.database import get_async_db
@@ -26,6 +26,8 @@ from app.utils.pagination import paginate_async, pagination_response
 from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryResponse
 from app.models.category import Category
 from app.utils.timestamp import fmt_ts
+from app.utils.bulk_import import parse_csv_file, validate_rows, chunk_list
+from app.schemas.validators import strip_and_escape_html
 from typing import Optional
 import uuid
 
@@ -102,6 +104,116 @@ async def create_category(
         "updated_by":      str(current_user["user_id"]),
         "last_updated_by": creator_name,
     }, 201)
+
+
+# ══════════════════════════════════════════════════════════════════
+# POST /categories/import → Bulk import categories from CSV
+# ══════════════════════════════════════════════════════════════════
+@router.post("/import")
+async def import_categories(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(require_permission("products.edit")),
+    db: AsyncSession = Depends(get_async_db)
+):
+    business_id = current_user["business_id"]
+    user_id = current_user["user_id"]
+
+    # ── 1. Parse CSV ──────────────────────────────────────────────────────────
+    file_bytes = await file.read()
+    rows, parse_error = parse_csv_file(file_bytes)
+    if parse_error:
+        return error_response(parse_error, 400)
+
+    # ── 2. Row transform: validate & sanitize each row ────────────────────────
+    def row_transform(row: dict, row_num: int):
+        # Required field: category_name
+        name = row.get("category_name") or row.get("name") or row.get("Category Name") or ""
+        name = name.strip()
+        if not name:
+            return None, "category_name is required"
+
+        # Sanitize (same as CategoryCreate validator)
+        name = strip_and_escape_html(name)
+
+        return {"category_name": name, "_row_number": row_num}, None
+
+    valid_rows, errors = validate_rows(rows, row_transform)
+
+    # ── 3. No tier limit for categories (uncapped) — skip check_bulk_create_allowed
+    # But still enforce max import rows (handled by parse_csv_file)
+
+    # ── 4. Fetch existing category names for duplicate detection (single query) ─
+    existing_names = {}
+    if valid_rows:
+        name_list = [r["category_name"] for r in valid_rows]
+        # Batch fetch existing names (case-insensitive)
+        placeholders = ", ".join([f":name_{i}" for i in range(len(name_list))])
+        params = {"bid": business_id}
+        for i, n in enumerate(name_list):
+            params[f"name_{i}"] = n.lower()
+
+        existing_rows = (await db.execute(text(f"""
+            SELECT category_id, LOWER(category_name) as lname
+            FROM categories
+            WHERE business_id = CAST(:bid AS uuid)
+              AND LOWER(category_name) IN ({placeholders})
+              AND is_deleted = false
+        """), params)).fetchall()
+
+        for r in existing_rows:
+            existing_names[r.lname] = str(r.category_id)
+
+    # ── 5. Upsert in chunks ────────────────────────────────────────────────────
+    created = 0
+    updated = 0
+    upsert_errors = []
+
+    for chunk in chunk_list(valid_rows):
+        for row in chunk:
+            row_num = row.pop("_row_number")
+            name = row["category_name"]
+            name_lower = name.lower()
+
+            try:
+                if name_lower in existing_names:
+                    # UPDATE existing
+                    cat_id = existing_names[name_lower]
+                    await db.execute(text("""
+                        UPDATE categories
+                        SET category_name = :name,
+                            updated_by = CAST(:uid AS uuid)
+                        WHERE category_id = CAST(:cid AS uuid)
+                          AND business_id = CAST(:bid AS uuid)
+                    """), {"name": name, "cid": cat_id, "bid": business_id, "uid": user_id})
+                    updated += 1
+                else:
+                    # INSERT new
+                    new_cat_id = str(uuid.uuid4())
+                    await db.execute(text("""
+                        INSERT INTO categories (category_id, business_id, category_name, created_by, updated_by)
+                        VALUES (CAST(:cid AS uuid), CAST(:bid AS uuid), :name, CAST(:uid AS uuid), CAST(:uid AS uuid))
+                    """), {"cid": new_cat_id, "bid": business_id, "name": name, "uid": user_id})
+                    existing_names[name_lower] = new_cat_id  # prevent dup within same import
+                    created += 1
+            except Exception as e:
+                upsert_errors.append({"row": row_num, "message": str(e)})
+
+        await db.commit()
+        await async_set_rls_gucs_after_commit(db, current_user)
+
+    all_errors = errors + upsert_errors
+
+    return success_response({
+        "message": f"Import completed: {created} created, {updated} updated, {len(all_errors)} errors",
+        "summary": {
+            "total_rows": len(rows),
+            "valid_rows": len(valid_rows),
+            "created": created,
+            "updated": updated,
+            "errors": len(all_errors)
+        },
+        "errors": all_errors
+    })
 
 
 # ══════════════════════════════════════════════════════════════════

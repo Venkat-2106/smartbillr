@@ -6,12 +6,12 @@ import { fetchSalesSummary } from '../api/salesApi';
 import SaleDetailDrawer from '../components/SaleDetailDrawer';
 import {
   Table, Button, Badge, SearchBar,
-  Pagination, DateRangeFilter, ExportButton,
+  Pagination, DateRangeFilter, ExportButton, ImportButton,
   ConfirmDialog, EmptyState, BentoCard, MetricCard,
   UpgradePrompt,
 } from '../../../shared/components';
 import { selectStyle }       from '../../../shared/components/FormField';
-import { SALES_CSV_COLUMNS } from '../../../shared/utils/csvExport';
+import { SALES_CSV_COLUMNS, SALES_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport';
 import { formatCurrency }    from '../../../shared/utils/formatCurrency';
 import { formatDate }        from '../../../shared/utils/formatDate';
 import useAuthStore          from '../../../store/authStore';
@@ -252,6 +252,13 @@ export default function SalesPage() {
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <ExportButton onFetch={handleExport} filename="sales" columns={SALES_CSV_COLUMNS} />
+          {canCreate && (
+            <ImportButton
+              endpoint="/v1/sales/import"
+              title="Sales"
+              columns={SALES_IMPORT_TEMPLATE}
+            />
+          )}
           {canCreate && (
             <Button variant="primary" onClick={() => navigate('/sales/new')} data-shortcut="new">
               + New Invoice

@@ -293,7 +293,7 @@ function applyTheme(theme, accent) {
 }
 
 function useTheme() {
-  const [theme,  setThemeState]  = useState(() => localStorage.getItem(THEME_KEY)  || 'light')
+  const [theme,  setThemeState]  = useState(() => localStorage.getItem(THEME_KEY)  ?? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'))
   const [accent, setAccentState] = useState(() => localStorage.getItem(ACCENT_KEY) || 'blue')
   useEffect(() => { applyTheme(theme, accent) }, [theme, accent])
   function setTheme(t)  { localStorage.setItem(THEME_KEY,  t); setThemeState(t) }

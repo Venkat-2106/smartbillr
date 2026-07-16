@@ -57,11 +57,8 @@ const HamburgerIcon = (
   </svg>
 )
 
-const BellIcon = (
-  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-    <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
-  </svg>
-)
+// FIXED: Removed decorative-only BellIcon — had no notification API, no unread
+// count, no click handler. It was a static UI element pretending to be interactive.
 
 const MoonIcon = (
   <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -241,12 +238,6 @@ const hamburgerBtnStyle = {
   color: 'var(--text-secondary)',
 }
 
-const notificationDotStyle = {
-  position: 'absolute', top: 8, right: 9,
-  width: 5, height: 5, background: 'var(--accent-600)',
-  borderRadius: '50%',
-  border: '1.5px solid var(--topbar-bg)',
-}
 
 const topbarDividerStyle = { width: 1, height: 18, background: 'var(--border)' }
 
@@ -873,11 +864,6 @@ export default function DashboardLayout() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 8 }}>
-
-            <IconButton aria-label="Notifications">
-              {BellIcon}
-              <span style={notificationDotStyle} />
-            </IconButton>
 
             <div style={topbarDividerStyle} />
 

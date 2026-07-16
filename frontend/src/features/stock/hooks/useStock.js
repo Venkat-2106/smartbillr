@@ -186,8 +186,13 @@ export function useStockMovements({ active = false } = {}) {
 
   const [search,   setSearchRaw]  = useState('')
   const [moveType, setMoveTypeRaw] = useState('')
-  const [dateFrom, setDateFrom]   = useState('')
-  const [dateTo,   setDateTo]     = useState('')
+  const defaultDateFrom = (() => {
+    const d = new Date(); d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0, 10)
+  })()
+  const defaultDateTo = new Date().toISOString().slice(0, 10)
+  const [dateFrom, setDateFrom]   = useState(defaultDateFrom)
+  const [dateTo,   setDateTo]     = useState(defaultDateTo)
   const [sortKey,  setSortKey]    = useState('move_created_at')
   const [sortDir,  setSortDir]    = useState('desc')
   const [page,     setPage]       = useState(1)

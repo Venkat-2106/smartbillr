@@ -105,6 +105,23 @@ def return_item_to_dict(row):
 # HELPER: Validate return items against original sale
 # FIX: Now queries sales_return_items and uses sale_item_id for lookups,
 #      matching the DB trigger's validation logic exactly.
+#
+# CONCURRENCY SAFETY:
+#   FOR UPDATE OF si serialises concurrent return-creation/approval requests
+#   on the same sale_items rows. Without it, two concurrent requests both
+#   read stale "already_returned" totals and both approve returns that
+#   together exceed the original sale quantity — the DB trigger would then
+#   add stock back twice (double-restock bug).
+#
+#   Matching the pattern in purchase_return.py validate_return_items (which
+#   uses FOR UPDATE OF pi).
+#
+# TRANSACTION OWNERSHIP:
+#   This function MUST only be called inside a transaction controlled by the
+#   caller (inside the caller's try block, before its db.commit()). The row
+#   lock acquired here is held until that commit. If called outside a
+#   transaction — or if the caller commits before calling this — the lock
+#   is released immediately and provides no protection.
 # ─────────────────────────────────────────
 async def validate_return_items(db: AsyncSession, sale_id: str, business_id: str, items, exclude_return_id: str = None):
     # Batch Step 1 → Fetch ALL sale items for this sale in one query
@@ -122,6 +139,7 @@ async def validate_return_items(db: AsyncSession, sale_id: str, business_id: str
                 WHERE si.sale_id = CAST(:sale_id AS uuid)
                   AND si.business_id = CAST(:bid AS uuid)
                   AND si.product_id = ANY(CAST(:pids AS uuid[]))
+                FOR UPDATE OF si  -- serialises concurrent return requests on the same sale (see comment above)
             """),
             # BUG FIX: asyncpg expects a Python list for array params, not a
             # manually-formatted "{uuid1,uuid2}" string (causes DataError).

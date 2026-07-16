@@ -210,7 +210,7 @@ async def import_sales(
 
         try:
             qty = int(float(qty_raw))
-            unit_price = Decimal(str(float(unit_price_raw)))
+            unit_price = Decimal(unit_price_raw)
             if qty <= 0:
                 return None, "quantity must be positive"
             if unit_price <= 0:
@@ -226,7 +226,7 @@ async def import_sales(
         allow_stock_override_raw = (row.get("allow_stock_override") or row.get("Override") or "false").strip().lower()
 
         try:
-            discount = Decimal(str(float(discount_raw)))
+            discount = Decimal(discount_raw)
             if discount < 0:
                 discount = Decimal("0")
         except (ValueError, TypeError):
@@ -235,7 +235,7 @@ async def import_sales(
         paid_amount = None
         if paid_amount_raw and paid_amount_raw.strip():
             try:
-                paid_amount = Decimal(str(float(paid_amount_raw)))
+                paid_amount = Decimal(paid_amount_raw)
                 if paid_amount <= 0:
                     paid_amount = None
             except (ValueError, TypeError):

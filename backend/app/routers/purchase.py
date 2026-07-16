@@ -530,7 +530,7 @@ async def import_purchases(
 
         try:
             qty = int(float(qty_raw))
-            unit_price = Decimal(str(float(unit_price_raw)))
+            unit_price = Decimal(unit_price_raw)
             if qty <= 0:
                 return None, "quantity must be positive"
             if unit_price <= 0:
@@ -544,7 +544,7 @@ async def import_purchases(
         notes = (row.get("notes") or row.get("Notes") or "").strip() or None
 
         try:
-            discount = Decimal(str(float(discount_raw)))
+            discount = Decimal(discount_raw)
             if discount < 0:
                 discount = Decimal("0")
         except (ValueError, TypeError):

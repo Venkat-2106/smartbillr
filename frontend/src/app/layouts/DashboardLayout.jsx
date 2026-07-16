@@ -367,13 +367,41 @@ function Logo({ collapsed }) {
 
 function ThemePanel({ theme, setTheme, accent, setAccent, onClose }) {
   const ref = useRef(null)
+
+  // Click outside to close (existing)
   useEffect(() => {
     function h(e) { if (ref.current && !ref.current.contains(e.target)) onClose() }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
   }, [onClose])
+
+  // Focus trap (additive — does not affect click-outside behaviour)
+  useEffect(() => {
+    const prev = document.activeElement
+    const panel = ref.current
+    if (panel) {
+      const focusable = panel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+      if (focusable.length > 0) focusable[0].focus()
+    }
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') { onClose(); return }
+      if (e.key === 'Tab') {
+        const f = panel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+        if (f.length < 2) return
+        const first = f[0], last = f[f.length - 1]
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      if (prev && typeof prev.focus === 'function') prev.focus()
+    }
+  }, [onClose])
+
   return (
-    <div ref={ref} style={themePanelContainerStyle}>
+    <div ref={ref} role="dialog" aria-modal="true" aria-label="Theme settings" style={themePanelContainerStyle}>
       <p style={panelSectionLabel}>
         Theme
       </p>
@@ -432,6 +460,32 @@ function ThemePanel({ theme, setTheme, accent, setAccent, onClose }) {
 }
 
 function LogoutDialog({ onConfirm, onCancel }) {
+  const dialogRef = useRef(null)
+
+  useEffect(() => {
+    const prev = document.activeElement
+    const panel = dialogRef.current
+    if (panel) {
+      const focusable = panel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+      if (focusable.length > 0) focusable[0].focus()
+    }
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') { onCancel(); return }
+      if (e.key === 'Tab') {
+        const f = panel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+        if (f.length < 2) return
+        const first = f[0], last = f[f.length - 1]
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      if (prev && typeof prev.focus === 'function') prev.focus()
+    }
+  }, [onCancel])
+
   return (
     <div
       onClick={onCancel}
@@ -440,7 +494,7 @@ function LogoutDialog({ onConfirm, onCancel }) {
       aria-label="Sign out confirmation"
       style={dialogOverlayStyle}
     >
-      <div onClick={e => e.stopPropagation()} style={dialogCardStyle}>
+      <div ref={dialogRef} onClick={e => e.stopPropagation()} style={dialogCardStyle}>
         <div style={dialogIconBoxStyle}>
           {LogoutIcon}
         </div>

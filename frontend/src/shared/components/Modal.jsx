@@ -18,7 +18,7 @@
 //   visible viewport. See ModalPortal.jsx for the full root-cause writeup.
 //   The dialog panel itself (markup, styling, animation, sizes) is unchanged.
 
-import { useState, Children, isValidElement } from 'react'
+import { useState, Children, isValidElement, useRef, useEffect } from 'react'
 import ModalPortal from './ModalPortal'
 
 const SIZE_MAP = {
@@ -61,6 +61,52 @@ export default function Modal({
   // FIX: single boolean tracks close-button hover — no DOM mutation needed
   const [closeBtnHovered, setCloseBtnHovered] = useState(false)
 
+  // ── Focus trap ──────────────────────────────────────────────────────────────
+  const panelRef      = useRef(null)
+  const onCloseRef    = useRef(onClose)
+  onCloseRef.current  = onClose
+
+  useEffect(() => {
+    if (!open) return
+    const prev = document.activeElement
+
+    const panel = panelRef.current
+    if (panel) {
+      const focusable = panel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+      if (focusable.length > 0) {
+        focusable[0].focus()
+      } else {
+        panel.focus()
+      }
+    }
+
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') {
+        onCloseRef.current?.()
+        return
+      }
+      if (e.key === 'Tab') {
+        const focusable = panel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+        if (focusable.length < 2) return
+        const first = focusable[0]
+        const last  = focusable[focusable.length - 1]
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      if (prev && typeof prev.focus === 'function') prev.focus()
+    }
+  }, [open])
+
   if (!open) return null
 
   // Separate Modal.Footer children from body children so the footer
@@ -82,6 +128,8 @@ export default function Modal({
     <ModalPortal open={open} onClose={onClose} zIndex={1000}>
       {/* Panel */}
       <div
+        ref={panelRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"

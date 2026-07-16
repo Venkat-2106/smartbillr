@@ -408,13 +408,14 @@ async def update_staff(
     if body.role is not None:
         if body.role not in VALID_ROLES:
             return error_response(f"Invalid role. Must be one of: {', '.join(VALID_ROLES)}", 400)
-        updates["role"] = body.role
         role_row = (await db.execute(
             text("SELECT id FROM roles WHERE name = :role LIMIT 1"),
             {"role": body.role}
         )).fetchone()
-        if role_row:
-            updates["role_id"] = role_row.id
+        if not role_row:
+            return error_response("Role not found — contact support", 400)
+        updates["role"]     = body.role
+        updates["role_id"]  = role_row.id
 
     if not updates:
         return error_response("No fields to update", 400)

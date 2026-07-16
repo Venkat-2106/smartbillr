@@ -50,9 +50,14 @@ _ip_api_cache = TTLCache(maxsize=10000, ttl=API_WINDOW)
 
 
 def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    # Render's reverse proxy sets X-Real-IP to the real client address and
+    # overwrites any value a client may have sent in that header, so this is
+    # trustworthy.  Using X-Real-IP instead of X-Forwarded-For avoids the
+    # leftmost-value spoofing problem (a client can inject arbitrary values
+    # into X-Forwarded-For, and Render's proxy appends rather than replaces).
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
     if request.client:
         return request.client.host
     return "unknown"

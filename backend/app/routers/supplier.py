@@ -241,10 +241,11 @@ async def import_suppliers(
                             supp_address = :address,
                             supp_state = :state,
                             supp_country_code = :country_code,
-                            supp_tax_number = :tax_number
+                            supp_tax_number = :tax_number,
+                            updated_by = CAST(:uid AS uuid)
                         WHERE supp_id = CAST(:sid AS uuid)
                           AND business_id = CAST(:bid AS uuid)
-                    """), {**row, "sid": supp_id, "bid": business_id})
+                    """), {**row, "sid": supp_id, "bid": business_id, "uid": user_id})
                     updated += 1
                 else:
                     # INSERT new

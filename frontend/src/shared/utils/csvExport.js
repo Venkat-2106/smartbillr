@@ -507,5 +507,4 @@ export const SALES_IMPORT_TEMPLATE = [
   { key: 'payment_status',       label: 'Payment Status (pending/paid/partial)' },
   { key: 'paid_amount',          label: 'Paid Amount' },
   { key: 'allow_stock_override', label: 'Allow Stock Override (true/false)' },
-  { key: 'invoice_no',           label: 'Invoice No' },
 ];

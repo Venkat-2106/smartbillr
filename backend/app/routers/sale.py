@@ -224,7 +224,6 @@ async def import_sales(
         payment_status = (row.get("payment_status") or row.get("Payment Status") or "pending").strip().lower()
         paid_amount_raw = row.get("paid_amount") or row.get("Paid Amount")
         allow_stock_override_raw = (row.get("allow_stock_override") or row.get("Override") or "false").strip().lower()
-        invoice_no = (row.get("invoice_no") or row.get("Invoice No") or "").strip() or None
 
         try:
             discount = Decimal(str(float(discount_raw)))
@@ -260,8 +259,6 @@ async def import_sales(
             prod_name = strip_and_escape_html(prod_name)
         if barcode:
             barcode = strip_and_escape_html(barcode)
-        if invoice_no:
-            invoice_no = strip_and_escape_html(invoice_no)
 
         return {
             "cust_phone": cust_phone, "cust_name": cust_name,
@@ -272,7 +269,6 @@ async def import_sales(
             "payment_status": payment_status,
             "paid_amount": str(paid_amount) if paid_amount else None,
             "allow_stock_override": allow_stock_override,
-            "invoice_no": invoice_no,
             "_row_number": row_num
         }, None
 
@@ -411,7 +407,6 @@ async def import_sales(
                 payment_status = row.get("payment_status", "pending")
                 paid_amount = Decimal(row["paid_amount"]) if row.get("paid_amount") else None
                 allow_override = row.get("allow_stock_override", False)
-                invoice_no = row.get("invoice_no")
 
                 # ── Stock validation ──
                 if not allow_override and prod_info["stock_qty"] < qty:
@@ -424,9 +419,8 @@ async def import_sales(
                 # ── Calculate total ──
                 total_amount = unit_price * qty
 
-                # ── Generate invoice number (unless provided) ──
-                if not invoice_no:
-                    invoice_no = await generate_invoice_number(db, business_id)
+                # ── Generate invoice number (same as manual sale creation) ──
+                invoice_no = await generate_invoice_number(db, business_id)
 
                 new_sale_id = str(uuid.uuid4())
                 new_item_id = str(uuid.uuid4())

@@ -531,7 +531,8 @@ async def update_sales_return(
                 SET return_status = :status,
                     restock = :restock,
                     approved_by = CASE WHEN :status = 'approved' THEN CAST(:approved_by AS uuid) ELSE approved_by END,
-                    approved_at = CASE WHEN :status = 'approved' THEN NOW() ELSE approved_at END
+                    approved_at = CASE WHEN :status = 'approved' THEN NOW() ELSE approved_at END,
+                    stock_updated = CASE WHEN :status = 'approved' AND :restock = true THEN true ELSE stock_updated END
                 WHERE return_id = CAST(:return_id AS uuid)
                   AND business_id = CAST(:bid AS uuid)
             """),

@@ -1,4 +1,14 @@
 TIER_FEATURES = {
+    "suspended": {
+        "max_products": 0,
+        "max_customers": 0,
+        "max_suppliers": 0,
+        "max_sales_per_month": 0,
+        "max_purchases_per_month": 0,
+        "max_export_rows": 0,
+        "financial_reports": False,
+        "product_profit_view": False,
+    },
     "trial": {
         "max_products": 50,
         "max_customers": 50,

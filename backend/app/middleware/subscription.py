@@ -233,7 +233,9 @@ async def _check_subscription_for_user_async(user_id: str, db) -> tuple[dict | N
             _cache_sub_set(user_id, err)
             return err, "trial"
 
-        subscription_type = row.subscription_type or "trial"
+        # FIXED: NULL subscription_type now defaults to "suspended" (zero limits)
+        # instead of "trial" (which silently granted trial-tier access).
+        subscription_type = row.subscription_type or "suspended"
         now = datetime.now(timezone.utc)
         result_error = None
 

@@ -20,7 +20,7 @@ are identical across all of them:
 import csv
 import io
 from app.utils.subscription_features import get_feature_limits
-from app.utils.usage_limits import count_entities_async
+from app.utils.usage_limits import count_entities_async, count_monthly_async
 
 MAX_IMPORT_ROWS = 1000   # hard cap per uploaded file (data rows, excluding header)
 CHUNK_SIZE = 100          # rows per INSERT statement
@@ -91,6 +91,7 @@ async def check_bulk_create_allowed(
     limit_key: str,
     table: str,
     requested_count: int,
+    date_column: str | None = None,
 ) -> tuple[int, str | None]:
     """
     Checks how many of the requested rows can actually be inserted under the
@@ -108,7 +109,10 @@ async def check_bulk_create_allowed(
     if max_val is None:
         return requested_count, None  # uncapped tier (monthly/annual/lifetime)
 
-    current = await count_entities_async(db, business_id, table)
+    if date_column:
+        current = await count_monthly_async(db, business_id, table, date_column)
+    else:
+        current = await count_entities_async(db, business_id, table)
     remaining = max_val - current
 
     plan_label = subscription_type.capitalize()

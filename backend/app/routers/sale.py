@@ -277,7 +277,8 @@ async def import_sales(
     # ── 3. Check bulk create tier limit ───────────────────────────────────────
     sub_type = current_user.get("subscription_type") or await fetch_subscription_type_async(db, business_id)
     allowed_count, limit_msg = await check_bulk_create_allowed(
-        db, business_id, sub_type, "max_sales_per_month", "sales", len(valid_rows)
+        db, business_id, sub_type, "max_sales_per_month", "sales", len(valid_rows),
+        date_column="sales_created_at",
     )
     if allowed_count == 0:
         return error_response(limit_msg, 403)

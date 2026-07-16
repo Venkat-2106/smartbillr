@@ -53,7 +53,6 @@ async def bulk_check_and_reduce_stock(
     """), check_params)).fetchall()
 
     if len(rows) != len(product_ids):
-        await db.rollback()
         found = {str(r.prod_id) for r in rows}
         missing = [pid for pid in product_ids if pid not in found]
         return f"Products not found: {', '.join(missing)}"
@@ -69,7 +68,6 @@ async def bulk_check_and_reduce_stock(
         prev_stock_map[pid] = cur
 
     if insufficient:
-        await db.rollback()
         return "; ".join(insufficient)
 
     # ── 2. Bulk UPDATE stock qty (single statement) ───────────────────────

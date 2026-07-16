@@ -413,6 +413,7 @@ async def update_staff(
             {"role": body.role}
         )).fetchone()
         if not role_row:
+            # FIXED role and role_id must stay in sync — both updated together
             return error_response("Role not found — contact support", 400)
         updates["role"]     = body.role
         updates["role_id"]  = role_row.id

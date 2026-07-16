@@ -242,6 +242,7 @@ async def import_suppliers(
                             supp_state = :state,
                             supp_country_code = :country_code,
                             supp_tax_number = :tax_number,
+                            -- FIXED added updated_by to match customer.py's bulk-import pattern
                             updated_by = CAST(:uid AS uuid)
                         WHERE supp_id = CAST(:sid AS uuid)
                           AND business_id = CAST(:bid AS uuid)

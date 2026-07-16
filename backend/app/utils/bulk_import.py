@@ -109,6 +109,7 @@ async def check_bulk_create_allowed(
     if max_val is None:
         return requested_count, None  # uncapped tier (monthly/annual/lifetime)
 
+    # FIXED date_column added so monthly-capped limits use same count logic as single-record creation
     if date_column:
         current = await count_monthly_async(db, business_id, table, date_column)
     else:

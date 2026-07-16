@@ -293,6 +293,7 @@ function applyTheme(theme, accent) {
 }
 
 function useTheme() {
+  // FIXED OS dark mode preference checked when no stored theme exists
   const [theme,  setThemeState]  = useState(() => localStorage.getItem(THEME_KEY)  ?? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'))
   const [accent, setAccentState] = useState(() => localStorage.getItem(ACCENT_KEY) || 'blue')
   useEffect(() => { applyTheme(theme, accent) }, [theme, accent])

@@ -49,6 +49,7 @@ from app.database import get_async_db
 from app.middleware.rbac import require_permission, async_set_rls_gucs_after_commit
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
+from app.models.product import Product
 from app.schemas.sale import SaleCreate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
@@ -136,14 +137,27 @@ async def create_sale(
         invoice_no = await generate_invoice_number(db, business_id)
         new_sale_id = str(uuid.uuid4())
 
-        await create_sale_header(db, business_id, user_id, new_sale_id, invoice_no, data, total_amount, discount)
+        cust_id = str(data.customer_id) if data.customer_id else None
+        await create_sale_header(
+            db, business_id, user_id, new_sale_id, invoice_no,
+            customer_id=cust_id,
+            total_amount=total_amount,
+            discount=discount,
+            payment_method=data.sales_payment_method,
+            payment_status=data.sales_payment_status,
+        )
 
         if override_items:
             await handle_stock_overrides(db, business_id, user_id, new_sale_id, override_items)
 
         await insert_sale_items(db, business_id, new_sale_id, data.items, product_cache)
         final_amount = await update_sale_tax_totals(db, new_sale_id)
-        await auto_record_payment(db, business_id, new_sale_id, data, final_amount)
+        await auto_record_payment(
+            db, business_id, new_sale_id, final_amount,
+            payment_status=data.sales_payment_status,
+            payment_method=data.sales_payment_method,
+            paid_amount=data.paid_amount,
+        )
 
         await db.commit()
         # RLS: SET LOCAL/set_config GUCs are transaction-scoped and are cleared
@@ -210,6 +224,7 @@ async def import_sales(
 
         try:
             qty = int(float(qty_raw))
+            # FIXED use Decimal(raw) instead of Decimal(str(float(...))) to avoid float rounding error
             unit_price = Decimal(unit_price_raw)
             if qty <= 0:
                 return None, "quantity must be positive"
@@ -276,6 +291,7 @@ async def import_sales(
 
     # ── 3. Check bulk create tier limit ───────────────────────────────────────
     sub_type = current_user.get("subscription_type") or await fetch_subscription_type_async(db, business_id)
+    # FIXED added date_column so monthly limit counting works for bulk imports
     allowed_count, limit_msg = await check_bulk_create_allowed(
         db, business_id, sub_type, "max_sales_per_month", "sales", len(valid_rows),
         date_column="sales_created_at",
@@ -378,9 +394,41 @@ async def import_sales(
                 "prod_sell_price": float(r.prod_sell_price)
             }
 
-    # ── 5. Create sales ───────────────────────────────────────────────────────
+    # ── 5. Build ORM product cache for shared service functions ────────────────
+    # insert_sale_items needs Product ORM objects (for prod_mrp, prod_cost_price).
+    # The lookup above used raw SQL (name/barcode search), so we fetch ORM objects
+    # for the resolved IDs to pass to the shared function.
+    prod_ids = [info["prod_id"] for info in product_map.values()]
+    orm_cache = {}
+    if prod_ids:
+        result = await db.execute(
+            select(Product).where(
+                Product.prod_id.in_(prod_ids),
+                Product.business_id == business_id,
+            )
+        )
+        for p in result.scalars().all():
+            orm_cache[str(p.prod_id)] = p
+
+    # ── 6. Create sales ───────────────────────────────────────────────────────
+    # Each CSV row creates a single-item sale using the same service-layer
+    # functions as create_sale (create_sale_header → insert_sale_items →
+    # update_sale_tax_totals → auto_record_payment), so both paths share one
+    # source of truth for insert logic, tax calculation, and payment recording.
+    #
+    # Stock validation uses a local cache (decremented per row) rather than
+    # re-querying the DB, since intra-import rows see each other's deductions.
     created = 0
     sale_errors = []
+
+    # Lightweight adapter: wraps CSV row fields into the same interface that
+    # create_sale's SaleCreate.items provides, so insert_sale_items accepts it.
+    class ImportItem:
+        __slots__ = ("product_id", "sale_item_quantity", "sale_item_unit_price")
+        def __init__(self, product_id, qty, unit_price):
+            self.product_id = product_id
+            self.sale_item_quantity = qty
+            self.sale_item_unit_price = unit_price
 
     for chunk in chunk_list(valid_rows):
         for row in chunk:
@@ -409,7 +457,7 @@ async def import_sales(
                 paid_amount = Decimal(row["paid_amount"]) if row.get("paid_amount") else None
                 allow_override = row.get("allow_stock_override", False)
 
-                # ── Stock validation ──
+                # ── Stock validation (uses local cache for intra-import correctness) ──
                 if not allow_override and prod_info["stock_qty"] < qty:
                     sale_errors.append({
                         "row": row_num,
@@ -422,72 +470,38 @@ async def import_sales(
 
                 # ── Generate invoice number (same as manual sale creation) ──
                 invoice_no = await generate_invoice_number(db, business_id)
-
                 new_sale_id = str(uuid.uuid4())
-                new_item_id = str(uuid.uuid4())
 
-                # ── Create sale directly via raw SQL (reuses patterns from create_sale + purchase import) ──
-                await db.execute(text("""
-                    INSERT INTO sales (
-                        sales_id, business_id, customer_id,
-                        invoice_no, sales_total_amount, sales_discount,
-                        sales_payment_method, sales_payment_status, created_by
-                    ) VALUES (
-                        CAST(:sid AS uuid), CAST(:bid AS uuid), CAST(:cid AS uuid),
-                        :inv_no, :total_amount, :discount,
-                        :pay_method, :pay_status, CAST(:uid AS uuid)
-                    )
-                """), {
-                    "sid": new_sale_id, "bid": business_id,
-                    "cid": cust_id, "inv_no": invoice_no,
-                    "total_amount": str(total_amount), "discount": str(discount),
-                    "pay_method": payment_method, "pay_status": payment_status,
-                    "uid": user_id
-                })
+                # ── Create sale header (shared with create_sale) ──
+                await create_sale_header(
+                    db, business_id, user_id, new_sale_id, invoice_no,
+                    customer_id=cust_id,
+                    total_amount=total_amount,
+                    discount=discount,
+                    payment_method=payment_method,
+                    payment_status=payment_status,
+                )
 
-                # ── Insert sale item (DB triggers handle tax/stock) ──
-                await db.execute(text("""
-                    INSERT INTO sale_items (
-                        sale_item_id, business_id, sale_id, product_id,
-                        sale_item_quantity, sale_item_unit_price
-                    ) VALUES (
-                        CAST(:iid AS uuid), CAST(:bid AS uuid), CAST(:sid AS uuid),
-                        CAST(:pid AS uuid), :qty, :unit_price
-                    )
-                """), {
-                    "iid": new_item_id, "bid": business_id,
-                    "sid": new_sale_id, "pid": prod_info["prod_id"],
-                    "qty": qty, "unit_price": str(unit_price)
-                })
+                # ── Insert sale items via shared function (DB triggers handle tax/stock) ──
+                prod_orm = orm_cache.get(prod_info["prod_id"])
+                if not prod_orm:
+                    sale_errors.append({"row": row_num, "message": "product data error"})
+                    continue
+                item = ImportItem(prod_info["prod_id"], qty, unit_price)
+                await insert_sale_items(db, business_id, new_sale_id, [item], {prod_info["prod_id"]: prod_orm})
 
-                # ── Auto-record payment if status is not pending ──
-                if payment_status in ("paid", "partial"):
-                    pay_sale_full = total_amount - discount
-                    pay_amount = paid_amount if paid_amount else pay_sale_full
-                    pay_type = "partial" if payment_status == "partial" else "paid"
+                # ── Update tax totals (shared with create_sale) ──
+                final_amount = await update_sale_tax_totals(db, new_sale_id)
 
-                    new_pay_id = str(uuid.uuid4())
-                    await db.execute(text("""
-                        INSERT INTO payments (
-                            payment_id, business_id, sale_id,
-                            payment_amount, payment_method,
-                            cumulative_paid, payment_status,
-                            payment_note
-                        ) VALUES (
-                            CAST(:pid AS uuid), CAST(:bid AS uuid), CAST(:sid AS uuid),
-                            :amount, :method,
-                            :cumulative_paid, :status,
-                            :note
-                        )
-                    """), {
-                        "pid": new_pay_id, "bid": business_id,
-                        "sid": new_sale_id,
-                        "amount": str(pay_amount), "method": payment_method,
-                        "cumulative_paid": str(pay_amount), "status": pay_type,
-                        "note": "Auto-recorded from CSV bulk import"
-                    })
+                # ── Auto-record payment (shared with create_sale) ──
+                await auto_record_payment(
+                    db, business_id, new_sale_id, final_amount,
+                    payment_status=payment_status,
+                    payment_method=payment_method,
+                    paid_amount=paid_amount,
+                )
 
-                # Update local stock cache for subsequent rows
+                # Update local stock cache for subsequent rows in this import
                 new_stock = prod_info["stock_qty"] - qty
                 product_map[prod_key]["stock_qty"] = max(0, new_stock)
 

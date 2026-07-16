@@ -20,6 +20,7 @@ export default function ProtectedRoute({ children, permission = null }) {
     return () => unsub?.()
   }, [hydrated])
 
+  // FIXED Spinner prevents blank flash during hydration (replaced return null)
   if (!hydrated) return <Spinner center />
 
   if (!token || !profile) {

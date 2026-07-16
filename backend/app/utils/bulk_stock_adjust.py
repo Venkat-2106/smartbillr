@@ -68,9 +68,11 @@ async def bulk_check_and_reduce_stock(
         prev_stock_map[pid] = cur
 
     if insufficient:
+        # Caller owns rollback — no rollback here
         return "; ".join(insufficient)
 
     # ── 2. Bulk UPDATE stock qty (single statement) ───────────────────────
+    # FIXED parameterized to prevent SQL injection (was string-interpolated UUIDs)
     update_params: dict = {"uid": str(user_id), "bid": str(business_id)}
     update_parts = []
     for i, pid in enumerate(product_ids):

@@ -152,11 +152,12 @@ async def get_report_summary(
                     AND la.alert_status = 'unread'
                     AND p.is_deleted = false
                     AND p.prod_stock_qty <= p.prod_low_stock_alert) AS low_stock_count,
+                -- FIXED proportional discount formula instead of sale_item_subtotal
                 COALESCE((SELECT SUM(si.sale_item_subtotal * (s.sales_final_amount - s.tax_total) / NULLIF(s.sales_total_amount, 0) - (si.sale_item_quantity * COALESCE(si.sale_item_cost_price_at_sale, p.prod_cost_price)))
-                           FROM sale_items si
-                           JOIN sales s ON s.sales_id = si.sale_id
-                           JOIN products p ON p.prod_id = si.product_id
-                           WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {date_where_s}), 0) AS gross_profit,
+                            FROM sale_items si
+                            JOIN sales s ON s.sales_id = si.sale_id
+                            JOIN products p ON p.prod_id = si.product_id
+                            WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {date_where_s}), 0) AS gross_profit,
                 COALESCE((SELECT COALESCE(SUM(payment_amount), 0) FROM payments pay
                            JOIN sales s ON s.sales_id = pay.sale_id
                            WHERE pay.business_id = CAST(:bid AS uuid) AND pay.is_active = true
@@ -854,6 +855,7 @@ async def get_gross_profit(
         })
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
+    # FIXED proportional discount formula instead of sale_item_subtotal
     row = await db.execute(text(f"""
         SELECT
             COALESCE(SUM(si.sale_item_subtotal * (s.sales_final_amount - s.tax_total) / NULLIF(s.sales_total_amount, 0)), 0) AS total_revenue,
@@ -892,6 +894,7 @@ async def get_profit_by_product(
     show_profit = "view_product_profit" in perms and "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
+    # FIXED proportional discount formula instead of sale_item_subtotal
     rows = await db.execute(text(f"""
         SELECT
             p.prod_id,
@@ -942,6 +945,7 @@ async def get_profit_by_category(
     show_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
+    # FIXED proportional discount formula instead of sale_item_subtotal
     rows = await db.execute(text(f"""
         SELECT
             c.category_id,
@@ -991,6 +995,7 @@ async def get_profit_by_customer(
     show_financial = "dashboard.financial" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
+    # FIXED proportional discount formula instead of sale_item_subtotal
     rows = await db.execute(text(f"""
         SELECT
             c.cust_id,
@@ -1094,6 +1099,7 @@ async def get_profit_trend(
             fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 year') AS gs"
         group_expr = "date_trunc('year', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))"
 
+    # FIXED proportional discount formula instead of sale_item_subtotal
     rows = await db.execute(text(f"""
         WITH aggregated AS (
             SELECT

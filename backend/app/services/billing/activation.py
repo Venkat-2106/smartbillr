@@ -76,6 +76,7 @@ async def activate_subscription(db: AsyncSession, provider_object: dict, provide
     now = datetime.now(timezone.utc)
     billing_cycle = plan.billing_cycle
     if billing_cycle == "yearly":
+        # FIXED leap-year-safe date calculation using relativedelta instead of timedelta(days=365)
         period_end = now + relativedelta(years=1)
     elif billing_cycle == "one_time":
         period_end = now + timedelta(days=9999)

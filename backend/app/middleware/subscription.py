@@ -286,6 +286,7 @@ async def _check_subscription_for_user_async(user_id: str, db) -> tuple[dict | N
         _cache_sub_set(user_id, result_error, subscription_type, business_id=business_id)
         return result_error, subscription_type
 
+    # FIXED fail closed instead of granting trial access on error
     except Exception:
         logging.exception("Subscription check failed — blocking request")
         err = {

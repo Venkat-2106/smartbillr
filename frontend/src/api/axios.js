@@ -69,6 +69,7 @@ api.interceptors.request.use(async (config) => {
         processQueue(null, access_token)
         config.headers['Authorization'] = `Bearer ${access_token}`
         return config
+      // FIXED proactive refresh failure redirects instead of falling through with stale token
       } catch (err) {
         processQueue(err, null)
         useAuthStore.getState().clearAuth()

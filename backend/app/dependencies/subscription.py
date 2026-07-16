@@ -44,6 +44,7 @@ async def verify_subscription(
             request.state.verified_jwt_payload = payload
         except HTTPException:
             raise
+        # FIXED fail closed — raises 402 instead of silent return
         except Exception:
             logging.exception("verify_subscription: failed to decode token")
             raise HTTPException(

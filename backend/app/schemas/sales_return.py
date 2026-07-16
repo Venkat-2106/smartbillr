@@ -67,6 +67,7 @@ class SalesReturnCreate(BaseModel):
 
 class SalesReturnUpdate(BaseModel):
     return_status: str
+    # FIXED default changed to None so omitting restock in PATCH doesn't clear it
     restock:       Optional[bool] = None
 
     @field_validator("return_status")

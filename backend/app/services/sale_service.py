@@ -3,7 +3,7 @@ from sqlalchemy import text, select
 from decimal import Decimal
 from app.models.product import Product
 from app.models.sale import Sale
-from app.schemas.sale import SaleCreate
+
 from app.utils.payment_helpers import record_payment_and_sync_async, calculate_payment_status
 from app.utils.timestamp import fmt_ts
 import uuid
@@ -67,7 +67,21 @@ def calculate_total_amount(items) -> Decimal:
     return total
 
 
-async def create_sale_header(db: AsyncSession, business_id: str, user_id: str, new_sale_id: str, invoice_no: str, data: SaleCreate, total_amount: Decimal, discount: Decimal):
+async def create_sale_header(
+    db: AsyncSession,
+    business_id: str,
+    user_id: str,
+    new_sale_id: str,
+    invoice_no: str,
+    customer_id: str | None,
+    total_amount: Decimal,
+    discount: Decimal,
+    payment_method: str,
+    payment_status: str,
+):
+    # Accepts individual params (not a SaleCreate schema) so both the
+    # create_sale route and the bulk CSV import can call it without
+    # constructing a Pydantic model for every row.
     await db.execute(
         text("""
             INSERT INTO sales (
@@ -86,12 +100,12 @@ async def create_sale_header(db: AsyncSession, business_id: str, user_id: str, n
         {
             "sales_id": new_sale_id,
             "business_id": business_id,
-            "customer_id": str(data.customer_id) if data.customer_id else None,
+            "customer_id": customer_id,
             "invoice_no": invoice_no,
             "sales_total_amount": str(total_amount),
             "sales_discount": str(discount),
-            "sales_payment_method": data.sales_payment_method,
-            "sales_payment_status": data.sales_payment_status,
+            "sales_payment_method": payment_method,
+            "sales_payment_status": payment_status,
             "created_by": user_id,
         }
     )
@@ -214,29 +228,40 @@ async def update_sale_tax_totals(db: AsyncSession, new_sale_id: str) -> Decimal:
     return Decimal(str(row.sales_final_amount)) if row and row.sales_final_amount else Decimal("0")
 
 
-async def auto_record_payment(db: AsyncSession, business_id: str, new_sale_id: str, data: SaleCreate, final_amount: Decimal):
-    if data.sales_payment_status not in ("paid", "partial"):
+async def auto_record_payment(
+    db: AsyncSession,
+    business_id: str,
+    new_sale_id: str,
+    final_amount: Decimal,
+    payment_status: str,
+    payment_method: str = "cash",
+    paid_amount: Decimal | None = None,
+):
+    # Accepts individual params (not SaleCreate) so both create_sale and
+    # import_sales can share this function.  import_sales passes values
+    # from CSV row dicts directly.
+    if payment_status not in ("paid", "partial"):
         return
 
-    if data.sales_payment_status == "paid":
+    if payment_status == "paid":
         await record_payment_and_sync_async(
             db=db,
             business_id=business_id,
             sale_id=new_sale_id,
             payment_amount=final_amount,
-            payment_method=data.sales_payment_method or "cash",
+            payment_method=payment_method,
             new_status="paid",
             cumulative_paid=final_amount,
         )
-    elif data.sales_payment_status == "partial" and data.paid_amount and data.paid_amount > 0:
-        paid = data.paid_amount
+    elif payment_status == "partial" and paid_amount and paid_amount > 0:
+        paid = paid_amount
         if paid >= final_amount:
             await record_payment_and_sync_async(
                 db=db,
                 business_id=business_id,
                 sale_id=new_sale_id,
                 payment_amount=final_amount,
-                payment_method=data.sales_payment_method or "cash",
+                payment_method=payment_method,
                 new_status="paid",
                 cumulative_paid=final_amount,
             )
@@ -246,7 +271,7 @@ async def auto_record_payment(db: AsyncSession, business_id: str, new_sale_id: s
                 business_id=business_id,
                 sale_id=new_sale_id,
                 payment_amount=paid.quantize(Decimal("0.01")),
-                payment_method=data.sales_payment_method or "cash",
+                payment_method=payment_method,
                 new_status="partial",
                 cumulative_paid=paid.quantize(Decimal("0.01")),
             )

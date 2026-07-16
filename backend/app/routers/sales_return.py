@@ -139,6 +139,7 @@ async def validate_return_items(db: AsyncSession, sale_id: str, business_id: str
                 WHERE si.sale_id = CAST(:sale_id AS uuid)
                   AND si.business_id = CAST(:bid AS uuid)
                   AND si.product_id = ANY(CAST(:pids AS uuid[]))
+                -- FIXED added FOR UPDATE OF si for concurrency safety
                 FOR UPDATE OF si  -- serialises concurrent return requests on the same sale (see comment above)
             """),
             # BUG FIX: asyncpg expects a Python list for array params, not a
@@ -530,9 +531,11 @@ async def update_sales_return(
             text("""
                 UPDATE sales_returns
                 SET return_status = :status,
+                    -- FIXED restock only written when explicitly provided (guarded by restock_provided)
                     restock = CASE WHEN :restock_provided THEN :restock ELSE restock END,
                     approved_by = CASE WHEN :status = 'approved' THEN CAST(:approved_by AS uuid) ELSE approved_by END,
                     approved_at = CASE WHEN :status = 'approved' THEN NOW() ELSE approved_at END,
+                    -- FIXED stock_updated only set on approved+restock
                     stock_updated = CASE WHEN :status = 'approved' AND :restock_provided AND :restock = true THEN true ELSE stock_updated END
                 WHERE return_id = CAST(:return_id AS uuid)
                   AND business_id = CAST(:bid AS uuid)

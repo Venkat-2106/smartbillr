@@ -55,6 +55,7 @@ def _client_ip(request: Request) -> str:
     # trustworthy.  Using X-Real-IP instead of X-Forwarded-For avoids the
     # leftmost-value spoofing problem (a client can inject arbitrary values
     # into X-Forwarded-For, and Render's proxy appends rather than replaces).
+    # FIXED use Render-proxy-trusted X-Real-IP instead of spoofable X-Forwarded-For
     real_ip = request.headers.get("X-Real-IP")
     if real_ip:
         return real_ip.strip()
@@ -89,6 +90,7 @@ def _jwt_user_id(request: Request) -> str | None:
     if not auth.startswith("Bearer "):
         return None
     try:
+        # FIXED signature-verified decode instead of unsafe pyjwt.decode(…, verify_signature=False)
         payload = decode_token_payload(auth[len("Bearer "):])
         return payload.get("sub")
     except StarletteHTTPException:

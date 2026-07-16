@@ -30,4 +30,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         response.headers["Content-Security-Policy"] = CSP_HEADER_VALUE
 
+        # Prevent browser caching of authenticated responses
+        if not request.url.path in ("/", "/health") and not request.url.path.startswith("/v1/plans"):
+            response.headers["Cache-Control"] = "no-store"
+
         return response

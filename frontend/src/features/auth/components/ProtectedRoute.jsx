@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Outlet } from 'react-router-dom'
 import useAuthStore from '../../../store/authStore'
+import Spinner from '../../../shared/components/Spinner'
 
 export default function ProtectedRoute({ children, permission = null }) {
   const [hydrated, setHydrated] = useState(
@@ -19,7 +20,7 @@ export default function ProtectedRoute({ children, permission = null }) {
     return () => unsub?.()
   }, [hydrated])
 
-  if (!hydrated) return null
+  if (!hydrated) return <Spinner center />
 
   if (!token || !profile) {
     return <Navigate to="/login" replace />

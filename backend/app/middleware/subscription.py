@@ -286,6 +286,12 @@ async def _check_subscription_for_user_async(user_id: str, db) -> tuple[dict | N
         _cache_sub_set(user_id, result_error, subscription_type, business_id=business_id)
         return result_error, subscription_type
 
-    except Exception as e:
-        logging.warning("Async subscription check failed, allowing request through: %s", e)
-        return None, "trial"
+    except Exception:
+        logging.exception("Subscription check failed — blocking request")
+        err = {
+            "error_code": "SUBSCRIPTION_CHECK_FAILED",
+            "status": "check_failed",
+            "message": "Unable to verify subscription status. Please try again or contact support.",
+        }
+        _cache_sub_set(user_id, err)
+        return err, "trial"

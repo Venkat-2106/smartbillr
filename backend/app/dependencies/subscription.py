@@ -45,8 +45,19 @@ async def verify_subscription(
         except HTTPException:
             raise
         except Exception:
-            logging.warning("verify_subscription: failed to decode token", exc_info=True)
-            return
+            logging.exception("verify_subscription: failed to decode token")
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "error": "subscription_required",
+                    "message": "Unable to verify authentication. Please try again.",
+                    "subscription": {
+                        "error_code": "SUBSCRIPTION_CHECK_FAILED",
+                        "status": "check_failed",
+                        "message": "Unable to verify subscription status. Please try again or contact support.",
+                    },
+                },
+            )
 
     user_id = payload.get("sub")
     if not user_id:

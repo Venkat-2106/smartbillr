@@ -12,6 +12,7 @@ python-multipart==0.0.32
 pytest==9.1.0
 alembic==1.15.2
 apscheduler==3.11.0
+python-dateutil==2.9.0.post0
 cachetools==5.5.2
 redis>=5.0.0
 razorpay>=1.4.0

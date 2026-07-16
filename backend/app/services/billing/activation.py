@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timezone, timedelta
+from dateutil.relativedelta import relativedelta
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -75,7 +76,7 @@ async def activate_subscription(db: AsyncSession, provider_object: dict, provide
     now = datetime.now(timezone.utc)
     billing_cycle = plan.billing_cycle
     if billing_cycle == "yearly":
-        period_end = now + timedelta(days=365)
+        period_end = now + relativedelta(years=1)
     elif billing_cycle == "one_time":
         period_end = now + timedelta(days=9999)
     else:

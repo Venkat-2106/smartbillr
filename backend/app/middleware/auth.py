@@ -230,13 +230,13 @@ def decode_token_payload(token: str) -> dict:
     Supports:
       - RS256 (RSA) via JWKS
       - ES256 (ECDSA) via JWKS
-      - HS256 fallback using SUPABASE_JWT_SECRET
 
     Raises 401 if:
       - Token is malformed
       - Signature is invalid (forged/altered token)
       - Token is expired
       - No matching JWK key found
+      - Token is missing the required kid header
     """
     try:
         unverified_header = jwt.get_unverified_header(token)
@@ -261,27 +261,13 @@ def decode_token_payload(token: str) -> dict:
             )
             return payload
 
-        # ── Symmetric fallback (HS256) using SUPABASE_JWT_SECRET ──────────
-        jwt_secret_b64 = os.getenv("SUPABASE_JWT_SECRET")
-        if jwt_secret_b64:
-            jwt_secret = base64.b64decode(jwt_secret_b64)
-            payload = jwt.decode(
-                token,
-                jwt_secret,
-                algorithms=["HS256"],
-                leeway=10,
-                options={
-                    "verify_exp": True,
-                    "verify_aud": False,
-                    "verify_iss": False,
-                    "require": ["exp", "sub"],
-                },
-            )
-            return payload
-
+        # FIXED: Removed HS256 symmetric-secret fallback that allowed algorithm
+        # confusion attacks (CVE-2015-9235). An attacker who knows SUPABASE_JWT_SECRET
+        # could forge a token by omitting kid and signing with HS256.
+        # ── No kid header → reject outright ──
         raise HTTPException(
             status_code=401,
-            detail="Token has no kid header and SUPABASE_JWT_SECRET is not configured."
+            detail="Token is missing required key identifier."
         )
 
     except jwt.ExpiredSignatureError:
@@ -299,7 +285,9 @@ def decode_token_payload(token: str) -> dict:
         raise
     except Exception as e:
         logging.exception("JWT verification failed with unexpected error")
-        raise HTTPException(status_code=401, detail=f"Token verification failed: {e}")
+        # FIXED: detail no longer leaks exception text (e.g. stack traces or
+        # internal paths) to the client. Full error is logged server-side above.
+        raise HTTPException(status_code=401, detail="Token verification failed.")
 
 
 async def verify_token(

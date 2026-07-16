@@ -71,17 +71,22 @@ async def bulk_check_and_reduce_stock(
         return "; ".join(insufficient)
 
     # ── 2. Bulk UPDATE stock qty (single statement) ───────────────────────
-    product_ids_tuple = ", ".join(
-        f"(CAST('{pid}' AS uuid), {qty_map[pid]})" for pid in product_ids
-    )
+    update_params: dict = {"uid": str(user_id), "bid": str(business_id)}
+    update_parts = []
+    for i, pid in enumerate(product_ids):
+        tag = f"u{i}"
+        update_parts.append(f"(CAST(:{tag}_pid AS uuid), :{tag}_qty)")
+        update_params[f"{tag}_pid"] = pid
+        update_params[f"{tag}_qty"] = qty_map[pid]
+
     await db.execute(text(f"""
         UPDATE products AS p
         SET    prod_stock_qty = p.prod_stock_qty - v.qty,
                updated_by     = CAST(:uid AS uuid)
-        FROM   (VALUES {product_ids_tuple}) AS v(pid, qty)
+        FROM   (VALUES {", ".join(update_parts)}) AS v(pid, qty)
         WHERE  p.prod_id     = v.pid
           AND  p.business_id = CAST(:bid AS uuid)
-    """), {"uid": str(user_id), "bid": str(business_id)})
+    """), update_params)
 
     # ── 3. Bulk INSERT stock_movements (single statement) ──────────────────
     value_clauses = []

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from app.database import Base
 
@@ -7,7 +7,8 @@ class Profile(Base):
     __tablename__ = "profiles"
 
     id = Column(UUID(as_uuid=True), primary_key=True)
-    business_id = Column(UUID(as_uuid=True), nullable=False)
+    # FIXED: Added ForeignKey — DB has FK constraint fk_profiles_business_id
+    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=False)
     full_name = Column(String, nullable=False)
     email = Column(String, nullable=True)
     role = Column(String, nullable=True)

@@ -14,7 +14,7 @@ jobs:
         image: postgres:15
         env:
           POSTGRES_USER: smartbillr
-          POSTGRES_PASSWORD: testpassword
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: smartbillr_test
         ports:
           - 5432:5432
@@ -32,17 +32,17 @@ jobs:
         run: pip install -r backend/requirements.txt
       - name: Apply migrations
         env:
-          DATABASE_URL: postgresql://smartbillr:testpassword@localhost:5432/smartbillr_test
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           cd backend
           alembic upgrade head
       - name: Run tests
         env:
-          DATABASE_URL: postgresql://smartbillr:testpassword@localhost:5432/smartbillr_test
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           RUN_RLS_TESTS: 1
-          SUPABASE_URL: https://test.supabase.co
-          SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
-          SUPABASE_JWT_SECRET: dGVzdC1zZWNyZXQ=
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
           ENVIRONMENT: development
         run: pytest backend/tests/ -v
 

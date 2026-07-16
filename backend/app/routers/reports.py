@@ -419,7 +419,8 @@ async def get_sales_by_product(
     show_profit = "view_product_profit" in perms
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
-    profit_col = ", COALESCE(SUM(si.sale_item_subtotal - (si.sale_item_quantity * COALESCE(si.sale_item_cost_price_at_sale, p.prod_cost_price))), 0) AS profit" if show_profit else ""
+    # FIXED proportional discount formula instead of sale_item_subtotal
+    profit_col = ", COALESCE(SUM(si.sale_item_subtotal * (s.sales_final_amount - s.tax_total) / NULLIF(s.sales_total_amount, 0) - (si.sale_item_quantity * COALESCE(si.sale_item_cost_price_at_sale, p.prod_cost_price))), 0) AS profit" if show_profit else ""
 
     rows = await db.execute(text(f"""
         SELECT

@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { visualizer } from 'rollup-plugin-visualizer'
+import { visualizer } from 'rollup-plugin-visualizer'   // bundle analyzer — run with ANALYZE=true npm run build
 
 export default defineConfig({
   plugins: [react(), process.env.ANALYZE === 'true' && visualizer({ open: true, filename: 'dist/stats.html' })].filter(Boolean),

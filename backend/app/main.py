@@ -64,6 +64,11 @@ def _stop_scheduler():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _start_scheduler()
+    # Warn if running in production without Redis — permissions cache will be
+    # per-instance (10s TTL) instead of shared, meaning cache invalidations
+    # (role changes, suspensions) only affect the instance that processed them.
+    if os.getenv("ENVIRONMENT") == "production" and not os.getenv("REDIS_URL"):
+        logger.warning("REDIS_URL not set — permissions cache is per-instance (10s TTL)")
     yield
     _stop_scheduler()
 

@@ -181,6 +181,8 @@ export function useStockAlertRead() {
 
 // ── useStockMovements — Stock Movements tab ───────────────────────────────────
 // Only enabled when the Movements tab is active (pass active prop from page).
+// dateFrom defaults to 30 days ago, dateTo to today — avoids unbounded full-table
+// scans on initial load. User can still clear or widen the range via the pickers.
 export function useStockMovements({ active = false } = {}) {
   const user = useAuthStore(s => s.user)
 

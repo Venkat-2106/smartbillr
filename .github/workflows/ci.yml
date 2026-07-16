@@ -1,5 +1,9 @@
 name: CI
 
+# NOTE: All secrets below (POSTGRES_PASSWORD, DATABASE_URL, SUPABASE_*)
+# are sourced from GitHub Actions secrets — no hardcoded test values.
+# Add them at https://github.com/{owner}/{repo}/settings/secrets/actions.
+
 on:
   push:
     branches: [development]

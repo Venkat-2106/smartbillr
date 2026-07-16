@@ -1,11 +1,13 @@
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from cachetools import TTLCache
 import time
-import jwt as pyjwt
 import logging
 import os
+
+from app.middleware.auth import decode_token_payload
 
 _redis_rate = None
 
@@ -61,21 +63,33 @@ def _jwt_user_id(request: Request) -> str | None:
     Extracts 'sub' from the JWT payload.
 
     First tries the pre-decoded payload already stored on request.state
-    by SubscriptionMiddleware (which runs earlier in the middleware stack).
-    Falls back to a standalone decode WITHOUT signature verification for
-    excluded paths where SubscriptionMiddleware didn't run (e.g. /auth/*).
+    (set by SubscriptionMiddleware or verify_token dependency that ran on a
+    previous request in the same ASGI worker — rare but possible).
+
+    Falls back to signature-verified decode via decode_token_payload().
+    Unlike the old pyjwt.decode(…, verify_signature=False) which allowed an
+    attacker to forge arbitrary user_ids and bypass per-user rate limits (or
+    DoS a specific user by consuming their quota), this path validates the
+    JWT signature against Supabase JWKS keys (RS256/ES256) or the shared
+    HS256 secret.
+
+    On any verification failure the user_id is treated as unknown, so the
+    caller falls back to IP-based rate limiting for that request.
     """
     payload = getattr(request.state, "verified_jwt_payload", None)
     if payload:
         return payload.get("sub")
-    # Fallback for excluded paths where SubscriptionMiddleware didn't run
+
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         return None
     try:
-        payload = pyjwt.decode(auth[len("Bearer "):], options={"verify_signature": False})
+        payload = decode_token_payload(auth[len("Bearer "):])
         return payload.get("sub")
-    except pyjwt.InvalidTokenError:
+    except StarletteHTTPException:
+        return None
+    except Exception:
+        logging.exception("Unexpected error in _jwt_user_id rate-limit lookup")
         return None
 
 

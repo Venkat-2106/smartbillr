@@ -71,6 +71,11 @@ api.interceptors.request.use(async (config) => {
         return config
       } catch (err) {
         processQueue(err, null)
+        useAuthStore.getState().clearAuth()
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = '/login'
+        }
+        return Promise.reject(err)
       } finally {
         isRefreshing = false
       }

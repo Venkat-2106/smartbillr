@@ -51,9 +51,10 @@ class ProductCreate(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("Product name cannot be blank")
+        v = strip_and_escape_html(v)
         if len(v) > 100:
             raise ValueError("Product name must not exceed 100 characters")
-        return strip_and_escape_html(v)
+        return v
 
     @field_validator("barcode", "unit", "tax_code")
     @classmethod
@@ -102,9 +103,9 @@ class ProductUpdate(BaseModel):
             v = v.strip()
             if not v:
                 raise ValueError("Product name cannot be blank")
+            v = strip_and_escape_html(v)
             if len(v) > 100:
                 raise ValueError("Product name must not exceed 100 characters")
-            v = strip_and_escape_html(v)
         return v
 
     @field_validator("barcode", "unit", "tax_code")

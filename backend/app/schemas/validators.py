@@ -12,7 +12,7 @@ def strip_and_escape_html(v: str | None) -> str | None:
 
 # Formula-injection characters used in CSV export/import paths:
 # leading =, +, -, or @ can make spreadsheet apps execute formulas.
-_RE_FORMULA_LEAD = re.compile(r"^[=+\-@]")
+_RE_FORMULA_LEAD = re.compile(r"^[=+\-@]+")
 
 
 def strip_and_escape_csv_value(v: str | None) -> str | None:

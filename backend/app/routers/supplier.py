@@ -158,13 +158,13 @@ async def import_suppliers(
 
     # ── 2. Validate & transform rows ──────────────────────────────────────────
     def row_transform(row: dict, row_num: int):
-        name = strip_and_escape_csv_value(row.get("supp_name", "")).strip()
-        phone = strip_and_escape_csv_value(row.get("supp_phone", "")).strip() if row.get("supp_phone") else None
-        email = strip_and_escape_csv_value(row.get("supp_email", "")).strip() if row.get("supp_email") else None
-        address = strip_and_escape_csv_value(row.get("supp_address", "")).strip() if row.get("supp_address") else None
-        state = strip_and_escape_csv_value(row.get("supp_state", "")).strip() if row.get("supp_state") else None
-        country_code = strip_and_escape_csv_value(row.get("supp_country_code", "")).strip() if row.get("supp_country_code") else None
-        tax_number = strip_and_escape_csv_value(row.get("supp_tax_number", "")).strip() if row.get("supp_tax_number") else None
+        name = strip_and_escape_csv_value(row.get("supp_name", ""))
+        phone = strip_and_escape_csv_value(row.get("supp_phone", "")) if row.get("supp_phone") else None
+        email = strip_and_escape_csv_value(row.get("supp_email", "")) if row.get("supp_email") else None
+        address = strip_and_escape_csv_value(row.get("supp_address", "")) if row.get("supp_address") else None
+        state = strip_and_escape_csv_value(row.get("supp_state", "")) if row.get("supp_state") else None
+        country_code = strip_and_escape_csv_value(row.get("supp_country_code", "")) if row.get("supp_country_code") else None
+        tax_number = strip_and_escape_csv_value(row.get("supp_tax_number", "")) if row.get("supp_tax_number") else None
 
         if not name:
             return None, "supplier name is required"

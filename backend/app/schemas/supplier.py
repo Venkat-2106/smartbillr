@@ -27,9 +27,10 @@ class SupplierCreate(BaseModel):
     @field_validator("supp_name")
     @classmethod
     def sanitize_name(cls, v: str) -> str:
+        v = strip_and_escape_html(v)
         if len(v) > 100:
             raise ValueError("Supplier name must not exceed 100 characters")
-        return strip_and_escape_html(v)
+        return v
 
     @field_validator("supp_phone", "supp_address", "supp_state", "supp_country_code", "supp_tax_number")
     @classmethod
@@ -57,9 +58,11 @@ class SupplierUpdate(BaseModel):
     @field_validator("supp_name")
     @classmethod
     def sanitize_name(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and len(v) > 100:
-            raise ValueError("Supplier name must not exceed 100 characters")
-        return strip_and_escape_html(v)
+        if v is not None:
+            v = strip_and_escape_html(v)
+            if len(v) > 100:
+                raise ValueError("Supplier name must not exceed 100 characters")
+        return v
 
     @field_validator("supp_phone", "supp_address", "supp_state", "supp_country_code", "supp_tax_number")
     @classmethod

@@ -119,6 +119,8 @@ async def fetch_purchase_items(db: AsyncSession, pur_id: str, business_id: str):
 
 # ─────────────────────────────────────────
 # HELPER: Format purchase row as dict (includes audit fields, used by detail)
+# NOTE: All monetary fields use str(Decimal(str(x))) to avoid float precision loss.
+# Do NOT change back to float() — Decimal round-trips through string prevents drift.
 # ─────────────────────────────────────────
 def purchase_row_to_dict(row, items):
     return {

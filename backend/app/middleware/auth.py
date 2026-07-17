@@ -41,11 +41,11 @@
 #     Dashboard load (5-6 parallel calls) saves 5-6 DB round trips.
 #     Over the course of a session this is a significant speedup.
 #
-#   FIX — In-memory permissions cache (TTL = 10s).
-#     After the first request, subsequent requests from the same user within
-#     the TTL window skip the DB query entirely.
-#     Permissions change rarely (only when admin edits roles), so a 60s lag
-#     is acceptable and eliminates the auth DB query from ~99% of requests.
+#   FIX — In-memory permissions cache (TTL = 300s).
+    #     After the first request, subsequent requests from the same user within
+    #     the TTL window skip the DB query entirely.
+    #     Permissions change rarely (only when admin edits roles), so a 300s lag
+    #     is acceptable and eliminates the auth DB query from ~99% of requests.
 
 from fastapi import HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -72,14 +72,14 @@ security = HTTPBearer()
 #   Instance A has no awareness of cache entries on Instance B. When an admin
 #   changes a user's role or deactivates them via Instance A, only Instance A's
 #   cache is invalidated. Instance B continues serving stale data until TTL
-#   expiry (10s). A shared Redis cache would solve this properly, but for the
-#   current scale the 10s window is acceptable.
+#   expiry (300s). A shared Redis cache would solve this properly, but for the
+#   current scale the 300s window is acceptable.
 #
 # REDIS BACKED CACHE (optional):
 #   Set REDIS_URL env var to enable a shared Redis cache instead of TTLCache.
 #   This eliminates the multi-instance stale cache window entirely.
 #   Falls back to TTLCache if REDIS_URL is not set.
-_permissions_cache: TTLCache | None = TTLCache(maxsize=1000, ttl=10)
+_permissions_cache: TTLCache | None = TTLCache(maxsize=1000, ttl=300)
 _business_users_index: dict[str, set[str]] = {}  # business_id → set of cached user_ids
 _redis = None
 
@@ -115,7 +115,7 @@ def _cache_get(key: str) -> dict | None:
     return None
 
 
-def _cache_set(key: str, value: dict, ttl: int = 10):
+def _cache_set(key: str, value: dict, ttl: int = 300):
     r = _get_redis()
     if r:
         import json
@@ -197,7 +197,7 @@ def clear_business_users_cache(business_id: str) -> None:
     Invalidate cache entries for all users belonging to a business.
 
     Called when a business is suspended or reactivated so cached
-    entries don't bypass the suspension check for up to 10s.
+    entries don't bypass the suspension check for up to 300s.
 
     Uses _business_users_index for O(1) lookup instead of scanning the
     full _permissions_cache. Stale index entries (from TTL expiry) are
@@ -436,7 +436,7 @@ async def verify_token(
         "subscription_type": getattr(request.state, "subscription_type", None),
     }
 
-    # Cache for 10s so subsequent requests skip the DB query.
+    # Cache for 300s so subsequent requests skip the DB query.
     _cache_set(user_id, user_data)
 
     return user_data

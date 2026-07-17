@@ -20,14 +20,20 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "expenses",
-        sa.Column("source_type", sa.String(50), nullable=True)
-    )
-    op.add_column(
-        "expenses",
-        sa.Column("source_id", postgresql.UUID(as_uuid=True), nullable=True)
-    )
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    existing = {c["name"] for c in inspector.get_columns("expenses")}
+
+    if "source_type" not in existing:
+        op.add_column(
+            "expenses",
+            sa.Column("source_type", sa.String(50), nullable=True)
+        )
+    if "source_id" not in existing:
+        op.add_column(
+            "expenses",
+            sa.Column("source_id", postgresql.UUID(as_uuid=True), nullable=True)
+        )
 
 
 def downgrade() -> None:

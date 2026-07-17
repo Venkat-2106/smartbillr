@@ -18,65 +18,26 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "businesses",
-        sa.Column(
-            "payment_status",
-            sa.String(20),
-            nullable=False,
-            server_default="pending",
-        ),
-    )
-    op.add_column(
-        "businesses",
-        sa.Column(
-            "subscription_type",
-            sa.String(20),
-            nullable=False,
-            server_default="trial",
-        ),
-    )
-    op.add_column(
-        "businesses",
-        sa.Column(
-            "subscription_start_at",
-            postgresql.TIMESTAMP(timezone=True),
-            nullable=True,
-        ),
-    )
-    op.add_column(
-        "businesses",
-        sa.Column(
-            "subscription_end_at",
-            postgresql.TIMESTAMP(timezone=True),
-            nullable=True,
-        ),
-    )
-    op.add_column(
-        "businesses",
-        sa.Column(
-            "trial_start_at",
-            postgresql.TIMESTAMP(timezone=True),
-            nullable=True,
-        ),
-    )
-    op.add_column(
-        "businesses",
-        sa.Column(
-            "trial_end_at",
-            postgresql.TIMESTAMP(timezone=True),
-            nullable=True,
-        ),
-    )
-    op.add_column(
-        "businesses",
-        sa.Column(
-            "is_active",
-            sa.Boolean(),
-            nullable=False,
-            server_default=sa.text("true"),
-        ),
-    )
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    biz_cols = {c["name"] for c in inspector.get_columns("businesses")}
+
+    BUSINESS_COLUMNS = [
+        ("payment_status", sa.String(20), False, "pending"),
+        ("subscription_type", sa.String(20), False, "trial"),
+        ("subscription_start_at", postgresql.TIMESTAMP(timezone=True), True, None),
+        ("subscription_end_at", postgresql.TIMESTAMP(timezone=True), True, None),
+        ("trial_start_at", postgresql.TIMESTAMP(timezone=True), True, None),
+        ("trial_end_at", postgresql.TIMESTAMP(timezone=True), True, None),
+        ("is_active", sa.Boolean(), False, sa.text("true")),
+    ]
+
+    for name, col_type, nullable, default in BUSINESS_COLUMNS:
+        if name not in biz_cols:
+            kw = {"nullable": nullable}
+            if default is not None:
+                kw["server_default"] = default
+            op.add_column("businesses", sa.Column(name, col_type, **kw))
 
     # Seed subscription.manage permission for Super Admin role
     conn = op.get_bind()

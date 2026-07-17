@@ -17,13 +17,18 @@ depends_on: str | None = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        'profiles',
-        sa.Column('last_logout_at', postgresql.TIMESTAMP(timezone=True), nullable=True)
-    )
-    op.create_index('ix_profiles_last_logout_at', 'profiles', ['last_logout_at'])
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    existing = {c["name"] for c in inspector.get_columns("profiles")}
+
+    if "last_logout_at" not in existing:
+        op.add_column(
+            'profiles',
+            sa.Column('last_logout_at', postgresql.TIMESTAMP(timezone=True), nullable=True)
+        )
+        op.create_index('ix_profiles_last_logout_at', 'profiles', ['last_logout_at'])
 
 
 def downgrade() -> None:
-    op.drop_index('ix_profiles_last_logout_at')
-    op.drop_column('profiles', 'last_logout_at')
+    op.execute("DROP INDEX IF EXISTS ix_profiles_last_logout_at")
+    op.execute("ALTER TABLE profiles DROP COLUMN IF EXISTS last_logout_at")

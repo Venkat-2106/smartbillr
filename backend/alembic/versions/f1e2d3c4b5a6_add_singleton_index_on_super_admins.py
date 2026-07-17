@@ -18,10 +18,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "super_admins",
-        sa.Column("last_logout_at", sa.DateTime(), nullable=True),
-    )
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    existing = {c["name"] for c in inspector.get_columns("super_admins")}
+
+    if "last_logout_at" not in existing:
+        op.add_column(
+            "super_admins",
+            sa.Column("last_logout_at", sa.DateTime(), nullable=True),
+        )
     op.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS idx_super_admins_singleton
         ON super_admins ((TRUE))

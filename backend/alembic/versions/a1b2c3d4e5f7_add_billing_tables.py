@@ -82,11 +82,21 @@ def upgrade() -> None:
     )
 
     # ── businesses — new columns ────────────────────────────────────────────
-    op.add_column('businesses', sa.Column('current_plan_id', postgresql.UUID(as_uuid=True), sa.ForeignKey('plans.plan_id'), nullable=True))
-    op.add_column('businesses', sa.Column('payment_provider', sa.String(20), nullable=True))
-    op.add_column('businesses', sa.Column('provider_customer_id', sa.String(120), nullable=True))
-    op.add_column('businesses', sa.Column('auto_renew', sa.Boolean, nullable=False, server_default=sa.text('true')))
-    op.add_column('businesses', sa.Column('grace_period_end_at', sa.DateTime(timezone=True), nullable=True))
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    biz_cols = {c["name"] for c in inspector.get_columns("businesses")}
+
+    NEW_BIZ_COLS = {
+        "current_plan_id": lambda: sa.Column("current_plan_id", postgresql.UUID(as_uuid=True), sa.ForeignKey('plans.plan_id'), nullable=True),
+        "payment_provider": lambda: sa.Column("payment_provider", sa.String(20), nullable=True),
+        "provider_customer_id": lambda: sa.Column("provider_customer_id", sa.String(120), nullable=True),
+        "auto_renew": lambda: sa.Column("auto_renew", sa.Boolean, nullable=False, server_default=sa.text('true')),
+        "grace_period_end_at": lambda: sa.Column("grace_period_end_at", sa.DateTime(timezone=True), nullable=True),
+    }
+
+    for col_name, factory in NEW_BIZ_COLS.items():
+        if col_name not in biz_cols:
+            op.add_column("businesses", factory())
 
     # ── RLS policies ────────────────────────────────────────────────────────
     op.execute("""

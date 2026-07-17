@@ -19,8 +19,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("profiles", sa.Column("last_login_at", sa.DateTime(timezone=True), nullable=True))
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    existing = {c["name"] for c in inspector.get_columns("profiles")}
+
+    if "last_login_at" not in existing:
+        op.add_column("profiles", sa.Column("last_login_at", sa.DateTime(timezone=True), nullable=True))
 
 
 def downgrade() -> None:
-    op.drop_column("profiles", "last_login_at")
+    op.execute("ALTER TABLE profiles DROP COLUMN IF EXISTS last_login_at")

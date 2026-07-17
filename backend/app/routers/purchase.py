@@ -691,6 +691,26 @@ async def import_purchases(
     biz_country = (biz.business_country_code or "").strip() if biz else ""
     biz_state = (biz.business_state or "").strip() if biz else ""
 
+    # ── Batch supplier country/state lookup (same pattern as phone/name lookups above) ──
+    supplier_info_map: dict[str, dict] = {}
+    supp_id_list = list(set(supplier_map.values()))
+    if supp_id_list:
+        placeholders = ", ".join([f":si_{i}" for i in range(len(supp_id_list))])
+        params = {"bid": business_id}
+        for i, sid in enumerate(supp_id_list):
+            params[f"si_{i}"] = sid
+        sup_info_rows = (await db.execute(text(f"""
+            SELECT supp_id::text, supp_country_code, supp_state
+            FROM suppliers
+            WHERE business_id = CAST(:bid AS uuid)
+              AND supp_id::text IN ({placeholders})
+        """), params)).fetchall()
+        for r in sup_info_rows:
+            supplier_info_map[str(r.supp_id)] = {
+                "country": (r.supp_country_code or "").strip(),
+                "state": (r.supp_state or "").strip(),
+            }
+
     # ── 6. Create purchases ────────────────────────────────────────────────────
     created = 0
     purchase_errors = []
@@ -722,17 +742,12 @@ async def import_purchases(
                 payment_status = row.get("payment_status", "pending")
 
                 # ── Tax calculation via centralized engine ──
-                # Get supplier country/state for GST determination
+                # Resolve supplier country/state from in-memory cache
                 supp_country = ""
                 supp_state = ""
-                if supp_id:
-                    sup_info = (await db.execute(text("""
-                        SELECT supp_country_code, supp_state FROM suppliers
-                        WHERE supp_id = CAST(:sid AS uuid) AND business_id = CAST(:bid AS uuid)
-                    """), {"sid": supp_id, "bid": business_id})).fetchone()
-                    if sup_info:
-                        supp_country = (sup_info.supp_country_code or "").strip()
-                        supp_state = (sup_info.supp_state or "").strip()
+                if supp_id and supp_id in supplier_info_map:
+                    supp_country = supplier_info_map[supp_id]["country"]
+                    supp_state = supplier_info_map[supp_id]["state"]
 
                 tax_calc = calculate_item_tax(
                     unit_price=unit_price, quantity=qty, tax_rate=tax_rate,

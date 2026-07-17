@@ -28,6 +28,7 @@
 # removes stale alerts for products now above their threshold.
 # ─────────────────────────────────────────────────────────────────────────────
 
+import asyncio
 from fastapi import APIRouter, Depends, Query, File, UploadFile
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -176,34 +177,54 @@ sort_dir:     Optional[str] = Query(default="desc"),
         extra_where += " AND sm.move_created_at <= :date_to"
         params["date_to"] = date_to.strip()
 
-    # ── Combined data + count query ──────────────────────────────────────────
-    rows = (await db.execute(
-        text(f"""
-            SELECT
-                sm.move_id, sm.business_id, sm.product_id,
-                sm.move_type, sm.move_qty,
-                sm.move_prev_stock, sm.move_new_stock,
-                sm.sale_reference_id, sm.purchase_reference_id,
-                sm.reference_type, sm.reference_id,
-                sm.move_notes, sm.move_created_at, sm.move_created_by,
-                p.prod_name,
-                p2.full_name AS created_by_name,
-                s.invoice_no AS sale_invoice_no,
-                pur.pur_id   AS pur_reference_id,
-                COUNT(*) OVER() AS total_count
-            FROM stock_movements sm
-            LEFT JOIN products  p   ON p.prod_id = sm.product_id
-            LEFT JOIN profiles  p2  ON p2.id     = sm.move_created_by
-            LEFT JOIN sales     s   ON s.sales_id = sm.sale_reference_id
-            LEFT JOIN purchases pur ON pur.pur_id = sm.purchase_reference_id
-            WHERE sm.business_id = CAST(:business_id AS uuid)
-            {extra_where}
-            ORDER BY {order_col} {order_dir}
-            OFFSET :offset LIMIT :limit
-        """),
-        params
-    )).fetchall()
-    total = rows[0].total_count if rows else 0
+    # ── Split count + data queries (run concurrently) ────────────────────────
+    # Count needs the products LEFT JOIN only for the ILIKE search filter
+    # (which references p.prod_name). Still a big savings vs the old 4-join
+    # COUNT(*) OVER() pattern.
+    count_params = {k: v for k, v in params.items() if k != "offset" and k != "limit"}
+    data_params = params.copy()
+
+    async def count_query():
+        row = (await db.execute(
+            text(f"""
+                SELECT COUNT(*) AS total
+                FROM stock_movements sm
+                LEFT JOIN products p ON p.prod_id = sm.product_id
+                WHERE sm.business_id = CAST(:business_id AS uuid)
+                {extra_where}
+            """),
+            count_params
+        )).fetchone()
+        return row.total if row else 0
+
+    async def data_query():
+        return (await db.execute(
+            text(f"""
+                SELECT
+                    sm.move_id, sm.business_id, sm.product_id,
+                    sm.move_type, sm.move_qty,
+                    sm.move_prev_stock, sm.move_new_stock,
+                    sm.sale_reference_id, sm.purchase_reference_id,
+                    sm.reference_type, sm.reference_id,
+                    sm.move_notes, sm.move_created_at, sm.move_created_by,
+                    p.prod_name,
+                    p2.full_name AS created_by_name,
+                    s.invoice_no AS sale_invoice_no,
+                    pur.pur_id   AS pur_reference_id
+                FROM stock_movements sm
+                LEFT JOIN products  p   ON p.prod_id = sm.product_id
+                LEFT JOIN profiles  p2  ON p2.id     = sm.move_created_by
+                LEFT JOIN sales     s   ON s.sales_id = sm.sale_reference_id
+                LEFT JOIN purchases pur ON pur.pur_id = sm.purchase_reference_id
+                WHERE sm.business_id = CAST(:business_id AS uuid)
+                {extra_where}
+                ORDER BY {order_col} {order_dir}
+                OFFSET :offset LIMIT :limit
+            """),
+            data_params
+        )).fetchall()
+
+    total, rows = await asyncio.gather(count_query(), data_query())
 
     data = []
     for r in rows:

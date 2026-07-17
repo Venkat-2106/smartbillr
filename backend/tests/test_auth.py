@@ -9,8 +9,10 @@ set in conftest.py.  No mocks are used for token validation — the
 real decode_token_payload function runs end-to-end.
 """
 
+import uuid
 import pytest
 from fastapi.testclient import TestClient
+from app.main import app
 
 
 @pytest.mark.usefixtures("seed_data")
@@ -86,3 +88,35 @@ class TestInactiveUser:
         assert resp.status_code == 403
         body = resp.json()
         assert "inactive" in body.get("detail", "").lower()
+
+
+class TestPermissionDenied:
+    """Valid, active user who lacks a specific permission code → 403."""
+
+    def test_missing_permission_returns_403(self, client, db, seed_data):
+        from app.middleware.auth import verify_token
+
+        bid = str(seed_data["business_id"])
+        uid = str(seed_data["active_user_id"])
+
+        async def _restricted_user():
+            return {
+                "user_id": uid,
+                "business_id": bid,
+                "role": "staff",
+                "permissions": {"sales.delete"},  # notably NOT payments.manage
+            }
+
+        app.dependency_overrides[verify_token] = _restricted_user
+        try:
+            # POST /v1/payments/ requires payments.manage
+            resp = client.post(
+                "/v1/payments/",
+                json={"sale_id": str(uuid.uuid4()), "payment_amount": 100, "payment_method": "cash"},
+            )
+        finally:
+            app.dependency_overrides.pop(verify_token, None)
+
+        assert resp.status_code == 403
+        body = resp.json()
+        assert "Access denied" in body.get("message", "")

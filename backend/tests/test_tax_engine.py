@@ -84,3 +84,162 @@ def test_generic_tax_rounding():
     assert result["cgst_amount"] == Decimal("0")
     assert result["sgst_amount"] == Decimal("0")
     assert result["igst_amount"] == Decimal("0")
+
+
+# ── Edge cases ────────────────────────────────────────────────────────────────
+
+def test_zero_percent_tax_rate():
+    """0% tax → all tax amounts are 0, subtotal unchanged."""
+    result = calculate_item_tax(
+        unit_price=Decimal("100.00"),
+        quantity=2,
+        tax_rate=Decimal("0"),
+        business_country_code="IN",
+        business_state="karnataka",
+        counterparty_country_code="IN",
+        counterparty_state="karnataka",
+    )
+    assert result["subtotal"] == Decimal("200.00")
+    assert result["cgst_amount"] == Decimal("0")
+    assert result["sgst_amount"] == Decimal("0")
+    assert result["igst_amount"] == Decimal("0")
+    assert result["generic_tax_total"] == Decimal("0")
+    assert result["item_tax_total"] == Decimal("0")
+    assert result["item_total_with_tax"] == Decimal("200.00")
+    assert result["tax_type"] == "cgst_sgst"
+
+
+def test_one_hundred_percent_tax_rate():
+    """100% tax on ₹100 = ₹100 tax, total ₹200."""
+    result = calculate_item_tax(
+        unit_price=Decimal("100.00"),
+        quantity=1,
+        tax_rate=Decimal("100"),
+        business_country_code="IN",
+        business_state="karnataka",
+        counterparty_country_code="IN",
+        counterparty_state="karnataka",
+    )
+    assert result["subtotal"] == Decimal("100.00")
+    assert result["cgst_amount"] + result["sgst_amount"] == Decimal("100.00")
+    assert result["item_tax_total"] == Decimal("100.00")
+    assert result["item_total_with_tax"] == Decimal("200.00")
+    assert result["tax_type"] == "cgst_sgst"
+
+
+# ── Tax type determination ────────────────────────────────────────────────────
+
+def test_blank_counterparty_state_defaults_to_cgst_sgst():
+    """Indian business, blank customer state → defaults to intrastate (CGST+SGST)."""
+    result = calculate_item_tax(
+        unit_price=Decimal("100.00"),
+        quantity=1,
+        tax_rate=Decimal("18"),
+        business_country_code="IN",
+        business_state="karnataka",
+        counterparty_country_code="IN",
+        counterparty_state="",
+    )
+    assert result["tax_type"] == "cgst_sgst"
+    assert result["cgst_amount"] > 0
+    assert result["sgst_amount"] > 0
+    assert result["igst_amount"] == Decimal("0")
+
+
+def test_blank_counterparty_country_defaults_to_cgst_sgst():
+    """Blank counterparty country + blank state → treated as India, intrastate."""
+    result = calculate_item_tax(
+        unit_price=Decimal("100.00"),
+        quantity=1,
+        tax_rate=Decimal("18"),
+        business_country_code="IN",
+        business_state="karnataka",
+        counterparty_country_code="",
+        counterparty_state="",
+    )
+    assert result["tax_type"] == "cgst_sgst"
+    assert result["cgst_amount"] > 0
+    assert result["sgst_amount"] > 0
+
+
+def test_counterparty_none_state_defaults_to_cgst_sgst():
+    """counterparty_state=None → same as blank → intrastate."""
+    result = calculate_item_tax(
+        unit_price=Decimal("100.00"),
+        quantity=1,
+        tax_rate=Decimal("18"),
+        business_country_code="IN",
+        business_state="karnataka",
+        counterparty_country_code="IN",
+        counterparty_state=None,
+    )
+    assert result["tax_type"] == "cgst_sgst"
+
+
+def test_same_state_returns_cgst_sgst():
+    """Both parties in India, same state → CGST + SGST."""
+    result = calculate_item_tax(
+        unit_price=Decimal("100.00"),
+        quantity=1,
+        tax_rate=Decimal("18"),
+        business_country_code="IN",
+        business_state="karnataka",
+        counterparty_country_code="IN",
+        counterparty_state="karnataka",
+    )
+    assert result["tax_type"] == "cgst_sgst"
+    assert result["cgst_amount"] > 0
+    assert result["sgst_amount"] > 0
+    assert result["igst_amount"] == Decimal("0")
+
+
+def test_different_state_returns_igst():
+    """Both parties in India, different states → IGST."""
+    result = calculate_item_tax(
+        unit_price=Decimal("100.00"),
+        quantity=1,
+        tax_rate=Decimal("18"),
+        business_country_code="IN",
+        business_state="karnataka",
+        counterparty_country_code="IN",
+        counterparty_state="maharashtra",
+    )
+    assert result["tax_type"] == "igst"
+    assert result["igst_amount"] > 0
+    assert result["cgst_amount"] == Decimal("0")
+    assert result["sgst_amount"] == Decimal("0")
+
+
+def test_cross_border_returns_igst():
+    """Indian business selling to US customer → IGST."""
+    result = calculate_item_tax(
+        unit_price=Decimal("100.00"),
+        quantity=1,
+        tax_rate=Decimal("18"),
+        business_country_code="IN",
+        business_state="karnataka",
+        counterparty_country_code="US",
+        counterparty_state="",
+    )
+    assert result["tax_type"] == "igst"
+    assert result["igst_amount"] > 0
+    assert result["cgst_amount"] == Decimal("0")
+    assert result["sgst_amount"] == Decimal("0")
+
+
+def test_non_indian_business_returns_generic():
+    """US business → generic tax, no GST split."""
+    result = calculate_item_tax(
+        unit_price=Decimal("100.00"),
+        quantity=1,
+        tax_rate=Decimal("8"),
+        business_country_code="US",
+        business_state="california",
+        counterparty_country_code="US",
+        counterparty_state="california",
+    )
+    assert result["tax_type"] == "generic"
+    assert result["generic_tax_total"] > 0
+    assert result["cgst_amount"] == Decimal("0")
+    assert result["sgst_amount"] == Decimal("0")
+    assert result["igst_amount"] == Decimal("0")

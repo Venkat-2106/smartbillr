@@ -12,6 +12,7 @@ Dependencies required by the endpoint are mocked:
   - record_payment_and_sync → SQLite-compatible patch
 """
 
+from decimal import Decimal
 import uuid
 from unittest.mock import patch
 
@@ -315,3 +316,32 @@ class TestGetPaymentsBySale:
         fake_id = uuid.uuid4()
         resp = client.get(f"/v1/payments/sale/{fake_id}")
         assert resp.status_code == 404
+
+
+class TestCalculatePaymentStatus:
+    """Pure unit tests for calculate_payment_status() — no DB, no mocks."""
+
+    def test_pending_when_total_paid_zero(self):
+        """total_paid == 0 → pending."""
+        from app.utils.payment_helpers import calculate_payment_status
+        assert calculate_payment_status(Decimal("0"), Decimal("100")) == "pending"
+
+    def test_pending_when_total_paid_negative(self):
+        """total_paid < 0 → pending."""
+        from app.utils.payment_helpers import calculate_payment_status
+        assert calculate_payment_status(Decimal("-10"), Decimal("100")) == "pending"
+
+    def test_partial_when_total_paid_between_zero_and_final(self):
+        """0 < total_paid < sale_final → partial."""
+        from app.utils.payment_helpers import calculate_payment_status
+        assert calculate_payment_status(Decimal("50"), Decimal("100")) == "partial"
+
+    def test_paid_when_total_paid_equals_final(self):
+        """total_paid == sale_final → paid."""
+        from app.utils.payment_helpers import calculate_payment_status
+        assert calculate_payment_status(Decimal("100"), Decimal("100")) == "paid"
+
+    def test_paid_when_total_paid_exceeds_final(self):
+        """total_paid > sale_final → paid (overpayment treated as paid)."""
+        from app.utils.payment_helpers import calculate_payment_status
+        assert calculate_payment_status(Decimal("150"), Decimal("100")) == "paid"

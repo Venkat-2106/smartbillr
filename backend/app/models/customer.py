@@ -9,7 +9,7 @@ class Customer(Base):
 
     cust_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # FIX: Added ForeignKey — DB has FK constraint to businesses.business_id
-    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=True)
+    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=False)
     cust_name = Column(String(100), nullable=False)
     cust_phone = Column(String(15), nullable=True)
     cust_email = Column(String(100), nullable=True)

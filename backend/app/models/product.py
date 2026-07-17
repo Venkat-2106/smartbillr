@@ -30,7 +30,7 @@ class Product(Base):
     )
 
     prod_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=True)
+    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=False)
     category_id = Column(UUID(as_uuid=True), ForeignKey("categories.category_id"), nullable=True)
     prod_name = Column(String(100), nullable=False)
     prod_sell_price = Column(Numeric(10, 2), nullable=False)

@@ -8,7 +8,7 @@ class Category(Base):
     __tablename__ = "categories"
 
     category_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=True)
+    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=False)
     category_name = Column(String(50), nullable=False)
     is_deleted = Column(Boolean, default=False)
     created_at = Column(DateTime, nullable=True, server_default=text("now()"))

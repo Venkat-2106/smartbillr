@@ -10,7 +10,7 @@ class Purchase(Base):
     __tablename__ = "purchases"
 
     pur_id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    business_id        = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=True)  # ← FIXED
+    business_id        = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=False)
     supp_id            = Column(UUID(as_uuid=True), ForeignKey("suppliers.supp_id"), nullable=True)       # ← FIXED
     pur_total_amount   = Column(Numeric(10, 2), nullable=False)
     pur_discount       = Column(Numeric(10, 2), default=0)

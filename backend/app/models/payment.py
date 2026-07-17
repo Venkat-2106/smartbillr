@@ -10,7 +10,7 @@ class Payment(Base):
     __tablename__ = "payments"
 
     payment_id      = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    business_id     = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=True)
+    business_id     = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=False)
     sale_id         = Column(UUID(as_uuid=True), ForeignKey("sales.sales_id"), nullable=True)
     payment_amount  = Column(Numeric(10, 2), nullable=False)
     payment_method  = Column(String(15), nullable=True)

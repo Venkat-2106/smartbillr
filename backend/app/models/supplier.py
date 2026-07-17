@@ -10,7 +10,7 @@ class Supplier(Base):
     __tablename__ = "suppliers"
 
     supp_id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    business_id       = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=True)
+    business_id       = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=False)
     supp_name         = Column(String(100), nullable=False)
     supp_phone        = Column(String(15),  nullable=True)
     supp_email        = Column(String(100), nullable=True)

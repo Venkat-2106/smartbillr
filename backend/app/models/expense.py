@@ -9,7 +9,7 @@ class Expense(Base):
 
     expense_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # FIX: Added ForeignKey — DB has FK constraint to businesses.business_id
-    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=True)
+    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=False)
     expense_category = Column(String(50), nullable=True)
     expense_amount = Column(Numeric(10, 2), nullable=False)
     expense_date = Column(Date, nullable=True)

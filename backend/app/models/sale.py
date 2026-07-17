@@ -11,7 +11,7 @@ class Sale(Base):
     __tablename__ = "sales"
 
     sales_id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    business_id          = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=True)
+    business_id          = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=False)
     customer_id          = Column(UUID(as_uuid=True), ForeignKey("customers.cust_id"), nullable=True)
     invoice_no           = Column(String,       nullable=True)
     sales_total_amount   = Column(Numeric(10,2), nullable=True)

@@ -9,7 +9,7 @@ class StockMovement(Base):
 
     move_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # FIX: Added ForeignKey — DB has FK constraint to businesses.business_id
-    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=True)
+    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=False)
     # FIX: Added ForeignKey — DB has FK constraint to products.prod_id
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.prod_id"), nullable=True)
     move_type = Column(String(20), nullable=False)
@@ -39,7 +39,7 @@ class LowStockAlert(Base):
 
     alert_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # FIX: Added ForeignKey — DB has FK constraint to businesses.business_id
-    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=True)
+    business_id = Column(UUID(as_uuid=True), ForeignKey("businesses.business_id"), nullable=False)
     # FIX: Added ForeignKey — DB has FK constraint to products.prod_id
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.prod_id"), nullable=True)
     alert_stock_qty = Column(Integer, nullable=False)

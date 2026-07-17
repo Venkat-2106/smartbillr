@@ -314,18 +314,19 @@ async def get_sales_list(db: AsyncSession, business_id: str, pagination: dict, s
                s.updated_at,
                prof.full_name AS last_updated_by,
                COUNT(*) OVER() AS total_count,
-               pay.cumulative_paid
+               active_pay.cumulative_paid
         FROM sales s
         LEFT JOIN customers c ON c.cust_id = s.customer_id
         LEFT JOIN profiles prof ON prof.id = s.updated_by
-        LEFT JOIN LATERAL (
-            SELECT COALESCE(cumulative_paid, 0) AS cumulative_paid,
-                   payment_status
-            FROM payments
-            WHERE sale_id = s.sales_id
-              AND is_active = true
-            LIMIT 1
-        ) pay ON true
+        LEFT JOIN (
+            SELECT DISTINCT ON (pay.sale_id)
+                pay.sale_id,
+                COALESCE(pay.cumulative_paid, 0) AS cumulative_paid,
+                pay.payment_status
+            FROM payments pay
+            WHERE pay.is_active = true
+            ORDER BY pay.sale_id, pay.payment_paid_at DESC
+        ) active_pay ON active_pay.sale_id = s.sales_id
         WHERE s.business_id = CAST(:bid AS uuid)
           AND s.is_deleted  = false
         {extra_where}

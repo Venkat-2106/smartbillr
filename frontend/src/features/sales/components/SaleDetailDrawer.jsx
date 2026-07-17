@@ -20,7 +20,7 @@ import {
   PrinterIcon,
 } from '@heroicons/react/24/outline';
 import { fetchSale } from '../api/salesApi';
-import { Badge, Button, Spinner, Input } from '../../../shared/components';
+import { Badge, Button, Input } from '../../../shared/components';
 import { selectStyle } from '../../../shared/components/FormField';
 import { formatCurrency } from '../../../shared/utils/formatCurrency';
 import { formatDate }     from '../../../shared/utils/formatDate';
@@ -437,9 +437,96 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
         {/* Scrollable body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
           {isLoading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
-              <Spinner size="md" />
-            </div>
+            <>
+              {/* Invoice Details skeleton */}
+              <div style={{ marginBottom: 20 }}>
+                <div className="skeleton" style={{ width: '28%', height: 11, borderRadius: 6, marginBottom: 10 }} />
+                <div style={{
+                  background: 'var(--bg-page)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12, overflow: 'hidden',
+                }}>
+                  {[80, 65, 55, 45].map((w, i) => (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '10px 14px',
+                      borderBottom: i < 3 ? '1px solid var(--border)' : 'none',
+                    }}>
+                      <div className="skeleton" style={{ width: 15, height: 15, borderRadius: 4, flexShrink: 0 }} />
+                      <div className="skeleton" style={{ width: '25%', height: 12, borderRadius: 6 }} />
+                      <div className="skeleton" style={{ width: `${w}px`, height: 12, borderRadius: 6, marginLeft: 'auto' }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Line Items skeleton */}
+              <div style={{ marginBottom: 20 }}>
+                <div className="skeleton" style={{ width: '22%', height: 11, borderRadius: 6, marginBottom: 10 }} />
+                <div style={{
+                  background: 'var(--bg-page)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12, overflow: 'hidden',
+                }}>
+                  {[0, 1, 2].map(i => (
+                    <div key={i} style={{
+                      padding: '11px 14px',
+                      borderBottom: i < 2 ? '1px solid var(--border)' : 'none',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                        <div style={{ flex: 1 }}>
+                          <div className="skeleton" style={{ width: '55%', height: 13, borderRadius: 6, marginBottom: 6 }} />
+                          <div className="skeleton" style={{ width: '35%', height: 11, borderRadius: 6 }} />
+                        </div>
+                        <div className="skeleton" style={{ width: 50, height: 13, borderRadius: 6, flexShrink: 0 }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tax Breakdown skeleton */}
+              <div style={{ marginBottom: 20 }}>
+                <div className="skeleton" style={{ width: '24%', height: 11, borderRadius: 6, marginBottom: 10 }} />
+                <div style={{
+                  background: 'var(--bg-page)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12, overflow: 'hidden',
+                }}>
+                  {[0, 1].map(i => (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center',
+                      padding: '10px 14px',
+                      borderBottom: i < 1 ? '1px solid var(--border)' : 'none',
+                    }}>
+                      <div className="skeleton" style={{ width: '20%', height: 12, borderRadius: 6 }} />
+                      <div className="skeleton" style={{ width: 60, height: 12, borderRadius: 6, marginLeft: 'auto' }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Summary skeleton */}
+              <div style={{ marginBottom: 20 }}>
+                <div className="skeleton" style={{ width: '18%', height: 11, borderRadius: 6, marginBottom: 10 }} />
+                <div style={{
+                  background: 'var(--bg-page)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12, overflow: 'hidden',
+                }}>
+                  {[0, 1, 2, 3].map(i => (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center',
+                      padding: '10px 14px',
+                      borderBottom: i < 3 ? '1px solid var(--border)' : 'none',
+                    }}>
+                      <div className="skeleton" style={{ width: '22%', height: 12, borderRadius: 6 }} />
+                      <div className="skeleton" style={{ width: i === 3 ? 70 : 55, height: i === 3 ? 15 : 12, borderRadius: 6, marginLeft: 'auto' }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
           ) : isError ? (
             <div style={{
               padding: '20px 16px',

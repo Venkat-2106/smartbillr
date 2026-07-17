@@ -390,6 +390,7 @@ async def get_sales_by_customer(
           {date_where}
         GROUP BY c.cust_id, c.cust_name
         ORDER BY total_amount DESC
+        LIMIT 100
     """), {"bid": bid, **dp})
     rows = rows.fetchall()
 
@@ -439,6 +440,7 @@ async def get_sales_by_product(
           {date_where}
         GROUP BY p.prod_id, p.prod_name, c.category_name
         ORDER BY total_revenue DESC
+        LIMIT 100
     """), {"bid": bid, **dp})
     rows = rows.fetchall()
 

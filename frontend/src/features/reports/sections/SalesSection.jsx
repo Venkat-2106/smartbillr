@@ -68,7 +68,7 @@ export default function SalesSection({ dateFrom, dateTo }) {
           { key: 'invoice_count', label: 'Invoices', align: 'center' },
           { key: 'total_amount', label: 'Total', align: 'right', format: v => formatCurrency(v, country) },
           { key: 'outstanding_amount', label: 'Outstanding', align: 'right', format: v => formatCurrency(v, country) },
-        ]} data={Array.isArray(byCustomer.data) ? byCustomer.data : []} loading={byCustomer.isLoading} />
+        ]} data={Array.isArray(byCustomer.data) ? byCustomer.data.slice(0, 100) : []} loading={byCustomer.isLoading} />
       </InfoCard>
 
       <InfoCard title="Sales by Product" subtitle="Product-wise revenue" style={{ marginTop: 20 }}>
@@ -77,7 +77,7 @@ export default function SalesSection({ dateFrom, dateTo }) {
           { key: 'category_name', label: 'Category' },
           { key: 'total_qty_sold', label: 'Qty', align: 'center' },
           { key: 'total_revenue', label: 'Revenue', align: 'right', format: v => formatCurrency(v, country) },
-        ]} data={Array.isArray(byProduct.data) ? byProduct.data : []} loading={byProduct.isLoading} />
+        ]} data={Array.isArray(byProduct.data) ? byProduct.data.slice(0, 100) : []} loading={byProduct.isLoading} />
       </InfoCard>
     </BentoCard>
   )

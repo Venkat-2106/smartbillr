@@ -74,7 +74,7 @@ from app.utils.payment_helpers import record_payment_and_sync_async, calculate_p
 from app.utils.currency import get_currency_symbol
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list
-from app.schemas.validators import strip_and_escape_html
+from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 import uuid
 
 router = APIRouter(prefix="/v1/sales", tags=["Sales"])
@@ -265,15 +265,15 @@ async def import_sales(
 
         allow_stock_override = allow_stock_override_raw in ("true", "yes", "1")
 
-        # Sanitize strings
+        # Sanitize strings (CSV-safe: strips formula-injection characters)
         if cust_phone:
-            cust_phone = strip_and_escape_html(cust_phone)
+            cust_phone = strip_and_escape_csv_value(cust_phone)
         if cust_name:
-            cust_name = strip_and_escape_html(cust_name)
+            cust_name = strip_and_escape_csv_value(cust_name)
         if prod_name:
-            prod_name = strip_and_escape_html(prod_name)
+            prod_name = strip_and_escape_csv_value(prod_name)
         if barcode:
-            barcode = strip_and_escape_html(barcode)
+            barcode = strip_and_escape_csv_value(barcode)
 
         return {
             "cust_phone": cust_phone, "cust_name": cust_name,
@@ -355,18 +355,18 @@ async def import_sales(
         placeholders = ", ".join([f":pn_{i}" for i in range(len(prod_name_list))])
         params = {"bid": business_id}
         for i, pn in enumerate(prod_name_list):
-            params[f"pn_{i}"] = pn
+            params[f"pn_{i}"] = pn.strip().lower()
 
         prod_rows = (await db.execute(text(f"""
             SELECT prod_id::text, prod_name, prod_stock_qty, prod_sell_price
             FROM products
             WHERE business_id = CAST(:bid AS uuid)
-              AND prod_name IN ({placeholders})
+              AND LOWER(TRIM(prod_name)) IN ({placeholders})
               AND is_deleted = false
         """), params)).fetchall()
 
         for r in prod_rows:
-            product_map[r.prod_name] = {
+            product_map[r.prod_name.strip().lower()] = {
                 "prod_id": str(r.prod_id),
                 "stock_qty": r.prod_stock_qty,
                 "prod_sell_price": float(r.prod_sell_price)
@@ -442,7 +442,8 @@ async def import_sales(
                 cust_id = cust_map.get(row["cust_name"])
 
             # Resolve product
-            prod_key = row.get("prod_name") or row.get("barcode")
+            raw_key = row.get("prod_name")
+            prod_key = raw_key.strip().lower() if raw_key else row.get("barcode")
             prod_info = product_map.get(prod_key) if prod_key else None
             if not prod_info:
                 sale_errors.append({"row": row_num, "message": "product not found"})

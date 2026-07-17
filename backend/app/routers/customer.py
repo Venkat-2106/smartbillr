@@ -42,7 +42,7 @@ from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list
-from app.schemas.validators import strip_and_escape_html
+from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from typing import Optional
 import uuid
 
@@ -162,20 +162,20 @@ async def import_customers(
         country_code = (row.get("cust_country_code") or row.get("country_code") or row.get("Country Code") or "").strip() or None
         tax_number = (row.get("cust_tax_number") or row.get("tax_number") or row.get("Tax Number") or "").strip() or None
 
-        # Sanitize all string fields (same as CustomerCreate validators)
-        name = strip_and_escape_html(name)
+        # Sanitize all string fields (CSV-safe: strips formula-injection characters)
+        name = strip_and_escape_csv_value(name)
         if phone:
-            phone = strip_and_escape_html(phone)
+            phone = strip_and_escape_csv_value(phone)
         if email:
-            email = strip_and_escape_html(email)
+            email = strip_and_escape_csv_value(email)
         if address:
-            address = strip_and_escape_html(address)
+            address = strip_and_escape_csv_value(address)
         if state:
-            state = strip_and_escape_html(state)
+            state = strip_and_escape_csv_value(state)
         if country_code:
-            country_code = strip_and_escape_html(country_code)
+            country_code = strip_and_escape_csv_value(country_code)
         if tax_number:
-            tax_number = strip_and_escape_html(tax_number)
+            tax_number = strip_and_escape_csv_value(tax_number)
 
         # Validate email format if provided
         if email and "@" not in email:

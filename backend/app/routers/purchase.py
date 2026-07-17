@@ -56,7 +56,7 @@ from app.utils.timestamp import fmt_ts
 from app.utils.tax_engine import calculate_item_tax
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list
-from app.schemas.validators import strip_and_escape_html
+from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from app.utils.bulk_stock_adjust import bulk_check_and_reduce_stock
 import logging
 from decimal import Decimal
@@ -412,8 +412,7 @@ async def create_purchase(
                         expense_id, business_id, expense_category,
                         expense_amount, expense_notes, created_by,
                         source_type, source_id
-                    )
-                    SELECT
+                    ) VALUES (
                         CAST(:expense_id AS uuid),
                         CAST(:business_id AS uuid),
                         :expense_category,
@@ -422,13 +421,10 @@ async def create_purchase(
                         CAST(:created_by AS uuid),
                         :source_type,
                         CAST(:source_id AS uuid)
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM expenses
-                        WHERE source_type = 'purchase'
-                          AND source_id    = CAST(:source_id AS uuid)
-                          AND business_id  = CAST(:business_id AS uuid)
-                          AND is_deleted   = false
                     )
+                    ON CONFLICT (business_id, source_type, source_id)
+                    WHERE is_deleted = false AND source_type IS NOT NULL
+                    DO NOTHING
                 """),
                 {
                     "expense_id":       str(uuid.uuid4()),
@@ -554,17 +550,17 @@ async def import_purchases(
         if payment_status not in ("pending", "paid", "partial"):
             payment_status = "pending"
 
-        # Sanitize strings
+        # Sanitize strings (CSV-safe: strips formula-injection characters)
         if supp_phone:
-            supp_phone = strip_and_escape_html(supp_phone)
+            supp_phone = strip_and_escape_csv_value(supp_phone)
         if supp_name:
-            supp_name = strip_and_escape_html(supp_name)
+            supp_name = strip_and_escape_csv_value(supp_name)
         if prod_name:
-            prod_name = strip_and_escape_html(prod_name)
+            prod_name = strip_and_escape_csv_value(prod_name)
         if barcode:
-            barcode = strip_and_escape_html(barcode)
+            barcode = strip_and_escape_csv_value(barcode)
         if notes:
-            notes = strip_and_escape_html(notes)
+            notes = strip_and_escape_csv_value(notes)
 
         return {
             "supp_phone": supp_phone,
@@ -647,18 +643,18 @@ async def import_purchases(
         placeholders = ", ".join([f":pn_{i}" for i in range(len(prod_name_list))])
         params = {"bid": business_id}
         for i, pn in enumerate(prod_name_list):
-            params[f"pn_{i}"] = pn
+            params[f"pn_{i}"] = pn.strip().lower()
 
         prod_rows = (await db.execute(text(f"""
             SELECT prod_id::text, prod_name, tax_rate, prod_cost_price
             FROM products
             WHERE business_id = CAST(:bid AS uuid)
-              AND prod_name IN ({placeholders})
+              AND LOWER(TRIM(prod_name)) IN ({placeholders})
               AND is_deleted = false
         """), params)).fetchall()
 
         for r in prod_rows:
-            product_map[r.prod_name] = {
+            product_map[r.prod_name.strip().lower()] = {
                 "prod_id": str(r.prod_id),
                 "tax_rate": float(r.tax_rate) if r.tax_rate is not None else 0.0,
                 "cost_price": float(r.prod_cost_price) if r.prod_cost_price is not None else 0.0
@@ -711,7 +707,8 @@ async def import_purchases(
                 supp_id = supplier_map.get(row["supp_name"])
 
             # Resolve product
-            prod_key = row.get("prod_name") or row.get("barcode")
+            raw_key = row.get("prod_name")
+            prod_key = raw_key.strip().lower() if raw_key else row.get("barcode")
             prod_info = product_map.get(prod_key) if prod_key else None
             if not prod_info:
                 purchase_errors.append({"row": row_num, "message": "product not found"})
@@ -829,19 +826,15 @@ async def import_purchases(
                             expense_id, business_id, expense_category,
                             expense_amount, expense_notes, created_by,
                             source_type, source_id
-                        )
-                        SELECT
+                        ) VALUES (
                             CAST(:eid AS uuid), CAST(:bid AS uuid),
                             'purchase', :amount, :notes,
                             CAST(:uid AS uuid), 'purchase',
                             CAST(:pid AS uuid)
-                        WHERE NOT EXISTS (
-                            SELECT 1 FROM expenses
-                            WHERE source_type = 'purchase'
-                              AND source_id = CAST(:pid AS uuid)
-                              AND business_id = CAST(:bid AS uuid)
-                              AND is_deleted = false
                         )
+                        ON CONFLICT (business_id, source_type, source_id)
+                        WHERE is_deleted = false AND source_type IS NOT NULL
+                        DO NOTHING
                     """), {
                         "eid": str(uuid.uuid4()), "bid": business_id,
                         "amount": str(tax_calc["subtotal"] - discount),
@@ -1162,8 +1155,7 @@ async def update_purchase_status(
                     expense_id, business_id, expense_category,
                     expense_amount, expense_notes, created_by,
                     source_type, source_id
-                )
-                SELECT
+                ) VALUES (
                     CAST(:expense_id AS uuid),
                     CAST(:business_id AS uuid),
                     :expense_category,
@@ -1172,13 +1164,10 @@ async def update_purchase_status(
                     CAST(:created_by AS uuid),
                     :source_type,
                     CAST(:source_id AS uuid)
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM expenses
-                    WHERE source_type = 'purchase'
-                      AND source_id    = CAST(:source_id AS uuid)
-                      AND business_id  = CAST(:business_id AS uuid)
-                      AND is_deleted   = false
                 )
+                ON CONFLICT (business_id, source_type, source_id)
+                WHERE is_deleted = false AND source_type IS NOT NULL
+                DO NOTHING
                 RETURNING expense_id
             """),
             {

@@ -47,7 +47,7 @@ from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list
-from app.schemas.validators import strip_and_escape_html
+from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from typing import Optional
 import uuid
 
@@ -158,13 +158,13 @@ async def import_suppliers(
 
     # ── 2. Validate & transform rows ──────────────────────────────────────────
     def row_transform(row: dict, row_num: int):
-        name = strip_and_escape_html(row.get("supp_name", "")).strip()
-        phone = strip_and_escape_html(row.get("supp_phone", "")).strip() if row.get("supp_phone") else None
-        email = strip_and_escape_html(row.get("supp_email", "")).strip() if row.get("supp_email") else None
-        address = strip_and_escape_html(row.get("supp_address", "")).strip() if row.get("supp_address") else None
-        state = strip_and_escape_html(row.get("supp_state", "")).strip() if row.get("supp_state") else None
-        country_code = strip_and_escape_html(row.get("supp_country_code", "")).strip() if row.get("supp_country_code") else None
-        tax_number = strip_and_escape_html(row.get("supp_tax_number", "")).strip() if row.get("supp_tax_number") else None
+        name = strip_and_escape_csv_value(row.get("supp_name", "")).strip()
+        phone = strip_and_escape_csv_value(row.get("supp_phone", "")).strip() if row.get("supp_phone") else None
+        email = strip_and_escape_csv_value(row.get("supp_email", "")).strip() if row.get("supp_email") else None
+        address = strip_and_escape_csv_value(row.get("supp_address", "")).strip() if row.get("supp_address") else None
+        state = strip_and_escape_csv_value(row.get("supp_state", "")).strip() if row.get("supp_state") else None
+        country_code = strip_and_escape_csv_value(row.get("supp_country_code", "")).strip() if row.get("supp_country_code") else None
+        tax_number = strip_and_escape_csv_value(row.get("supp_tax_number", "")).strip() if row.get("supp_tax_number") else None
 
         if not name:
             return None, "supplier name is required"

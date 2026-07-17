@@ -42,7 +42,7 @@ from app.utils.pagination import paginate_async, pagination_response
 from app.utils.queries import fetch_stock_kpi_counts_async
 from app.utils.timestamp import fmt_ts
 from app.utils.bulk_import import parse_csv_file, validate_rows, chunk_list
-from app.schemas.validators import strip_and_escape_html
+from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 import uuid
 import logging
 
@@ -608,7 +608,7 @@ async def import_stock_adjustments(
         # Optional notes
         notes = (row.get("move_notes") or row.get("notes") or row.get("Notes") or "").strip() or None
         if notes:
-            notes = strip_and_escape_html(notes)
+            notes = strip_and_escape_csv_value(notes)
 
         return {
             "product_id": product_id,

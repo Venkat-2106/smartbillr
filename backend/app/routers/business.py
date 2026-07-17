@@ -106,3 +106,71 @@ async def get_staff(
                    "is_active": r.is_active, "created_at": fmt_ts(r.created_at)} for r in rows]
 
     return success_response(pagination_response(staff_list, total, pagination["page"], pagination["limit"], capped=pagination["_capped"]))
+
+
+# ─── DELETE MY BUSINESS (soft-delete) ──────────────────────────
+@router.delete("/me")
+async def delete_my_business(
+    current_user: dict = Depends(require_permission("settings.manage")),
+    db: AsyncSession = Depends(get_async_db)
+):
+    business_id = current_user["business_id"]
+
+    biz = (await db.execute(
+        select(Business).where(
+            Business.business_id == business_id,
+            Business.is_deleted == False
+        )
+    )).scalar_one_or_none()
+
+    if not biz:
+        return error_response("Business not found", 404)
+
+    try:
+        # 1. Soft-delete the business itself
+        biz.is_deleted = True
+
+        # 2. Soft-delete all child rows that carry is_deleted
+        await db.execute(
+            text("UPDATE categories SET is_deleted = true WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false"),
+            {"bid": business_id}
+        )
+        await db.execute(
+            text("UPDATE customers   SET is_deleted = true WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false"),
+            {"bid": business_id}
+        )
+        await db.execute(
+            text("UPDATE expenses    SET is_deleted = true WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false"),
+            {"bid": business_id}
+        )
+        await db.execute(
+            text("UPDATE products    SET is_deleted = true WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false"),
+            {"bid": business_id}
+        )
+        await db.execute(
+            text("UPDATE purchases   SET is_deleted = true WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false"),
+            {"bid": business_id}
+        )
+        await db.execute(
+            text("UPDATE sales       SET is_deleted = true WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false"),
+            {"bid": business_id}
+        )
+        await db.execute(
+            text("UPDATE suppliers   SET is_deleted = true WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false"),
+            {"bid": business_id}
+        )
+
+        # 3. Deactivate all staff profiles (is_active column — no is_deleted)
+        await db.execute(
+            text("UPDATE profiles SET is_active = false WHERE business_id = CAST(:bid AS uuid) AND is_active = true"),
+            {"bid": business_id}
+        )
+
+        await db.commit()
+        await async_set_rls_gucs_after_commit(db, current_user)
+
+        return success_response({"message": "Business deleted successfully"})
+
+    except Exception as e:
+        await db.rollback()
+        return error_response("An unexpected error occurred. Please try again.", status_code=500)

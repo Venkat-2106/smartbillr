@@ -24,6 +24,8 @@ class CustomerCreate(BaseModel):
     @field_validator("cust_name")
     @classmethod
     def sanitize_name(cls, v: str) -> str:
+        if len(v) > 100:
+            raise ValueError("Customer name must not exceed 100 characters")
         return strip_and_escape_html(v)
 
     @field_validator("cust_phone", "cust_address", "cust_state", "cust_country_code", "cust_tax_number")
@@ -51,6 +53,8 @@ class CustomerUpdate(BaseModel):
     @field_validator("cust_name")
     @classmethod
     def sanitize_name(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) > 100:
+            raise ValueError("Customer name must not exceed 100 characters")
         return strip_and_escape_html(v)
 
     @field_validator("cust_phone", "cust_address", "cust_state", "cust_country_code", "cust_tax_number")

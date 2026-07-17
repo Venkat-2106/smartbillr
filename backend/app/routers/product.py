@@ -93,7 +93,7 @@ from app.utils.queries import fetch_stock_kpi_counts_async
 from app.utils.timestamp import fmt_ts
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list
-from app.schemas.validators import strip_and_escape_html
+from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from sqlalchemy.exc import IntegrityError
 from typing import Optional
 import uuid
@@ -372,16 +372,16 @@ async def import_products(
         barcode = (row.get("barcode") or row.get("Barcode") or "").strip() or None
         unit = (row.get("unit") or row.get("Unit") or "pcs").strip()
 
-        # Sanitize strings
-        name = strip_and_escape_html(name)
+        # Sanitize strings (CSV-safe: strips formula-injection characters)
+        name = strip_and_escape_csv_value(name)
         if category_name:
-            category_name = strip_and_escape_html(category_name)
+            category_name = strip_and_escape_csv_value(category_name)
         if tax_code:
-            tax_code = strip_and_escape_html(tax_code)
+            tax_code = strip_and_escape_csv_value(tax_code)
         if barcode:
-            barcode = strip_and_escape_html(barcode)
+            barcode = strip_and_escape_csv_value(barcode)
         if unit:
-            unit = strip_and_escape_html(unit)
+            unit = strip_and_escape_csv_value(unit)
 
         # Validate numeric fields
         try:

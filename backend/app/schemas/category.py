@@ -10,6 +10,8 @@ class CategoryCreate(BaseModel):
     @field_validator("category_name")
     @classmethod
     def sanitize_name(cls, v: str) -> str:
+        if len(v) > 50:
+            raise ValueError("Category name must not exceed 50 characters")
         return strip_and_escape_html(v)
 
 class CategoryUpdate(BaseModel):
@@ -18,6 +20,8 @@ class CategoryUpdate(BaseModel):
     @field_validator("category_name")
     @classmethod
     def sanitize_name(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) > 50:
+            raise ValueError("Category name must not exceed 50 characters")
         return strip_and_escape_html(v)
 
 class CategoryResponse(BaseModel):

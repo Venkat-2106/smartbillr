@@ -28,7 +28,7 @@ async def validate_and_cache_products(db: AsyncSession, business_id: str, items,
             Product.prod_id.in_(requested_ids),
             Product.business_id == business_id,
             Product.is_deleted == False
-        )
+        ).with_for_update()
     )
     products_bulk = result.scalars().all()
     product_cache = {str(p.prod_id): p for p in products_bulk}
@@ -115,28 +115,12 @@ async def handle_stock_overrides(db: AsyncSession, business_id: str, user_id: st
     if not override_items:
         return
 
-    # 1. Bulk UPDATE products — single round trip for all overrides
-    values_clause = ", ".join(
-        f"(CAST(:pid_{i} AS uuid), :shortfall_{i})"
-        for i in range(len(override_items))
-    )
-    update_params = {"business_id": business_id}
-    for i, ov in enumerate(override_items):
-        update_params[f"pid_{i}"] = str(ov["product"].prod_id)
-        update_params[f"shortfall_{i}"] = ov["requested_qty"] - ov["available_qty"]
+    # The fn_sale_stock_movement trigger will deduct stock naturally;
+    # no compensating stock increase here — the override only bypasses
+    # the insufficient-stock validation error. The stock_movements row
+    # below records the override for audit purposes.
 
-    await db.execute(
-        text(f"""
-            UPDATE products
-            SET prod_stock_qty = products.prod_stock_qty + v.shortfall
-            FROM (VALUES {values_clause}) AS v(prod_id, shortfall)
-            WHERE products.prod_id = v.prod_id
-              AND products.business_id = CAST(:business_id AS uuid)
-        """),
-        update_params
-    )
-
-    # 2. Multi-row INSERT into stock_movements — single round trip for all overrides
+    # Multi-row INSERT into stock_movements — single round trip for all overrides
     insert_values = ", ".join(
         f"(CAST(:mid_{i} AS uuid), CAST(:bid AS uuid), CAST(:pid_{i} AS uuid), "
         f":mtype_{i}, :mqty_{i}, :mprev_{i}, CAST(:sref AS uuid), :mnotes_{i}, CAST(:cby AS uuid))"

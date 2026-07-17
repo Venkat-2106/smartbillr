@@ -27,7 +27,7 @@ from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryRespons
 from app.models.category import Category
 from app.utils.timestamp import fmt_ts
 from app.utils.bulk_import import parse_csv_file, validate_rows, chunk_list
-from app.schemas.validators import strip_and_escape_html
+from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from typing import Optional
 import uuid
 
@@ -132,8 +132,8 @@ async def import_categories(
         if not name:
             return None, "category_name is required"
 
-        # Sanitize (same as CategoryCreate validator)
-        name = strip_and_escape_html(name)
+        # Sanitize (CSV-safe: strips formula-injection characters)
+        name = strip_and_escape_csv_value(name)
 
         return {"category_name": name, "_row_number": row_num}, None
 

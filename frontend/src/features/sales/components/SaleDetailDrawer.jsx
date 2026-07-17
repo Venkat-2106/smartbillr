@@ -23,7 +23,7 @@ import { fetchSale } from '../api/salesApi';
 import { Badge, Button, Input } from '../../../shared/components';
 import { selectStyle } from '../../../shared/components/FormField';
 import { formatCurrency } from '../../../shared/utils/formatCurrency';
-import { formatDate }     from '../../../shared/utils/formatDate';
+import { formatDate, formatDateTime } from '../../../shared/utils/formatDate';
 import {
   buildPrintHeader,
   buildPrintWatermark,
@@ -34,6 +34,7 @@ import {
 import { usePermissions } from '../../../shared/hooks/usePermissions';
 import { detectTaxType, getTaxLabel } from '../../../shared/utils/formatTax';
 import CreateSalesReturnDrawer from '../../salesReturns/components/CreateSalesReturnDrawer';
+import { fetchPaymentsBySale } from '../../payments/api/paymentsApi';
 import useAuthStore from '../../../store/authStore';
 
 // ── Payment status badge helper (for print — literal hex, no CSS vars) ────────
@@ -251,6 +252,15 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
     enabled:  !!sale?.sales_id,
     staleTime: 2 * 60 * 1000,
   });
+
+  const { data: paymentsData } = useQuery({
+    queryKey: ['payments', 'sale', sale?.sales_id],
+    queryFn:  () => fetchPaymentsBySale(sale.sales_id),
+    enabled:  !!sale?.sales_id && can('payments.manage'),
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const paymentHistory = paymentsData?.payment_history ?? [];
 
   // Auto-print after create
   useEffect(() => {
@@ -522,6 +532,27 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                     }}>
                       <div className="skeleton" style={{ width: '22%', height: 12, borderRadius: 6 }} />
                       <div className="skeleton" style={{ width: i === 3 ? 70 : 55, height: i === 3 ? 15 : 12, borderRadius: 6, marginLeft: 'auto' }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Payment History skeleton */}
+              <div style={{ marginBottom: 20 }}>
+                <div className="skeleton" style={{ width: '28%', height: 11, borderRadius: 6, marginBottom: 10 }} />
+                <div style={{
+                  background: 'var(--bg-page)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12, overflow: 'hidden',
+                }}>
+                  {[0, 1].map(i => (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center',
+                      padding: '10px 14px',
+                      borderBottom: i < 1 ? '1px solid var(--border)' : 'none',
+                    }}>
+                      <div className="skeleton" style={{ width: '28%', height: 12, borderRadius: 6 }} />
+                      <div className="skeleton" style={{ width: 55, height: 12, borderRadius: 6, marginLeft: 'auto' }} />
                     </div>
                   ))}
                 </div>
@@ -832,6 +863,33 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                   />
                 )}
               </DrawerSection>
+
+              {can('payments.manage') && paymentHistory.length > 0 && (
+                <DrawerSection title={`Payment History (${paymentHistory.length})`}>
+                  {paymentHistory.map((p, i) => (
+                    <div key={p.payment_id} style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '10px 14px',
+                      borderBottom: i < paymentHistory.length - 1 ? '1px solid var(--border)' : 'none',
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
+                          {formatCurrency(p.payment_amount, country)}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                          {formatDateTime(p.payment_paid_at)}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          {(p.payment_method || '—').replace(/_/g, ' ').toUpperCase()}
+                        </div>
+                        <Badge status={p.payment_status} dot size="sm" />
+                      </div>
+                    </div>
+                  ))}
+                </DrawerSection>
+              )}
 
               {(detail?.notes || sale.notes) && (
                 <DrawerSection title="Notes">

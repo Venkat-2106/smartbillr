@@ -241,10 +241,10 @@ export default function SubscriptionPage() {
               flexWrap: 'wrap',
             }}>
               <InfoBadge label="Status" value={statusLabel[sub.payment_status] || sub.payment_status} />
-              {sub.trial_end_at && (
+              {currentTier === 'trial' && sub.trial_end_at && (
                 <InfoBadge label="Trial Ends" value={formatDate(sub.trial_end_at)} />
               )}
-              {sub.subscription_end_at && (
+              {currentTier !== 'trial' && sub.subscription_end_at && (
                 <InfoBadge label="Subscription Ends" value={formatDate(sub.subscription_end_at)} />
               )}
               {sub.days_remaining !== null && sub.days_remaining !== undefined && (

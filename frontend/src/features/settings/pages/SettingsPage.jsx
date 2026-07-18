@@ -197,7 +197,7 @@ export default function SettingsPage() {
                           {sub?.payment_status === 'paid' ? 'Active' : sub?.payment_status || '—'}
                         </div>
                       </div>
-                      {sub?.trial_end_at && (
+                      {sub?.subscription_type === 'trial' && sub?.trial_end_at && (
                         <div style={{ textAlign: 'center' }}>
                           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Trial Ends</div>
                           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -205,7 +205,7 @@ export default function SettingsPage() {
                           </div>
                         </div>
                       )}
-                      {sub?.subscription_end_at && (
+                      {sub?.subscription_type !== 'trial' && sub?.subscription_end_at && (
                         <div style={{ textAlign: 'center' }}>
                           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Subscription Ends</div>
                           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>

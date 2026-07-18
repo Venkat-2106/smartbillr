@@ -767,3 +767,6 @@ kbd kbd { border: none; padding: 0; background: none; box-shadow: none; }
   .landing-footer-grid { grid-template-columns: 1fr !important; text-align: center; }
   .landing-footer-grid > div:first-child { display: flex; flex-direction: column; align-items: center; }
 }
+@media (max-width: 640px) {
+  .pagination-jump { display: none !important; }
+}

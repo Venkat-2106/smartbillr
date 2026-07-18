@@ -13,7 +13,7 @@
 //
 //   No visual change — identical appearance and transition.
 
-import { useState, memo } from 'react'
+import { useState, useCallback, memo } from 'react'
 
 function Pagination({ pagination, onPageChange }) {
   if (!pagination) return null
@@ -120,8 +120,16 @@ function Pagination({ pagination, onPageChange }) {
 // hooks cannot be called conditionally, and the early `if (total <= 1) return null`
 // above means we need state below that guard. This inner component always renders.
 function PaginationInner({ current, total, pages, pagination, onPageChange, btnBase, activeStyle, NavBtn }) {
-  // FIX: single state tracks which page button is hovered — no DOM mutation needed
   const [hoveredPage, setHoveredPage] = useState(null)
+  const [jumpValue, setJumpValue] = useState('')
+
+  const handleJump = useCallback(() => {
+    const n = parseInt(jumpValue, 10)
+    if (!isNaN(n) && n >= 1 && n <= total && n !== current) {
+      onPageChange(n)
+    }
+    setJumpValue('')
+  }, [jumpValue, total, current, onPageChange])
 
   return (
     <div style={{
@@ -183,6 +191,40 @@ function PaginationInner({ current, total, pages, pagination, onPageChange, btnB
         )}
 
         <NavBtn direction="next" />
+
+        {total > 7 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}
+               className="pagination-jump">
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>Go to</span>
+            <input
+              type="number"
+              min={1}
+              max={total}
+              value={jumpValue}
+              onChange={(e) => setJumpValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleJump() }}
+              onBlur={handleJump}
+              placeholder={current}
+              style={{
+                width: 46,
+                height: 34,
+                padding: '0 6px',
+                border: '1px solid var(--border)',
+                borderRadius: 9,
+                background: 'var(--bg-card)',
+                fontSize: 13,
+                fontWeight: 500,
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
+                textAlign: 'center',
+                outline: 'none',
+                MozAppearance: 'textfield',
+              }}
+              className="sb-focusable"
+              aria-label={`Go to page (1–${total})`}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

@@ -17,6 +17,7 @@ import { usePermissions } from '../../../shared/hooks/usePermissions'
 import { formatDate, formatDateOnly } from '../../../shared/utils/formatDate'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import useAuthStore from '../../../store/authStore'
+import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
 
 import { useExpenses } from '../hooks/useExpenses'
 import ExpenseDetailDrawer from '../components/ExpenseDetailDrawer'
@@ -192,6 +193,14 @@ export default function ExpensesPage() {
   const [deletingExpense, setDeletingExpense] = useState(null)
   const [showDelete, setShowDelete] = useState(false)
   const [selectedExpenseId, setSelectedExpenseId] = useState(null)
+
+  const { selectedIndex, setSelectedIndex } = useTableKeyboardNav({
+    rows: expenses,
+    rowKey: 'expense_id',
+    onEnterRow: (row) => setSelectedExpenseId(row.expense_id),
+    onEditRow: canManage ? (row) => handleOpenEdit(row) : undefined,
+    onDeleteRow: canManage ? (row) => handleDeleteClick(row) : undefined,
+  })
 
   const isEditing = !!editingExpense?.expense_id
 
@@ -444,6 +453,8 @@ export default function ExpensesPage() {
               sortDir={sortDir}
               onSort={handleSort}
               onRowClick={(row) => setSelectedExpenseId(row.expense_id)}
+              selectedIndex={selectedIndex}
+              onSelectedIndexChange={setSelectedIndex}
             />
           </div>
         </BentoCard>

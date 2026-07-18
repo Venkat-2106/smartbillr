@@ -64,6 +64,7 @@ import { useFeatureAccess }     from '../../../shared/hooks/useFeatureAccess'
 import { formatDate }           from '../../../shared/utils/formatDate'
 import { formatCurrency }       from '../../../shared/utils/formatCurrency'
 import useAuthStore             from '../../../store/authStore'
+import useTableKeyboardNav      from '../../../shared/hooks/useTableKeyboardNav'
 import { fetchCategories }      from '../../categories/api/categoriesApi'
 
 import {
@@ -778,6 +779,14 @@ export default function ProductsPage() {
 
   const handleRowClick = useCallback((row) => setDetailProduct(row), [])
 
+  const { selectedIndex, setSelectedIndex } = useTableKeyboardNav({
+    rows: products,
+    rowKey: 'prod_id',
+    onEnterRow: handleRowClick,
+    onEditRow: canManage ? (row) => setEditTarget(row) : undefined,
+    onDeleteRow: canManage ? (row) => setDeleteTarget(row) : undefined,
+  })
+
   // ── Metric computations from server-side summary ────────────────────────────
   const lowStockCount    = productSummary?.low_stock_count ?? 0
   const outOfStockCount  = productSummary?.out_of_stock_count ?? 0
@@ -973,10 +982,12 @@ export default function ProductsPage() {
               rows={products}
               loading={isLoading}
               rowKey="prod_id"
-               onRowClick={handleRowClick}
+              onRowClick={handleRowClick}
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={handleSort}
+              selectedIndex={selectedIndex}
+              onSelectedIndexChange={setSelectedIndex}
             />
           </div>
         </BentoCard>

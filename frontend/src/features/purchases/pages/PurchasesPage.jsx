@@ -16,6 +16,7 @@ import { selectStyle } from '../../../shared/components/FormField'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate } from '../../../shared/utils/formatDate'
 import { PURCHASE_CSV_COLUMNS, PURCHASE_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport'
+import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
 
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' }
 const STATUS_LABEL = { paid: 'Paid', partial: 'Partial', pending: 'Unpaid' }
@@ -164,6 +165,13 @@ export default function PurchasesPage() {
   function onConfirmDelete() {
     deletePurchase(deletingPur.pur_id, reduceStock, { onSuccess: handleCloseDelete })
   }
+
+  const { selectedIndex, setSelectedIndex } = useTableKeyboardNav({
+    rows: purchases,
+    rowKey: 'pur_id',
+    onEnterRow: (row) => setSelectedPurId(row.pur_id),
+    onDeleteRow: handleDeleteClick,
+  })
 
   const columns = useMemo(() => buildColumns(country), [country])
 
@@ -410,6 +418,8 @@ export default function PurchasesPage() {
               sortDir={sortDir}
               onSort={handleSort}
               onRowClick={(row) => setSelectedPurId(row.pur_id)}
+              selectedIndex={selectedIndex}
+              onSelectedIndexChange={setSelectedIndex}
             />
           </div>
         </BentoCard>

@@ -30,6 +30,7 @@ import { selectStyle }           from '../../../shared/components/FormField'
 import { formatCurrency }        from '../../../shared/utils/formatCurrency'
 import { formatDate }            from '../../../shared/utils/formatDate'
 import { PAYMENT_CSV_COLUMNS }   from '../../../shared/utils/csvExport'
+import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
 
 // ── Badge mappings ────────────────────────────────────────────────────────────
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' }
@@ -198,6 +199,12 @@ export default function PaymentsPage() {
 
   // Drawer state — stores the sale_id of the selected row
   const [selectedSaleId, setSelectedSaleId] = useState(null)
+
+  const { selectedIndex, setSelectedIndex } = useTableKeyboardNav({
+    rows: payments,
+    rowKey: 'sale_id',
+    onEnterRow: (row) => setSelectedSaleId(row.sale_id),
+  })
 
   const columns = useMemo(
     () => buildColumns(setSelectedSaleId, country),
@@ -378,6 +385,8 @@ export default function PaymentsPage() {
               sortDir={sortDir}
               onSort={handleSort}
               onRowClick={(row) => setSelectedSaleId(row.sale_id)}
+              selectedIndex={selectedIndex}
+              onSelectedIndexChange={setSelectedIndex}
             />
           </div>
         </BentoCard>

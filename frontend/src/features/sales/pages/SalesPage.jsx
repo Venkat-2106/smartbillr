@@ -15,6 +15,7 @@ import { SALES_CSV_COLUMNS, SALES_IMPORT_TEMPLATE } from '../../../shared/utils/
 import { formatCurrency }    from '../../../shared/utils/formatCurrency';
 import { formatDate }        from '../../../shared/utils/formatDate';
 import useAuthStore          from '../../../store/authStore';
+import useTableKeyboardNav   from '../../../shared/hooks/useTableKeyboardNav';
 
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' };
 const STATUS_LABEL   = { paid: 'Paid',    partial: 'Partial', pending: 'Unpaid' };
@@ -217,6 +218,13 @@ export default function SalesPage() {
 
   const handleRowClick = useCallback((row) => setDrawerSale(row), [])
 
+  const { selectedIndex, setSelectedIndex } = useTableKeyboardNav({
+    rows: sales,
+    rowKey: 'sales_id',
+    onEnterRow: handleRowClick,
+    onDeleteRow: handleDeleteClick,
+  })
+
   const activeCount =
     (activeSearch ? 1 : 0) + (activeDateFilter ? 1 : 0) + (activeStatusFilter ? 1 : 0);
 
@@ -400,7 +408,9 @@ export default function SalesPage() {
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={handleSort}
-               onRowClick={handleRowClick}
+              onRowClick={handleRowClick}
+              selectedIndex={selectedIndex}
+              onSelectedIndexChange={setSelectedIndex}
             />
           </div>
         </BentoCard>

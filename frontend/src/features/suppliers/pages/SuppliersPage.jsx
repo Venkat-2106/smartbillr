@@ -17,6 +17,7 @@ import {
   DateRangeFilter, ExportButton, ImportButton, StateDropdown, UpgradePrompt,
 } from '../../../shared/components';
 import useAuthStore from '../../../store/authStore';
+import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav';
 import { selectStyle, textareaStyle } from '../../../shared/components/FormField';
 import { SUPPLIER_CSV_COLUMNS, SUPPLIER_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport';
 import { usePermissions } from '../../../shared/hooks/usePermissions';
@@ -85,6 +86,14 @@ export default function SuppliersPage() {
   const onAdd    = (data) => createMutation.mutate(data);
   const onEdit   = (data) => updateMutation.mutate({ id: editTarget.supp_id, body: data });
   const onDelete = ()     => deleteMutation.mutate(deleteTarget.supp_id);
+
+  const { selectedIndex, setSelectedIndex } = useTableKeyboardNav({
+    rows: suppliers,
+    rowKey: 'supp_id',
+    onEnterRow: (row) => setDrawerSupplier(row),
+    onEditRow: canManage ? (row) => setEditTarget(row) : undefined,
+    onDeleteRow: canManage ? (row) => setDeleteTarget(row) : undefined,
+  })
 
   const activeFiltersCount =
     (activeSearch ? 1 : 0) + (activeDateFilter ? 1 : 0);
@@ -335,6 +344,8 @@ export default function SuppliersPage() {
           sortDir={sortDir}
           onSort={handleSort}
           onRowClick={(row) => setDrawerSupplier(row)}
+          selectedIndex={selectedIndex}
+          onSelectedIndexChange={setSelectedIndex}
         />
       </div>
       )}

@@ -30,6 +30,7 @@ import {
 
 import { STOCK_CSV_COLUMNS, STOCK_CSV_COLUMNS_NO_PROFIT, STOCK_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport'
 import { usePermissions }  from '../../../shared/hooks/usePermissions'
+import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
 import { formatDate }      from '../../../shared/utils/formatDate'
 import { formatCurrency }  from '../../../shared/utils/formatCurrency'
 import useAuthStore        from '../../../store/authStore'
@@ -220,6 +221,13 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
   const business    = useAuthStore(s => s.business)
   const countryCode = business?.business_country_code
   const [adjustTarget, setAdjustTarget] = useState(null)
+
+  const { selectedIndex, setSelectedIndex } = useTableKeyboardNav({
+    rows: stock,
+    rowKey: 'prod_id',
+    onEnterRow: canAdjust ? (row) => setAdjustTarget(row) : undefined,
+    onEditRow: canAdjust ? (row) => setAdjustTarget(row) : undefined,
+  })
 
   const {
     stock, pagination, totalItems, isLoading, isError,
@@ -554,6 +562,8 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={handleSort}
+              selectedIndex={selectedIndex}
+              onSelectedIndexChange={setSelectedIndex}
             />
           </div>
         </BentoCard>

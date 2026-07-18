@@ -83,7 +83,7 @@ export default function SuppliersPage() {
         supp_tax_number:   editTarget.supp_tax_number   || '',
       });
     }
-  }, [editTarget]);
+  }, [editTarget, editForm]);
 
   /* ── Submit handlers ──────────────────────────────────────────────────── */
   const onAdd    = (data) => createMutation.mutate(data);

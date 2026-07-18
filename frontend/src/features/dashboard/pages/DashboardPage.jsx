@@ -470,7 +470,7 @@ export default function DashboardPage() {
           }
           const el = <MetricCard key={card.label} {...card} colSpan={3} loading={false} style={{ cursor: card.onClick ? 'pointer' : 'default' }} />
           return card.lockedReason
-            ? <UpgradeBlur key={card.label} reason={card.lockedReason}>{el}</UpgradeBlur>
+            ? <UpgradeBlur key={card.label} reason={card.lockedReason} compact>{el}</UpgradeBlur>
             : el
         })}
       </div>

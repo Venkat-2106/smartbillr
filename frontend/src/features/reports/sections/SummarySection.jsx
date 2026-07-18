@@ -33,5 +33,5 @@ export default function SummarySection({ dateFrom, dateTo }) {
     </BentoCard>
   )
 
-  return lockedReason ? <UpgradeBlur reason={lockedReason} feature="reports &amp; financial data">{content}</UpgradeBlur> : content
+  return lockedReason ? <UpgradeBlur reason={lockedReason} feature="reports & financial data">{content}</UpgradeBlur> : content
 }

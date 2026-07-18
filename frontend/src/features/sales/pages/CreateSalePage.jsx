@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, PageHeader, FormField } from '../../../shared/components';
 import { selectStyle } from '../../../shared/components/FormField';
@@ -47,6 +47,33 @@ export default function CreateSalePage() {
   const [addItemHovered, setAddItemHovered] = useState(false);
   const customerRef = useRef(null);
 
+  // ── Dirty-form protection ────────────────────────────────────────────────
+  const [initialState] = useState(() => ({
+    items: JSON.parse(JSON.stringify(items)),
+    customerId,
+    paymentMethod,
+    paymentStatus,
+    paidAmount,
+  }))
+  const isDirty = useMemo(() => (
+    JSON.stringify(items) !== JSON.stringify(initialState.items) ||
+    customerId !== initialState.customerId ||
+    paymentMethod !== initialState.paymentMethod ||
+    paymentStatus !== initialState.paymentStatus ||
+    paidAmount !== initialState.paidAmount
+  ), [items, customerId, paymentMethod, paymentStatus, paidAmount, initialState])
+
+  const confirmLeave = useCallback(() => {
+    if (!isDirty) return true
+    return window.confirm('You have unsaved changes. Are you sure you want to leave?')
+  }, [isDirty])
+
+  useEffect(() => {
+    const handler = (e) => { if (isDirty) { e.preventDefault(); e.returnValue = '' } }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [isDirty])
+
   useShortcut('alt+p', () => { addItem(); }, { preventDefault: true })
   useShortcut('ctrl+shift+c', () => {
     const selects = document.querySelectorAll('.sb-select')
@@ -61,9 +88,9 @@ export default function CreateSalePage() {
         title="New Invoice"
         subtitle="Create a new sales invoice"
         back
-        onBack={() => navigate('/sales')}
+        onBack={() => { if (confirmLeave()) navigate('/sales') }}
         action={
-          <Button variant="ghost" onClick={() => navigate('/sales')} disabled={isPending}>
+          <Button variant="ghost" onClick={() => { if (confirmLeave()) navigate('/sales') }} disabled={isPending}>
             Cancel
           </Button>
         }

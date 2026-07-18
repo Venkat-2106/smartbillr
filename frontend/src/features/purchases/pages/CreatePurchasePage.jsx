@@ -17,7 +17,7 @@
 //   - Module-level NUM_INPUT_STYLE constant (FIX 4)
 //   - No product pre-loading — server-side search on demand (≥2 chars)
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useNavigate }          from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast }                from 'react-hot-toast'
@@ -67,6 +67,31 @@ export default function CreatePurchasePage() {
   const [paymentStatus, setPaymentStatus] = useState('pending')
   const [discount,      setDiscount]      = useState('')
   const [items,         setItems]         = useState([newItem()])
+
+  // ── Dirty-form protection ────────────────────────────────────────────────
+  const [initialState] = useState(() => ({
+    items: JSON.parse(JSON.stringify(items)),
+    suppId,
+    paymentStatus,
+    discount,
+  }))
+  const isDirty = useMemo(() => (
+    JSON.stringify(items) !== JSON.stringify(initialState.items) ||
+    suppId !== initialState.suppId ||
+    paymentStatus !== initialState.paymentStatus ||
+    discount !== initialState.discount
+  ), [items, suppId, paymentStatus, discount, initialState])
+
+  const confirmLeave = useCallback(() => {
+    if (!isDirty) return true
+    return window.confirm('You have unsaved changes. Are you sure you want to leave?')
+  }, [isDirty])
+
+  useEffect(() => {
+    const handler = (e) => { if (isDirty) { e.preventDefault(); e.returnValue = '' } }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [isDirty])
 
   // ── Supplier combobox state ───────────────────────────────────────────────
   const [suppSearch,       setSuppSearch]       = useState('')
@@ -301,10 +326,10 @@ export default function CreatePurchasePage() {
         title="New Purchase"
         subtitle="Record a stock purchase from a supplier"
         back
-        onBack={() => navigate('/purchases')}
+        onBack={() => { if (confirmLeave()) navigate('/purchases') }}
         action={
           <div style={{ display: 'flex', gap: 10 }}>
-            <Button variant="ghost" onClick={() => navigate('/purchases')} disabled={mutation.isPending}>
+            <Button variant="ghost" onClick={() => { if (confirmLeave()) navigate('/purchases') }} disabled={mutation.isPending}>
               Cancel
             </Button>
             <Button

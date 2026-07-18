@@ -186,7 +186,7 @@ export default function SignupPage() {
             className={`input ${errors.business_name ? 'error' : ''}`}
             value={form.business_name}
             onChange={e => set('business_name', e.target.value)}
-            placeholder="Acme Corp"
+            placeholder="Sri MahaLakshmi Stores"
           />
         </FormField>
 

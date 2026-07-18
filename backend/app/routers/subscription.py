@@ -104,7 +104,7 @@ async def register_business(
     payload: BusinessCreate,
     db: AsyncSession = Depends(get_async_db),
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     business_id = str(uuid.uuid4())
     trial_end = now + timedelta(days=30)
 
@@ -248,7 +248,7 @@ async def get_my_subscription(
     db: AsyncSession = Depends(get_async_db),
 ):
     bid = current_user["business_id"]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     row = (await db.execute(
         text("""

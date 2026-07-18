@@ -512,6 +512,7 @@ export default function CreatePurchasePage() {
                 <select
                   value={paymentStatus}
                   onChange={e => setPaymentStatus(e.target.value)}
+                  className="sb-select"
                   style={selectStyle}
                 >
                   <option value="pending">Unpaid (Pending)</option>

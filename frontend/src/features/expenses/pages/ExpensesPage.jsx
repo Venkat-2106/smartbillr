@@ -454,7 +454,7 @@ export default function ExpensesPage() {
       >
         <form onSubmit={handleSubmit(onSubmit)} noValidate>
           <FormField label="Category" error={errors.expense_category?.message} required style={{ marginBottom: 16 }}>
-            <select {...register('expense_category')} style={selectStyle} aria-label="Expense category">
+            <select {...register('expense_category')} className="sb-select" style={selectStyle} aria-label="Expense category">
               <option value="">\u2014 Select Category \u2014</option>
               {ALLOWED_CATEGORIES.map((c) => (
                 <option key={c.value} value={c.value}>{c.label}</option>

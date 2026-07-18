@@ -354,7 +354,7 @@ export default function StaffPage() {
           )}
 
           <FormField label="Role" error={addForm.formState.errors.role?.message} required style={{ marginBottom: 8 }}>
-            <select {...addForm.register('role')} style={selectStyle} aria-label="Role">
+            <select {...addForm.register('role')} className="sb-select" style={selectStyle} aria-label="Role">
               <option value="">— Select Role —</option>
               {ROLES.map((r) => {
                 const canAdd = r.value === 'staff' ? canAddStaff : canAddManager
@@ -399,7 +399,7 @@ export default function StaffPage() {
             </FormField>
 
             <FormField label="Role" error={editForm.formState.errors.role?.message} required style={{ marginBottom: 8 }}>
-              <select {...editForm.register('role')} style={selectStyle} aria-label="Role">
+              <select {...editForm.register('role')} className="sb-select" style={selectStyle} aria-label="Role">
                 <option value="">— Select Role —</option>
                 {ROLES.map((r) => (
                   <option key={r.value} value={r.value}>{r.label}</option>

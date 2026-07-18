@@ -83,6 +83,7 @@ export default function AddCustomerModal({
           <select
             value={country}
             onChange={e => onCountryChange(e.target.value)}
+            className="sb-select"
             style={{ ...selectStyle }}
           >
             <option value="">— Select Country —</option>

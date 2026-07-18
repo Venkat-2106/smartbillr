@@ -262,7 +262,7 @@ export default function PaymentHistoryDrawer({ saleId, onClose, onRecorded, isRe
                       </FormField>
 
                       <FormField label="Payment Method" error={errors.payment_method?.message} style={{ marginBottom: 16 }}>
-                        <select {...register('payment_method')} style={selectStyle}>
+                        <select {...register('payment_method')} className="sb-select" style={selectStyle}>
                           {PAYMENT_METHODS.map(m => (
                             <option key={m.value} value={m.value}>{m.label}</option>
                           ))}

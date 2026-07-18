@@ -286,6 +286,7 @@ export default function CreateSalePage() {
                     <select
                       value={paymentStatus}
                       onChange={e => { setPaymentStatus(e.target.value); setPaidAmount(''); }}
+                      className="sb-select"
                       style={selectStyle}
                     >
                       <option value="paid">Paid</option>

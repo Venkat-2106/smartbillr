@@ -72,7 +72,7 @@ function StateField({ register, selectedCountry }) {
   const states = STATES_BY_COUNTRY[selectedCountry] ?? null
   if (states) {
     return (
-      <select {...register('cust_state')} style={selectStyle}>
+      <select {...register('cust_state')} className="sb-select" style={selectStyle}>
         <option value="">Select state / province</option>
         {states.map(s => <option key={s} value={s}>{s}</option>)}
       </select>
@@ -117,7 +117,7 @@ export default function CustomerForm({ defaultValues = {}, onSubmit, onClose, is
         </FormField>
 
         <FormField label="Country" error={errors.cust_country_code}>
-          <select {...register('cust_country_code')} style={selectStyle}>
+          <select {...register('cust_country_code')} className="sb-select" style={selectStyle}>
             <option value="">Select country</option>
             {COUNTRY_CODES.map(c => (
               <option key={c.code} value={c.code}>{c.label}</option>

@@ -280,7 +280,7 @@ export default function SettingsPage() {
                       <Input {...register('business_state')} disabled placeholder="e.g. Tamil Nadu" />
                     </FormField>
                     <FormField label="Country" error={errors.business_country_code?.message}>
-                      <select {...register('business_country_code')} disabled style={selectStyle} aria-label="Business country">
+                      <select {...register('business_country_code')} disabled className="sb-select" style={selectStyle} aria-label="Business country">
                         <option value="">— Select Country —</option>
                         {COUNTRIES.map((c) => (
                           <option

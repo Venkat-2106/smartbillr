@@ -301,6 +301,7 @@ export default function PurchasesPage() {
           <select
             value={status}
             onChange={e => setStatus(e.target.value)}
+            className="sb-select"
             style={{ ...selectStyle, width: 'auto', padding: '9px 32px 9px 14px', fontSize: 13 }}
             aria-label="Filter by payment status"
           >

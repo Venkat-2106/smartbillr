@@ -92,6 +92,7 @@ export default function StateDropdown({
     return (
       <FormField label={label} error={error} required={required}>
         <select
+          className="sb-select"
           style={{
             ...selectStyle,
             // Use border shorthand (not borderColor) to avoid React shorthand/longhand conflict

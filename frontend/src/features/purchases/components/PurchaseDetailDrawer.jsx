@@ -237,6 +237,7 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
                 <select
                   value={newStatus}
                   onChange={e => setNewStatus(e.target.value)}
+                  className="sb-select"
                   style={{ ...selectStyle, flex: 1 }}
                 >
                   <option value="pending">Unpaid (Pending)</option>

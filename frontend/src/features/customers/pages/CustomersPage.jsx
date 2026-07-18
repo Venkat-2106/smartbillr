@@ -586,7 +586,7 @@ export default function CustomersPage() {
               />
             </FormField>
             <FormField label="Country" error={errors.cust_country_code?.message}>
-              <select {...register('cust_country_code')} style={selectStyle}>
+              <select {...register('cust_country_code')} className="sb-select" style={selectStyle}>
                 <option value="">— Select Country —</option>
                 {COUNTRIES.map((c) => (
                   <option

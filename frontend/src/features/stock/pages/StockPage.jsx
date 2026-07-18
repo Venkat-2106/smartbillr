@@ -470,6 +470,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
           <select
             value={categoryId}
             onChange={e => setCategoryId(e.target.value)}
+            className="sb-select"
             style={{ ...selectStyle, width: 'auto', padding: '9px 32px 9px 14px', fontSize: 13 }}
             aria-label="Filter by category"
           >
@@ -482,6 +483,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
           <select
             value={status}
             onChange={e => setStatus(e.target.value)}
+            className="sb-select"
             style={{ ...selectStyle, width: 'auto', padding: '9px 32px 9px 14px', fontSize: 13 }}
             aria-label="Filter by stock status"
           >
@@ -494,6 +496,7 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
           <select
             value={isActive}
             onChange={e => setIsActive(e.target.value)}
+            className="sb-select"
             style={{ ...selectStyle, width: 'auto', padding: '9px 32px 9px 14px', fontSize: 13 }}
             aria-label="Filter by active status"
           >
@@ -688,6 +691,7 @@ function StockMovementsTab({ active }) {
           <select
             value={moveType}
             onChange={e => setMoveType(e.target.value)}
+            className="sb-select"
             style={{ ...selectStyle, width: 'auto', padding: '9px 32px 9px 14px', fontSize: 13 }}
             aria-label="Filter by movement type"
           >

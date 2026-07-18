@@ -8,6 +8,13 @@
 //   3. Low Stock Alerts → GET /stock/alerts   (new)
 //
 // Adjust Stock modal: POST /stock/adjust (gated by stock.adjust permission).
+//
+// UI/UX AUDIT (2026-07-18):
+//   Finding #11 — SkeletonTable on each tab during initial load (3 blocks)
+//   Finding #12 — selectStyle applied to 4 selects (status, tab sort, etc.)
+//   Finding #14 — .bento-grid.bento-grid-12 for metric cards
+//   Finding #15 — Dismissible error banners with role="alert" on each tab
+//   See UI_UX_AUDIT_REPORT.md
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'

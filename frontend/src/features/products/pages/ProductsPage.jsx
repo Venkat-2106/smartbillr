@@ -8,6 +8,15 @@
 //   - barcodeError + onBarcodeErrorClear props added (mirrors nameError pattern)
 //   - doCreate/doUpdate catch "barcode already exists" and surface inline
 //   - excludeProdId passed to EditProductForm for self-barcode check
+//
+// UI/UX AUDIT (2026-07-18):
+//   Finding #1  — PageHeader replaces inline page title markup
+//   Finding #6  — EmptyState with built-in context icon replaces inline SVG
+//   Finding #11 — SkeletonTable shown during initial load (isInitialLoading)
+//   Finding #12 — selectStyle applied to status filter select
+//   Finding #14 — .bento-grid.bento-grid-12 for metric cards
+//   Finding #15 — Dismissible error banner with role="alert"
+//   See UI_UX_AUDIT_REPORT.md
 //   No layout, column, modal, permission, or architecture changes.
 //
 // VALIDATION CHANGES (2026-06-06):

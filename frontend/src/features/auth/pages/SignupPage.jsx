@@ -1,4 +1,10 @@
 import { useState, useEffect } from 'react'
+
+// UI/UX Audit (2026-07-18):
+//   Finding #5  — All fields validated via react-hook-form + Zod schema
+//   Finding #12 — Country/state selects replaced with shared COUNTRIES module
+//                 and StateDropdown component (deduplicates ~70 lines of local data)
+//   See UI_UX_AUDIT_REPORT.md
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'

@@ -1,5 +1,12 @@
 import { useMemo } from 'react'
 
+// UI/UX Audit (2026-07-18) — Finding #6:
+//   Built-in icon set (12 SVG icons) + `context` prop replace ~200 lines of
+//   inline SVG that were duplicated across 12 list pages.
+//   `hasFilters` prop swaps the icon/message when the empty state is caused
+//   by active filters rather than zero records.
+//   See UI_UX_AUDIT_REPORT.md
+
 // ── Built-in icon set ──────────────────────────────────────────────────────────
 // All icons: 24×24 viewBox, stroke="currentColor", strokeWidth 1.5,
 // strokeLinecap="round", strokeLinejoin="round", aria-hidden="true".

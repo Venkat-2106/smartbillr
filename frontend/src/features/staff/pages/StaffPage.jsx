@@ -1,4 +1,11 @@
 ﻿import { useState, useMemo, useEffect } from 'react'
+
+// UI/UX Audit (2026-07-18):
+//   Finding #6  — EmptyState with built-in context icon replaces inline SVG
+//   Finding #12 — selectStyle applied to status filter select
+//   Finding #14 — .bento-grid.bento-grid-12 for metric cards
+//   Finding #15 — Dismissible error banner with role="alert"
+//   See UI_UX_AUDIT_REPORT.md
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from 'react-router-dom'

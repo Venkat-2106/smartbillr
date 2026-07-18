@@ -8,6 +8,15 @@
 //   Clicking a row opens PaymentHistoryDrawer showing full installment
 //   history + the "Record Payment" form for pending/partial sales.
 //
+// UI/UX AUDIT (2026-07-18):
+//   Finding #1  — PageHeader replaces inline page title markup
+//   Finding #6  — EmptyState with built-in context icon replaces inline SVG
+//   Finding #11 — SkeletonTable shown during initial load (isInitialLoading)
+//   Finding #12 — selectStyle applied to status filter select
+//   Finding #14 — .bento-grid.bento-grid-12 for metric cards
+//   Finding #15 — Dismissible error banner with role="alert"
+//   See UI_UX_AUDIT_REPORT.md
+//
 // ARCHITECTURE:
 //   - No fetch in this component — everything comes from usePayments()
 //   - No useState for form fields — React Hook Form in the drawer

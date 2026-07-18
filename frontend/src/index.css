@@ -1,6 +1,15 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════════
+   UI/UX AUDIT ADDITIONS (2026-07-18):
+     Finding #3  — .sb-focusable (focus-visible outline for keyboard users)
+     Finding #4  — .skip-link (skip-to-content for screen readers)
+     Finding #14 — .bento-grid / .bento-grid-12 (consistent metric-card grids)
+     Finding #18 — .pagination-jump (responsive "Go to page" input, hidden ≤640px)
+   See UI_UX_AUDIT_REPORT.md for full details.
+═══════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════
    SMARTBILLR — PREMIUM DESIGN SYSTEM v4
    Inspired by: Stripe · Linear · Vercel · Ramp · Mercury
    Theme: Premium Light / Dark × Ocean Blue / Royal Purple / Emerald / Amber

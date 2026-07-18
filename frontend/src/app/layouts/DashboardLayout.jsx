@@ -1,4 +1,9 @@
 import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react'
+
+// UI/UX Audit (2026-07-18):
+//   Finding #4  — Skip-to-content link rendered before <nav>, targets id="main-content" on <main>
+//   Finding #9  — Escape key closes mobile sidebar (useEffect监听 Escape when mobileOpen=true)
+//   See UI_UX_AUDIT_REPORT.md
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import toast from 'react-hot-toast'

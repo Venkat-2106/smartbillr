@@ -1,5 +1,10 @@
 import { memo } from 'react'
 
+// UI/UX Audit (2026-07-18) — Finding #8:
+//   Added selectedIndex / onSelectedIndexChange props for keyboard navigation
+//   (pairs with useTableKeyboardNav hook). Selected row gets a subtle highlight.
+//   See UI_UX_AUDIT_REPORT.md
+
 function Skeleton({ w = '60%', h = 13 }) {
   return (
     <div style={{

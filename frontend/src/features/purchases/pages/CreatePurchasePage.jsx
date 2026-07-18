@@ -8,6 +8,12 @@
 //   - Line items: quantity + unit (cost) price + tax rate from product
 //   - Right panel: Order summary + Payment status
 //   - Submits POST /purchases with items array
+//
+// UI/UX AUDIT (2026-07-18) — Finding #13:
+//   Added dirty-form protection: snapshot of initial form state via useState
+//   initializer, useMemo for dirty comparison, window.confirm() on Back/Cancel,
+//   and beforeunload handler when form is dirty. Prevents accidental data loss.
+//   See UI_UX_AUDIT_REPORT.md
 //   - On success: redirects to /purchases
 //
 // PERF:

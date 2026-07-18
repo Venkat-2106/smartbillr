@@ -21,10 +21,41 @@
 //
 //   Visual design (icon, title, message, button layout, animation) is 100%
 //   unchanged.
+//
+// UI/UX AUDIT (2026-07-18):
+//   JSDoc block added documenting all props, including the children slot.
+//   See UI_UX_AUDIT_REPORT.md
 
 import ModalPortal from './ModalPortal'
 import Button from './Button'
 
+/**
+ * ConfirmDialog — modal confirmation prompt (danger / warning).
+ *
+ * @param {boolean}  open        – controls visibility
+ * @param {Function} onClose     – called when the user dismisses (backdrop, Escape, Cancel)
+ * @param {Function} onConfirm   – called when the user clicks the confirm button
+ * @param {string}   [title]     – heading text (default: "Are you sure?")
+ * @param {string}   [message]   – body text below the title
+ * @param {string}   [confirmText]- label for the confirm button
+ * @param {string}   [cancelText] – label for the cancel button
+ * @param {'danger'|'warning'} [variant] – icon, colour scheme, and confirm-button style
+ * @param {boolean}  [loading]   – shows a spinner on the confirm button and disables both buttons
+ * @param {React.ReactNode} [children]
+ *   Optional extra content rendered below the message and above the action
+ *   buttons.  Useful for adding a checkbox, radio group, or extra warning
+ *   text that the user must acknowledge before confirming.
+ *
+ *   Example — see PurchasesPage.jsx delete-confirmation dialog, where a
+ *   "Reduce stock levels" checkbox is passed as children:
+ *
+ *     <ConfirmDialog …>
+ *       <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+ *         <input type="checkbox" checked={reduceStock} onChange={…} />
+ *         Reduce stock levels
+ *       </label>
+ *     </ConfirmDialog>
+ */
 export default function ConfirmDialog({
   open,
   onClose,

@@ -1,4 +1,12 @@
 ﻿import { useState, useMemo, useEffect } from 'react'
+
+// UI/UX Audit (2026-07-18):
+//   Finding #1  — PageHeader replaces inline page title markup
+//   Finding #6  — EmptyState with built-in context icon replaces inline SVG
+//   Finding #11 — SkeletonTable shown during initial load (isInitialLoading)
+//   Finding #12 — selectStyle applied to category filter select
+//   Finding #15 — Dismissible error banner with role="alert"
+//   See UI_UX_AUDIT_REPORT.md
 import { useQuery } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { fetchExpenseSummary } from '../api/expensesApi'

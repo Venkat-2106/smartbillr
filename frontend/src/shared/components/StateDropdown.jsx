@@ -11,6 +11,12 @@
 // The component accepts a value + onChange interface so it works cleanly
 // with setValue() and watch() from useForm().
 //
+// UI/UX AUDIT (2026-07-18) — Finding #12:
+//   Used by SignupPage to replace ~70 lines of local country/state data with
+//   the shared COUNTRY_STATES module. Handles empty-state countries (Singapore,
+//   Japan, etc.) via text-input fallback automatically.
+//   See UI_UX_AUDIT_REPORT.md
+//
 // USAGE IN A FORM (with React Hook Form):
 //
 //   const { watch, setValue, formState: { errors } } = useForm()

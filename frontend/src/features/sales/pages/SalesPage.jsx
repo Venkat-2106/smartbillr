@@ -1,4 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+
+// UI/UX Audit (2026-07-18):
+//   Finding #1  — PageHeader replaces inline page title markup
+//   Finding #6  — EmptyState with built-in context icon replaces inline SVG
+//   Finding #11 — SkeletonTable shown during initial load (isInitialLoading)
+//   Finding #12 — selectStyle applied to status filter select
+//   Finding #14 — .bento-grid.bento-grid-12 for metric cards
+//   Finding #15 — Dismissible error banner with role="alert"
+//   See UI_UX_AUDIT_REPORT.md
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSales } from '../hooks/useSales';

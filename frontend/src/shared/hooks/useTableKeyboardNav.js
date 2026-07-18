@@ -1,6 +1,13 @@
 import { useState, useCallback } from 'react'
 import { useShortcut } from './useShortcut'
 
+// UI/UX Audit (2026-07-18) — Finding #8:
+//   Keyboard navigation hook for table pages. Supports ↑/↓ to move selection,
+//   Enter to open/edit, Delete/Backspace to trigger delete confirmation.
+//   Used by 7 list pages (Sales, Purchases, Payments, Expenses, Customers,
+//   Suppliers, Staff). Pairs with Table.jsx's selectedIndex/onSelectedIndexChange.
+//   See UI_UX_AUDIT_REPORT.md
+
 export default function useTableKeyboardNav({
   rows = [],
   rowKey = 'id',

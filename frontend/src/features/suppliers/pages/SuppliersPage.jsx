@@ -4,6 +4,13 @@
 // Export uses onFetch={handleExport} (lazy fetch on click) via useSuppliers(),
 // which sends the current active filters to the backend and returns all
 // matching records — not limited to the 20 rows visible on screen.
+//
+// UI/UX AUDIT (2026-07-18):
+//   Finding #1  — PageHeader replaces inline page title markup
+//   Finding #6  — EmptyState with built-in context icon replaces inline SVG
+//   Finding #15 — Dismissible error banner with role="alert"
+//   Finding #16 — useEffect dependency list corrected: [editTarget] → [editTarget, editForm]
+//   See UI_UX_AUDIT_REPORT.md
 
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';

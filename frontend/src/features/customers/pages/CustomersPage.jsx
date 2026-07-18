@@ -9,6 +9,14 @@
 //   handleExport() fetches from the backend on demand so the CSV always
 //   contains all matching records — not just the 20 rows on screen.
 //
+// UI/UX AUDIT (2026-07-18):
+//   Finding #1  — PageHeader replaces inline page title markup
+//   Finding #6  — EmptyState with built-in context icon replaces inline SVG
+//   Finding #12 — selectStyle applied to status filter select
+//   Finding #14 — .bento-grid.bento-grid-12 for metric cards
+//   Finding #15 — Dismissible error banner with role="alert"
+//   See UI_UX_AUDIT_REPORT.md
+//
 //   Pagination is always shown (no activeSearch/activeDateFilter hide logic
 //   needed — server handles filtering so pagination is always accurate).
 

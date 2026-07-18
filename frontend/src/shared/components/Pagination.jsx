@@ -1,6 +1,6 @@
 // src/shared/components/Pagination.jsx
 //
-// FIX APPLIED:
+// FIX APPLIED (hover-sticky bug):
 //   NavBtn and page buttons were using onMouseEnter/Leave to mutate
 //   e.currentTarget.style.background directly (same DOM mutation bug fixed
 //   in Modal.jsx, Table.jsx, DashboardLayout.jsx). When the parent re-renders
@@ -8,6 +8,12 @@
 //
 //   Fix: NavBtn now has its own useState(false) for hover — it is already a
 //   function component so this is a natural, minimal change. Page buttons use
+//   the same pattern.
+//
+// UI/UX AUDIT (2026-07-18) — Finding #18:
+//   Added "Go to page" numeric input after the next-page button.
+//   Hidden on mobile (≤640px) via .pagination-jump media query in index.css.
+//   See UI_UX_AUDIT_REPORT.md
 //   a single hoveredPage state at the outer component level (same approach
 //   as Table.jsx's row hover tracking).
 //

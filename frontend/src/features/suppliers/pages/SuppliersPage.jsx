@@ -324,7 +324,8 @@ export default function SuppliersPage() {
 
       {!isError && !isLoading && suppliers.length === 0 ? (
         <EmptyState
-          icon={activeSearch || activeDateFilter ? '🔍' : '🏭'}
+          context="supplier"
+          hasFilters={activeSearch || activeDateFilter}
           title={activeSearch || activeDateFilter ? 'No results matching your filters' : 'Nothing here yet'}
           description={activeSearch || activeDateFilter ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'Add your first supplier to get started.'}
           action={activeSearch || activeDateFilter ? (

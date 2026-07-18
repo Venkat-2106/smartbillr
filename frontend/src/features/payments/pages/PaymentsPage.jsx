@@ -341,19 +341,8 @@ export default function PaymentsPage() {
       {!isLoading && payments.length === 0 ? (
         <BentoCard>
           <EmptyState
-            icon={
-              activeFilters > 0 ? (
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-              ) : (
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
-                  <line x1="1" y1="10" x2="23" y2="10" />
-                </svg>
-              )
-            }
+            context="payment"
+            hasFilters={activeFilters > 0}
             title={activeFilters > 0 ? 'No results matching your filters' : 'Nothing here yet'}
             description={activeFilters > 0 ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'Payments are recorded when sales are created or updated.'}
             action={activeFilters > 0 ? (

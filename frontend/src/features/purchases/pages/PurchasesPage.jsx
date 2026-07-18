@@ -360,21 +360,8 @@ export default function PurchasesPage() {
       {!isLoading && purchases.length === 0 ? (
         <BentoCard>
           <EmptyState
-            icon={
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                {activeFilters > 0 ? (
-                  <>
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                  </>
-                ) : (
-                  <>
-                    <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
-                    <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" />
-                  </>
-                )}
-              </svg>
-            }
+            context="purchase"
+            hasFilters={activeFilters > 0}
             title={activeFilters > 0 ? 'No results matching your filters' : 'Nothing here yet'}
             description={activeFilters > 0 ? "Try adjusting your search or filters to find what you're looking for." : 'No purchases yet.'}
             action={activeFilters > 0 ? (

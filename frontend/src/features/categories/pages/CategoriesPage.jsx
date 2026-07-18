@@ -307,7 +307,8 @@ export default function CategoriesPage() {
 
       {!isLoading && categories.length === 0 ? (
         <EmptyState
-          icon={activeFilters > 0 ? '🔍' : '📂'}
+          context="category"
+          hasFilters={activeFilters > 0}
           title={activeFilters > 0 ? 'No results matching your filters' : 'Nothing here yet'}
           description={activeFilters > 0 ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'Add your first category to start organising products.'}
           action={activeFilters > 0 ? (

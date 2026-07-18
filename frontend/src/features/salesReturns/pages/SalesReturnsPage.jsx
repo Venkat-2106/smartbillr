@@ -262,7 +262,8 @@ export default function SalesReturnsPage() {
 
       {!isLoading && returns.length === 0 ? (
         <EmptyState
-          icon={activeFilters > 0 ? '🔍' : '↩️'}
+          context="return"
+          hasFilters={activeFilters > 0}
           title={activeFilters > 0 ? 'No results matching your filters' : 'Nothing here yet'}
           description={activeFilters > 0 ? 'Try adjusting your search or filters to find what you\'re looking for.' : 'No sales returns yet. Create one from a sale record.'}
           action={activeFilters > 0 ? (

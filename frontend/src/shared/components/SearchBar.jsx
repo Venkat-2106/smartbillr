@@ -92,6 +92,7 @@ export default function SearchBar({
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         autoComplete="off"
+        className="sb-focusable"
         style={{
           width: '100%',
           padding: '8px 36px 8px 36px',
@@ -102,7 +103,6 @@ export default function SearchBar({
           fontWeight: 400,
           color: 'var(--text-primary)',
           fontFamily: 'var(--font-sans, "Inter", sans-serif)',
-          outline: 'none',
           transition: 'border-color 0.15s, box-shadow 0.15s',
           boxShadow: focused ? '0 0 0 3px var(--accent-glow, rgba(79,70,229,0.14))' : 'none',
         }}

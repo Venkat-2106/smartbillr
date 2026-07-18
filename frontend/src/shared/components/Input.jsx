@@ -57,7 +57,6 @@ const Input = forwardRef(function Input(
     flex: 1,
     background: 'transparent',
     border: 'none',
-    outline: 'none',
     fontFamily: 'var(--font-sans, "Plus Jakarta Sans", sans-serif)',
     fontSize: 13,
     fontWeight: 400,
@@ -102,6 +101,7 @@ const Input = forwardRef(function Input(
           ref={ref}
           id={fieldId}
           disabled={disabled}
+          className="sb-focusable"
           style={inputStyle}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}

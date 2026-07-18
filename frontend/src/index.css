@@ -531,6 +531,13 @@ body {
   outline: 2px solid var(--accent-500);
   outline-offset: 2px;
 }
+.sb-focusable {
+  outline: none;
+}
+.sb-focusable:focus-visible {
+  outline: 2px solid var(--accent-500);
+  outline-offset: 2px;
+}
 .sr-only {
   position: absolute;
   width: 1px; height: 1px;

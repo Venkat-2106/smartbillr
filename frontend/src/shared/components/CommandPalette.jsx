@@ -141,8 +141,9 @@ export default function CommandPalette({ open, onClose }) {
             aria-autocomplete="list"
             aria-activedescendant={filtered[activeIdx] ? `cmd-item-${activeIdx}` : undefined}
             aria-controls="cmd-results-list"
+            className="sb-focusable"
             style={{
-              flex: 1, border: 'none', outline: 'none',
+              flex: 1, border: 'none',
               fontSize: 14, color: 'var(--text-primary)',
               background: 'transparent', fontFamily: 'inherit',
             }}

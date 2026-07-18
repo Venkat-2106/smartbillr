@@ -9,7 +9,7 @@ import {
   Button, Input, Modal, Table, SearchBar,
   Pagination, ConfirmDialog,
   FormField, ExportButton, DateRangeFilter,
-  EmptyState, BentoCard, MetricCard,
+  EmptyState, BentoCard, MetricCard, PageHeader,
 } from '../../../shared/components'
 import { selectStyle } from '../../../shared/components/FormField'
 import { EXPENSE_CSV_COLUMNS } from '../../../shared/utils/csvExport'
@@ -281,50 +281,29 @@ export default function ExpensesPage() {
   return (
     <>
       {/* PAGE HEADER */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 24, flexWrap: 'wrap', gap: 12,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button
-            onClick={() => navigate('/dashboard')}
-            style={{
-              background: 'var(--bg-card)', border: '1.5px solid var(--border)',
-              borderRadius: 'var(--r-md)', cursor: 'pointer', padding: 8,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--text-secondary)', lineHeight: 1,
-            }}
-            aria-label="Back to dashboard"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-          </button>
-          <div>
-            <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
-              Expenses
-            </h1>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
-              Track your business expenses, operating costs, and payments
-            </p>
+      <PageHeader
+        title="Expenses"
+        subtitle="Track your business expenses, operating costs, and payments"
+        back
+        onBack={() => navigate('/dashboard')}
+        action={
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <ExportButton
+              onFetch={handleExport}
+              filename="expenses"
+              columns={EXPENSE_CSV_COLUMNS}
+            />
+            <Button
+              variant="primary"
+              leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
+              onClick={handleOpenAdd}
+              data-shortcut="new"
+            >
+              Add Expense
+            </Button>
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <ExportButton
-            onFetch={handleExport}
-            filename="expenses"
-            columns={EXPENSE_CSV_COLUMNS}
-          />
-          <Button
-            variant="primary"
-            leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
-            onClick={handleOpenAdd}
-            data-shortcut="new"
-          >
-            Add Expense
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* METRIC CARDS */}
       <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>

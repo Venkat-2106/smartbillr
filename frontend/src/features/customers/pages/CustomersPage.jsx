@@ -28,7 +28,7 @@ import {
   Pagination, ConfirmDialog,
   FormField, StateDropdown, ExportButton, ImportButton,
   DateRangeFilter, EmptyState,
-  MetricCard, BentoCard, UpgradePrompt,
+  MetricCard, BentoCard, UpgradePrompt, PageHeader,
 } from '../../../shared/components'
 
 import { selectStyle, textareaStyle } from '../../../shared/components/FormField'
@@ -50,12 +50,6 @@ const DeleteIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <polyline points="3 6 5 6 21 6" />
     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-  </svg>
-)
-
-const ChevronLeftIcon = (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <polyline points="15 18 9 12 15 6" />
   </svg>
 )
 
@@ -395,56 +389,36 @@ export default function CustomersPage() {
   // ─── RENDER ───────────────────────────────────────────────────────────────
   return (
     <>
-      {/* PAGE HEADER */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 24, flexWrap: 'wrap', gap: 12,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button
-            onClick={() => navigate('/dashboard')}
-            style={{
-              background: 'var(--bg-card)', border: '1.5px solid var(--border)',
-              borderRadius: 'var(--r-md)', cursor: 'pointer', padding: 8,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--text-secondary)', lineHeight: 1,
-            }}
-            aria-label="Back to dashboard"
-          >
-            {ChevronLeftIcon}
-          </button>
-          <div>
-            <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
-              Customers
-            </h1>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
-              Manage your customer list, contacts, and billing details
-            </p>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <ExportButton
-            onFetch={handleExport}
-            filename="customers"
-            columns={CUSTOMER_CSV_COLUMNS}
-          />
-          {canManage && (
-            <ImportButton
-              endpoint="/v1/customers/import"
-              title="Customers"
-              columns={CUSTOMER_IMPORT_TEMPLATE}
+      <PageHeader
+        title="Customers"
+        subtitle="Manage your customer list, contacts, and billing details"
+        back
+        onBack={() => navigate('/dashboard')}
+        action={
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <ExportButton
+              onFetch={handleExport}
+              filename="customers"
+              columns={CUSTOMER_CSV_COLUMNS}
             />
-          )}
-          <Button
-            variant="primary"
-            leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
-            onClick={handleOpenAdd}
-            data-shortcut="new"
-          >
-            Add Customer
-          </Button>
-        </div>
-      </div>
+            {canManage && (
+              <ImportButton
+                endpoint="/v1/customers/import"
+                title="Customers"
+                columns={CUSTOMER_IMPORT_TEMPLATE}
+              />
+            )}
+            <Button
+              variant="primary"
+              leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
+              onClick={handleOpenAdd}
+              data-shortcut="new"
+            >
+              Add Customer
+            </Button>
+          </div>
+        }
+      />
 
       {showUpgradeBanner && subscription?.subscription_type === 'trial' && (
         <UpgradePrompt

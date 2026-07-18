@@ -24,7 +24,7 @@ import PaymentHistoryDrawer, { DrawerOverlay }
 import {
   Button, Table, Badge, SearchBar,
   Pagination, DateRangeFilter, ExportButton,
-  EmptyState, MetricCard, BentoCard,
+  EmptyState, MetricCard, BentoCard, PageHeader,
 } from '../../../shared/components'
 import { selectStyle }           from '../../../shared/components/FormField'
 import { formatCurrency }        from '../../../shared/utils/formatCurrency'
@@ -220,27 +220,17 @@ export default function PaymentsPage() {
 
   return (
     <>
-      {/* PAGE HEADER */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 24, flexWrap: 'wrap', gap: 12,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
-            Payments
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
-            Track payment collections, invoices, and outstanding balances
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+      <PageHeader
+        title="Payments"
+        subtitle="Track payment collections, invoices, and outstanding balances"
+        action={
           <ExportButton
             onFetch={handleExport}
             filename="payments"
             columns={PAYMENT_CSV_COLUMNS}
           />
-        </div>
-      </div>
+        }
+      />
 
       {/* METRIC CARDS */}
       <div style={{

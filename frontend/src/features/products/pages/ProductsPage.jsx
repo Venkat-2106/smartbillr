@@ -56,6 +56,7 @@ import {
   ImportButton,
   MetricCard,
   BentoCard,
+  PageHeader,
 } from '../../../shared/components'
 
 import { PRODUCT_CSV_COLUMNS, PRODUCT_CSV_COLUMNS_NO_PROFIT, PRODUCT_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport'
@@ -88,12 +89,6 @@ const TrashIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <polyline points="3 6 5 6 21 6" />
     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-  </svg>
-)
-
-const ChevronLeftIcon = (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <polyline points="15 18 9 12 15 6" />
   </svg>
 )
 
@@ -796,58 +791,38 @@ export default function ProductsPage() {
 
   return (
     <>
-      {/* PAGE HEADER */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 24, flexWrap: 'wrap', gap: 12,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button
-            onClick={() => navigate('/dashboard')}
-            style={{
-              background: 'var(--bg-card)', border: '1.5px solid var(--border)',
-              borderRadius: 'var(--r-md)', cursor: 'pointer', padding: 8,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--text-secondary)', lineHeight: 1,
-            }}
-            aria-label="Back to dashboard"
-          >
-            {ChevronLeftIcon}
-          </button>
-          <div>
-            <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
-              Products
-            </h1>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
-              Manage your product catalogue, prices, and stock alerts
-            </p>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <ExportButton
-            onFetch={handleExport}
-            filename="products"
-            columns={csvColumns}
-          />
-          {canManage && (
-            <ImportButton
-              endpoint="/v1/products/import"
-              title="Products"
-              columns={PRODUCT_IMPORT_TEMPLATE}
+      <PageHeader
+        title="Products"
+        subtitle="Manage your product catalogue, prices, and stock alerts"
+        back
+        onBack={() => navigate('/dashboard')}
+        action={
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <ExportButton
+              onFetch={handleExport}
+              filename="products"
+              columns={csvColumns}
             />
-          )}
-          {canManage && (
-            <Button
-              variant="primary"
-              leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
-              onClick={() => setShowAdd(true)}
-              data-shortcut="new"
-            >
-              Add Product
-            </Button>
-          )}
-        </div>
-      </div>
+            {canManage && (
+              <ImportButton
+                endpoint="/v1/products/import"
+                title="Products"
+                columns={PRODUCT_IMPORT_TEMPLATE}
+              />
+            )}
+            {canManage && (
+              <Button
+                variant="primary"
+                leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
+                onClick={() => setShowAdd(true)}
+                data-shortcut="new"
+              >
+                Add Product
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       {showUpgradeBanner && subscription?.subscription_type === 'trial' && (
         <UpgradePrompt

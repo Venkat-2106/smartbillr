@@ -647,6 +647,13 @@ export default function DashboardLayout() {
 
   useEffect(() => { setMobileOpen(false) }, [location.pathname])
 
+  useEffect(() => {
+    if (!mobileOpen) return
+    const handler = (e) => { if (e.key === 'Escape') setMobileOpen(false) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [mobileOpen])
+
   const { registerShortcut, paletteOpen, setPaletteOpen, helpOpen, setHelpOpen } = useShortcutContext()
   const paletteOpenRef = useRef(paletteOpen)
   paletteOpenRef.current = paletteOpen

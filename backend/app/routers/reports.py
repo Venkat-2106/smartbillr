@@ -1411,6 +1411,7 @@ async def get_customer_purchase_history(
     pagination: dict = Depends(paginate_async),
 ):
     bid = current_user["business_id"]
+    can_financial = check_feature_access(current_user, "financial_reports")["allowed"]
 
     # Customer summary
     cust_row = await db.execute(text("""
@@ -1500,16 +1501,16 @@ async def get_customer_purchase_history(
         },
         "summary": {
             "total_invoices": int(totals.total_invoices) if totals else 0,
-            "total_amount": float(totals.total_amount) if totals else 0,
-            "paid_amount": float(totals.paid_amount) if totals else 0,
-            "outstanding": float(totals.total_amount - totals.paid_amount) if totals else 0,
+            "total_amount": float(totals.total_amount) if (totals and can_financial) else None,
+            "paid_amount": float(totals.paid_amount) if (totals and can_financial) else None,
+            "outstanding": float(totals.total_amount - totals.paid_amount) if (totals and can_financial) else None,
             "last_purchase_date": str(totals.last_purchase_date) if (totals and totals.last_purchase_date) else None,
         },
         "sales_history": pagination_response(
             [{
                 "sales_id": str(r.sales_id),
                 "invoice_no": r.invoice_no,
-                "amount": float(r.sales_final_amount),
+                "amount": float(r.sales_final_amount) if can_financial else None,
                 "discount": float(r.sales_discount),
                 "tax": float(r.tax_total),
                 "payment_status": r.sales_payment_status,
@@ -1523,7 +1524,7 @@ async def get_customer_purchase_history(
             [{
                 "payment_id": str(r.payment_id),
                 "invoice_no": r.invoice_no,
-                "amount": float(r.payment_amount),
+                "amount": float(r.payment_amount) if can_financial else None,
                 "method": r.payment_method,
                 "status": r.payment_status,
                 "paid_at": str(r.payment_paid_at),
@@ -1709,6 +1710,7 @@ async def get_supplier_purchase_history(
     pagination: dict = Depends(paginate_async),
 ):
     bid = current_user["business_id"]
+    can_financial = check_feature_access(current_user, "financial_reports")["allowed"]
 
     supp_row = await db.execute(text("""
         SELECT supp_name, supp_phone, supp_email FROM suppliers
@@ -1762,14 +1764,14 @@ async def get_supplier_purchase_history(
         },
         "summary": {
             "total_purchases": int(totals.total_purchases) if totals else 0,
-            "total_amount": float(totals.total_amount) if totals else 0,
+            "total_amount": float(totals.total_amount) if (totals and can_financial) else None,
             "first_purchase": str(totals.first_purchase) if (totals and totals.first_purchase) else None,
             "last_purchase": str(totals.last_purchase) if (totals and totals.last_purchase) else None,
         },
         "purchases": pagination_response(
             [{
                 "pur_id": str(r.pur_id),
-                "amount": float(r.pur_final_amount),
+                "amount": float(r.pur_final_amount) if can_financial else None,
                 "discount": float(r.pur_discount),
                 "tax": float(r.pur_tax_total),
                 "payment_status": r.pur_payment_status,
@@ -2134,6 +2136,7 @@ async def get_tax_by_rate(
     db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
+    can_financial = check_feature_access(current_user, "financial_reports")["allowed"]
     date_where, dp = _date_col("s", "sales_created_at", date_from, date_to)
 
     # Sales tax by GST rate
@@ -2157,8 +2160,8 @@ async def get_tax_by_rate(
         {
             "gst_rate": float(r.gst_rate) if r.gst_rate else 0,
             "item_count": int(r.item_count),
-            "tax_amount": float(r.tax_amount),
-            "taxable_amount": float(r.taxable_amount),
+            "tax_amount": float(r.tax_amount) if can_financial else None,
+            "taxable_amount": float(r.taxable_amount) if can_financial else None,
         }
         for r in rows
     ])

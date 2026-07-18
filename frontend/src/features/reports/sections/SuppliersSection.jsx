@@ -1,15 +1,19 @@
 import { useMemo } from 'react'
 import { BentoCard, BarChart } from '../../../shared/components'
+import UpgradeBlur from '../../../shared/components/UpgradeBlur'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { useTopSuppliers, useSupplierSpendAnalysis, useReportCountry } from '../hooks/useReports'
 import { SectionTitle, InfoCard, DataTable } from '../components/shared'
+import { useFeatureAccess } from '../../../shared/hooks/useFeatureAccess'
 
 export default function SuppliersSection({ dateFrom, dateTo }) {
+  const { reason } = useFeatureAccess('financial_reports')
   const topSuppliers = useTopSuppliers(dateFrom, dateTo)
   const spend = useSupplierSpendAnalysis()
   const country = useReportCountry()
 
   return (
+    <UpgradeBlur reason={reason}>
     <BentoCard>
       <SectionTitle title="Supplier Reports" subtitle="Supplier performance and spend analysis" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
@@ -27,5 +31,6 @@ export default function SuppliersSection({ dateFrom, dateTo }) {
         </InfoCard>
       </div>
     </BentoCard>
+    </UpgradeBlur>
   )
 }

@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { BentoCard, EmptyState } from '../../../shared/components'
+import UpgradeBlur from '../../../shared/components/UpgradeBlur'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { useInventoryValuation, useInventoryMovementSummary, useStockFlow, useMovingProducts, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, InfoCard } from '../components/shared'
+import { useFeatureAccess } from '../../../shared/hooks/useFeatureAccess'
 
 export default function InventorySection({ dateFrom, dateTo }) {
+  const { reason } = useFeatureAccess('financial_reports')
   const [movementPeriod, setMovementPeriod] = useState('monthly')
   const valuation = useInventoryValuation()
   const movementSummary = useInventoryMovementSummary(dateFrom, dateTo)
@@ -16,6 +19,7 @@ export default function InventorySection({ dateFrom, dateTo }) {
   const sf = stockFlow.data
 
   return (
+    <UpgradeBlur reason={reason}>
     <BentoCard>
       <SectionTitle title="Inventory Reports" subtitle="Stock levels, valuation, and movement analysis" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
@@ -64,5 +68,6 @@ export default function InventorySection({ dateFrom, dateTo }) {
         </InfoCard>
       </div>
     </BentoCard>
+    </UpgradeBlur>
   )
 }

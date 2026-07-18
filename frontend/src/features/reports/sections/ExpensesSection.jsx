@@ -1,10 +1,13 @@
 import { useState, useMemo } from 'react'
 import { BentoCard, LineChart, DonutChart } from '../../../shared/components'
+import UpgradeBlur from '../../../shared/components/UpgradeBlur'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { useExpensesByCategory, useExpenseTrend, useExpenseDistribution, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, ChartCard, InfoCard, DataTable } from '../components/shared'
+import { useFeatureAccess } from '../../../shared/hooks/useFeatureAccess'
 
 export default function ExpensesSection({ dateFrom, dateTo }) {
+  const { reason } = useFeatureAccess('financial_reports')
   const [period, setPeriod] = useState('monthly')
   const byCategory = useExpensesByCategory(dateFrom, dateTo)
   const trend = useExpenseTrend(period, dateFrom, dateTo)
@@ -27,6 +30,7 @@ export default function ExpensesSection({ dateFrom, dateTo }) {
   }, [distribution.data])
 
   return (
+    <UpgradeBlur reason={reason}>
     <BentoCard>
       <SectionTitle title="Expense Reports" subtitle="Expense tracking and category analysis" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
@@ -51,5 +55,6 @@ export default function ExpensesSection({ dateFrom, dateTo }) {
         ]} data={Array.isArray(byCategory.data) ? byCategory.data : []} loading={byCategory.isLoading} />
       </InfoCard>
     </BentoCard>
+    </UpgradeBlur>
   )
 }

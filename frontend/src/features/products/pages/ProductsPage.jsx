@@ -60,6 +60,7 @@ import {
 
 import { PRODUCT_CSV_COLUMNS, PRODUCT_CSV_COLUMNS_NO_PROFIT, PRODUCT_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport'
 import { usePermissions }       from '../../../shared/hooks/usePermissions'
+import { useFeatureAccess }     from '../../../shared/hooks/useFeatureAccess'
 import { formatDate }           from '../../../shared/utils/formatDate'
 import { formatCurrency }       from '../../../shared/utils/formatCurrency'
 import useAuthStore             from '../../../store/authStore'
@@ -267,12 +268,11 @@ function LockedCell({ message }) {
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function ProductsPage() {
   const { can }   = usePermissions()
+  const { allowed: canViewProfit, reason: tierReason } = useFeatureAccess('product_profit_view')
   const canManage = can('products.edit')
-  const canViewProfit = can('view_product_profit')
   const business      = useAuthStore(s => s.business)
   const countryCode   = business?.business_country_code
-  const subType       = business?.subscription_type
-  const isTierLocked  = (subType === 'trial' || subType === 'suspended') && canViewProfit
+  const isTierLocked  = tierReason != null
 
   const categories = useCategoryOptions()
   const navigate = useNavigate()

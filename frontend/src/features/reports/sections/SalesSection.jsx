@@ -1,10 +1,13 @@
 import { useState, useMemo } from 'react'
 import { BentoCard, LineChart, BarChart, DonutChart } from '../../../shared/components'
+import UpgradeBlur from '../../../shared/components/UpgradeBlur'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { useSalesTrend, useSalesByCustomer, useSalesByProduct, useSalesByPaymentMethod, useSalesInvoiceStatus, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, ChartCard, InfoCard, DataTable } from '../components/shared'
+import { useFeatureAccess } from '../../../shared/hooks/useFeatureAccess'
 
 export default function SalesSection({ dateFrom, dateTo }) {
+  const { reason } = useFeatureAccess('financial_reports')
   const [period, setPeriod] = useState('monthly')
   const trend = useSalesTrend(period, dateFrom, dateTo)
   const byCustomer = useSalesByCustomer(dateFrom, dateTo)
@@ -15,7 +18,7 @@ export default function SalesSection({ dateFrom, dateTo }) {
 
   const trendData = useMemo(() => {
     if (!Array.isArray(trend.data)) return []
-    return trend.data.map(d => ({ label: d.label, value: Math.round(d.revenue) }))
+    return trend.data.map(d => ({ label: d.label, value: d.revenue != null ? Math.round(d.revenue) : 0 }))
   }, [trend.data])
 
   const statusData = invoiceStatus.data ? [
@@ -30,6 +33,7 @@ export default function SalesSection({ dateFrom, dateTo }) {
   }, [byPayment.data])
 
   return (
+    <UpgradeBlur reason={reason}>
     <BentoCard>
       <SectionTitle title="Sales Reports" subtitle="Revenue, customer trends, product performance" />
 
@@ -80,5 +84,6 @@ export default function SalesSection({ dateFrom, dateTo }) {
         ]} data={Array.isArray(byProduct.data) ? byProduct.data.slice(0, 100) : []} loading={byProduct.isLoading} />
       </InfoCard>
     </BentoCard>
+    </UpgradeBlur>
   )
 }

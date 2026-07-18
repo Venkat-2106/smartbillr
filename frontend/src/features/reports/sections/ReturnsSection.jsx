@@ -1,10 +1,13 @@
 import { useState, useMemo } from 'react'
 import { BentoCard, LineChart } from '../../../shared/components'
+import UpgradeBlur from '../../../shared/components/UpgradeBlur'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { useSalesReturns, usePurchaseReturns, useReturnsTrend, useReturnsImpact, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, ChartCard, InfoCard, DataTable } from '../components/shared'
+import { useFeatureAccess } from '../../../shared/hooks/useFeatureAccess'
 
 export default function ReturnsSection({ dateFrom, dateTo }) {
+  const { reason } = useFeatureAccess('financial_reports')
   const [period, setPeriod] = useState('monthly')
   const salesReturns = useSalesReturns(dateFrom, dateTo)
   const purchaseReturns = usePurchaseReturns(dateFrom, dateTo)
@@ -21,6 +24,7 @@ export default function ReturnsSection({ dateFrom, dateTo }) {
   }, [trend.data])
 
   return (
+    <UpgradeBlur reason={reason}>
     <BentoCard>
       <SectionTitle title="Return Reports" subtitle="Sales returns, purchase returns, and profit impact" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
@@ -41,5 +45,6 @@ export default function ReturnsSection({ dateFrom, dateTo }) {
         </InfoCard>
       </div>
     </BentoCard>
+    </UpgradeBlur>
   )
 }

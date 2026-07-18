@@ -1,11 +1,14 @@
 import { useState, useMemo } from 'react'
 import { BentoCard, LineChart, BarChart } from '../../../shared/components'
+import UpgradeBlur from '../../../shared/components/UpgradeBlur'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { getTaxLabel } from '../../../shared/utils/formatTax'
 import { usePurchaseSummary, usePurchaseTrend, usePurchasesBySupplier, usePurchasesByProduct, usePurchaseTaxSummary, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, ChartCard, InfoCard } from '../components/shared'
+import { useFeatureAccess } from '../../../shared/hooks/useFeatureAccess'
 
 export default function PurchasesSection({ dateFrom, dateTo }) {
+  const { reason } = useFeatureAccess('financial_reports')
   const [period, setPeriod] = useState('monthly')
   const summary = usePurchaseSummary(dateFrom, dateTo)
   const trend = usePurchaseTrend(period, dateFrom, dateTo)
@@ -22,6 +25,7 @@ export default function PurchasesSection({ dateFrom, dateTo }) {
   const s = summary.data
 
   return (
+    <UpgradeBlur reason={reason}>
     <BentoCard>
       <SectionTitle title="Purchase Reports" subtitle="Spend analysis and supplier performance" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
@@ -44,5 +48,6 @@ export default function PurchasesSection({ dateFrom, dateTo }) {
         </InfoCard>
       </div>
     </BentoCard>
+    </UpgradeBlur>
   )
 }

@@ -1,10 +1,13 @@
 import { useState, useMemo } from 'react'
 import { BentoCard, LineChart, DonutChart, Pagination } from '../../../shared/components'
+import UpgradeBlur from '../../../shared/components/UpgradeBlur'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { usePaymentCollections, useOutstandingReceivables, usePaymentsByMethod, usePartialPayments, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, ChartCard, InfoCard, DataTable } from '../components/shared'
+import { useFeatureAccess } from '../../../shared/hooks/useFeatureAccess'
 
 export default function PaymentsSection({ dateFrom, dateTo }) {
+  const { reason } = useFeatureAccess('financial_reports')
   const [period, setPeriod] = useState('monthly')
   const [partialPage, setPartialPage] = useState(1)
   const collections = usePaymentCollections(period, dateFrom, dateTo)
@@ -24,6 +27,7 @@ export default function PaymentsSection({ dateFrom, dateTo }) {
   }, [byMethod.data])
 
   return (
+    <UpgradeBlur reason={reason}>
     <BentoCard>
       <SectionTitle title="Payment Reports" subtitle="Collections, outstanding, and payment methods" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
@@ -50,5 +54,6 @@ export default function PaymentsSection({ dateFrom, dateTo }) {
         <Pagination pagination={partial.data?.pagination} onPageChange={setPartialPage} />
       </InfoCard>
     </BentoCard>
+    </UpgradeBlur>
   )
 }

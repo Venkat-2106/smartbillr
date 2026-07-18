@@ -1,16 +1,20 @@
 import { useState } from 'react'
 import { BentoCard, Pagination } from '../../../shared/components'
+import UpgradeBlur from '../../../shared/components/UpgradeBlur'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { useTopCustomers, useCustomerOutstanding, useReportCountry } from '../hooks/useReports'
 import { SectionTitle, InfoCard, DataTable } from '../components/shared'
+import { useFeatureAccess } from '../../../shared/hooks/useFeatureAccess'
 
 export default function CustomersSection({ dateFrom, dateTo }) {
+  const { reason } = useFeatureAccess('financial_reports')
   const topCustomers = useTopCustomers(dateFrom, dateTo)
   const [outstandingPage, setOutstandingPage] = useState(1)
   const outstanding = useCustomerOutstanding(outstandingPage)
   const country = useReportCountry()
 
   return (
+    <UpgradeBlur reason={reason}>
     <BentoCard>
       <SectionTitle title="Customer Reports" subtitle="Top customers, outstanding, and purchase history" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
@@ -32,5 +36,6 @@ export default function CustomersSection({ dateFrom, dateTo }) {
         </InfoCard>
       </div>
     </BentoCard>
+    </UpgradeBlur>
   )
 }

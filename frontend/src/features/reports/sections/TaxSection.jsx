@@ -1,10 +1,13 @@
 import { BentoCard } from '../../../shared/components'
+import UpgradeBlur from '../../../shared/components/UpgradeBlur'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { getTaxLabel } from '../../../shared/utils/formatTax'
 import { useTaxCollected, useTaxPaid, useTaxLiability, useTaxByRate, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, InfoCard, DataTable } from '../components/shared'
+import { useFeatureAccess } from '../../../shared/hooks/useFeatureAccess'
 
 export default function TaxSection({ dateFrom, dateTo }) {
+  const { reason } = useFeatureAccess('financial_reports')
   const collected = useTaxCollected(dateFrom, dateTo)
   const paid = useTaxPaid(dateFrom, dateTo)
   const liability = useTaxLiability(dateFrom, dateTo)
@@ -21,6 +24,7 @@ export default function TaxSection({ dateFrom, dateTo }) {
     : undefined
 
   return (
+    <UpgradeBlur reason={reason}>
     <BentoCard>
       <SectionTitle title={`${taxLabel} Reports`} subtitle={`${taxLabel} collected, paid, and net liability`} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
@@ -38,5 +42,6 @@ export default function TaxSection({ dateFrom, dateTo }) {
         ]} data={Array.isArray(byRate.data) ? byRate.data : []} loading={byRate.isLoading} />
       </InfoCard>
     </BentoCard>
+    </UpgradeBlur>
   )
 }

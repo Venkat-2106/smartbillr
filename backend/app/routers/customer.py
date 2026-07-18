@@ -511,7 +511,8 @@ async def get_customer_summary_kpi(
     db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
-    can_financial = check_feature_access(current_user, "financial_reports")["allowed"]
+    fin_access = check_feature_access(current_user, "financial_reports")
+    can_financial = fin_access["allowed"]
 
     row = (await db.execute(text("""
         WITH customer_counts AS (
@@ -544,6 +545,7 @@ async def get_customer_summary_kpi(
         "total_count":        int(row.total_count),
         "new_this_month":     int(row.new_this_month),
         "outstanding_balance": str(row.outstanding_balance) if can_financial else None,
+        "financial_locked_reason": fin_access["locked_reason"],
     })
 
 

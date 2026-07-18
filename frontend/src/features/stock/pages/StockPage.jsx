@@ -34,10 +34,12 @@ import {
   TabBar,
   selectStyle,
   SkeletonTable,
+  LockedCell,
 } from '../../../shared/components'
 
 import { STOCK_CSV_COLUMNS, STOCK_CSV_COLUMNS_NO_PROFIT, STOCK_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport'
 import { usePermissions }  from '../../../shared/hooks/usePermissions'
+import { useFeatureAccess } from '../../../shared/hooks/useFeatureAccess'
 import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
 import { formatDate }      from '../../../shared/utils/formatDate'
 import { formatCurrency }  from '../../../shared/utils/formatCurrency'
@@ -201,7 +203,7 @@ function AlertBadge({ stockQty }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // TAB 1 — Current Stock
 // ═══════════════════════════════════════════════════════════════════════════════
-function CurrentStockTab({ canViewProfit, canAdjust }) {
+function CurrentStockTab({ canViewProfit, isTierLocked, canAdjust }) {
   const categories  = useCategoryOptions()
   const business    = useAuthStore(s => s.business)
   const countryCode = business?.business_country_code
@@ -327,7 +329,9 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
             render: (row) => (
               row.prod_cost_price != null
                 ? <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{formatCurrency(row.prod_cost_price, countryCode)}</span>
-                : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
+                : isTierLocked
+                  ? <LockedCell message="Upgrade to view" />
+                  : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
             ),
           },
           {
@@ -1016,6 +1020,8 @@ function LowStockAlertsTab({ active }) {
 export default function StockPage() {
   const { can }        = usePermissions()
   const canViewProfit  = can('view_product_profit')
+  const { reason: tierReason } = useFeatureAccess('product_profit_view')
+  const isTierLocked   = tierReason != null
   const canAdjust      = can('stock.adjust')
 
   const [activeTab, setActiveTab] = useState('current')
@@ -1034,7 +1040,7 @@ export default function StockPage() {
       <TabBar tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'current' && (
-        <CurrentStockTab canViewProfit={canViewProfit} canAdjust={canAdjust} />
+        <CurrentStockTab canViewProfit={canViewProfit} isTierLocked={isTierLocked} canAdjust={canAdjust} />
       )}
 
       {activeTab === 'movements' && (

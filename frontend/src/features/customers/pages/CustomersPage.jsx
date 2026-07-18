@@ -445,7 +445,8 @@ export default function CustomersPage() {
           loading={isLoading}
           icon={DollarSignIcon}
           label="Outstanding Balance"
-          value={customerSummary?.outstanding_balance != null ? formatCurrency(customerSummary.outstanding_balance, country) : '\u2014'}
+          value={customerSummary?.outstanding_balance != null ? formatCurrency(customerSummary.outstanding_balance, country) : null}
+          locked={!!customerSummary?.financial_locked_reason}
         />
         <MetricCard
           colSpan={3}

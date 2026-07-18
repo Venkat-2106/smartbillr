@@ -29,6 +29,7 @@ export { default as DonutChart }     from './DonutChart';
 
 export { default as BentoCard }      from './BentoCard';
 export { default as MetricCard }     from './MetricCard';
+export { default as LockedCell }     from './LockedCell';
 export { default as AnalyticsCard }  from './AnalyticsCard';
 export { default as TabBar }         from './TabBar';
 export { SkeletonCard, SkeletonTable as SkeletonTableRows, SkeletonChart } from './PremiumSkeleton';

@@ -256,7 +256,8 @@ export default function PaymentsPage() {
             </svg>
           }
           label="Total Payments Collected"
-          value={paymentSummary?.total_collected != null ? formatCurrency(paymentSummary.total_collected, country) : '\u2014'}
+          value={paymentSummary?.total_collected != null ? formatCurrency(paymentSummary.total_collected, country) : null}
+          locked={!!paymentSummary?.financial_locked_reason}
           loading={isLoading || summaryLoading}
         />
         <MetricCard

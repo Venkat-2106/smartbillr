@@ -386,12 +386,12 @@ export default function DashboardPage() {
   const metricCards = useMemo(() => [
     (data?.total_revenue != null || financialLockedReason) ? {
       label: 'Revenue',
-      value: data?.total_revenue != null ? formatCurrency(data.total_revenue, country) : '—',
+      value: data?.total_revenue != null ? formatCurrency(data.total_revenue, country) : null,
       icon: <SvgIcon path={ICONS.revenue} size={18} />,
       onClick: () => navigate('/reports'),
       growth: data?.revenue_growth,
       subtitle: financialLockedReason ? 'Upgrade to view' : 'Gross from all invoices',
-      lockedReason: financialLockedReason && data?.total_revenue == null ? financialLockedReason : null,
+      locked: !!financialLockedReason && data?.total_revenue == null,
     } : null,
     {
       label: 'Invoices',
@@ -416,11 +416,11 @@ export default function DashboardPage() {
     },
     (data?.total_expenses != null || financialLockedReason) ? {
       label: 'Expenses',
-      value: data?.total_expenses != null ? formatCurrency(data.total_expenses, country) : '—',
+      value: data?.total_expenses != null ? formatCurrency(data.total_expenses, country) : null,
       icon: <SvgIcon path={ICONS.expenses} size={18} />,
       onClick: () => navigate('/expenses'),
       subtitle: financialLockedReason ? 'Upgrade to view' : 'All recorded expenses',
-      lockedReason: financialLockedReason && data?.total_expenses == null ? financialLockedReason : null,
+      locked: !!financialLockedReason && data?.total_expenses == null,
     } : null,
     {
       label: 'Pending Payments',
@@ -468,10 +468,7 @@ export default function DashboardPage() {
           if (!card) {
             return <MetricCard key={i} label="" value="" icon={<SvgIcon path={ICONS.invoices} />} colSpan={3} loading />
           }
-          const el = <MetricCard key={card.label} {...card} colSpan={3} loading={false} style={{ cursor: card.onClick ? 'pointer' : 'default' }} />
-          return card.lockedReason
-            ? <UpgradeBlur key={card.label} reason={card.lockedReason} compact>{el}</UpgradeBlur>
-            : el
+          return <MetricCard key={card.label} {...card} colSpan={3} loading={false} />
         })}
       </div>
 

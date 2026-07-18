@@ -361,7 +361,8 @@ async def get_payment_summary_kpi(
     db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
-    can_financial = check_feature_access(current_user, "financial_reports")["allowed"]
+    fin_access = check_feature_access(current_user, "financial_reports")
+    can_financial = fin_access["allowed"]
 
     row = (await db.execute(text("""
         SELECT
@@ -375,6 +376,7 @@ async def get_payment_summary_kpi(
     return success_response({
         "total_collected": float(row.total_collected) if can_financial else None,
         "pending_count":   int(row.pending_count),
+        "financial_locked_reason": fin_access["locked_reason"],
     })
 
 

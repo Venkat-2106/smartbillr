@@ -556,7 +556,8 @@ async def get_sales_summary(
     db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
-    can_financial = check_feature_access(current_user, "financial_reports")["allowed"]
+    fin_access = check_feature_access(current_user, "financial_reports")
+    can_financial = fin_access["allowed"]
 
     row = (await db.execute(text("""
         SELECT
@@ -578,6 +579,7 @@ async def get_sales_summary(
         "weekly_revenue": str(row.weekly_revenue) if can_financial else None,
         "monthly_revenue": str(row.monthly_revenue) if can_financial else None,
         "outstanding_receivables": str(row.outstanding_receivables) if can_financial else None,
+        "financial_locked_reason": fin_access["locked_reason"],
     })
 
 

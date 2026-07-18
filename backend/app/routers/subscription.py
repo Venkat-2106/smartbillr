@@ -37,11 +37,11 @@ def _parse_dt(val):
     if val is None:
         return None
     if isinstance(val, datetime):
-        return val
+        return val.replace(tzinfo=None)
     if isinstance(val, str):
         for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"):
             try:
-                return datetime.strptime(val, fmt).replace(tzinfo=timezone.utc)
+                return datetime.strptime(val, fmt)
             except ValueError:
                 continue
     return val

@@ -26,6 +26,7 @@ import {
   BentoCard,
   TabBar,
   selectStyle,
+  SkeletonTable,
 } from '../../../shared/components'
 
 import { STOCK_CSV_COLUMNS, STOCK_CSV_COLUMNS_NO_PROFIT, STOCK_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport'
@@ -515,7 +516,11 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
         </div>
       )}
 
-      {!isLoading && stock.length === 0 ? (
+      {isLoading ? (
+        <BentoCard padding={false}>
+          <SkeletonTable rows={8} columns={8} />
+        </BentoCard>
+      ) : stock.length === 0 ? (
         <BentoCard>
           <EmptyState
             context="stock"
@@ -739,7 +744,11 @@ function StockMovementsTab({ active }) {
         </div>
       )}
 
-      {!isLoading && movements.length === 0 ? (
+      {isLoading ? (
+        <BentoCard padding={false}>
+          <SkeletonTable rows={8} columns={7} />
+        </BentoCard>
+      ) : movements.length === 0 ? (
         <BentoCard>
           <EmptyState
             context="sale"
@@ -942,7 +951,11 @@ function LowStockAlertsTab({ active }) {
         </div>
       )}
 
-      {!isLoading && alerts.length === 0 ? (
+      {isLoading ? (
+        <BentoCard padding={false}>
+          <SkeletonTable rows={8} columns={7} />
+        </BentoCard>
+      ) : alerts.length === 0 ? (
         <BentoCard>
           <EmptyState
             icon={CheckCircleIcon}

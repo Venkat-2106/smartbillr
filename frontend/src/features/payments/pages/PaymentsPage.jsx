@@ -24,7 +24,7 @@ import PaymentHistoryDrawer, { DrawerOverlay }
 import {
   Button, Table, Badge, SearchBar,
   Pagination, DateRangeFilter, ExportButton,
-  EmptyState, MetricCard, BentoCard, PageHeader,
+  EmptyState, MetricCard, BentoCard, PageHeader, SkeletonTable,
 } from '../../../shared/components'
 import { selectStyle }           from '../../../shared/components/FormField'
 import { formatCurrency }        from '../../../shared/utils/formatCurrency'
@@ -338,7 +338,11 @@ export default function PaymentsPage() {
       )}
 
       {/* TABLE — click row to open history drawer */}
-      {!isLoading && payments.length === 0 ? (
+      {isLoading ? (
+        <BentoCard padding={false}>
+          <SkeletonTable rows={8} columns={10} />
+        </BentoCard>
+      ) : payments.length === 0 ? (
         <BentoCard>
           <EmptyState
             context="payment"

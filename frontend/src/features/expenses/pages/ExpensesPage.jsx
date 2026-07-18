@@ -9,7 +9,7 @@ import {
   Button, Input, Modal, Table, SearchBar,
   Pagination, ConfirmDialog,
   FormField, ExportButton, DateRangeFilter,
-  EmptyState, BentoCard, MetricCard, PageHeader,
+  EmptyState, BentoCard, MetricCard, PageHeader, SkeletonTable,
 } from '../../../shared/components'
 import { selectStyle } from '../../../shared/components/FormField'
 import { EXPENSE_CSV_COLUMNS } from '../../../shared/utils/csvExport'
@@ -393,7 +393,11 @@ export default function ExpensesPage() {
       )}
 
       {/* TABLE */}
-      {!isLoading && expenses.length === 0 ? (
+      {isLoading ? (
+        <BentoCard padding={false}>
+          <SkeletonTable rows={8} columns={7} />
+        </BentoCard>
+      ) : expenses.length === 0 ? (
         <BentoCard>
           <EmptyState
             context="expense"

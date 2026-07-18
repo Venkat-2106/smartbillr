@@ -57,6 +57,7 @@ import {
   MetricCard,
   BentoCard,
   PageHeader,
+  SkeletonTable,
 } from '../../../shared/components'
 
 import { PRODUCT_CSV_COLUMNS, PRODUCT_CSV_COLUMNS_NO_PROFIT, PRODUCT_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport'
@@ -914,7 +915,11 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {!isLoading && products.length === 0 ? (
+      {isLoading ? (
+        <BentoCard padding={false}>
+          <SkeletonTable rows={8} columns={8} />
+        </BentoCard>
+      ) : products.length === 0 ? (
         <BentoCard>
           <EmptyState
             context="product"

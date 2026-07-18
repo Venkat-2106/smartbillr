@@ -9,7 +9,7 @@ import PurchaseDetailDrawer, { DrawerOverlay }
 import {
   Table, Badge, SearchBar, Button,
   Pagination, DateRangeFilter, ExportButton, ImportButton,
-  EmptyState, BentoCard, MetricCard,
+  EmptyState, BentoCard, MetricCard, SkeletonTable,
   ConfirmDialog, UpgradePrompt, PageHeader,
 } from '../../../shared/components'
 import { selectStyle } from '../../../shared/components/FormField'
@@ -357,7 +357,11 @@ export default function PurchasesPage() {
       )}
 
       {/* TABLE */}
-      {!isLoading && purchases.length === 0 ? (
+      {isLoading ? (
+        <BentoCard padding={false}>
+          <SkeletonTable rows={8} columns={8} />
+        </BentoCard>
+      ) : purchases.length === 0 ? (
         <BentoCard>
           <EmptyState
             context="purchase"

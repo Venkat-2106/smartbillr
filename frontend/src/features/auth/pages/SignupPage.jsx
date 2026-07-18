@@ -1,5 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import AuthLayout from '../../../app/layouts/AuthLayout'
 import { registerBusiness } from '../../subscription/api/subscriptionApi'
 import toast from 'react-hot-toast'
@@ -78,49 +81,58 @@ const STATES_BY_COUNTRY = {
   ],
 }
 
+const signupSchema = z.object({
+  business_name:          z.string().min(1, 'Business name is required'),
+  owner_name:             z.string().min(1, 'Your name is required'),
+  owner_email:            z.string().min(1, 'Email is required').email('Enter a valid email'),
+  owner_password:         z.string().min(1, 'Password is required').min(8, 'Minimum 8 characters'),
+  business_phone:         z.string().optional().or(z.literal('')),
+  business_country_code:  z.string().min(1, 'Country is required'),
+  business_state:         z.string().min(1, 'State is required'),
+  business_address:       z.string().optional().or(z.literal('')),
+})
+
 export default function SignupPage() {
   const navigate = useNavigate()
-  const [form, setForm] = useState({
-    business_name: '',
-    owner_name: '',
-    owner_email: '',
-    owner_password: '',
-    business_phone: '',
-    business_address: '',
-    business_country_code: '',
-    business_state: '',
-  })
-  const [errors, setErrors] = useState({})
   const [isLoading, setIsLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [serverError, setServerError] = useState('')
 
-  const states = STATES_BY_COUNTRY[form.business_country_code] || []
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    setError,
+    formState: { errors },
+  } = useForm({
+    resolver: zodResolver(signupSchema),
+    defaultValues: {
+      business_name: '',
+      owner_name: '',
+      owner_email: '',
+      owner_password: '',
+      business_phone: '',
+      business_country_code: '',
+      business_state: '',
+      business_address: '',
+    },
+  })
 
-  function validate() {
-    const errs = {}
-    if (!form.business_name) errs.business_name = 'Business name is required'
-    if (!form.owner_name) errs.owner_name = 'Your name is required'
-    if (!form.owner_email) errs.owner_email = 'Email is required'
-    else if (!/\S+@\S+\.\S+/.test(form.owner_email)) errs.owner_email = 'Enter a valid email'
-    if (!form.owner_password) errs.owner_password = 'Password is required'
-    else if (form.owner_password.length < 8) errs.owner_password = 'Minimum 8 characters'
-    if (!form.business_country_code) errs.business_country_code = 'Country is required'
-    if (!form.business_state) errs.business_state = 'State is required'
-    return errs
-  }
+  const countryCode = watch('business_country_code')
+  const states = STATES_BY_COUNTRY[countryCode] || []
 
-  async function handleSubmit(e) {
-    e.preventDefault()
+  useEffect(() => {
+    if (countryCode) setValue('business_state', '')
+  }, [countryCode, setValue])
+
+  async function onSubmit(data) {
     if (submitted) return
     setSubmitted(true)
     setServerError('')
-    const errs = validate()
-    if (Object.keys(errs).length > 0) { setErrors(errs); setSubmitted(false); return }
-    setErrors({})
     setIsLoading(true)
     try {
-      const payload = { ...form }
+      const payload = { ...data }
       if (!payload.business_phone) delete payload.business_phone
       if (!payload.business_address) payload.business_address = null
       const res = await registerBusiness(payload)
@@ -141,7 +153,8 @@ export default function SignupPage() {
         msg = err.message
       }
       if (msg.toLowerCase().includes('already registered')) {
-        setErrors(p => ({ ...p, owner_email: msg }))
+        setServerError('')
+        setError('owner_email', { type: 'server', message: msg })
       } else {
         setServerError(msg || 'Registration failed. Please try again.')
       }
@@ -149,15 +162,6 @@ export default function SignupPage() {
       setIsLoading(false)
       setSubmitted(false)
     }
-  }
-
-  function set(field, value) {
-    const next = { ...form, [field]: value }
-    if (field === 'business_country_code') {
-      next.business_state = ''
-    }
-    setForm(next)
-    setErrors(p => ({ ...p, [field]: '' }))
   }
 
   return (
@@ -180,62 +184,56 @@ export default function SignupPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit}>
-        <FormField label="Business name" error={errors.business_name} required style={{ marginBottom: 16 }}>
+      <form onSubmit={handleSubmit(onSubmit)}>
+        <FormField label="Business name" error={errors.business_name?.message} required style={{ marginBottom: 16 }}>
           <input
+            {...register('business_name')}
             className={`input ${errors.business_name ? 'error' : ''}`}
-            value={form.business_name}
-            onChange={e => set('business_name', e.target.value)}
             placeholder="Sri MahaLakshmi Stores"
           />
         </FormField>
 
-        <FormField label="Your name" error={errors.owner_name} required style={{ marginBottom: 16 }}>
+        <FormField label="Your name" error={errors.owner_name?.message} required style={{ marginBottom: 16 }}>
           <input
+            {...register('owner_name')}
             className={`input ${errors.owner_name ? 'error' : ''}`}
-            value={form.owner_name}
-            onChange={e => set('owner_name', e.target.value)}
             placeholder="John Doe"
           />
         </FormField>
 
-        <FormField label="Email address" error={errors.owner_email} required style={{ marginBottom: 16 }}>
+        <FormField label="Email address" error={errors.owner_email?.message} required style={{ marginBottom: 16 }}>
           <input
+            {...register('owner_email')}
             className={`input ${errors.owner_email ? 'error' : ''}`}
             type="email"
-            value={form.owner_email}
-            onChange={e => set('owner_email', e.target.value)}
             placeholder="you@company.com"
             autoComplete="email"
           />
         </FormField>
 
-        <FormField label="Password" error={errors.owner_password} required style={{ marginBottom: 16 }} helper="Min 8 characters, with uppercase, lowercase & a digit">
+        <FormField label="Password" error={errors.owner_password?.message} required style={{ marginBottom: 16 }} helper="Min 8 characters, with uppercase, lowercase & a digit">
           <input
+            {...register('owner_password')}
             className={`input ${errors.owner_password ? 'error' : ''}`}
             type="password"
-            value={form.owner_password}
-            onChange={e => set('owner_password', e.target.value)}
             placeholder="At least 8 characters"
             autoComplete="new-password"
           />
         </FormField>
 
-        <FormField label="Phone (optional)" error={errors.business_phone} style={{ marginBottom: 16 }}>
+        <FormField label="Phone (optional)" error={errors.business_phone?.message} style={{ marginBottom: 16 }}>
           <input
+            {...register('business_phone')}
             className="input"
-            value={form.business_phone}
-            onChange={e => set('business_phone', e.target.value)}
             placeholder="+1 234 567 8900"
           />
         </FormField>
 
-        <FormField label="Country" error={errors.business_country_code} required style={{ marginBottom: 16 }}>
+        <FormField label="Country" error={errors.business_country_code?.message} required style={{ marginBottom: 16 }}>
           <select
+            {...register('business_country_code')}
             className="sb-select"
             style={selectStyle}
-            value={form.business_country_code}
-            onChange={e => set('business_country_code', e.target.value)}
           >
             <option value="">Select country</option>
             {COUNTRIES.map(c => (
@@ -244,13 +242,12 @@ export default function SignupPage() {
           </select>
         </FormField>
 
-        <FormField label="State" error={errors.business_state} required style={{ marginBottom: 16 }}>
+        <FormField label="State" error={errors.business_state?.message} required style={{ marginBottom: 16 }}>
           <select
+            {...register('business_state')}
             className="sb-select"
             style={selectStyle}
-            value={form.business_state}
-            onChange={e => set('business_state', e.target.value)}
-            disabled={!form.business_country_code}
+            disabled={!countryCode}
           >
             <option value="">Select state</option>
             {states.map(s => (
@@ -259,11 +256,10 @@ export default function SignupPage() {
           </select>
         </FormField>
 
-        <FormField label="Address (optional)" error={errors.business_address} style={{ marginBottom: 20 }}>
+        <FormField label="Address (optional)" error={errors.business_address?.message} style={{ marginBottom: 20 }}>
           <input
+            {...register('business_address')}
             className="input"
-            value={form.business_address}
-            onChange={e => set('business_address', e.target.value)}
             placeholder="123 Main St, City"
           />
         </FormField>

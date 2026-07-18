@@ -191,7 +191,7 @@ export default function StaffPage() {
         />
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 16, marginBottom: 24 }}>
+      <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>
         <MetricCard
           colSpan={6}
           icon={

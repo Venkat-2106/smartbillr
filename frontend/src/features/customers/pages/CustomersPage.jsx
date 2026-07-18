@@ -414,12 +414,7 @@ export default function CustomersPage() {
       )}
 
       {/* METRIC CARDS */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(12, 1fr)',
-        gap: 16,
-        marginBottom: 24,
-      }}>
+      <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>
         <MetricCard
           colSpan={3}
           loading={isLoading}

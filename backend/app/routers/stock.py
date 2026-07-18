@@ -29,6 +29,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 import asyncio
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query, File, UploadFile
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -172,11 +173,11 @@ sort_dir:     Optional[str] = Query(default="desc"),
 
     if date_from and date_from.strip():
         extra_where += " AND sm.move_created_at >= :date_from"
-        params["date_from"] = date_from.strip()
+        params["date_from"] = datetime.fromisoformat(date_from.strip().replace("Z", "+00:00"))
 
     if date_to and date_to.strip():
         extra_where += " AND sm.move_created_at <= :date_to"
-        params["date_to"] = date_to.strip()
+        params["date_to"] = datetime.fromisoformat(date_to.strip().replace("Z", "+00:00"))
 
     # ── Split count + data queries (run concurrently) ────────────────────────
     # Count needs the products LEFT JOIN only for the ILIKE search filter

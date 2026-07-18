@@ -769,7 +769,7 @@ export default function ProductsPage() {
   const outOfStockCount  = productSummary?.out_of_stock_count ?? 0
   const stockValue = canViewProfit && productSummary?.stock_value != null
     ? formatCurrency(productSummary.stock_value, countryCode)
-    : '—'
+    : null
 
   return (
     <>
@@ -830,6 +830,7 @@ export default function ProductsPage() {
           icon={TrendingUpIcon}
           label="Stock Value"
           value={stockValue}
+          locked={isTierLocked}
         />
         <MetricCard
           colSpan={3}

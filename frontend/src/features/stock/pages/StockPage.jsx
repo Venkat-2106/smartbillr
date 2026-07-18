@@ -209,13 +209,6 @@ function CurrentStockTab({ canViewProfit, isTierLocked, canAdjust }) {
   const countryCode = business?.business_country_code
   const [adjustTarget, setAdjustTarget] = useState(null)
 
-  const { selectedIndex, setSelectedIndex } = useTableKeyboardNav({
-    rows: stock,
-    rowKey: 'prod_id',
-    onEnterRow: canAdjust ? (row) => setAdjustTarget(row) : undefined,
-    onEditRow: canAdjust ? (row) => setAdjustTarget(row) : undefined,
-  })
-
   const {
     stock, pagination, totalItems, isLoading, isError,
     search, setSearch,
@@ -226,6 +219,13 @@ function CurrentStockTab({ canViewProfit, isTierLocked, canAdjust }) {
     page, setPage,
     handleExport,
   } = useStock()
+
+  const { selectedIndex, setSelectedIndex } = useTableKeyboardNav({
+    rows: stock,
+    rowKey: 'prod_id',
+    onEnterRow: canAdjust ? (row) => setAdjustTarget(row) : undefined,
+    onEditRow: canAdjust ? (row) => setAdjustTarget(row) : undefined,
+  })
 
   const [bannerDismissed, setBannerDismissed] = useState(false)
   useEffect(() => { setBannerDismissed(false) }, [isError])
@@ -342,7 +342,9 @@ function CurrentStockTab({ canViewProfit, isTierLocked, canAdjust }) {
             render: (row) => (
               row.stock_value != null
                 ? <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{formatCurrency(row.stock_value, countryCode)}</span>
-                : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
+                : isTierLocked
+                  ? <LockedCell message="Upgrade to view" />
+                  : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
             ),
           },
         ]
@@ -425,7 +427,8 @@ function CurrentStockTab({ canViewProfit, isTierLocked, canAdjust }) {
           loading={isLoading}
           icon={DollarIcon}
           label="Stock Value"
-          value={stockValue != null ? formatCurrency(stockValue, countryCode) : '\u2014'}
+          value={stockValue != null ? formatCurrency(stockValue, countryCode) : null}
+          locked={canViewProfit && isTierLocked}
         />
         <MetricCard
           colSpan={3}

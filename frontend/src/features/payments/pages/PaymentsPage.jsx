@@ -14,7 +14,7 @@
 //   - Permissions gated by payments.manage (read + write same permission)
 //   - ExportButton uses onFetch (lazy — only runs when clicked)
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery }         from '@tanstack/react-query'
 import { usePayments }       from '../hooks/usePayments'
 import { fetchPaymentSummary } from '../api/paymentsApi'
@@ -191,6 +191,9 @@ export default function PaymentsPage() {
     isRecording,
   } = usePayments()
 
+  const [bannerDismissed, setBannerDismissed] = useState(false)
+  useEffect(() => { setBannerDismissed(false) }, [isError])
+
   const { data: paymentSummary, isLoading: summaryLoading } = useQuery({
     queryKey: ['payment-summary'],
     queryFn: fetchPaymentSummary,
@@ -317,8 +320,8 @@ export default function PaymentsPage() {
       </div>
 
       {/* ERROR BANNER */}
-      {isError && (
-        <div style={{
+      {isError && !bannerDismissed && (
+        <div role="alert" style={{
           background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
           borderRadius: 12, padding: '12px 16px', color: 'var(--danger-text)',
           fontSize: 13, marginBottom: 24, fontWeight: 500,
@@ -330,6 +333,9 @@ export default function PaymentsPage() {
             <line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
           Could not load payments. Check that the backend is running and refresh.
+          <button type="button" onClick={() => setBannerDismissed(true)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--danger-text)', cursor: 'pointer', padding: 2, lineHeight: 1, flexShrink: 0 }} aria-label="Dismiss error">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
         </div>
       )}
 

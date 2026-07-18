@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { usePurchases } from '../hooks/usePurchases'
@@ -143,6 +143,9 @@ export default function PurchasesPage() {
     deletePurchase,
     isDeleting,
   } = usePurchases()
+
+  const [bannerDismissed, setBannerDismissed] = useState(false)
+  useEffect(() => { setBannerDismissed(false) }, [isError])
 
   const [showUpgradeBanner, setShowUpgradeBanner] = useState(true)
   const [selectedPurId, setSelectedPurId] = useState(null)
@@ -341,8 +344,8 @@ export default function PurchasesPage() {
       </div>
 
       {/* ERROR BANNER */}
-      {isError && (
-        <div style={{
+      {isError && !bannerDismissed && (
+        <div role="alert" style={{
           display: 'flex', alignItems: 'center', gap: 10,
           background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
           borderRadius: 12, padding: '12px 16px', color: 'var(--danger-text)',
@@ -354,6 +357,9 @@ export default function PurchasesPage() {
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
           Could not load purchases. Check that the backend is running and refresh.
+          <button type="button" onClick={() => setBannerDismissed(true)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--danger-text)', cursor: 'pointer', padding: 2, lineHeight: 1, flexShrink: 0 }} aria-label="Dismiss error">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
         </div>
       )}
 

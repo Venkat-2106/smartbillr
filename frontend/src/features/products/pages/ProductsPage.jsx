@@ -39,7 +39,7 @@
 //   ✅ Profit permission gate (canViewProfit) for cost/profit columns + form
 //   ✅ Zod .trim() on prod_name (trimmed before schema min/max check)
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
@@ -278,6 +278,9 @@ export default function ProductsPage() {
     isLoading,
     isError,
   } = useProducts()
+
+  const [bannerDismissed, setBannerDismissed] = useState(false)
+  useEffect(() => { setBannerDismissed(false) }, [isError])
 
   // LOCAL sort + date state REMOVED:
   //   Previously sortKey/sortDir/dateFrom/dateTo were local useState in this
@@ -898,8 +901,8 @@ export default function ProductsPage() {
         <DateRangeFilter from={dateFrom} to={dateTo} onChange={handleDateChange} />
       </div>
 
-      {isError && (
-        <div style={{
+      {isError && !bannerDismissed && (
+        <div role="alert" style={{
           background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
           borderRadius: 12, padding: '12px 16px', color: 'var(--danger-text)',
           fontSize: 13, marginBottom: 24, fontWeight: 500,
@@ -907,6 +910,9 @@ export default function ProductsPage() {
         }}>
           {ErrorAlertIcon}
           Could not load products. Check that the backend is running and refresh.
+          <button type="button" onClick={() => setBannerDismissed(true)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--danger-text)', cursor: 'pointer', padding: 2, lineHeight: 1, flexShrink: 0 }} aria-label="Dismiss error">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
         </div>
       )}
 

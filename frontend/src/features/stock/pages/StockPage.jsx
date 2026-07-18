@@ -9,7 +9,7 @@
 //
 // Adjust Stock modal: POST /stock/adjust (gated by stock.adjust permission).
 
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import {
@@ -217,6 +217,9 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
     page, setPage,
     handleExport,
   } = useStock()
+
+  const [bannerDismissed, setBannerDismissed] = useState(false)
+  useEffect(() => { setBannerDismissed(false) }, [isError])
 
   const csvColumns    = canViewProfit ? STOCK_CSV_COLUMNS : STOCK_CSV_COLUMNS_NO_PROFIT
   const activeFilters = Boolean(search.trim() || categoryId || status || isActive)
@@ -502,8 +505,8 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
         </div>
       </div>
 
-      {isError && (
-        <div style={{
+      {isError && !bannerDismissed && (
+        <div role="alert" style={{
           background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
           borderRadius: 12, padding: '12px 16px', color: 'var(--danger-text)',
           fontSize: 13, marginBottom: 24, fontWeight: 500,
@@ -511,6 +514,9 @@ function CurrentStockTab({ canViewProfit, canAdjust }) {
         }}>
           {WarningTriangleSm}
           Could not load stock data. Check that the backend is running and refresh.
+          <button type="button" onClick={() => setBannerDismissed(true)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--danger-text)', cursor: 'pointer', padding: 2, lineHeight: 1, flexShrink: 0 }} aria-label="Dismiss error">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
         </div>
       )}
 
@@ -578,6 +584,9 @@ function StockMovementsTab({ active }) {
     page, setPage,
     handleExport,
   } = useStockMovements({ active })
+
+  const [bannerDismissed, setBannerDismissed] = useState(false)
+  useEffect(() => { setBannerDismissed(false) }, [isError])
 
   const activeFilters = Boolean(search.trim() || moveType || dateFrom || dateTo)
 
@@ -731,8 +740,8 @@ function StockMovementsTab({ active }) {
         </div>
       </div>
 
-      {isError && (
-        <div style={{
+      {isError && !bannerDismissed && (
+        <div role="alert" style={{
           background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
           borderRadius: 12, padding: '12px 16px', color: 'var(--danger-text)',
           fontSize: 13, marginBottom: 24, fontWeight: 500,
@@ -740,6 +749,9 @@ function StockMovementsTab({ active }) {
         }}>
           {WarningTriangleSm}
           Could not load stock movements. Check that the backend is running and refresh.
+          <button type="button" onClick={() => setBannerDismissed(true)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--danger-text)', cursor: 'pointer', padding: 2, lineHeight: 1, flexShrink: 0 }} aria-label="Dismiss error">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
         </div>
       )}
 
@@ -791,6 +803,10 @@ function LowStockAlertsTab({ active }) {
     page, setPage,
     refetch,
   } = useStockAlerts({ active })
+
+  const [bannerDismissed, setBannerDismissed] = useState(false)
+  useEffect(() => { setBannerDismissed(false) }, [isError])
+
   const { markRead, isMarkingRead } = useStockAlertRead()
 
   const handleAlertClick = useCallback((row) => {
@@ -938,8 +954,8 @@ function LowStockAlertsTab({ active }) {
         Use <strong>Adjust Stock</strong> on the <strong>Current Stock</strong> tab to restock.
       </div>
 
-      {isError && (
-        <div style={{
+      {isError && !bannerDismissed && (
+        <div role="alert" style={{
           background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
           borderRadius: 12, padding: '12px 16px', color: 'var(--danger-text)',
           fontSize: 13, marginBottom: 24, fontWeight: 500,
@@ -947,6 +963,9 @@ function LowStockAlertsTab({ active }) {
         }}>
           {WarningTriangleSm}
           Could not load stock alerts. Check that the backend is running and refresh.
+          <button type="button" onClick={() => setBannerDismissed(true)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--danger-text)', cursor: 'pointer', padding: 2, lineHeight: 1, flexShrink: 0 }} aria-label="Dismiss error">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
         </div>
       )}
 

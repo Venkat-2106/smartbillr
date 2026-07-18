@@ -1,4 +1,4 @@
-﻿import { useState, useMemo } from 'react'
+﻿import { useState, useMemo, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from 'react-router-dom'
@@ -122,6 +122,9 @@ export default function StaffPage() {
     canAddManager,
     canAddAnyRole,
   } = useStaff()
+
+  const [bannerDismissed, setBannerDismissed] = useState(false)
+  useEffect(() => { setBannerDismissed(false) }, [isError])
 
   const [showAdd, setShowAdd] = useState(false)
   const [editingStaff, setEditingStaff] = useState(null)
@@ -274,13 +277,17 @@ export default function StaffPage() {
         </div>
       </div>
 
-      {isError && (
-        <div style={{
+      {isError && !bannerDismissed && (
+        <div role="alert" style={{
           background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
           borderRadius: 12, padding: '12px 16px', color: 'var(--danger-text)',
           fontSize: 13, marginBottom: 24, fontWeight: 500,
+          display: 'flex', alignItems: 'center', gap: 8,
         }}>
           Could not load staff. Check that the backend is running and refresh.
+          <button type="button" onClick={() => setBannerDismissed(true)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--danger-text)', cursor: 'pointer', padding: 2, lineHeight: 1, flexShrink: 0 }} aria-label="Dismiss error">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
         </div>
       )}
 

@@ -7,79 +7,8 @@ import AuthLayout from '../../../app/layouts/AuthLayout'
 import { registerBusiness } from '../../subscription/api/subscriptionApi'
 import toast from 'react-hot-toast'
 import FormField, { selectStyle } from '../../../shared/components/FormField'
-
-const COUNTRIES = [
-  { code: 'IN', name: 'India' },
-  { code: 'US', name: 'United States' },
-  { code: 'GB', name: 'United Kingdom' },
-  { code: 'CA', name: 'Canada' },
-  { code: 'AU', name: 'Australia' },
-  { code: 'AE', name: 'UAE' },
-  { code: 'SG', name: 'Singapore' },
-  { code: 'MY', name: 'Malaysia' },
-  { code: 'NZ', name: 'New Zealand' },
-  { code: 'ZA', name: 'South Africa' },
-]
-
-const STATES_BY_COUNTRY = {
-  IN: [
-    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
-    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
-    'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
-    'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
-    'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
-    'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-    'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu',
-    'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
-  ],
-  US: [
-    'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California',
-    'Colorado', 'Connecticut', 'Delaware', 'Florida', 'Georgia',
-    'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa',
-    'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland',
-    'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi', 'Missouri',
-    'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey',
-    'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio',
-    'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina',
-    'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont',
-    'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming',
-  ],
-  GB: [
-    'England', 'Scotland', 'Wales', 'Northern Ireland',
-  ],
-  CA: [
-    'Alberta', 'British Columbia', 'Manitoba', 'New Brunswick',
-    'Newfoundland and Labrador', 'Nova Scotia', 'Ontario', 'Prince Edward Island',
-    'Quebec', 'Saskatchewan', 'Northwest Territories', 'Nunavut', 'Yukon',
-  ],
-  AU: [
-    'New South Wales', 'Queensland', 'South Australia', 'Tasmania',
-    'Victoria', 'Western Australia', 'Australian Capital Territory', 'Northern Territory',
-  ],
-  AE: [
-    'Abu Dhabi', 'Ajman', 'Dubai', 'Fujairah',
-    'Ras Al Khaimah', 'Sharjah', 'Umm Al Quwain',
-  ],
-  SG: [
-    'Central Singapore', 'North East', 'North West', 'South East', 'South West',
-  ],
-  MY: [
-    'Johor', 'Kedah', 'Kelantan', 'Kuala Lumpur', 'Labuan',
-    'Melaka', 'Negeri Sembilan', 'Pahang', 'Perak', 'Perlis',
-    'Pulau Pinang', 'Putrajaya', 'Sabah', 'Sarawak', 'Selangor', 'Terengganu',
-  ],
-  NZ: [
-    'Auckland', 'Bay of Plenty', 'Canterbury', 'Gisborne',
-    "Hawke's Bay", 'Manawatu-Whanganui', 'Marlborough', 'Nelson',
-    'Northland', 'Otago', 'Southland', 'Taranaki',
-    'Tasman', 'Waikato', 'Wellington', 'West Coast',
-    'Chatham Islands',
-  ],
-  ZA: [
-    'Eastern Cape', 'Free State', 'Gauteng', 'KwaZulu-Natal',
-    'Limpopo', 'Mpumalanga', 'North West', 'Northern Cape', 'Western Cape',
-  ],
-}
+import StateDropdown from '../../../shared/components/StateDropdown'
+import { COUNTRIES } from '../../../shared/data/countries'
 
 const signupSchema = z.object({
   business_name:          z.string().min(1, 'Business name is required'),
@@ -120,7 +49,6 @@ export default function SignupPage() {
   })
 
   const countryCode = watch('business_country_code')
-  const states = STATES_BY_COUNTRY[countryCode] || []
 
   useEffect(() => {
     if (countryCode) setValue('business_state', '')
@@ -236,25 +164,21 @@ export default function SignupPage() {
             style={selectStyle}
           >
             <option value="">Select country</option>
-            {COUNTRIES.map(c => (
-              <option key={c.code} value={c.code}>{c.name}</option>
+            {COUNTRIES.filter(c => c.value).map(c => (
+              <option key={c.value} value={c.value}>{c.label}</option>
             ))}
           </select>
         </FormField>
 
-        <FormField label="State" error={errors.business_state?.message} required style={{ marginBottom: 16 }}>
-          <select
-            {...register('business_state')}
-            className="sb-select"
-            style={selectStyle}
-            disabled={!countryCode}
-          >
-            <option value="">Select state</option>
-            {states.map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </FormField>
+        <div style={{ marginBottom: 16 }}>
+          <StateDropdown
+            countryCode={countryCode}
+            value={watch('business_state')}
+            onChange={(val) => setValue('business_state', val)}
+            error={errors.business_state?.message}
+            required
+          />
+        </div>
 
         <FormField label="Address (optional)" error={errors.business_address?.message} style={{ marginBottom: 20 }}>
           <input

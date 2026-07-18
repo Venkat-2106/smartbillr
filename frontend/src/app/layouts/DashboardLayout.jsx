@@ -719,6 +719,8 @@ export default function DashboardLayout() {
 
   return (
     <div style={rootContainerStyle}>
+      <a href="#main-content" className="skip-link">Skip to main content</a>
+
       <style>{`
         .sb-icon-btn { transition: background-color .13s, color .13s; }
         .sb-icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
@@ -944,11 +946,12 @@ export default function DashboardLayout() {
 
         {showBanner && <SubscriptionBanner />}
 
-        <main style={{
+        <main id="main-content" tabIndex="-1" style={{
           flex: 1,
           padding: isMobile ? '1.25rem 1rem' : '1.5rem 2rem',
           paddingBottom: isMobile ? 'calc(1.25rem + 3.5rem)' : '1.5rem',
           overflowY: 'auto', overflowX: 'hidden',
+          outline: 'none',
         }}>
           <div className="fade-up"><ErrorBoundary><Suspense fallback={
             <div style={loadingFallbackStyle}>

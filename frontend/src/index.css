@@ -538,6 +538,23 @@ body {
   outline: 2px solid var(--accent-500);
   outline-offset: 2px;
 }
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  z-index: 9999;
+  padding: 8px 16px;
+  background: var(--accent-600);
+  color: #fff;
+  border-radius: var(--r-md);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.skip-link:focus {
+  left: 16px;
+  top: 16px;
+}
 .sr-only {
   position: absolute;
   width: 1px; height: 1px;

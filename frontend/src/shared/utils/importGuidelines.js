@@ -65,7 +65,7 @@ export const CUSTOMER_GUIDELINES = {
     'Customer Name is required and cannot be empty.',
     'If a Phone number matches an existing customer, the record is updated (not duplicated).',
     'Email must contain "@" if provided.',
-    'Duplicate Phone numbers within the same import file may cause errors.',
+    'If the same Phone number appears more than once in your file, only the first row is imported — later duplicates are reported as errors and skipped.',
   ],
   tips: [
     'Leave optional fields empty — they will not overwrite existing values on upsert.',
@@ -93,6 +93,7 @@ export const SUPPLIER_GUIDELINES = {
     'If a Phone number matches an existing supplier, the record is updated (not duplicated).',
     'Phone field must not contain "@" — use the Email column for email addresses.',
     'Email must contain "@" if provided.',
+    'If the same Phone number appears more than once in your file, only the first row is imported — later duplicates are reported as errors and skipped.',
   ],
   tips: [
     'Create Suppliers before importing Purchases — each Purchase row references a Supplier by phone or name.',
@@ -129,6 +130,8 @@ export const PRODUCT_GUIDELINES = {
     'Barcode must be unique if provided.',
     'Unit must be one of the supported units listed above.',
     'Duplicate product names (case-insensitive) update the existing product.',
+    'If the same Product Name appears more than once in your file, only the first row is imported — later duplicates are reported as errors and skipped.',
+    'If the same Barcode appears more than once in your file, only the first row is imported — later duplicates are reported as errors and skipped.',
   ],
   tips: [
     'Create Categories before importing Products — each row references a category by its exact name.',

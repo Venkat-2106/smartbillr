@@ -251,10 +251,20 @@ async def import_suppliers(
     # Updated fields: name, email, address, state, country_code, tax_number.
     new_rows = []
     update_rows = []
+    # Track phones seen in this import file to catch in-file duplicates.
+    # If two rows share the same phone, only the first is used — the later
+    # duplicate is skipped with a clear error message.
+    seen_in_file = {}
 
     for row in valid_rows:
         row_num = row.pop("_row_number")
         phone = row.get("supp_phone")
+
+        # ── In-file duplicate check ───────────────────────────────────────────
+        # Two rows in the same CSV sharing a phone → skip the later one.
+        if phone and phone in seen_in_file:
+            errors.append({"row": row_num, "message": f'Duplicate phone "{phone}" also appears on row {seen_in_file[phone]} — only the first occurrence will be imported.'})
+            continue
 
         if phone and phone in existing_phones:
             update_rows.append({"sid": existing_phones[phone], "uid": user_id, **row})
@@ -263,6 +273,7 @@ async def import_suppliers(
             new_rows.append({"sid": new_supp_id, "bid": business_id, "uid": user_id, **row})
             if phone:
                 existing_phones[phone] = new_supp_id
+                seen_in_file[phone] = row_num
 
     created = 0
     updated = 0

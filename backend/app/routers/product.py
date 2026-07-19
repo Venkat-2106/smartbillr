@@ -557,6 +557,10 @@ async def import_products(
     # Track barcodes seen in this import batch to catch in-file duplicates
     # before they hit the DB (complements existing_barcodes from DB lookup).
     batch_barcodes = {}
+    # Track product names seen in this import file to catch in-file duplicates.
+    # If two rows share the same name, only the first is used — the later
+    # duplicate is skipped with a clear error message.
+    seen_in_file_names = {}
 
     for row in valid_rows:
         row_num = row.pop("_row_number")
@@ -577,12 +581,19 @@ async def import_products(
                 upsert_errors.append({"row": row_num, "message": f'Barcode "{barcode}" is duplicated in this import file.'})
                 continue
 
+        # ── In-file name duplicate check ──────────────────────────────────────
+        # Two rows in the same CSV sharing a product name → skip the later one.
+        if name_lower in seen_in_file_names:
+            upsert_errors.append({"row": row_num, "message": f'Duplicate product name "{name}" also appears on row {seen_in_file_names[name_lower]} — only the first occurrence will be imported.'})
+            continue
+
         if name_lower in existing_names:
             update_rows.append({"pid": existing_names[name_lower], "uid": user_id, "cat_id": category_id, **row})
         else:
             new_prod_id = str(uuid.uuid4())
             new_rows.append({"pid": new_prod_id, "bid": business_id, "uid": user_id, "cat_id": category_id, **row})
             existing_names[name_lower] = new_prod_id
+            seen_in_file_names[name_lower] = row_num
             if barcode:
                 existing_barcodes[barcode] = new_prod_id
                 batch_barcodes[barcode] = new_prod_id

@@ -170,6 +170,9 @@ async def import_categories(
             existing_names[r.lname] = str(r.category_id)
 
     # ── 5. Bulk insert — skip duplicates entirely, no update ───────────────────
+    # Batch approach: single multi-row INSERT replaces per-row loop (N db calls → 1).
+    # Duplicates (by lowercased category_name) are rejected with an error message
+    # that the frontend ImportButton.jsx already renders in its toast.
     new_rows = []
     duplicate_errors = []
 
@@ -188,6 +191,8 @@ async def import_categories(
     created = 0
 
     if new_rows:
+        # Build one INSERT with indexed params (:cid_0, :cid_1, …) so asyncpg
+        # sends a single prepared statement instead of N individual executions.
         placeholders = ", ".join([
             f"(:cid_{i}, CAST(:bid AS uuid), :name_{i}, CAST(:uid_{i} AS uuid), CAST(:uid_{i} AS uuid))"
             for i in range(len(new_rows))

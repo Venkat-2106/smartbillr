@@ -42,7 +42,7 @@ from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.subscription_features import check_feature_access
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
-from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from typing import Optional
 import uuid
@@ -229,55 +229,113 @@ async def import_customers(
             for r in existing_rows:
                 existing_phones[r.cust_phone] = str(r.cust_id)
 
-    # ── 5. Upsert in chunks ───────────────────────────────────────────────────
+    # ── 5. Batch upsert — single multi-row INSERT + UPDATE ─────────────────────
+    # Batch approach: replaces per-row db.execute() loop (N calls) with:
+    #   1. One multi-row INSERT for new rows
+    #   2. One CASE-WHEN UPDATE for existing rows
+    #   3. Single commit (down from N commits)
+    # Duplicate key = cust_phone. Rows with existing phone → update, else → insert.
+    # Updated fields: name, email, address, state, country_code, tax_number.
+    new_rows = []
+    update_rows = []
+
+    for row in valid_rows:
+        row_num = row.pop("_row_number")
+        phone = row.get("cust_phone")
+
+        if phone and phone in existing_phones:
+            update_rows.append({"cid": existing_phones[phone], "uid": user_id, **row})
+        else:
+            new_cust_id = str(uuid.uuid4())
+            new_rows.append({"cid": new_cust_id, "bid": business_id, "uid": user_id, **row})
+            if phone:
+                existing_phones[phone] = new_cust_id
+
     created = 0
     updated = 0
     upsert_errors = []
 
-    for chunk in chunk_list(valid_rows):
-        for row in chunk:
-            row_num = row.pop("_row_number")
-            phone = row.get("cust_phone")
+    # --- Single multi-row INSERT for new customers ---
+    if new_rows:
+        # Indexed params (:cid_0, :cid_1, …) let asyncpg batch-bind in one round-trip.
+        placeholders = ", ".join([
+            f"(:cid_{i}, CAST(:bid AS uuid), :name_{i}, :phone_{i}, :email_{i}, :address_{i}, :state_{i}, :country_code_{i}, :tax_number_{i}, CAST(:uid_{i} AS uuid))"
+            for i in range(len(new_rows))
+        ])
+        params = {"bid": business_id}
+        for i, r in enumerate(new_rows):
+            params[f"cid_{i}"] = r["cid"]
+            params[f"name_{i}"] = r["cust_name"]
+            params[f"phone_{i}"] = r["cust_phone"]
+            params[f"email_{i}"] = r["cust_email"]
+            params[f"address_{i}"] = r["cust_address"]
+            params[f"state_{i}"] = r["cust_state"]
+            params[f"country_code_{i}"] = r["cust_country_code"]
+            params[f"tax_number_{i}"] = r["cust_tax_number"]
+            params[f"uid_{i}"] = r["uid"]
 
-            try:
-                if phone and phone in existing_phones:
-                    # UPDATE existing
-                    cust_id = existing_phones[phone]
-                    await db.execute(text("""
-                        UPDATE customers
-                        SET cust_name = :name,
-                            cust_email = :email,
-                            cust_address = :address,
-                            cust_state = :state,
-                            cust_country_code = :country_code,
-                            cust_tax_number = :tax_number,
-                            updated_by = CAST(:uid AS uuid)
-                        WHERE cust_id = CAST(:cid AS uuid)
-                          AND business_id = CAST(:bid AS uuid)
-                    """), {**row, "cid": cust_id, "bid": business_id, "uid": user_id})
-                    updated += 1
-                else:
-                    # INSERT new
-                    new_cust_id = str(uuid.uuid4())
-                    await db.execute(text("""
-                        INSERT INTO customers (
-                            cust_id, business_id, cust_name, cust_phone, cust_email,
-                            cust_address, cust_state, cust_country_code, cust_tax_number,
-                            updated_by
-                        ) VALUES (
-                            CAST(:cid AS uuid), CAST(:bid AS uuid), :name, :phone, :email,
-                            :address, :state, :country_code, :tax_number,
-                            CAST(:uid AS uuid)
-                        )
-                    """), {**row, "cid": new_cust_id, "bid": business_id, "uid": user_id})
-                    if phone:
-                        existing_phones[phone] = new_cust_id  # prevent dup within same import
-                    created += 1
-            except Exception as e:
-                upsert_errors.append({"row": row_num, "message": str(e)})
+        try:
+            await db.execute(text(f"""
+                INSERT INTO customers (
+                    cust_id, business_id, cust_name, cust_phone, cust_email,
+                    cust_address, cust_state, cust_country_code, cust_tax_number,
+                    updated_by
+                ) VALUES {placeholders}
+            """), params)
+            created = len(new_rows)
+        except Exception as e:
+            upsert_errors.append({"row": 0, "message": f"Bulk insert failed: {e}"})
 
-        await db.commit()
-        await async_set_rls_gucs_after_commit(db, current_user)
+    # --- Single CASE-WHEN UPDATE for existing customers ---
+    # Uses "col = CASE WHEN id = :pid_0 THEN val_0 WHEN id = :pid_1 THEN val_1 END"
+    # pattern to update many rows in one statement, filtered by WHERE id IN (…).
+    if update_rows:
+        case_name = []
+        case_email = []
+        case_address = []
+        case_state = []
+        case_country = []
+        case_tax = []
+        case_uid = []
+        params = {"bid": business_id}
+        for i, r in enumerate(update_rows):
+            case_name.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :name_{i}")
+            case_email.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :email_{i}")
+            case_address.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :address_{i}")
+            case_state.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :state_{i}")
+            case_country.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :country_code_{i}")
+            case_tax.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :tax_number_{i}")
+            case_uid.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN CAST(:uid_{i} AS uuid)")
+            params[f"cid_{i}"] = r["cid"]
+            params[f"name_{i}"] = r["cust_name"]
+            params[f"email_{i}"] = r["cust_email"]
+            params[f"address_{i}"] = r["cust_address"]
+            params[f"state_{i}"] = r["cust_state"]
+            params[f"country_code_{i}"] = r["cust_country_code"]
+            params[f"tax_number_{i}"] = r["cust_tax_number"]
+            params[f"uid_{i}"] = r["uid"]
+
+        cid_list = ", ".join([f"CAST(:cid_{i} AS uuid)" for i in range(len(update_rows))])
+
+        try:
+            await db.execute(text(f"""
+                UPDATE customers
+                SET cust_name         = CASE {" ".join(case_name)} END,
+                    cust_email        = CASE {" ".join(case_email)} END,
+                    cust_address      = CASE {" ".join(case_address)} END,
+                    cust_state        = CASE {" ".join(case_state)} END,
+                    cust_country_code = CASE {" ".join(case_country)} END,
+                    cust_tax_number   = CASE {" ".join(case_tax)} END,
+                    updated_by        = CASE {" ".join(case_uid)} END
+                WHERE business_id = CAST(:bid AS uuid)
+                  AND cust_id IN ({cid_list})
+            """), params)
+            updated = len(update_rows)
+        except Exception as e:
+            upsert_errors.append({"row": 0, "message": f"Bulk update failed: {e}"})
+
+    await db.commit()
+    await async_set_rls_gucs_after_commit(db, current_user)
 
     all_errors = errors + upsert_errors
 

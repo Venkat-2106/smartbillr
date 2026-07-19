@@ -93,7 +93,7 @@ from app.utils.queries import fetch_stock_kpi_counts_async
 from app.utils.timestamp import fmt_ts
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 from app.utils.subscription_features import check_feature_access
-from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from sqlalchemy.exc import IntegrityError
 from typing import Optional
@@ -494,79 +494,142 @@ async def import_products(
             for r in existing_rows:
                 existing_barcodes[r.barcode] = str(r.prod_id)
 
-    # ── 6. Upsert in chunks ────────────────────────────────────────────────────
+    # ── 6. Batch upsert — single multi-row INSERT + UPDATE ─────────────────────
+    # Same batch pattern as customer/supplier.py, but more complex:
+    #   - Duplicate key = prod_name (lowercased), with secondary barcode dedup
+    #   - category_name resolved to category_id via category_map (can be None → NULL)
+    #   - prod_profit is DB-generated (computed column) — excluded from INSERT
+    #   - 11 updatable columns vs 7 in customer/supplier
+    #   - category_id uses ::uuid cast (handles NULL → NULL::uuid safely in PG)
+    new_rows = []
+    update_rows = []
+
+    for row in valid_rows:
+        row_num = row.pop("_row_number")
+        name = row["prod_name"]
+        name_lower = name.lower()
+        barcode = row.get("barcode")
+        category_name = row.get("category_name")
+        category_id = category_map.get(category_name.lower()) if category_name else None
+
+        if name_lower in existing_names:
+            update_rows.append({"pid": existing_names[name_lower], "uid": user_id, "cat_id": category_id, **row})
+        else:
+            new_prod_id = str(uuid.uuid4())
+            new_rows.append({"pid": new_prod_id, "bid": business_id, "uid": user_id, "cat_id": category_id, **row})
+            existing_names[name_lower] = new_prod_id
+            if barcode:
+                existing_barcodes[barcode] = new_prod_id
+
     created = 0
     updated = 0
     upsert_errors = []
 
-    for chunk in chunk_list(valid_rows):
-        for row in chunk:
-            row_num = row.pop("_row_number")
-            name = row["prod_name"]
-            name_lower = name.lower()
-            barcode = row.get("barcode")
-            category_name = row.get("category_name")
-            category_id = category_map.get(category_name.lower()) if category_name else None
+    # --- Single multi-row INSERT for new products ---
+    # Columns: prod_id, business_id, category_id, prod_name, prices, stock, tax, barcode, unit,
+    #          prod_created_at (NOW()), created_by, updated_by.
+    # Excludes prod_profit — it's a DB-generated/computed column.
+    if new_rows:
+        placeholders = ", ".join([
+            f"(:pid_{i}, CAST(:bid AS uuid), :cat_id_{i}::uuid, :name_{i}, :sell_price_{i}, :mrp_{i}, :cost_price_{i}, :stock_qty_{i}, :low_stock_alert_{i}, :tax_rate_{i}, :tax_code_{i}, :barcode_{i}, :unit_{i}, NOW(), CAST(:uid_{i} AS uuid), CAST(:uid_{i} AS uuid))"
+            for i in range(len(new_rows))
+        ])
+        params = {"bid": business_id}
+        for i, r in enumerate(new_rows):
+            params[f"pid_{i}"] = r["pid"]
+            params[f"cat_id_{i}"] = r["cat_id"]
+            params[f"name_{i}"] = r["prod_name"]
+            params[f"sell_price_{i}"] = r["prod_sell_price"]
+            params[f"mrp_{i}"] = r["prod_mrp"]
+            params[f"cost_price_{i}"] = r["prod_cost_price"]
+            params[f"stock_qty_{i}"] = r["prod_stock_qty"]
+            params[f"low_stock_alert_{i}"] = r["prod_low_stock_alert"]
+            params[f"tax_rate_{i}"] = r["tax_rate"]
+            params[f"tax_code_{i}"] = r["tax_code"]
+            params[f"barcode_{i}"] = r["barcode"]
+            params[f"unit_{i}"] = r["unit"]
+            params[f"uid_{i}"] = r["uid"]
 
-            try:
-                if name_lower in existing_names:
-                    # UPDATE existing
-                    prod_id = existing_names[name_lower]
-                    await db.execute(text("""
-                        UPDATE products
-                        SET prod_sell_price = :sell_price,
-                            prod_cost_price = :cost_price,
-                            prod_mrp = :mrp,
-                            prod_stock_qty = :stock_qty,
-                            prod_low_stock_alert = :low_stock_alert,
-                            tax_rate = :tax_rate,
-                            tax_code = :tax_code,
-                            barcode = :barcode,
-                            unit = :unit,
-                            category_id = CAST(:cat_id AS uuid),
-                            updated_by = CAST(:uid AS uuid)
-                        WHERE prod_id = CAST(:pid AS uuid)
-                          AND business_id = CAST(:bid AS uuid)
-                    """), {**row, "pid": prod_id, "bid": business_id, "uid": user_id, "cat_id": category_id})
-                    updated += 1
-                else:
-                    # INSERT new
-                    new_prod_id = str(uuid.uuid4())
-                    await db.execute(text("""
-                        INSERT INTO products (
-                            prod_id, business_id, category_id, prod_name,
-                            prod_sell_price, prod_mrp, prod_cost_price,
-                            prod_stock_qty, prod_low_stock_alert, tax_rate,
-                            tax_code, barcode, unit,
-                            prod_created_at, created_by, updated_by
-                        ) VALUES (
-                            CAST(:pid AS uuid), CAST(:bid AS uuid), CAST(:cat_id AS uuid), :name,
-                            :sell_price, :mrp, :cost_price,
-                            :stock_qty, :low_stock_alert, :tax_rate,
-                            :tax_code, :barcode, :unit,
-                            NOW(), CAST(:uid AS uuid), CAST(:uid AS uuid)
-                        )
-                    """), {**row, "pid": new_prod_id, "bid": business_id, "uid": user_id, "cat_id": category_id})
-                    existing_names[name_lower] = new_prod_id  # prevent dup within same import
-                    if barcode:
-                        existing_barcodes[barcode] = new_prod_id
-                    created += 1
+        try:
+            await db.execute(text(f"""
+                INSERT INTO products (
+                    prod_id, business_id, category_id, prod_name,
+                    prod_sell_price, prod_mrp, prod_cost_price,
+                    prod_stock_qty, prod_low_stock_alert, tax_rate,
+                    tax_code, barcode, unit,
+                    prod_created_at, created_by, updated_by
+                ) VALUES {placeholders}
+            """), params)
+            created = len(new_rows)
+        except Exception as e:
+            upsert_errors.append({"row": 0, "message": f"Bulk insert failed: {e}"})
 
-                # Log stock movement if stock_qty > 0 (initial stock)
-                stock_qty = row.get("prod_stock_qty", 0)
-                if stock_qty > 0:
-                    prod_id_for_movement = existing_names.get(name_lower)
-                    if not prod_id_for_movement:
-                        # For newly created products, we need the ID
-                        # This is a limitation - we'd need to flush to get the ID
-                        # For simplicity, we'll skip stock movement logging for initial import
-                        pass
+    # --- Single CASE-WHEN UPDATE for existing products ---
+    # Updates 11 columns via CASE-WHEN pattern (same as customer/supplier but with
+    # additional price/stock/tax columns and category_id with ::uuid NULL handling).
+    if update_rows:
+        case_sell = []
+        case_cost = []
+        case_mrp = []
+        case_stock = []
+        case_alert = []
+        case_tax_rate = []
+        case_tax_code = []
+        case_barcode = []
+        case_unit = []
+        case_cat = []
+        case_uid = []
+        params = {"bid": business_id}
+        for i, r in enumerate(update_rows):
+            case_sell.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :sell_price_{i}")
+            case_cost.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :cost_price_{i}")
+            case_mrp.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :mrp_{i}")
+            case_stock.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :stock_qty_{i}")
+            case_alert.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :low_stock_alert_{i}")
+            case_tax_rate.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :tax_rate_{i}")
+            case_tax_code.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :tax_code_{i}")
+            case_barcode.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :barcode_{i}")
+            case_unit.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :unit_{i}")
+            case_cat.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :cat_id_{i}::uuid")
+            case_uid.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN CAST(:uid_{i} AS uuid)")
+            params[f"pid_{i}"] = r["pid"]
+            params[f"sell_price_{i}"] = r["prod_sell_price"]
+            params[f"cost_price_{i}"] = r["prod_cost_price"]
+            params[f"mrp_{i}"] = r["prod_mrp"]
+            params[f"stock_qty_{i}"] = r["prod_stock_qty"]
+            params[f"low_stock_alert_{i}"] = r["prod_low_stock_alert"]
+            params[f"tax_rate_{i}"] = r["tax_rate"]
+            params[f"tax_code_{i}"] = r["tax_code"]
+            params[f"barcode_{i}"] = r["barcode"]
+            params[f"unit_{i}"] = r["unit"]
+            params[f"cat_id_{i}"] = r["cat_id"]
+            params[f"uid_{i}"] = r["uid"]
 
-            except Exception as e:
-                upsert_errors.append({"row": row_num, "message": str(e)})
+        pid_list = ", ".join([f"CAST(:pid_{i} AS uuid)" for i in range(len(update_rows))])
 
-        await db.commit()
-        await async_set_rls_gucs_after_commit(db, current_user)
+        try:
+            await db.execute(text(f"""
+                UPDATE products
+                SET prod_sell_price      = CASE {" ".join(case_sell)} END,
+                    prod_cost_price      = CASE {" ".join(case_cost)} END,
+                    prod_mrp             = CASE {" ".join(case_mrp)} END,
+                    prod_stock_qty       = CASE {" ".join(case_stock)} END,
+                    prod_low_stock_alert = CASE {" ".join(case_alert)} END,
+                    tax_rate             = CASE {" ".join(case_tax_rate)} END,
+                    tax_code             = CASE {" ".join(case_tax_code)} END,
+                    barcode              = CASE {" ".join(case_barcode)} END,
+                    unit                 = CASE {" ".join(case_unit)} END,
+                    category_id          = CASE {" ".join(case_cat)} END,
+                    updated_by           = CASE {" ".join(case_uid)} END
+                WHERE business_id = CAST(:bid AS uuid)
+                  AND prod_id IN ({pid_list})
+            """), params)
+            updated = len(update_rows)
+        except Exception as e:
+            upsert_errors.append({"row": 0, "message": f"Bulk update failed: {e}"})
+
+    await db.commit()
+    await async_set_rls_gucs_after_commit(db, current_user)
 
     all_errors = errors + upsert_errors
 

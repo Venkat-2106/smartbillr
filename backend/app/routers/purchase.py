@@ -55,7 +55,7 @@ from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.tax_engine import calculate_item_tax
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
-from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list, friendly_db_error
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from app.utils.bulk_stock_adjust import bulk_check_and_reduce_stock
 import logging
@@ -864,7 +864,7 @@ async def import_purchases(
                     created += 1
 
             except Exception as e:
-                purchase_errors.append({"row": row_num, "message": str(e)})
+                purchase_errors.append({"row": row_num, "message": friendly_db_error(e, context=f"purchase row {row_num}")})
 
         await db.commit()
         await async_set_rls_gucs_after_commit(db, current_user)

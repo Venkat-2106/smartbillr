@@ -74,7 +74,7 @@ from app.utils.payment_helpers import record_payment_and_sync_async, calculate_p
 from app.utils.currency import get_currency_symbol
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 from app.utils.subscription_features import check_feature_access
-from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list, friendly_db_error
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 import uuid
 
@@ -512,7 +512,7 @@ async def import_sales(
                     created += 1
 
             except Exception as e:
-                sale_errors.append({"row": row_num, "message": str(e)})
+                sale_errors.append({"row": row_num, "message": friendly_db_error(e, context=f"sale row {row_num}")})
 
         await db.commit()
         await async_set_rls_gucs_after_commit(db, current_user)

@@ -19,8 +19,12 @@ are identical across all of them:
 """
 import csv
 import io
+import logging
+from sqlalchemy.exc import IntegrityError, DataError, ProgrammingError
 from app.utils.subscription_features import get_feature_limits
 from app.utils.usage_limits import count_entities_async, count_monthly_async
+
+logger = logging.getLogger(__name__)
 
 MAX_IMPORT_ROWS = 1000   # hard cap per uploaded file (data rows, excluding header)
 CHUNK_SIZE = 100          # rows per INSERT statement
@@ -138,3 +142,29 @@ async def check_bulk_create_allowed(
 def chunk_list(items: list, size: int = CHUNK_SIZE):
     for i in range(0, len(items), size):
         yield items[i:i + size]
+
+
+def friendly_db_error(e: Exception, context: str = "this batch") -> str:
+    """
+    Converts a raw DB/driver exception into a short, plain-English message safe
+    to show end users. Always logs the full original exception server-side via
+    logging.exception BEFORE returning the sanitized message, so nothing is lost
+    for debugging — only what reaches the client is sanitized.
+    """
+    logger.exception(f"Bulk import DB error while processing {context}")
+
+    if isinstance(e, IntegrityError):
+        orig = str(getattr(e, "orig", e)).lower()
+        if "unique" in orig or "duplicate" in orig:
+            return "One or more rows conflict with an existing record (duplicate name, phone, or barcode)."
+        if "foreign key" in orig:
+            return "One or more rows reference a category, supplier, or product that no longer exists."
+        return "Some rows conflict with existing data and could not be saved."
+
+    if isinstance(e, DataError):
+        return "Some rows contain a value in the wrong format (check numbers, dates, or IDs) and could not be saved."
+
+    if isinstance(e, ProgrammingError):
+        return "We hit an unexpected error saving this batch. Nothing in this batch was saved — please try again or contact support."
+
+    return "An unexpected error occurred while saving this batch. Please try again."

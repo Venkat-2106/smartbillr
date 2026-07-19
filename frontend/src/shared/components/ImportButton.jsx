@@ -139,14 +139,16 @@ export default function ImportButton({
         toast.success(successMsg, { duration: errorCount > 0 ? 6000 : 3500 });
 
         if (errorCount > 0 && errors?.length > 0 && errors.length <= 20) {
-          // Show first few errors for debugging
-          const errorDetails = errors.slice(0, 5)
-            .map(e => `Row ${e.row}: ${e.message}`)
-            .join('\n');
+          const lines = errors.slice(0, 5)
+            .map(e => e.row === 0 ? e.message : `Row ${e.row}: ${e.message}`);
+          if (errors.length > 5) {
+            lines.push(`+ ${errors.length - 5} more row(s) with errors`);
+          }
+          const errorDetails = lines.join('\n');
           if (errorDetails) {
-            toast(`Error details:\n${errorDetails}`, {
+            toast(`Import issues:\n${errorDetails}`, {
               duration: 8000,
-              style: { fontSize: '11px', fontFamily: 'monospace', whiteSpace: 'pre-line' },
+              style: { whiteSpace: 'pre-line' },
             });
           }
         }

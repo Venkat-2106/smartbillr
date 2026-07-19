@@ -43,7 +43,7 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
 from app.utils.queries import fetch_stock_kpi_counts_async
 from app.utils.timestamp import fmt_ts
-from app.utils.bulk_import import parse_csv_file, validate_rows, chunk_list
+from app.utils.bulk_import import parse_csv_file, validate_rows, chunk_list, friendly_db_error
 from app.utils.subscription_features import check_feature_access
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 import uuid
@@ -811,7 +811,7 @@ async def import_stock_adjustments(
                     product_map[lookup_key] = (resolved_pid, new_stock, resolved_name)
 
             except Exception as e:
-                adjustment_errors.append({"row": row_num, "message": str(e)})
+                adjustment_errors.append({"row": row_num, "message": friendly_db_error(e, context=f"stock adjustment row {row_num}")})
 
         await db.commit()
         await async_set_rls_gucs_after_commit(db, current_user)

@@ -46,7 +46,7 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
-from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, friendly_db_error
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from typing import Optional
 import uuid
@@ -288,7 +288,7 @@ async def import_suppliers(
             """), params)
             created = len(new_rows)
         except Exception as e:
-            upsert_errors.append({"row": 0, "message": f"Bulk insert failed: {e}"})
+            upsert_errors.append({"row": 0, "message": friendly_db_error(e, context="supplier insert batch")})
 
     # --- Single CASE-WHEN UPDATE for existing suppliers ---
     if update_rows:
@@ -334,7 +334,7 @@ async def import_suppliers(
             """), params)
             updated = len(update_rows)
         except Exception as e:
-            upsert_errors.append({"row": 0, "message": f"Bulk update failed: {e}"})
+            upsert_errors.append({"row": 0, "message": friendly_db_error(e, context="supplier update batch")})
 
     await db.commit()
     await async_set_rls_gucs_after_commit(db, current_user)

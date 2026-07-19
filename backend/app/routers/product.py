@@ -93,7 +93,7 @@ from app.utils.queries import fetch_stock_kpi_counts_async
 from app.utils.timestamp import fmt_ts
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 from app.utils.subscription_features import check_feature_access
-from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, friendly_db_error
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from sqlalchemy.exc import IntegrityError
 from typing import Optional
@@ -569,7 +569,7 @@ async def import_products(
             """), params)
             created = len(new_rows)
         except Exception as e:
-            upsert_errors.append({"row": 0, "message": f"Bulk insert failed: {e}"})
+            upsert_errors.append({"row": 0, "message": friendly_db_error(e, context="product insert batch")})
 
     # --- Single CASE-WHEN UPDATE for existing products ---
     # Updates 11 columns via CASE-WHEN pattern (same as customer/supplier but with
@@ -629,7 +629,7 @@ async def import_products(
             """), params)
             updated = len(update_rows)
         except Exception as e:
-            upsert_errors.append({"row": 0, "message": f"Bulk update failed: {e}"})
+            upsert_errors.append({"row": 0, "message": friendly_db_error(e, context="product update batch")})
 
     await db.commit()
     await async_set_rls_gucs_after_commit(db, current_user)

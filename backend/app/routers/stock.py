@@ -591,6 +591,7 @@ async def adjust_stock(
 # ══════════════════════════════════════════════════════════════════
 # POST /stock/import → Bulk import stock adjustments from CSV
 # ══════════════════════════════════════════════════════════════════
+@router.post("/import/")
 @router.post("/import")
 async def import_stock_adjustments(
     file: UploadFile = File(...),
@@ -734,79 +735,80 @@ async def import_stock_adjustments(
             (resolved_pid, prev_stock, resolved_name) = product_map[lookup_key]
 
             try:
-                # ── Lock for update (serializes concurrent adjustments) ──
-                prod_row = (await db.execute(text("""
-                    SELECT prod_stock_qty, prod_name FROM products
-                    WHERE prod_id = CAST(:pid AS uuid)
-                      AND business_id = CAST(:bid AS uuid)
-                      AND is_deleted = false
-                    FOR UPDATE
-                """), {"pid": resolved_pid, "bid": business_id})).fetchone()
+                async with db.begin_nested():
+                    # ── Lock for update (serializes concurrent adjustments) ──
+                    prod_row = (await db.execute(text("""
+                        SELECT prod_stock_qty, prod_name FROM products
+                        WHERE prod_id = CAST(:pid AS uuid)
+                          AND business_id = CAST(:bid AS uuid)
+                          AND is_deleted = false
+                        FOR UPDATE
+                    """), {"pid": resolved_pid, "bid": business_id})).fetchone()
 
-                if not prod_row:
-                    adjustment_errors.append({"row": row_num, "message": f"product deleted during import"})
-                    continue
-
-                prev_stock = prod_row.prod_stock_qty
-                resolved_name = prod_row.prod_name
-
-                # Calculate new stock and move_qty
-                if adj_type == "add":
-                    new_stock = prev_stock + qty
-                    move_qty = qty
-                elif adj_type == "remove":
-                    if qty > prev_stock:
-                        adjustment_errors.append({
-                            "row": row_num,
-                            "message": f"cannot remove {qty} from '{resolved_name}' — only {prev_stock} in stock"
-                        })
-                        continue
-                    new_stock = prev_stock - qty
-                    move_qty = -qty
-                else:  # "set"
-                    new_stock = qty
-                    move_qty = qty - prev_stock
-                    if new_stock == prev_stock:
-                        # No change needed — skip silently
-                        processed += 1
+                    if not prod_row:
+                        adjustment_errors.append({"row": row_num, "message": f"product deleted during import"})
                         continue
 
-                # Update product stock
-                await db.execute(text("""
-                    UPDATE products
-                    SET prod_stock_qty = :new_stock,
-                        updated_by = CAST(:uid AS uuid)
-                    WHERE prod_id = CAST(:pid AS uuid)
-                      AND business_id = CAST(:bid AS uuid)
-                """), {"new_stock": new_stock, "pid": resolved_pid, "bid": business_id, "uid": user_id})
+                    prev_stock = prod_row.prod_stock_qty
+                    resolved_name = prod_row.prod_name
 
-                # Insert stock movement
-                new_move_id = str(uuid.uuid4())
-                await db.execute(text("""
-                    INSERT INTO stock_movements (
-                        move_id, business_id, product_id,
-                        move_type, move_qty,
-                        move_prev_stock,
-                        move_notes, move_created_by
-                    ) VALUES (
-                        CAST(:mid AS uuid), CAST(:bid AS uuid), CAST(:pid AS uuid),
-                        :move_type, :move_qty,
-                        :move_prev_stock,
-                        :move_notes, CAST(:uid AS uuid)
-                    )
-                """), {
-                    "mid": new_move_id, "bid": business_id, "pid": resolved_pid,
-                    "move_type": "adjustment", "move_qty": move_qty,
-                    "move_prev_stock": prev_stock,
-                    "move_notes": notes, "uid": user_id
-                })
+                    # Calculate new stock and move_qty
+                    if adj_type == "add":
+                        new_stock = prev_stock + qty
+                        move_qty = qty
+                    elif adj_type == "remove":
+                        if qty > prev_stock:
+                            adjustment_errors.append({
+                                "row": row_num,
+                                "message": f"cannot remove {qty} from '{resolved_name}' — only {prev_stock} in stock"
+                            })
+                            continue
+                        new_stock = prev_stock - qty
+                        move_qty = -qty
+                    else:  # "set"
+                        new_stock = qty
+                        move_qty = qty - prev_stock
+                        if new_stock == prev_stock:
+                            # No change needed — skip silently
+                            processed += 1
+                            continue
 
-                # Cleanup stale alerts
-                await cleanup_product_alerts(db, business_id, resolved_pid)
-                processed += 1
+                    # Update product stock
+                    await db.execute(text("""
+                        UPDATE products
+                        SET prod_stock_qty = :new_stock,
+                            updated_by = CAST(:uid AS uuid)
+                        WHERE prod_id = CAST(:pid AS uuid)
+                          AND business_id = CAST(:bid AS uuid)
+                    """), {"new_stock": new_stock, "pid": resolved_pid, "bid": business_id, "uid": user_id})
 
-                # Update the product_map with new stock for subsequent rows in same import
-                product_map[lookup_key] = (resolved_pid, new_stock, resolved_name)
+                    # Insert stock movement
+                    new_move_id = str(uuid.uuid4())
+                    await db.execute(text("""
+                        INSERT INTO stock_movements (
+                            move_id, business_id, product_id,
+                            move_type, move_qty,
+                            move_prev_stock,
+                            move_notes, move_created_by
+                        ) VALUES (
+                            CAST(:mid AS uuid), CAST(:bid AS uuid), CAST(:pid AS uuid),
+                            :move_type, :move_qty,
+                            :move_prev_stock,
+                            :move_notes, CAST(:uid AS uuid)
+                        )
+                    """), {
+                        "mid": new_move_id, "bid": business_id, "pid": resolved_pid,
+                        "move_type": "adjustment", "move_qty": move_qty,
+                        "move_prev_stock": prev_stock,
+                        "move_notes": notes, "uid": user_id
+                    })
+
+                    # Cleanup stale alerts
+                    await cleanup_product_alerts(db, business_id, resolved_pid)
+                    processed += 1
+
+                    # Update the product_map with new stock for subsequent rows in same import
+                    product_map[lookup_key] = (resolved_pid, new_stock, resolved_name)
 
             except Exception as e:
                 adjustment_errors.append({"row": row_num, "message": str(e)})

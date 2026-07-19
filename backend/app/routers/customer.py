@@ -133,6 +133,7 @@ async def create_customer(
 # ══════════════════════════════════════════════════════════════════
 # POST /customers/import → Bulk import customers from CSV
 # ══════════════════════════════════════════════════════════════════
+@router.post("/import/")
 @router.post("/import")
 async def import_customers(
     file: UploadFile = File(...),

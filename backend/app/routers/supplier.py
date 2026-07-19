@@ -141,6 +141,7 @@ async def create_supplier(
 # ══════════════════════════════════════════════════════════════════
 # POST /suppliers/import → Bulk import suppliers from CSV
 # ══════════════════════════════════════════════════════════════════
+@router.post("/import/")
 @router.post("/import")
 async def import_suppliers(
     file: UploadFile = File(...),
@@ -158,20 +159,36 @@ async def import_suppliers(
 
     # ── 2. Validate & transform rows ──────────────────────────────────────────
     def row_transform(row: dict, row_num: int):
-        name = strip_and_escape_csv_value(row.get("supp_name", ""))
-        phone = strip_and_escape_csv_value(row.get("supp_phone", "")) if row.get("supp_phone") else None
-        email = strip_and_escape_csv_value(row.get("supp_email", "")) if row.get("supp_email") else None
-        address = strip_and_escape_csv_value(row.get("supp_address", "")) if row.get("supp_address") else None
-        state = strip_and_escape_csv_value(row.get("supp_state", "")) if row.get("supp_state") else None
-        country_code = strip_and_escape_csv_value(row.get("supp_country_code", "")) if row.get("supp_country_code") else None
-        tax_number = strip_and_escape_csv_value(row.get("supp_tax_number", "")) if row.get("supp_tax_number") else None
-
+        name = (row.get("supp_name") or row.get("name") or row.get("Supplier Name") or "").strip()
         if not name:
             return None, "supplier name is required"
-        if phone and "@" in phone:  # simple sanity check
+
+        phone = (row.get("supp_phone") or row.get("phone") or row.get("Phone") or "").strip() or None
+        email = (row.get("supp_email") or row.get("email") or row.get("Email") or "").strip() or None
+        address = (row.get("supp_address") or row.get("address") or row.get("Address") or "").strip() or None
+        state = (row.get("supp_state") or row.get("state") or row.get("State") or "").strip() or None
+        country_code = (row.get("supp_country_code") or row.get("country_code") or row.get("Country Code") or "").strip() or None
+        tax_number = (row.get("supp_tax_number") or row.get("tax_number") or row.get("Tax Number") or "").strip() or None
+
+        if phone:
+            phone = strip_and_escape_csv_value(phone)
+        if email:
+            email = strip_and_escape_csv_value(email)
+        if address:
+            address = strip_and_escape_csv_value(address)
+        if state:
+            state = strip_and_escape_csv_value(state)
+        if country_code:
+            country_code = strip_and_escape_csv_value(country_code)
+        if tax_number:
+            tax_number = strip_and_escape_csv_value(tax_number)
+
+        if phone and "@" in phone:
             return None, "phone appears to be an email"
         if email and "@" not in email:
             return None, "invalid email format"
+
+        name = strip_and_escape_csv_value(name)
 
         return {
             "supp_name": name,

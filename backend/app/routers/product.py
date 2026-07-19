@@ -345,6 +345,7 @@ async def create_product(
 # ══════════════════════════════════════════════════════════════════
 # POST /products/import → Bulk import products from CSV
 # ══════════════════════════════════════════════════════════════════
+@router.post("/import/")
 @router.post("/import")
 async def import_products(
     file: UploadFile = File(...),
@@ -577,7 +578,6 @@ async def import_products(
         case_sell = []
         case_cost = []
         case_mrp = []
-        case_stock = []
         case_alert = []
         case_tax_rate = []
         case_tax_code = []
@@ -590,7 +590,6 @@ async def import_products(
             case_sell.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :sell_price_{i}")
             case_cost.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :cost_price_{i}")
             case_mrp.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :mrp_{i}")
-            case_stock.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :stock_qty_{i}")
             case_alert.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :low_stock_alert_{i}")
             case_tax_rate.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :tax_rate_{i}")
             case_tax_code.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :tax_code_{i}")
@@ -602,7 +601,6 @@ async def import_products(
             params[f"sell_price_{i}"] = r["prod_sell_price"]
             params[f"cost_price_{i}"] = r["prod_cost_price"]
             params[f"mrp_{i}"] = r["prod_mrp"]
-            params[f"stock_qty_{i}"] = r["prod_stock_qty"]
             params[f"low_stock_alert_{i}"] = r["prod_low_stock_alert"]
             params[f"tax_rate_{i}"] = r["tax_rate"]
             params[f"tax_code_{i}"] = r["tax_code"]
@@ -619,7 +617,6 @@ async def import_products(
                 SET prod_sell_price      = CASE {" ".join(case_sell)} END,
                     prod_cost_price      = CASE {" ".join(case_cost)} END,
                     prod_mrp             = CASE {" ".join(case_mrp)} END,
-                    prod_stock_qty       = CASE {" ".join(case_stock)} END,
                     prod_low_stock_alert = CASE {" ".join(case_alert)} END,
                     tax_rate             = CASE {" ".join(case_tax_rate)} END,
                     tax_code             = CASE {" ".join(case_tax_code)} END,

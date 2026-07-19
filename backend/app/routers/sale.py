@@ -186,6 +186,7 @@ async def create_sale(
 # Tax calculation is handled by DB triggers (fn_sale_stock_movement).
 # Invoice numbers are generated via the business_counters sequence.
 # ══════════════════════════════════════════════════════════════════
+@router.post("/import/")
 @router.post("/import")
 async def import_sales(
     file: UploadFile = File(...),
@@ -451,63 +452,64 @@ async def import_sales(
                 continue
 
             try:
-                unit_price = Decimal(row["unit_price"])
-                qty = row["qty"]
-                discount = Decimal(row.get("discount", "0"))
-                payment_method = row.get("payment_method", "cash")
-                payment_status = row.get("payment_status", "pending")
-                paid_amount = Decimal(row["paid_amount"]) if row.get("paid_amount") else None
-                allow_override = row.get("allow_stock_override", False)
+                async with db.begin_nested():
+                    unit_price = Decimal(row["unit_price"])
+                    qty = row["qty"]
+                    discount = Decimal(row.get("discount", "0"))
+                    payment_method = row.get("payment_method", "cash")
+                    payment_status = row.get("payment_status", "pending")
+                    paid_amount = Decimal(row["paid_amount"]) if row.get("paid_amount") else None
+                    allow_override = row.get("allow_stock_override", False)
 
-                # ── Stock validation (uses local cache for intra-import correctness) ──
-                if not allow_override and prod_info["stock_qty"] < qty:
-                    sale_errors.append({
-                        "row": row_num,
-                        "message": f"insufficient stock for product — need {qty} but only {prod_info['stock_qty']} available"
-                    })
-                    continue
+                    # ── Stock validation (uses local cache for intra-import correctness) ──
+                    if not allow_override and prod_info["stock_qty"] < qty:
+                        sale_errors.append({
+                            "row": row_num,
+                            "message": f"insufficient stock for product — need {qty} but only {prod_info['stock_qty']} available"
+                        })
+                        continue
 
-                # ── Calculate total ──
-                total_amount = unit_price * qty
+                    # ── Calculate total ──
+                    total_amount = unit_price * qty
 
-                # ── Generate invoice number (same as manual sale creation) ──
-                invoice_no = await generate_invoice_number(db, business_id)
-                new_sale_id = str(uuid.uuid4())
+                    # ── Generate invoice number (same as manual sale creation) ──
+                    invoice_no = await generate_invoice_number(db, business_id)
+                    new_sale_id = str(uuid.uuid4())
 
-                # ── Create sale header (shared with create_sale) ──
-                await create_sale_header(
-                    db, business_id, user_id, new_sale_id, invoice_no,
-                    customer_id=cust_id,
-                    total_amount=total_amount,
-                    discount=discount,
-                    payment_method=payment_method,
-                    payment_status=payment_status,
-                )
+                    # ── Create sale header (shared with create_sale) ──
+                    await create_sale_header(
+                        db, business_id, user_id, new_sale_id, invoice_no,
+                        customer_id=cust_id,
+                        total_amount=total_amount,
+                        discount=discount,
+                        payment_method=payment_method,
+                        payment_status=payment_status,
+                    )
 
-                # ── Insert sale items via shared function (DB triggers handle tax/stock) ──
-                prod_orm = orm_cache.get(prod_info["prod_id"])
-                if not prod_orm:
-                    sale_errors.append({"row": row_num, "message": "product data error"})
-                    continue
-                item = ImportItem(prod_info["prod_id"], qty, unit_price)
-                await insert_sale_items(db, business_id, new_sale_id, [item], {prod_info["prod_id"]: prod_orm})
+                    # ── Insert sale items via shared function (DB triggers handle tax/stock) ──
+                    prod_orm = orm_cache.get(prod_info["prod_id"])
+                    if not prod_orm:
+                        sale_errors.append({"row": row_num, "message": "product data error"})
+                        continue
+                    item = ImportItem(prod_info["prod_id"], qty, unit_price)
+                    await insert_sale_items(db, business_id, new_sale_id, [item], {prod_info["prod_id"]: prod_orm})
 
-                # ── Update tax totals (shared with create_sale) ──
-                final_amount = await update_sale_tax_totals(db, new_sale_id)
+                    # ── Update tax totals (shared with create_sale) ──
+                    final_amount = await update_sale_tax_totals(db, new_sale_id)
 
-                # ── Auto-record payment (shared with create_sale) ──
-                await auto_record_payment(
-                    db, business_id, new_sale_id, final_amount,
-                    payment_status=payment_status,
-                    payment_method=payment_method,
-                    paid_amount=paid_amount,
-                )
+                    # ── Auto-record payment (shared with create_sale) ──
+                    await auto_record_payment(
+                        db, business_id, new_sale_id, final_amount,
+                        payment_status=payment_status,
+                        payment_method=payment_method,
+                        paid_amount=paid_amount,
+                    )
 
-                # Update local stock cache for subsequent rows in this import
-                new_stock = prod_info["stock_qty"] - qty
-                product_map[prod_key]["stock_qty"] = max(0, new_stock)
+                    # Update local stock cache for subsequent rows in this import
+                    new_stock = prod_info["stock_qty"] - qty
+                    product_map[prod_key]["stock_qty"] = max(0, new_stock)
 
-                created += 1
+                    created += 1
 
             except Exception as e:
                 sale_errors.append({"row": row_num, "message": str(e)})

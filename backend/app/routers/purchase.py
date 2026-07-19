@@ -489,6 +489,7 @@ async def create_purchase(
 # resolved by phone/name and name/barcode respectively.
 # Tax is calculated via the centralized tax_engine (same as create_purchase).
 # ══════════════════════════════════════════════════════════════════
+@router.post("/import/")
 @router.post("/import")
 async def import_purchases(
     file: UploadFile = File(...),
@@ -737,129 +738,130 @@ async def import_purchases(
                 continue
 
             try:
-                unit_price = Decimal(row["unit_price"])
-                qty = row["qty"]
-                tax_rate = Decimal(str(prod_info["tax_rate"]))
-                discount = Decimal(row.get("discount", "0"))
-                payment_status = row.get("payment_status", "pending")
+                async with db.begin_nested():
+                    unit_price = Decimal(row["unit_price"])
+                    qty = row["qty"]
+                    tax_rate = Decimal(str(prod_info["tax_rate"]))
+                    discount = Decimal(row.get("discount", "0"))
+                    payment_status = row.get("payment_status", "pending")
 
-                # ── Tax calculation via centralized engine ──
-                # Resolve supplier country/state from in-memory cache
-                supp_country = ""
-                supp_state = ""
-                if supp_id and supp_id in supplier_info_map:
-                    supp_country = supplier_info_map[supp_id]["country"]
-                    supp_state = supplier_info_map[supp_id]["state"]
+                    # ── Tax calculation via centralized engine ──
+                    # Resolve supplier country/state from in-memory cache
+                    supp_country = ""
+                    supp_state = ""
+                    if supp_id and supp_id in supplier_info_map:
+                        supp_country = supplier_info_map[supp_id]["country"]
+                        supp_state = supplier_info_map[supp_id]["state"]
 
-                tax_calc = calculate_item_tax(
-                    unit_price=unit_price, quantity=qty, tax_rate=tax_rate,
-                    business_country_code=biz_country, business_state=biz_state,
-                    counterparty_country_code=supp_country, counterparty_state=supp_state
-                )
-
-                # ── Insert purchase header ──
-                new_pur_id = str(uuid.uuid4())
-                await db.execute(text("""
-                    INSERT INTO purchases (
-                        pur_id, business_id, supp_id,
-                        pur_total_amount, pur_discount,
-                        pur_cgst_total, pur_sgst_total,
-                        pur_igst_total, pur_tax_total,
-                        pur_payment_status, created_by
-                    ) VALUES (
-                        CAST(:pur_id AS uuid), CAST(:bid AS uuid), CAST(:sid AS uuid),
-                        :total_amount, :discount,
-                        :cgst_total, :sgst_total,
-                        :igst_total, :tax_total,
-                        :payment_status, CAST(:uid AS uuid)
+                    tax_calc = calculate_item_tax(
+                        unit_price=unit_price, quantity=qty, tax_rate=tax_rate,
+                        business_country_code=biz_country, business_state=biz_state,
+                        counterparty_country_code=supp_country, counterparty_state=supp_state
                     )
-                """), {
-                    "pur_id": new_pur_id, "bid": business_id,
-                    "sid": supp_id,
-                    "total_amount": str(tax_calc["subtotal"]),
-                    "discount": str(discount),
-                    "cgst_total": str(tax_calc["cgst_amount"]),
-                    "sgst_total": str(tax_calc["sgst_amount"]),
-                    "igst_total": str(tax_calc["igst_amount"]),
-                    "tax_total": str(tax_calc["generic_tax_total"]),
-                    "payment_status": payment_status,
-                    "uid": user_id
-                })
 
-                # ── Insert purchase item ──
-                await db.execute(text("""
-                    INSERT INTO purchase_items (
-                        item_id, business_id, pur_id, product_id,
-                        pur_item_qty, item_unit_price,
-                        gst_rate, cgst_amount, sgst_amount,
-                        igst_amount, pur_tax_total
-                    ) VALUES (
-                        CAST(:item_id AS uuid), CAST(:bid AS uuid), CAST(:pur_id AS uuid),
-                        CAST(:pid AS uuid),
-                        :qty, :unit_price,
-                        :gst_rate, :cgst_amount, :sgst_amount,
-                        :igst_amount, :pur_tax_total
-                    )
-                """), {
-                    "item_id": str(uuid.uuid4()), "bid": business_id,
-                    "pur_id": new_pur_id, "pid": prod_info["prod_id"],
-                    "qty": qty, "unit_price": str(unit_price),
-                    "gst_rate": str(tax_rate),
-                    "cgst_amount": str(tax_calc["cgst_amount"]),
-                    "sgst_amount": str(tax_calc["sgst_amount"]),
-                    "igst_amount": str(tax_calc["igst_amount"]),
-                    "pur_tax_total": str(tax_calc["generic_tax_total"])
-                })
-
-                # ── Update cost price (last-purchase-cost) ──
-                await db.execute(text("""
-                    UPDATE products
-                    SET prod_cost_price = :cost_price,
-                        updated_by = CAST(:uid AS uuid)
-                    WHERE prod_id = CAST(:pid AS uuid)
-                      AND business_id = CAST(:bid AS uuid)
-                """), {
-                    "cost_price": str(unit_price),
-                    "pid": prod_info["prod_id"], "bid": business_id,
-                    "uid": user_id
-                })
-
-                # ── Cleanup stale alerts ──
-                await db.execute(text("""
-                    DELETE FROM low_stock_alerts la
-                    USING products p
-                    WHERE la.product_id = CAST(:pid AS uuid)
-                      AND la.business_id = CAST(:bid AS uuid)
-                      AND p.prod_id = CAST(:pid AS uuid)
-                      AND p.business_id = CAST(:bid AS uuid)
-                      AND p.is_deleted = false
-                      AND p.prod_stock_qty > p.prod_low_stock_alert
-                """), {"pid": prod_info["prod_id"], "bid": business_id})
-
-                # ── Auto-expense if paid ──
-                if payment_status == "paid":
+                    # ── Insert purchase header ──
+                    new_pur_id = str(uuid.uuid4())
                     await db.execute(text("""
-                        INSERT INTO expenses (
-                            expense_id, business_id, expense_category,
-                            expense_amount, expense_notes, created_by,
-                            source_type, source_id
+                        INSERT INTO purchases (
+                            pur_id, business_id, supp_id,
+                            pur_total_amount, pur_discount,
+                            pur_cgst_total, pur_sgst_total,
+                            pur_igst_total, pur_tax_total,
+                            pur_payment_status, created_by
                         ) VALUES (
-                            CAST(:eid AS uuid), CAST(:bid AS uuid),
-                            'purchase', :amount, :notes,
-                            CAST(:uid AS uuid), 'purchase',
-                            CAST(:pid AS uuid)
+                            CAST(:pur_id AS uuid), CAST(:bid AS uuid), CAST(:sid AS uuid),
+                            :total_amount, :discount,
+                            :cgst_total, :sgst_total,
+                            :igst_total, :tax_total,
+                            :payment_status, CAST(:uid AS uuid)
                         )
-                        ON CONFLICT (business_id, source_type, source_id)
-                        WHERE is_deleted = false AND source_type IS NOT NULL
-                        DO NOTHING
                     """), {
-                        "eid": str(uuid.uuid4()), "bid": business_id,
-                        "amount": str(tax_calc["subtotal"] - discount),
-                        "notes": f"Auto-recorded from CSV bulk import {new_pur_id}",
-                        "uid": user_id, "pid": new_pur_id
+                        "pur_id": new_pur_id, "bid": business_id,
+                        "sid": supp_id,
+                        "total_amount": str(tax_calc["subtotal"]),
+                        "discount": str(discount),
+                        "cgst_total": str(tax_calc["cgst_amount"]),
+                        "sgst_total": str(tax_calc["sgst_amount"]),
+                        "igst_total": str(tax_calc["igst_amount"]),
+                        "tax_total": str(tax_calc["generic_tax_total"]),
+                        "payment_status": payment_status,
+                        "uid": user_id
                     })
 
-                created += 1
+                    # ── Insert purchase item ──
+                    await db.execute(text("""
+                        INSERT INTO purchase_items (
+                            item_id, business_id, pur_id, product_id,
+                            pur_item_qty, item_unit_price,
+                            gst_rate, cgst_amount, sgst_amount,
+                            igst_amount, pur_tax_total
+                        ) VALUES (
+                            CAST(:item_id AS uuid), CAST(:bid AS uuid), CAST(:pur_id AS uuid),
+                            CAST(:pid AS uuid),
+                            :qty, :unit_price,
+                            :gst_rate, :cgst_amount, :sgst_amount,
+                            :igst_amount, :pur_tax_total
+                        )
+                    """), {
+                        "item_id": str(uuid.uuid4()), "bid": business_id,
+                        "pur_id": new_pur_id, "pid": prod_info["prod_id"],
+                        "qty": qty, "unit_price": str(unit_price),
+                        "gst_rate": str(tax_rate),
+                        "cgst_amount": str(tax_calc["cgst_amount"]),
+                        "sgst_amount": str(tax_calc["sgst_amount"]),
+                        "igst_amount": str(tax_calc["igst_amount"]),
+                        "pur_tax_total": str(tax_calc["generic_tax_total"])
+                    })
+
+                    # ── Update cost price (last-purchase-cost) ──
+                    await db.execute(text("""
+                        UPDATE products
+                        SET prod_cost_price = :cost_price,
+                            updated_by = CAST(:uid AS uuid)
+                        WHERE prod_id = CAST(:pid AS uuid)
+                          AND business_id = CAST(:bid AS uuid)
+                    """), {
+                        "cost_price": str(unit_price),
+                        "pid": prod_info["prod_id"], "bid": business_id,
+                        "uid": user_id
+                    })
+
+                    # ── Cleanup stale alerts ──
+                    await db.execute(text("""
+                        DELETE FROM low_stock_alerts la
+                        USING products p
+                        WHERE la.product_id = CAST(:pid AS uuid)
+                          AND la.business_id = CAST(:bid AS uuid)
+                          AND p.prod_id = CAST(:pid AS uuid)
+                          AND p.business_id = CAST(:bid AS uuid)
+                          AND p.is_deleted = false
+                          AND p.prod_stock_qty > p.prod_low_stock_alert
+                    """), {"pid": prod_info["prod_id"], "bid": business_id})
+
+                    # ── Auto-expense if paid ──
+                    if payment_status == "paid":
+                        await db.execute(text("""
+                            INSERT INTO expenses (
+                                expense_id, business_id, expense_category,
+                                expense_amount, expense_notes, created_by,
+                                source_type, source_id
+                            ) VALUES (
+                                CAST(:eid AS uuid), CAST(:bid AS uuid),
+                                'purchase', :amount, :notes,
+                                CAST(:uid AS uuid), 'purchase',
+                                CAST(:pid AS uuid)
+                            )
+                            ON CONFLICT (business_id, source_type, source_id)
+                            WHERE is_deleted = false AND source_type IS NOT NULL
+                            DO NOTHING
+                        """), {
+                            "eid": str(uuid.uuid4()), "bid": business_id,
+                            "amount": str(tax_calc["subtotal"] - discount),
+                            "notes": f"Auto-recorded from CSV bulk import {new_pur_id}",
+                            "uid": user_id, "pid": new_pur_id
+                        })
+
+                    created += 1
 
             except Exception as e:
                 purchase_errors.append({"row": row_num, "message": str(e)})

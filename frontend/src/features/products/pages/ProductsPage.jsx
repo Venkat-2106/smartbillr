@@ -817,7 +817,12 @@ export default function ProductsPage() {
                 endpoint="/products/import"
                 title="Products"
                 columns={PRODUCT_IMPORT_TEMPLATE}
-                requiredColumns={[{ key: 'prod_name', label: 'Product Name', alternates: ['name'] }]}
+                requiredColumns={[
+                  { key: 'prod_name',       label: 'Product Name', alternates: ['name'] },
+                  { key: 'category_name',   label: 'Category',     alternates: ['Category'] },
+                  { key: 'prod_sell_price', label: 'Sell Price',   alternates: ['sell_price'] },
+                  { key: 'prod_cost_price', label: 'Cost Price',   alternates: ['cost_price'] },
+                ]}
               />
             )}
             {canManage && (

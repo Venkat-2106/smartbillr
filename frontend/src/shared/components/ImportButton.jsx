@@ -68,7 +68,8 @@ export default function ImportButton({
     const missing = [];
 
     for (const col of requiredColumns) {
-      const variants = [col.key, ...(col.alternates || [])].map(v => v.toLowerCase());
+      // Check key, label (template uses labels as headers), and any alternates
+      const variants = [col.key, col.label, ...(col.alternates || [])].map(v => v.toLowerCase());
       const found = variants.some(v => headers.includes(v));
       if (!found) missing.push(col.label);
     }

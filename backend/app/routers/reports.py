@@ -61,10 +61,10 @@ def _date_range_params(date_from: Optional[str], date_to: Optional[str]):
     params = {}
     if date_from:
         clause += " AND s.sales_created_at >= CAST(:date_from AS timestamp)"
-        params["date_from"] = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
+        params["date_from"] = datetime.fromisoformat(date_from.replace("Z", ""))
     if date_to:
         clause += " AND s.sales_created_at < CAST(:date_to AS timestamp) + INTERVAL '1 day'"
-        params["date_to"] = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
+        params["date_to"] = datetime.fromisoformat(date_to.replace("Z", ""))
     return clause, params
 
 
@@ -75,10 +75,10 @@ def _date_col(table_alias: str, col: str, date_from: Optional[str], date_to: Opt
     params = {}
     if date_from:
         clause += f" AND {table_alias}.{col} >= CAST(:date_from AS timestamp)"
-        params["date_from"] = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
+        params["date_from"] = datetime.fromisoformat(date_from.replace("Z", ""))
     if date_to:
         clause += f" AND {table_alias}.{col} < CAST(:date_to AS timestamp) + INTERVAL '1 day'"
-        params["date_to"] = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
+        params["date_to"] = datetime.fromisoformat(date_to.replace("Z", ""))
     return clause, params
 
 

@@ -299,11 +299,11 @@ async def get_sales_list(db: AsyncSession, business_id: str, pagination: dict, s
 
     if date_from:
         extra_where += " AND s.sales_created_at >= :date_from"
-        params["date_from"] = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
+        params["date_from"] = datetime.fromisoformat(date_from.replace("Z", ""))
 
     if date_to:
         extra_where += " AND s.sales_created_at <= :date_to"
-        params["date_to"] = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
+        params["date_to"] = datetime.fromisoformat(date_to.replace("Z", ""))
 
     data_sql = f"""
         SELECT s.sales_id, s.invoice_no, s.customer_id,

@@ -444,11 +444,11 @@ async def get_all_customers(
     # This mirrors the pattern in sale.py (the reference implementation).
     if updated_from:
         extra_where += " AND c.updated_at >= :updated_from"
-        params["updated_from"] = datetime.fromisoformat(updated_from.replace("Z", "+00:00"))
+        params["updated_from"] = datetime.fromisoformat(updated_from.replace("Z", ""))
 
     if updated_to:
         extra_where += " AND c.updated_at <= :updated_to"
-        params["updated_to"] = datetime.fromisoformat(updated_to.replace("Z", "+00:00"))
+        params["updated_to"] = datetime.fromisoformat(updated_to.replace("Z", ""))
 
     rows = (await db.execute(
         text(f"""

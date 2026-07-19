@@ -389,11 +389,11 @@ async def get_all_purchase_returns(
 
     if date_from:
         extra_where += " AND pr.return_created_at >= :date_from"
-        params["date_from"] = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
+        params["date_from"] = datetime.fromisoformat(date_from.replace("Z", ""))
 
     if date_to:
         extra_where += " AND pr.return_created_at <= :date_to"
-        params["date_to"] = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
+        params["date_to"] = datetime.fromisoformat(date_to.replace("Z", ""))
 
     params["offset"] = pagination["offset"]
     params["limit"] = pagination["limit"]

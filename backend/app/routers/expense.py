@@ -163,11 +163,11 @@ async def get_all_expenses(
 
     if date_from:
         extra_where += " AND e.expense_date >= :date_from"
-        params["date_from"] = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
+        params["date_from"] = datetime.fromisoformat(date_from.replace("Z", ""))
 
     if date_to:
         extra_where += " AND e.expense_date <= :date_to"
-        params["date_to"] = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
+        params["date_to"] = datetime.fromisoformat(date_to.replace("Z", ""))
 
     params["offset"] = pagination["offset"]
     params["limit"] = pagination["limit"]

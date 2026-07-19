@@ -33,6 +33,7 @@ import {
   SearchBar,
   ExportButton,
   ImportButton,
+  ImportGuidelines,
   DateRangeFilter,
   MetricCard,
   BentoCard,
@@ -42,7 +43,8 @@ import {
   LockedCell,
 } from '../../../shared/components'
 
-import { STOCK_CSV_COLUMNS, STOCK_CSV_COLUMNS_NO_PROFIT, STOCK_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport'
+import { STOCK_CSV_COLUMNS, STOCK_CSV_COLUMNS_NO_PROFIT, STOCK_IMPORT_TEMPLATE, STOCK_IMPORT_SAMPLES } from '../../../shared/utils/csvExport'
+import { STOCK_GUIDELINES } from '../../../shared/utils/importGuidelines'
 import { usePermissions }  from '../../../shared/hooks/usePermissions'
 import { useFeatureAccess } from '../../../shared/hooks/useFeatureAccess'
 import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
@@ -414,6 +416,7 @@ function CurrentStockTab({ canViewProfit, isTierLocked, canAdjust }) {
             endpoint="/stock/import"
             title="Stock"
             columns={STOCK_IMPORT_TEMPLATE}
+            sampleRows={STOCK_IMPORT_SAMPLES}
             requiredColumns={[
               { key: 'qty', label: 'Quantity', alternates: ['quantity'] },
               { key: 'product_id', label: 'Product ID', alternates: ['prod_id', 'barcode', 'Barcode', 'prod_name', 'product_name', 'Product Name'] },
@@ -421,6 +424,13 @@ function CurrentStockTab({ canViewProfit, isTierLocked, canAdjust }) {
           />
         </div>
       </div>
+
+      <ImportGuidelines
+        guidelines={STOCK_GUIDELINES}
+        columns={STOCK_IMPORT_TEMPLATE}
+        sampleRows={STOCK_IMPORT_SAMPLES}
+        templateName="stock"
+      />
 
       {/* METRIC CARDS */}
       <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>

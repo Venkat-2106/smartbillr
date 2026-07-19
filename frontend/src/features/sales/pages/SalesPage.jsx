@@ -18,12 +18,13 @@ import { fetchSalesSummary } from '../api/salesApi';
 import SaleDetailDrawer from '../components/SaleDetailDrawer';
 import {
   Table, Button, Badge, SearchBar,
-  Pagination, DateRangeFilter, ExportButton, ImportButton,
+  Pagination, DateRangeFilter, ExportButton, ImportButton, ImportGuidelines,
   ConfirmDialog, EmptyState, BentoCard, MetricCard,
   UpgradePrompt, PageHeader,
 } from '../../../shared/components';
 import { selectStyle }       from '../../../shared/components/FormField';
-import { SALES_CSV_COLUMNS, SALES_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport';
+import { SALES_CSV_COLUMNS, SALES_IMPORT_TEMPLATE, SALES_IMPORT_SAMPLES } from '../../../shared/utils/csvExport';
+import { SALES_GUIDELINES } from '../../../shared/utils/importGuidelines';
 import { formatCurrency }    from '../../../shared/utils/formatCurrency';
 import { formatDate }        from '../../../shared/utils/formatDate';
 import useAuthStore          from '../../../store/authStore';
@@ -258,6 +259,7 @@ export default function SalesPage() {
                 endpoint="/sales/import"
                 title="Sales"
                 columns={SALES_IMPORT_TEMPLATE}
+                sampleRows={SALES_IMPORT_SAMPLES}
                 requiredColumns={[
                   { key: 'qty', label: 'Quantity', alternates: ['quantity'] },
                   { key: 'unit_price', label: 'Unit Price', alternates: ['price'] },
@@ -282,6 +284,13 @@ export default function SalesPage() {
           style={{ marginBottom: 24 }}
         />
       )}
+
+      <ImportGuidelines
+        guidelines={SALES_GUIDELINES}
+        columns={SALES_IMPORT_TEMPLATE}
+        sampleRows={SALES_IMPORT_SAMPLES}
+        templateName="sales"
+      />
 
       <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>
         <MetricCard

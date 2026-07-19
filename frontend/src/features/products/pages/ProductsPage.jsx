@@ -69,6 +69,7 @@ import {
   SearchBar,
   ExportButton,
   ImportButton,
+  ImportGuidelines,
   MetricCard,
   BentoCard,
   PageHeader,
@@ -76,7 +77,8 @@ import {
   LockedCell,
 } from '../../../shared/components'
 
-import { PRODUCT_CSV_COLUMNS, PRODUCT_CSV_COLUMNS_NO_PROFIT, PRODUCT_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport'
+import { PRODUCT_CSV_COLUMNS, PRODUCT_CSV_COLUMNS_NO_PROFIT, PRODUCT_IMPORT_TEMPLATE, PRODUCT_IMPORT_SAMPLES } from '../../../shared/utils/csvExport'
+import { PRODUCT_GUIDELINES } from '../../../shared/utils/importGuidelines'
 import { usePermissions }       from '../../../shared/hooks/usePermissions'
 import { useFeatureAccess }     from '../../../shared/hooks/useFeatureAccess'
 import { formatDate }           from '../../../shared/utils/formatDate'
@@ -817,6 +819,7 @@ export default function ProductsPage() {
                 endpoint="/products/import"
                 title="Products"
                 columns={PRODUCT_IMPORT_TEMPLATE}
+                sampleRows={PRODUCT_IMPORT_SAMPLES}
                 requiredColumns={[
                   { key: 'prod_name',       label: 'Product Name', alternates: ['name'] },
                   { key: 'category_name',   label: 'Category',     alternates: ['Category'] },
@@ -847,6 +850,13 @@ export default function ProductsPage() {
           style={{ marginBottom: 24 }}
         />
       )}
+
+      <ImportGuidelines
+        guidelines={PRODUCT_GUIDELINES}
+        columns={PRODUCT_IMPORT_TEMPLATE}
+        sampleRows={PRODUCT_IMPORT_SAMPLES}
+        templateName="products"
+      />
 
       {/* METRIC CARDS */}
       <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>

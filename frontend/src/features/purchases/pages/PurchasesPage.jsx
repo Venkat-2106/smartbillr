@@ -20,14 +20,15 @@ import PurchaseDetailDrawer, { DrawerOverlay }
   from '../components/PurchaseDetailDrawer'
 import {
   Table, Badge, SearchBar, Button,
-  Pagination, DateRangeFilter, ExportButton, ImportButton,
+  Pagination, DateRangeFilter, ExportButton, ImportButton, ImportGuidelines,
   EmptyState, BentoCard, MetricCard, SkeletonTable,
   ConfirmDialog, UpgradePrompt, PageHeader,
 } from '../../../shared/components'
 import { selectStyle } from '../../../shared/components/FormField'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate } from '../../../shared/utils/formatDate'
-import { PURCHASE_CSV_COLUMNS, PURCHASE_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport'
+import { PURCHASE_CSV_COLUMNS, PURCHASE_IMPORT_TEMPLATE, PURCHASE_IMPORT_SAMPLES } from '../../../shared/utils/csvExport'
+import { PURCHASE_GUIDELINES } from '../../../shared/utils/importGuidelines'
 import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
 
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' }
@@ -226,6 +227,7 @@ export default function PurchasesPage() {
                 endpoint="/purchases/import"
                 title="Purchases"
                 columns={PURCHASE_IMPORT_TEMPLATE}
+                sampleRows={PURCHASE_IMPORT_SAMPLES}
                 requiredColumns={[
                   { key: 'qty', label: 'Quantity', alternates: ['quantity'] },
                   { key: 'unit_price', label: 'Unit Price', alternates: ['price'] },
@@ -250,6 +252,13 @@ export default function PurchasesPage() {
           style={{ marginBottom: 24 }}
         />
       )}
+
+      <ImportGuidelines
+        guidelines={PURCHASE_GUIDELINES}
+        columns={PURCHASE_IMPORT_TEMPLATE}
+        sampleRows={PURCHASE_IMPORT_SAMPLES}
+        templateName="purchases"
+      />
 
       {/* METRIC CARDS */}
       <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>

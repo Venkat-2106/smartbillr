@@ -407,9 +407,12 @@ export const STOCK_CSV_COLUMNS_NO_PROFIT = [
 // Generates a header-only CSV for each module so users can fill it in
 // and upload it via the Import button.
 
-export function downloadTemplateCsv(filename, columns) {
+export function downloadTemplateCsv(filename, columns, sampleRows = []) {
   const headerRow = columns.map(col => escapeCsvCell(col.label)).join(',');
-  const csvString = headerRow + '\r\n';
+  const dataRows = sampleRows.map(row =>
+    row.map(val => escapeCsvCell(val != null ? String(val) : '')).join(',')
+  ).join('\r\n');
+  const csvString = headerRow + '\r\n' + (dataRows ? dataRows + '\r\n' : '');
 
   const BOM = '\uFEFF';
   const blob = new Blob([BOM + csvString], { type: 'text/csv;charset=utf-8;' });
@@ -509,4 +512,43 @@ export const SALES_IMPORT_TEMPLATE = [
   { key: 'payment_status',       label: 'Payment Status (pending/paid/partial)' },
   { key: 'paid_amount',          label: 'Paid Amount' },
   { key: 'allow_stock_override', label: 'Allow Stock Override (true/false)' },
+];
+
+// ─── SAMPLE DATA FOR IMPORT TEMPLATES ──────────────────────────────────────────
+// Example rows to help users understand the expected format.
+// These are for guidance only — users should replace them with their own data.
+
+export const CATEGORY_IMPORT_SAMPLES = [
+  ['Grocery'],
+  ['Electronics'],
+];
+
+export const CUSTOMER_IMPORT_SAMPLES = [
+  ['Rahul Sharma', '9876543210', 'rahul@example.com', '12 MG Road, Mumbai', 'Maharashtra', 'IN', '27AABCU9603R1ZM'],
+  ['Priya Patel', '9876543211', 'priya@example.com', '45 Anna Salai, Chennai', 'Tamil Nadu', 'IN', '33AABCP1234F1Z5'],
+];
+
+export const SUPPLIER_IMPORT_SAMPLES = [
+  ['Fresh Foods Ltd', '9876543220', 'contact@freshfoods.com', '78 Industrial Area, Delhi', 'Delhi', 'IN', '07AABCF5678G1Z2'],
+  ['Global Traders', '9876543221', 'info@globaltraders.com', '12 Market Road, Bangalore', 'Karnataka', 'IN', '29AABCG9012H1Z8'],
+];
+
+export const PRODUCT_IMPORT_SAMPLES = [
+  ['Wheat Flour 5kg', 'Grocery', '245', '210', '245', '60', '15', '5', '', '2135484232', 'pcs'],
+  ['Sugar 1kg', 'Grocery', '48', '42', '48', '120', '25', '5', '', '2135484233', 'pcs'],
+];
+
+export const STOCK_IMPORT_SAMPLES = [
+  ['', '2135484232', 'Wheat Flour 5kg', 'add', '20', 'Restocked from warehouse'],
+  ['', '2135484233', 'Sugar 1kg', 'remove', '5', 'Damaged goods'],
+];
+
+export const PURCHASE_IMPORT_SAMPLES = [
+  ['9876543220', 'Fresh Foods Ltd', 'Wheat Flour 5kg', '2135484232', '50', '210', '0', 'paid', 'Monthly restock'],
+  ['9876543220', 'Fresh Foods Ltd', 'Sugar 1kg', '2135484233', '100', '42', '0', 'pending', ''],
+];
+
+export const SALES_IMPORT_SAMPLES = [
+  ['9876543210', 'Rahul Sharma', 'Wheat Flour 5kg', '2135484232', '2', '245', '0', 'cash', 'paid', '490', 'false'],
+  ['9876543211', 'Priya Patel', 'Sugar 1kg', '2135484233', '3', '48', '0', 'upi', 'paid', '144', 'false'],
 ];

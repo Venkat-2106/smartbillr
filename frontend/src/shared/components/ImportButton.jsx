@@ -51,6 +51,7 @@ export default function ImportButton({
   title = 'Import', // string — displayed in toast messages and template filename
   columns = null,  // array of {key, label} — if provided, shows a "Download Template" link
   requiredColumns = null, // array of {key, label, alternates?} — checked against CSV headers before upload
+  sampleRows = [], // array of arrays — sample data rows included in the downloaded template
   disabled = false,
   onSuccess,       // callback after successful import
 }) {
@@ -131,7 +132,11 @@ export default function ImportButton({
       if (!summary || savedCount === 0) {
         // No rows were actually saved — this is a failure even if the server
         // returned 200 (bulk-import endpoints always return success_response).
-        toast.error(message || 'Import failed — no rows were saved', { duration: 6000 });
+        // Show the actual error detail if available, not the generic summary.
+        // The fallback message references Import Guidelines (see ImportGuidelines.jsx)
+        // so users know where to find correct column headers and required fields.
+        const errorDetail = errors?.[0]?.message;
+        toast.error(errorDetail || message || 'Import failed — no rows were saved. Check the Import Guidelines below for correct column headers and required fields.', { duration: 6000 });
       } else {
         // At least some rows were saved
         const errorCount = summary.errors || errors?.length || 0;
@@ -179,7 +184,7 @@ export default function ImportButton({
 
   function handleDownloadTemplate() {
     try {
-      downloadTemplateCsv(title.toLowerCase().replace(/\s+/g, '_'), columns);
+      downloadTemplateCsv(title.toLowerCase().replace(/\s+/g, '_'), columns, sampleRows);
       toast.success(`Downloaded ${title} import template`);
     } catch {
       toast.error('Failed to download template');

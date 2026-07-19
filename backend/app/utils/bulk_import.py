@@ -49,7 +49,14 @@ def parse_csv_file(file_bytes: bytes) -> tuple[list[dict], list[str] | None, str
     if reader.fieldnames is None:
         return [], None, "CSV file is empty or has no header row."
 
+    # Strip whitespace from headers so "Product Name " matches "Product Name"
+    reader.fieldnames = [fn.strip() for fn in reader.fieldnames]
+
     rows = list(reader)
+
+    # Filter out completely empty rows (blank lines at end of file)
+    rows = [r for r in rows if any((v or "").strip() for v in r.values())]
+
     if not rows:
         return [], reader.fieldnames, "CSV file has no data rows."
 
@@ -205,7 +212,21 @@ def friendly_db_error(e: Exception, context: str = "this batch") -> str:
     if isinstance(e, DataError):
         return "Some rows contain a value in the wrong format (check numbers, dates, or IDs) and could not be saved."
 
+    # ProgrammingError usually means a schema/column mismatch between the CSV
+    # and what the endpoint expects — point the user at the Import Guidelines
+    # panel and downloadable template rather than a vague "contact support".
     if isinstance(e, ProgrammingError):
-        return "We hit an unexpected error saving this batch. Nothing in this batch was saved — please try again or contact support."
+        return (
+            "The file format could not be processed. Please make sure you are "
+            "uploading a CSV file (.csv) with the correct column headers. "
+            "Download the template from the Import Guidelines section and fill "
+            "it in without changing the header row, then try again."
+        )
 
-    return "An unexpected error occurred while saving this batch. Please try again."
+    # Catch-all: still guide users toward the on-page Import Guidelines
+    # instead of a bare "try again" so they know where to look for help.
+    return (
+        "An unexpected error occurred while saving this batch. Please check "
+        "that all required fields are filled in correctly, refer to the "
+        "Import Guidelines on this page, and try again."
+    )

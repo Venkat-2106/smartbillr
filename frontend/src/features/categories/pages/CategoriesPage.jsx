@@ -33,10 +33,12 @@ import {
   SearchBar,
   ExportButton,
   ImportButton,
+  ImportGuidelines,
   DateRangeFilter
 } from '../../../shared/components'
 
-import { CATEGORY_CSV_COLUMNS, CATEGORY_IMPORT_TEMPLATE } from '../../../shared/utils/csvExport'
+import { CATEGORY_CSV_COLUMNS, CATEGORY_IMPORT_TEMPLATE, CATEGORY_IMPORT_SAMPLES } from '../../../shared/utils/csvExport'
+import { CATEGORY_GUIDELINES } from '../../../shared/utils/importGuidelines'
 import { usePermissions }        from '../../../shared/hooks/usePermissions'
 import { formatDate }            from '../../../shared/utils/formatDate'
 
@@ -244,6 +246,7 @@ export default function CategoriesPage() {
               endpoint="/categories/import"
               title="Categories"
               columns={CATEGORY_IMPORT_TEMPLATE}
+              sampleRows={CATEGORY_IMPORT_SAMPLES}
               requiredColumns={[{ key: 'category_name', label: 'Category Name', alternates: ['name'] }]}
             />
             )}
@@ -259,6 +262,13 @@ export default function CategoriesPage() {
             )}
           </div>
         }
+      />
+
+      <ImportGuidelines
+        guidelines={CATEGORY_GUIDELINES}
+        columns={CATEGORY_IMPORT_TEMPLATE}
+        sampleRows={CATEGORY_IMPORT_SAMPLES}
+        templateName="categories"
       />
 
       {/* Toolbar */}

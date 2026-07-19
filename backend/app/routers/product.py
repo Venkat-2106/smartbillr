@@ -377,19 +377,19 @@ async def import_products(
         # Required field: prod_name
         name = (row.get("prod_name") or row.get("name") or row.get("Product Name") or "").strip()
         if not name:
-            return None, "prod_name is required"
+            return None, "Product Name is required"
 
         category_name = (row.get("category_name") or row.get("Category") or "").strip()
         if not category_name:
-            return None, "category_name is required"
+            return None, "Category is required"
 
         sell_price = row.get("prod_sell_price") or row.get("sell_price") or row.get("Sell Price")
         if sell_price is None or str(sell_price).strip() == "":
-            return None, "prod_sell_price is required"
+            return None, "Sell Price is required"
 
         cost_price = row.get("prod_cost_price") or row.get("cost_price") or row.get("Cost Price")
         if cost_price is None or str(cost_price).strip() == "":
-            return None, "prod_cost_price is required"
+            return None, "Cost Price is required"
 
         # Optional fields with sanitization
         mrp = row.get("prod_mrp") or row.get("mrp") or row.get("MRP")
@@ -550,7 +550,7 @@ async def import_products(
     #   - category_name resolved to category_id via category_map (can be None → NULL)
     #   - prod_profit is DB-generated (computed column) — excluded from INSERT
     #   - 11 updatable columns vs 7 in customer/supplier
-    #   - category_id uses ::uuid cast (handles NULL → NULL::uuid safely in PG)
+    #   - category_id uses CAST(:param AS uuid) (handles NULL → NULL safely in PG)
     new_rows = []
     update_rows = []
 
@@ -581,7 +581,7 @@ async def import_products(
     # Excludes prod_profit — it's a DB-generated/computed column.
     if new_rows:
         placeholders = ", ".join([
-            f"(:pid_{i}, CAST(:bid AS uuid), :cat_id_{i}::uuid, :name_{i}, :sell_price_{i}, :mrp_{i}, :cost_price_{i}, :stock_qty_{i}, :low_stock_alert_{i}, :tax_rate_{i}, :tax_code_{i}, :barcode_{i}, :unit_{i}, NOW(), CAST(:uid_{i} AS uuid), CAST(:uid_{i} AS uuid))"
+            f"(:pid_{i}, CAST(:bid AS uuid), CAST(:cat_id_{i} AS uuid), :name_{i}, :sell_price_{i}, :mrp_{i}, :cost_price_{i}, :stock_qty_{i}, :low_stock_alert_{i}, :tax_rate_{i}, :tax_code_{i}, :barcode_{i}, :unit_{i}, NOW(), CAST(:uid_{i} AS uuid), CAST(:uid_{i} AS uuid))"
             for i in range(len(new_rows))
         ])
         params = {"bid": business_id}
@@ -616,7 +616,7 @@ async def import_products(
 
     # --- Single CASE-WHEN UPDATE for existing products ---
     # Updates 11 columns via CASE-WHEN pattern (same as customer/supplier but with
-    # additional price/stock/tax columns and category_id with ::uuid NULL handling).
+    # additional price/stock/tax columns and category_id with CAST(:param AS uuid) NULL handling).
     if update_rows:
         case_sell = []
         case_cost = []
@@ -638,7 +638,7 @@ async def import_products(
             case_tax_code.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :tax_code_{i}")
             case_barcode.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :barcode_{i}")
             case_unit.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :unit_{i}")
-            case_cat.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :cat_id_{i}::uuid")
+            case_cat.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN CAST(:cat_id_{i} AS uuid)")
             case_uid.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN CAST(:uid_{i} AS uuid)")
             params[f"pid_{i}"] = r["pid"]
             params[f"sell_price_{i}"] = r["prod_sell_price"]

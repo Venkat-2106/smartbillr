@@ -333,9 +333,7 @@ export default function CategoriesPage() {
       />
       )}
 
-      {activeFilters === 0 && (
-        <Pagination pagination={pagination} onPageChange={setPage} />
-      )}
+      <Pagination pagination={pagination} onPageChange={setPage} />
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Category" subtitle="Create a new product group">
         <CategoryForm onSubmit={handleCreate} onClose={() => setShowAdd(false)} isPending={isCreating} />

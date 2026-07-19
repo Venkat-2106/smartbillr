@@ -107,13 +107,17 @@ export const SUPPLIER_GUIDELINES = {
 export const PRODUCT_GUIDELINES = {
   title: 'How to Import Products',
   description: 'Product Name, Category, Sell Price, and Cost Price are required. Rows with a matching Product Name update existing products (upsert).',
+  warning: [
+    'Stock Quantity cannot be updated via Product Bulk Import. The Stock Qty column is used as opening stock when creating new products only.',
+    'To update stock for existing products, use the Stock page — Stock Adjustment or Bulk Stock Update.',
+  ],
   fields: [
     { name: 'Product Name',    required: true,  note: 'Max 100 characters. Used for upsert — case-insensitive match.' },
     { name: 'Category',        required: true,  note: 'Must exactly match an existing category name in your system.' },
     { name: 'Sell Price',      required: true,  note: 'Must be 0 or greater.' },
     { name: 'Cost Price',      required: true,  note: 'Must be 0 or greater.' },
     { name: 'MRP',             required: false, note: 'Must be >= Sell Price if provided. Leave empty or 0 if not applicable.' },
-    { name: 'Stock Qty',       required: false, note: 'Whole number, 0 or greater. Defaults to 0.' },
+    { name: 'Stock Qty',       required: false, note: 'Opening stock for new products only. Ignored for existing products.' },
     { name: 'Low Stock Alert', required: false, note: 'Whole number, 0 or greater. Defaults to 10.' },
     { name: 'Tax Rate %',      required: false, note: 'Number between 0 and 100. Defaults to 0.' },
     { name: 'Tax Code',        required: false, note: 'Max 50 characters (e.g. GST, VAT).' },

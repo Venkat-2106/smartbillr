@@ -59,6 +59,17 @@ function WarningIcon() {
   )
 }
 
+function AlertTriangleIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: '#B45309' }}>
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  )
+}
+
 function LightbulbIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -92,7 +103,7 @@ export default function ImportGuidelines({
 
   if (!guidelines) return null
 
-  const { title, description, fields, rules, tips } = guidelines
+  const { title, description, warning, fields, rules, tips } = guidelines
   const requiredFields = fields?.filter(f => f.required) || []
   const optionalFields = fields?.filter(f => !f.required) || []
 
@@ -154,6 +165,33 @@ export default function ImportGuidelines({
             }}>
               {description}
             </p>
+          )}
+
+          {/* Important Warning Banner */}
+          {warning?.length > 0 && (
+            <div style={{
+              marginTop: 14,
+              padding: '12px 14px',
+              borderRadius: 8,
+              background: 'linear-gradient(135deg, #FEF3C7, #FDE68A)',
+              border: '1.5px solid #F59E0B',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+                <span style={{ marginTop: 1 }}>
+                  <AlertTriangleIcon />
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#92400E', lineHeight: 1.4 }}>
+                  Important
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 24 }}>
+                {warning.map((msg, i) => (
+                  <span key={i} style={{ fontSize: 12.5, color: '#78350F', lineHeight: 1.5, fontWeight: 500 }}>
+                    {msg}
+                  </span>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* Before You Import checklist */}

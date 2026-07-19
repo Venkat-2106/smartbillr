@@ -404,7 +404,7 @@ async def import_products(
         mrp = row.get("prod_mrp") or row.get("mrp") or row.get("MRP")
         stock_qty = row.get("prod_stock_qty") or row.get("stock_qty") or row.get("Stock Qty") or "0"
         low_stock_alert = row.get("prod_low_stock_alert") or row.get("low_stock_alert") or row.get("Low Stock Alert") or "10"
-        tax_rate = row.get("tax_rate") or row.get("Tax Rate") or "0"
+        tax_rate = row.get("tax_rate") or row.get("Tax Rate") or row.get("Tax Rate %") or "0"
         tax_code = (row.get("tax_code") or row.get("Tax Code") or "").strip() or None
         barcode = (row.get("barcode") or row.get("Barcode") or "").strip() or None
         unit = (row.get("unit") or row.get("Unit") or "pcs").strip()
@@ -579,17 +579,6 @@ async def import_products(
         category_name = row.get("category_name")
         category_id = category_map.get(category_name.lower()) if category_name else None
 
-        # ── Barcode uniqueness pre-check ──────────────────────────────────────
-        # Check both DB-existing barcodes AND in-batch duplicates. This prevents
-        # DB-level IntegrityError (uix_products_barcode_business) entirely.
-        if barcode:
-            if barcode in existing_barcodes:
-                upsert_errors.append({"row": row_num, "message": f'Barcode "{barcode}" is already used by another product.'})
-                continue
-            if barcode in batch_barcodes:
-                upsert_errors.append({"row": row_num, "message": f'Barcode "{barcode}" is duplicated in this import file.'})
-                continue
-
         # ── In-file name duplicate check ──────────────────────────────────────
         # Two rows in the same CSV sharing a product name → skip the later one.
         if name_lower in seen_in_file_names:
@@ -597,8 +586,27 @@ async def import_products(
             continue
 
         if name_lower in existing_names:
-            update_rows.append({"pid": existing_names[name_lower], "uid": user_id, "cat_id": category_id, **row})
+            # ── UPDATE path: product already exists ──────────────────────────
+            pid = existing_names[name_lower]
+            # Barcode uniqueness: allow if same product, reject if different product
+            if barcode:
+                if barcode in existing_barcodes and existing_barcodes[barcode] != pid:
+                    upsert_errors.append({"row": row_num, "message": f'Barcode "{barcode}" is already assigned to another product. Please use a unique barcode.'})
+                    continue
+                if barcode in batch_barcodes:
+                    upsert_errors.append({"row": row_num, "message": f'Barcode "{barcode}" is duplicated in this import file.'})
+                    continue
+            update_rows.append({"pid": pid, "uid": user_id, "cat_id": category_id, **row})
         else:
+            # ── NEW path: product doesn't exist yet ──────────────────────────
+            # Barcode must not exist at all (DB or in-batch)
+            if barcode:
+                if barcode in existing_barcodes:
+                    upsert_errors.append({"row": row_num, "message": f'Barcode "{barcode}" is already used by another product.'})
+                    continue
+                if barcode in batch_barcodes:
+                    upsert_errors.append({"row": row_num, "message": f'Barcode "{barcode}" is duplicated in this import file.'})
+                    continue
             new_prod_id = str(uuid.uuid4())
             new_rows.append({"pid": new_prod_id, "bid": business_id, "uid": user_id, "cat_id": category_id, **row})
             existing_names[name_lower] = new_prod_id

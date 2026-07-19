@@ -55,7 +55,7 @@ from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.tax_engine import calculate_item_tax
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
-from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list, friendly_db_error, check_required_headers
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, friendly_db_error, check_required_headers
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from app.utils.bulk_stock_adjust import bulk_check_and_reduce_stock
 import logging
@@ -725,174 +725,271 @@ async def import_purchases(
                 "state": (r.supp_state or "").strip(),
             }
 
-    # ── 6. Create purchases ────────────────────────────────────────────────────
-    created = 0
+    # ── 6. Build purchase records in Python ────────────────────────────────────
+    # Batch approach: replaces per-row db.execute() loop (N calls × 5 statements
+    # each) with 5 batched statements total:
+    #   1. One multi-row INSERT for all purchase headers
+    #   2. One multi-row INSERT for all purchase items
+    #   3. One CASE-WHEN UPDATE for product cost prices
+    #   4. One DELETE for stale low-stock alerts (all products at once)
+    #   5. One multi-row INSERT for auto-expenses (paid purchases)
+    #   6. Single commit (down from N commits)
     purchase_errors = []
+    header_rows = []    # [{pur_id, sid, total, discount, cgst, sgst, igst, tax, status}]
+    item_rows = []      # [{item_id, pur_id, pid, qty, price, gst, cgst, sgst, igst, tax}]
+    cost_updates = []   # [{pid, price}] — last-purchase-cost
+    paid_rows = []      # [{pur_id, amount}] — auto-expense candidates
 
-    for chunk in chunk_list(valid_rows):
-        for row in chunk:
-            row_num = row.pop("_row_number")
+    # ── 6-row validation loop: resolve suppliers, products, compute tax ───────
+    # All validation and tax calculation happens in Python (no db calls).
+    # Valid rows are collected into batch arrays; invalid rows produce errors.
+    for row in valid_rows:
+        row_num = row.pop("_row_number")
 
-            # Resolve supplier
-            supp_id = None
-            if row.get("supp_phone"):
-                supp_id = supplier_map.get(row["supp_phone"])
-            elif row.get("supp_name"):
-                supp_id = supplier_map.get(row["supp_name"])
+        # ── Resolve supplier from pre-fetched supplier_map (phone → name fallback) ──
+        supp_id = None
+        if row.get("supp_phone"):
+            supp_id = supplier_map.get(row["supp_phone"])
+        elif row.get("supp_name"):
+            supp_id = supplier_map.get(row["supp_name"])
 
-            # If a supplier reference was provided but not found, reject the row
-            if (row.get("supp_phone") or row.get("supp_name")) and not supp_id:
-                purchase_errors.append({"row": row_num, "message": f'Supplier "{row.get("supp_phone") or row.get("supp_name")}" not found. Leave this column blank, or add the supplier first.'})
-                continue
+        # Reject row if supplier reference was given but not found in DB
+        if (row.get("supp_phone") or row.get("supp_name")) and not supp_id:
+            purchase_errors.append({"row": row_num, "message": f'Supplier "{row.get("supp_phone") or row.get("supp_name")}" not found. Leave this column blank, or add the supplier first.'})
+            continue
 
-            # Resolve product
-            raw_key = row.get("prod_name")
-            prod_key = raw_key.strip().lower() if raw_key else row.get("barcode")
-            prod_info = product_map.get(prod_key) if prod_key else None
-            if not prod_info:
-                purchase_errors.append({"row": row_num, "message": f'Row {row_num}: Product "{row.get("prod_name") or row.get("barcode")}" not found — check the spelling, or that the product exists.'})
-                continue
+        # ── Resolve product from pre-fetched product_map (name → barcode fallback) ──
+        raw_key = row.get("prod_name")
+        prod_key = raw_key.strip().lower() if raw_key else row.get("barcode")
+        prod_info = product_map.get(prod_key) if prod_key else None
+        if not prod_info:
+            purchase_errors.append({"row": row_num, "message": f'Row {row_num}: Product "{row.get("prod_name") or row.get("barcode")}" not found — check the spelling, or that the product exists.'})
+            continue
 
-            try:
-                async with db.begin_nested():
-                    unit_price = Decimal(row["unit_price"])
-                    qty = row["qty"]
-                    tax_rate = Decimal(str(prod_info["tax_rate"]))
-                    discount = Decimal(row.get("discount", "0"))
-                    payment_status = row.get("payment_status", "pending")
+        # ── Parse numeric fields (Decimal to avoid float rounding) ──
+        unit_price = Decimal(row["unit_price"])
+        qty = row["qty"]
+        tax_rate = Decimal(str(prod_info["tax_rate"]))
+        discount = Decimal(row.get("discount", "0"))
+        payment_status = row.get("payment_status", "pending")
 
-                    # ── Tax calculation via centralized engine ──
-                    # Resolve supplier country/state from in-memory cache
-                    supp_country = ""
-                    supp_state = ""
-                    if supp_id and supp_id in supplier_info_map:
-                        supp_country = supplier_info_map[supp_id]["country"]
-                        supp_state = supplier_info_map[supp_id]["state"]
+        # ── Tax calculation via centralized engine ──
+        # Handles India GST (CGST/SGST vs IGST) and generic tax for other countries.
+        supp_country = ""
+        supp_state = ""
+        if supp_id and supp_id in supplier_info_map:
+            supp_country = supplier_info_map[supp_id]["country"]
+            supp_state = supplier_info_map[supp_id]["state"]
 
-                    tax_calc = calculate_item_tax(
-                        unit_price=unit_price, quantity=qty, tax_rate=tax_rate,
-                        business_country_code=biz_country, business_state=biz_state,
-                        counterparty_country_code=supp_country, counterparty_state=supp_state
-                    )
+        tax_calc = calculate_item_tax(
+            unit_price=unit_price, quantity=qty, tax_rate=tax_rate,
+            business_country_code=biz_country, business_state=biz_state,
+            counterparty_country_code=supp_country, counterparty_state=supp_state
+        )
 
-                    # ── Insert purchase header ──
-                    new_pur_id = str(uuid.uuid4())
-                    await db.execute(text("""
-                        INSERT INTO purchases (
-                            pur_id, business_id, supp_id,
-                            pur_total_amount, pur_discount,
-                            pur_cgst_total, pur_sgst_total,
-                            pur_igst_total, pur_tax_total,
-                            pur_payment_status, created_by
-                        ) VALUES (
-                            CAST(:pur_id AS uuid), CAST(:bid AS uuid), CAST(:sid AS uuid),
-                            :total_amount, :discount,
-                            :cgst_total, :sgst_total,
-                            :igst_total, :tax_total,
-                            :payment_status, CAST(:uid AS uuid)
-                        )
-                    """), {
-                        "pur_id": new_pur_id, "bid": business_id,
-                        "sid": supp_id,
-                        "total_amount": str(tax_calc["subtotal"]),
-                        "discount": str(discount),
-                        "cgst_total": str(tax_calc["cgst_amount"]),
-                        "sgst_total": str(tax_calc["sgst_amount"]),
-                        "igst_total": str(tax_calc["igst_amount"]),
-                        "tax_total": str(tax_calc["generic_tax_total"]),
-                        "payment_status": payment_status,
-                        "uid": user_id
-                    })
+        # ── Accumulate batch arrays (no db calls yet) ──
+        new_pur_id = str(uuid.uuid4())
+        new_item_id = str(uuid.uuid4())
 
-                    # ── Insert purchase item ──
-                    await db.execute(text("""
-                        INSERT INTO purchase_items (
-                            item_id, business_id, pur_id, product_id,
-                            pur_item_qty, item_unit_price,
-                            gst_rate, cgst_amount, sgst_amount,
-                            igst_amount, pur_tax_total
-                        ) VALUES (
-                            CAST(:item_id AS uuid), CAST(:bid AS uuid), CAST(:pur_id AS uuid),
-                            CAST(:pid AS uuid),
-                            :qty, :unit_price,
-                            :gst_rate, :cgst_amount, :sgst_amount,
-                            :igst_amount, :pur_tax_total
-                        )
-                    """), {
-                        "item_id": str(uuid.uuid4()), "bid": business_id,
-                        "pur_id": new_pur_id, "pid": prod_info["prod_id"],
-                        "qty": qty, "unit_price": str(unit_price),
-                        "gst_rate": str(tax_rate),
-                        "cgst_amount": str(tax_calc["cgst_amount"]),
-                        "sgst_amount": str(tax_calc["sgst_amount"]),
-                        "igst_amount": str(tax_calc["igst_amount"]),
-                        "pur_tax_total": str(tax_calc["generic_tax_total"])
-                    })
+        header_rows.append({
+            "pur_id": new_pur_id, "sid": supp_id,
+            "total": str(tax_calc["subtotal"]), "discount": str(discount),
+            "cgst": str(tax_calc["cgst_amount"]), "sgst": str(tax_calc["sgst_amount"]),
+            "igst": str(tax_calc["igst_amount"]), "tax": str(tax_calc["generic_tax_total"]),
+            "status": payment_status,
+        })
 
-                    # ── Update cost price (last-purchase-cost) ──
-                    await db.execute(text("""
-                        UPDATE products
-                        SET prod_cost_price = :cost_price,
-                            updated_by = CAST(:uid AS uuid)
-                        WHERE prod_id = CAST(:pid AS uuid)
-                          AND business_id = CAST(:bid AS uuid)
-                    """), {
-                        "cost_price": str(unit_price),
-                        "pid": prod_info["prod_id"], "bid": business_id,
-                        "uid": user_id
-                    })
+        item_rows.append({
+            "item_id": new_item_id, "pur_id": new_pur_id,
+            "pid": prod_info["prod_id"], "qty": qty, "price": str(unit_price),
+            "gst": str(tax_rate),
+            "cgst": str(tax_calc["cgst_amount"]), "sgst": str(tax_calc["sgst_amount"]),
+            "igst": str(tax_calc["igst_amount"]), "tax": str(tax_calc["generic_tax_total"]),
+        })
 
-                    # ── Cleanup stale alerts ──
-                    await db.execute(text("""
-                        DELETE FROM low_stock_alerts la
-                        USING products p
-                        WHERE la.product_id = CAST(:pid AS uuid)
-                          AND la.business_id = CAST(:bid AS uuid)
-                          AND p.prod_id = CAST(:pid AS uuid)
-                          AND p.business_id = CAST(:bid AS uuid)
-                          AND p.is_deleted = false
-                          AND p.prod_stock_qty > p.prod_low_stock_alert
-                    """), {"pid": prod_info["prod_id"], "bid": business_id})
+        # ── Last-purchase-cost: append to batch UPDATE list ──
+        # If the same product appears multiple times in CSV, last row wins.
+        cost_updates.append({"pid": prod_info["prod_id"], "price": str(unit_price)})
 
-                    # ── Auto-expense if paid ──
-                    if payment_status == "paid":
-                        await db.execute(text("""
-                            INSERT INTO expenses (
-                                expense_id, business_id, expense_category,
-                                expense_amount, expense_notes, created_by,
-                                source_type, source_id
-                            ) VALUES (
-                                CAST(:eid AS uuid), CAST(:bid AS uuid),
-                                'purchase', :amount, :notes,
-                                CAST(:uid AS uuid), 'purchase',
-                                CAST(:pid AS uuid)
-                            )
-                            ON CONFLICT (business_id, source_type, source_id)
-                            WHERE is_deleted = false AND source_type IS NOT NULL
-                            DO NOTHING
-                        """), {
-                            "eid": str(uuid.uuid4()), "bid": business_id,
-                            "amount": str(tax_calc["subtotal"] - discount),
-                            "notes": f"Auto-recorded from CSV bulk import {new_pur_id}",
-                            "uid": user_id, "pid": new_pur_id
-                        })
+        # ── Auto-expense: collect paid purchases for batch INSERT ──
+        if payment_status == "paid":
+            paid_rows.append({"pur_id": new_pur_id, "amount": str(tax_calc["subtotal"] - discount)})
 
-                    created += 1
+    created = len(header_rows)
 
-            except Exception as e:
-                purchase_errors.append({"row": row_num, "message": friendly_db_error(e, context=f"purchase row {row_num}")})
+    # ── 6a. Single multi-row INSERT for all purchase headers ──────────────────
+    # Indexed params (:pur_id_0, :pur_id_1, …) let asyncpg batch-bind in one
+    # round-trip instead of N individual INSERT statements.
+    # pur_final_amount is a DB generated column — never insert it.
+    if header_rows:
+        placeholders = ", ".join([
+            f"(:pur_id_{i}, CAST(:bid AS uuid), CAST(:sid_{i} AS uuid), "
+            f":total_{i}, :discount_{i}, :cgst_{i}, :sgst_{i}, :igst_{i}, :tax_{i}, "
+            f":status_{i}, CAST(:uid AS uuid))"
+            for i in range(len(header_rows))
+        ])
+        params = {"bid": business_id, "uid": user_id}
+        for i, r in enumerate(header_rows):
+            params[f"pur_id_{i}"] = r["pur_id"]
+            params[f"sid_{i}"] = r["sid"]
+            params[f"total_{i}"] = r["total"]
+            params[f"discount_{i}"] = r["discount"]
+            params[f"cgst_{i}"] = r["cgst"]
+            params[f"sgst_{i}"] = r["sgst"]
+            params[f"igst_{i}"] = r["igst"]
+            params[f"tax_{i}"] = r["tax"]
+            params[f"status_{i}"] = r["status"]
 
-        await db.commit()
-        await async_set_rls_gucs_after_commit(db, current_user)
+        try:
+            await db.execute(text(f"""
+                INSERT INTO purchases (
+                    pur_id, business_id, supp_id,
+                    pur_total_amount, pur_discount,
+                    pur_cgst_total, pur_sgst_total,
+                    pur_igst_total, pur_tax_total,
+                    pur_payment_status, created_by
+                ) VALUES {placeholders}
+            """), params)
+        except Exception as e:
+            return error_response(friendly_db_error(e, context="purchase headers batch"), 500)
+
+    # ── 6b. Single multi-row INSERT for all purchase items ────────────────────
+    # GENERATED columns (item_subtotal, item_tax_total, item_total_with_tax)
+    # are never inserted — DB computes them via trigger.
+    # Each item links back to its parent header via pur_id.
+    if item_rows:
+        placeholders = ", ".join([
+            f"(:iid_{i}, CAST(:bid AS uuid), CAST(:pur_{i} AS uuid), CAST(:pid_{i} AS uuid), "
+            f":qty_{i}, :price_{i}, :gst_{i}, :cgst_{i}, :sgst_{i}, :igst_{i}, :tax_{i})"
+            for i in range(len(item_rows))
+        ])
+        params = {"bid": business_id}
+        for i, r in enumerate(item_rows):
+            params[f"iid_{i}"] = r["item_id"]
+            params[f"pur_{i}"] = r["pur_id"]
+            params[f"pid_{i}"] = r["pid"]
+            params[f"qty_{i}"] = r["qty"]
+            params[f"price_{i}"] = r["price"]
+            params[f"gst_{i}"] = r["gst"]
+            params[f"cgst_{i}"] = r["cgst"]
+            params[f"sgst_{i}"] = r["sgst"]
+            params[f"igst_{i}"] = r["igst"]
+            params[f"tax_{i}"] = r["tax"]
+
+        try:
+            await db.execute(text(f"""
+                INSERT INTO purchase_items (
+                    item_id, business_id, pur_id, product_id,
+                    pur_item_qty, item_unit_price,
+                    gst_rate, cgst_amount, sgst_amount,
+                    igst_amount, pur_tax_total
+                ) VALUES {placeholders}
+            """), params)
+        except Exception as e:
+            return error_response(friendly_db_error(e, context="purchase items batch"), 500)
+
+    # ── 6c. Single CASE-WHEN UPDATE for product cost prices ──────────────────
+    # Last-purchase-cost accounting: set prod_cost_price to the unit price from
+    # this import. prod_profit is a generated column — DB recomputes it.
+    # Same CASE-WHEN pattern as customer.py/supplier.py bulk imports:
+    #   SET col = CASE WHEN id = :id_0 THEN :val_0 WHEN id = :id_1 THEN :val_1 END
+    if cost_updates:
+        # Deduplicate: keep only last entry per product (last-purchase-cost)
+        deduped = {}
+        for r in cost_updates:
+            deduped[r["pid"]] = r["price"]
+        unique_products = [{"pid": pid, "price": price} for pid, price in deduped.items()]
+
+        # Build CASE-WHEN clauses (one WHEN per product)
+        case_cost = []
+        case_uid = []
+        params = {"bid": business_id, "uid": user_id}
+        for i, r in enumerate(unique_products):
+            case_cost.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN :price_{i}")
+            case_uid.append(f"WHEN prod_id = CAST(:pid_{i} AS uuid) THEN CAST(:uid AS uuid)")
+            params[f"pid_{i}"] = r["pid"]
+            params[f"price_{i}"] = r["price"]
+
+        # IN clause to restrict UPDATE to only affected products
+        pid_list = ", ".join([f"CAST(:pid_{i} AS uuid)" for i in range(len(unique_products))])
+
+        try:
+            await db.execute(text(f"""
+                UPDATE products
+                SET prod_cost_price = CASE {" ".join(case_cost)} END,
+                    updated_by      = CASE {" ".join(case_uid)} END
+                WHERE business_id = CAST(:bid AS uuid)
+                  AND prod_id IN ({pid_list})
+            """), params)
+        except Exception as e:
+            purchase_errors.append({"row": 0, "message": friendly_db_error(e, context="cost price batch update")})
+
+    # ── 6d. Single DELETE for stale low-stock alerts ──────────────────────────
+    # Purchase increases stock. Remove stale alerts for products now above
+    # their low-stock threshold so replenished items disappear from alerts.
+    # Uses ANY(CAST(:pids AS uuid[])) to match all affected products in one query.
+    if cost_updates:
+        unique_pids = list(deduped.keys())
+        try:
+            await db.execute(text("""
+                DELETE FROM low_stock_alerts la
+                USING products p
+                WHERE p.prod_id = la.product_id
+                  AND la.product_id = ANY(CAST(:pids AS uuid[]))
+                  AND la.business_id = CAST(:bid AS uuid)
+                  AND p.prod_stock_qty > p.prod_low_stock_alert
+            """), {"pids": unique_pids, "bid": business_id})
+        except Exception:
+            pass  # non-critical cleanup failure — stock is still correct
+
+    # ── 6e. Single multi-row INSERT for auto-expenses (paid purchases) ───────
+    # WHY: Cash purchase = money leaves the business immediately.
+    # Without this, the accountant must manually add an expense for every
+    # cash purchase — that is error-prone.
+    # Race-safety: ON CONFLICT DO NOTHING prevents duplicate expenses
+    # when PATCH /status is called concurrently with "paid".
+    if paid_rows:
+        placeholders = ", ".join([
+            f"(:eid_{i}, CAST(:bid AS uuid), 'purchase', :amount_{i}, :notes_{i}, "
+            f"CAST(:uid AS uuid), 'purchase', CAST(:pur_{i} AS uuid))"
+            for i in range(len(paid_rows))
+        ])
+        params = {"bid": business_id, "uid": user_id}
+        for i, r in enumerate(paid_rows):
+            params[f"eid_{i}"] = str(uuid.uuid4())
+            params[f"amount_{i}"] = r["amount"]
+            params[f"notes_{i}"] = f"Auto-recorded from CSV bulk import {r['pur_id']}"
+            params[f"pur_{i}"] = r["pur_id"]
+
+        try:
+            await db.execute(text(f"""
+                INSERT INTO expenses (
+                    expense_id, business_id, expense_category,
+                    expense_amount, expense_notes, created_by,
+                    source_type, source_id
+                ) VALUES {placeholders}
+                ON CONFLICT (business_id, source_type, source_id)
+                WHERE is_deleted = false AND source_type IS NOT NULL
+                DO NOTHING
+            """), params)
+        except Exception as e:
+            purchase_errors.append({"row": 0, "message": friendly_db_error(e, context="auto-expense batch")})
+
+    # ── 7. Single commit for all batches ─────────────────────────────────────
+    # All 5 batched statements above are committed together. If any batch
+    # returned early with error_response(), this line is never reached.
+    await db.commit()
+    await async_set_rls_gucs_after_commit(db, current_user)
 
     all_errors = errors + purchase_errors
 
     return success_response({
-        "message": f"Import completed: {created} purchases created, {len(all_errors)} errors",
+        "message": f"Import completed: {created} purchases created, 0 updated, {len(all_errors)} errors",
         "summary": {
             "total_rows": len(rows),
             "valid_rows": len(valid_rows),
             "created": created,
+            "updated": 0,
             "errors": len(all_errors)
         },
         "errors": all_errors

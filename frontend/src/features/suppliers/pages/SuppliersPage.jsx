@@ -254,6 +254,7 @@ export default function SuppliersPage() {
                 endpoint="/suppliers/import"
                 title="Suppliers"
                 columns={SUPPLIER_IMPORT_TEMPLATE}
+                requiredColumns={[{ key: 'supp_name', label: 'Supplier Name', alternates: ['name'] }]}
               />
             )}
             {canManage && (

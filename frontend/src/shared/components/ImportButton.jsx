@@ -50,11 +50,31 @@ export default function ImportButton({
   endpoint,        // string — API endpoint URL (e.g. "/v1/categories/import")
   title = 'Import', // string — displayed in toast messages and template filename
   columns = null,  // array of {key, label} — if provided, shows a "Download Template" link
+  requiredColumns = null, // array of {key, label, alternates?} — checked against CSV headers before upload
   disabled = false,
   onSuccess,       // callback after successful import
 }) {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
+
+  function validateHeaders(csvText) {
+    if (!requiredColumns || requiredColumns.length === 0) return null;
+
+    // Parse just the header row
+    const firstLine = csvText.split('\n')[0];
+    if (!firstLine) return ['CSV file is empty'];
+
+    const headers = firstLine.split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
+    const missing = [];
+
+    for (const col of requiredColumns) {
+      const variants = [col.key, ...(col.alternates || [])].map(v => v.toLowerCase());
+      const found = variants.some(v => headers.includes(v));
+      if (!found) missing.push(col.label);
+    }
+
+    return missing.length > 0 ? missing : null;
+  }
 
   async function handleFileSelected(e) {
     const file = e.target.files?.[0];
@@ -73,6 +93,24 @@ export default function ImportButton({
     if (file.size > 5 * 1024 * 1024) {
       toast.error('File is too large — maximum 5 MB');
       return;
+    }
+
+    // Pre-upload header validation — check required columns exist
+    if (requiredColumns && requiredColumns.length > 0) {
+      try {
+        const text = await file.text();
+        const missing = validateHeaders(text);
+        if (missing) {
+          toast.error(
+            `Missing required column${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}`,
+            { duration: 6000 }
+          );
+          return;
+        }
+      } catch {
+        toast.error('Could not read CSV file');
+        return;
+      }
     }
 
     setUploading(true);

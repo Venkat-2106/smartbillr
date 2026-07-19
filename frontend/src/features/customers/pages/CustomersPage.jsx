@@ -404,6 +404,7 @@ export default function CustomersPage() {
                 endpoint="/customers/import"
                 title="Customers"
                 columns={CUSTOMER_IMPORT_TEMPLATE}
+                requiredColumns={[{ key: 'cust_name', label: 'Customer Name', alternates: ['name'] }]}
               />
             )}
             <Button

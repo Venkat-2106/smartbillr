@@ -244,6 +244,7 @@ export default function CategoriesPage() {
               endpoint="/categories/import"
               title="Categories"
               columns={CATEGORY_IMPORT_TEMPLATE}
+              requiredColumns={[{ key: 'category_name', label: 'Category Name', alternates: ['name'] }]}
             />
             )}
             {canManage && (

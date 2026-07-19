@@ -817,6 +817,7 @@ export default function ProductsPage() {
                 endpoint="/products/import"
                 title="Products"
                 columns={PRODUCT_IMPORT_TEMPLATE}
+                requiredColumns={[{ key: 'prod_name', label: 'Product Name', alternates: ['name'] }]}
               />
             )}
             {canManage && (

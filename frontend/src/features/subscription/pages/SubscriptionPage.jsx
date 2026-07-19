@@ -263,6 +263,38 @@ export default function SubscriptionPage() {
           </div>
         )}
 
+        {/* ── Renewal callout (only for expired subscriptions) ── */}
+        {hasSubscription && sub.is_expired && (
+          <div style={{
+            background: 'color-mix(in srgb, var(--danger) 8%, var(--bg-card))',
+            border: '1px solid color-mix(in srgb, var(--danger) 20%, transparent)',
+            borderRadius: 'var(--r-xl, 16px)',
+            padding: 24,
+            marginBottom: 32,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 16,
+          }}>
+            <div>
+              <p style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 600, color: 'var(--danger)' }}>
+                Renew your subscription
+              </p>
+              <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                Your current plan has expired. Renew to restore full access to your business data.
+              </p>
+            </div>
+            <Button
+              variant="primary"
+              onClick={() => navigate('/pricing')}
+              rightIcon={<span style={{ marginLeft: 2 }}>→</span>}
+            >
+              Renew now
+            </Button>
+          </div>
+        )}
+
         {/* ── Upgrade callout (only for logged-in users) ── */}
         {hasSubscription && nextTier && !sub.is_expired && (
           <div style={{

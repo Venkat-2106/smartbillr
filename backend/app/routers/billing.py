@@ -54,6 +54,10 @@ async def list_plans(db: AsyncSession = Depends(get_async_db)):
     for p in plans:
         if p.get("feature_limits") and isinstance(p["feature_limits"], str):
             p["feature_limits"] = json.loads(p["feature_limits"])
+        if p.get("price_inr") is not None:
+            p["price_inr"] = float(p["price_inr"])
+        if p.get("price_usd") is not None:
+            p["price_usd"] = float(p["price_usd"])
     return success_response(plans)
 
 

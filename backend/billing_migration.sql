@@ -120,7 +120,8 @@ INSERT INTO plans (plan_code, display_name, billing_cycle, price_inr, price_usd,
     ('trial',      'Free Trial',  'trial',    0,      0,      '{"max_products": 50, "max_customers": 50, "max_sales_monthly": 100, "max_staff": 1, "financial_reports": false, "product_profit_view": false}', 0),
     ('basic',      'Basic',       'monthly',  499,    9.99,   '{"max_products": 500, "max_customers": 500, "max_sales_monthly": 2000, "max_staff": 2, "financial_reports": false, "product_profit_view": false}', 1),
     ('pro',        'Pro',         'monthly',  999,    19,     '{"max_products": -1, "max_customers": -1, "max_sales_monthly": -1, "max_staff": 10, "financial_reports": true, "product_profit_view": true}', 2),
-    ('pro_yearly', 'Pro Yearly',  'yearly',   4999,   99,     '{"max_products": -1, "max_customers": -1, "max_sales_monthly": -1, "max_staff": 10, "financial_reports": true, "product_profit_view": true}', 3)
+    ('pro_yearly', 'Pro Yearly',  'yearly',   4999,   99,     '{"max_products": -1, "max_customers": -1, "max_sales_monthly": -1, "max_staff": 10, "financial_reports": true, "product_profit_view": true}', 3),
+    ('lifetime',   'Lifetime',    'one_time', 14999,  299,    '{"max_products": -1, "max_customers": -1, "max_sales_monthly": -1, "max_staff": -1, "financial_reports": true, "product_profit_view": true}', 4)
 ON CONFLICT (plan_code) DO NOTHING;
 
 -- Mark alembic migration as applied (prevents re-run via alembic)

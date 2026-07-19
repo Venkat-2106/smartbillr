@@ -8,6 +8,7 @@ import { Button, Spinner } from '../../../shared/components'
 const PLAN_DESCRIPTIONS = {
   basic: 'For single-location shops',
   pro: 'For growing businesses',
+  lifetime: 'Pay once, use forever',
 }
 
 const FEATURE_LABELS = {
@@ -45,6 +46,8 @@ function groupPlansByFamily(plans) {
         monthly: null,
         yearly: null,
         yearlyCode: null,
+        lifetime: null,
+        lifetimeCode: null,
         features: formatFeatures(plan.feature_limits),
       }
     }
@@ -55,6 +58,10 @@ function groupPlansByFamily(plans) {
     if (plan.billing_cycle === 'yearly') {
       groups[baseCode].yearly = entry
       groups[baseCode].yearlyCode = plan.plan_code
+    } else if (plan.billing_cycle === 'one_time') {
+      groups[baseCode].lifetime = entry
+      groups[baseCode].lifetimeCode = plan.plan_code
+      if (!groups[baseCode].name) groups[baseCode].name = plan.display_name
     } else {
       groups[baseCode].monthly = entry
       if (!groups[baseCode].name) groups[baseCode].name = plan.display_name
@@ -74,19 +81,20 @@ export default function PricingPage() {
   const country = useAuthStore((s) => s.business)?.business_country_code || 'IN'
   const isIndia = country.toUpperCase() === 'IN'
 
-  const { data: plansData, isLoading } = usePlans()
+  const { data: plansData, isLoading, isError, refetch } = usePlans()
   const { mutate: startCheckout, isPending } = useCheckout()
   const [selectedBilling, setSelectedBilling] = useState('monthly')
 
   const displayPlans = useMemo(() => groupPlansByFamily(plansData), [plansData])
 
-  function handleSubscribe(planCode, yearlyCode) {
+  function handleSubscribe(planCode, yearlyCode, overrideBillingCycle) {
     if (!isLoggedIn) {
       navigate(`/signup?plan=${planCode}`)
       return
     }
-    const resolvedCode = selectedBilling === 'yearly' && yearlyCode ? yearlyCode : planCode
-    startCheckout({ planCode: resolvedCode, billingCycle: selectedBilling }, {
+    const billingCycle = overrideBillingCycle || (selectedBilling === 'yearly' && yearlyCode ? 'yearly' : 'monthly')
+    const resolvedCode = billingCycle === 'yearly' && yearlyCode ? yearlyCode : planCode
+    startCheckout({ planCode: resolvedCode, billingCycle }, {
       onSuccess: (data) => {
         if (data.provider === 'razorpay') {
           openRazorpayCheckout(data)
@@ -120,6 +128,21 @@ export default function PricingPage() {
     return (
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '40px 24px', textAlign: 'center' }}>
         <Spinner size={32} />
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div style={{ maxWidth: 960, margin: '0 auto', padding: '40px 24px', textAlign: 'center' }}>
+        <div style={{
+          background: 'var(--danger-bg)', border: '1px solid var(--danger-border)',
+          borderRadius: 12, padding: '16px 20px', color: 'var(--danger-text)',
+          fontSize: 14, marginBottom: 16,
+        }}>
+          Could not load plans. Check that the backend is running and try again.
+        </div>
+        <Button variant="secondary" onClick={() => refetch()}>Retry</Button>
       </div>
     )
   }
@@ -159,9 +182,14 @@ export default function PricingPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
         {displayPlans.map((plan) => {
-          const price = selectedBilling === 'yearly' && plan.yearly
-            ? (isIndia ? `₹${plan.yearly.inr}/yr` : `$${plan.yearly.usd}/yr`)
-            : (isIndia ? `₹${plan.monthly.inr}/mo` : `$${plan.monthly.usd}/mo`)
+          let price
+          if (plan.lifetime) {
+            price = isIndia ? `₹${plan.lifetime.inr}` : `$${plan.lifetime.usd}`
+          } else if (selectedBilling === 'yearly' && plan.yearly) {
+            price = isIndia ? `₹${plan.yearly.inr}/yr` : `$${plan.yearly.usd}/yr`
+          } else {
+            price = isIndia ? `₹${plan.monthly?.inr}/mo` : `$${plan.monthly?.usd}/mo`
+          }
 
           return (
             <div
@@ -187,11 +215,11 @@ export default function PricingPage() {
               </ul>
               <Button
                 variant="primary"
-                onClick={() => handleSubscribe(plan.code, plan.yearlyCode)}
-                disabled={isPending || (selectedBilling === 'yearly' && !plan.yearly)}
+                onClick={() => handleSubscribe(plan.code, plan.yearlyCode, plan.lifetime ? 'one_time' : null)}
+                disabled={isPending || (!plan.lifetime && selectedBilling === 'yearly' && !plan.yearly)}
                 style={{ width: '100%' }}
               >
-                {isPending ? <Spinner size={16} /> : 'Get Started'}
+                {isPending ? <Spinner size={16} /> : (plan.lifetime ? 'Get Lifetime Access' : 'Get Started')}
               </Button>
             </div>
           )

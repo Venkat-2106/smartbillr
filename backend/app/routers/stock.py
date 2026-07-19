@@ -43,13 +43,20 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
 from app.utils.queries import fetch_stock_kpi_counts_async
 from app.utils.timestamp import fmt_ts
-from app.utils.bulk_import import parse_csv_file, validate_rows, chunk_list, friendly_db_error
+from app.utils.bulk_import import parse_csv_file, validate_rows, chunk_list, friendly_db_error, check_required_headers
 from app.utils.subscription_features import check_feature_access
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 import uuid
 import logging
 
 router = APIRouter(prefix="/v1/stock", tags=["Stock"])
+
+REQUIRED_STOCK_COLUMNS = [
+    {"names": ["qty", "quantity", "Qty", "Quantity"]},
+    {"names": ["product_id", "prod_id", "Product ID",
+               "barcode", "Barcode",
+               "prod_name", "product_name", "Product Name"]},
+]
 
 # Mirrors PROFIT_PERMISSION in product.py — gates prod_cost_price / stock value
 PROFIT_PERMISSION = "view_product_profit"
@@ -603,9 +610,13 @@ async def import_stock_adjustments(
 
     # ── 1. Parse CSV ──────────────────────────────────────────────────────────
     file_bytes = await file.read()
-    rows, parse_error = parse_csv_file(file_bytes)
+    rows, fieldnames, parse_error = parse_csv_file(file_bytes)
     if parse_error:
         return error_response(parse_error, 400)
+
+    header_error = check_required_headers(fieldnames, REQUIRED_STOCK_COLUMNS)
+    if header_error:
+        return error_response(header_error, 400)
 
     # ── 2. Row transform: validate & transform each row ────────────────────────
     def row_transform(row: dict, row_num: int):

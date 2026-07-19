@@ -55,7 +55,7 @@ from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.tax_engine import calculate_item_tax
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
-from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list, friendly_db_error
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list, friendly_db_error, check_required_headers
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from app.utils.bulk_stock_adjust import bulk_check_and_reduce_stock
 import logging
@@ -69,6 +69,13 @@ class PurchaseStatusUpdate(BaseModel):
 
 
 router = APIRouter(prefix="/v1/purchases", tags=["Purchases"])
+
+REQUIRED_PURCHASE_COLUMNS = [
+    {"names": ["qty", "quantity", "Qty", "Quantity"]},
+    {"names": ["unit_price", "price", "Unit Price", "Price"]},
+    {"names": ["prod_name", "product_name", "Product Name",
+               "barcode", "Barcode"]},
+]
 
 
 # ─────────────────────────────────────────
@@ -501,9 +508,13 @@ async def import_purchases(
 
     # ── 1. Parse CSV ──────────────────────────────────────────────────────────
     file_bytes = await file.read()
-    rows, parse_error = parse_csv_file(file_bytes)
+    rows, fieldnames, parse_error = parse_csv_file(file_bytes)
     if parse_error:
         return error_response(parse_error, 400)
+
+    header_error = check_required_headers(fieldnames, REQUIRED_PURCHASE_COLUMNS)
+    if header_error:
+        return error_response(header_error, 400)
 
     # ── 2. Row transform: validate & transform each row ────────────────────────
     def row_transform(row: dict, row_num: int):

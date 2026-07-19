@@ -31,7 +31,7 @@ from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryRespons
 from app.models.category import Category
 from app.utils.timestamp import fmt_ts
 from app.utils.subscription_features import check_feature_access
-from app.utils.bulk_import import parse_csv_file, validate_rows
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_required_headers
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from typing import Optional
 import uuid
@@ -40,6 +40,10 @@ router = APIRouter(
     prefix="/v1/categories",
     tags=["Categories"]
 )
+
+REQUIRED_CATEGORY_COLUMNS = [
+    {"names": ["category_name", "name", "Category Name"]},
+]
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -126,9 +130,13 @@ async def import_categories(
 
     # ── 1. Parse CSV ──────────────────────────────────────────────────────────
     file_bytes = await file.read()
-    rows, parse_error = parse_csv_file(file_bytes)
+    rows, fieldnames, parse_error = parse_csv_file(file_bytes)
     if parse_error:
         return error_response(parse_error, 400)
+
+    header_error = check_required_headers(fieldnames, REQUIRED_CATEGORY_COLUMNS)
+    if header_error:
+        return error_response(header_error, 400)
 
     # ── 2. Row transform: validate & sanitize each row ────────────────────────
     def row_transform(row: dict, row_num: int):

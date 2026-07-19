@@ -30,33 +30,74 @@ MAX_IMPORT_ROWS = 1000   # hard cap per uploaded file (data rows, excluding head
 CHUNK_SIZE = 100          # rows per INSERT statement
 
 
-def parse_csv_file(file_bytes: bytes) -> tuple[list[dict], str | None]:
+def parse_csv_file(file_bytes: bytes) -> tuple[list[dict], list[str] | None, str | None]:
     """
     Decodes and parses an uploaded CSV file into a list of dict rows
     (keys = header column names).
 
-    Returns (rows, error). error is None on success, and rows is [] on error.
+    Returns (rows, fieldnames, error). error is None on success,
+    and rows is [] on error. fieldnames is the raw header list from
+    the CSV (None on error) so callers can do header-level checks
+    without a second pass over the file.
     """
     try:
         text = file_bytes.decode("utf-8-sig")  # -sig strips BOM from Excel-exported CSVs
     except UnicodeDecodeError:
-        return [], "File is not valid UTF-8 text. Please save/export the CSV as UTF-8."
+        return [], None, "File is not valid UTF-8 text. Please save/export the CSV as UTF-8."
 
     reader = csv.DictReader(io.StringIO(text))
     if reader.fieldnames is None:
-        return [], "CSV file is empty or has no header row."
+        return [], None, "CSV file is empty or has no header row."
 
     rows = list(reader)
     if not rows:
-        return [], "CSV file has no data rows."
+        return [], reader.fieldnames, "CSV file has no data rows."
 
     if len(rows) > MAX_IMPORT_ROWS:
-        return [], (
+        return [], reader.fieldnames, (
             f"File has {len(rows)} rows — maximum {MAX_IMPORT_ROWS} rows per "
             f"import. Please split into smaller files."
         )
 
-    return rows, None
+    return rows, reader.fieldnames, None
+
+
+def check_required_headers(
+    fieldnames: list[str],
+    required_columns: list[dict],
+) -> str | None:
+    """
+    Checks that every required column has at least one of its accepted header
+    names present in the CSV's actual header row (fieldnames from csv.DictReader).
+
+    required_columns: list of {"names": [...]} where "names" is every header
+    variant that should count as satisfying that requirement — e.g.
+    {"names": ["prod_name", "name", "Product Name"]}.
+
+    Returns None if all required columns are present, or a single user-facing
+    error string listing every missing column's canonical label if any are absent.
+    """
+    if not fieldnames:
+        return None  # parse_csv_file already handles the "no header row" case
+
+    present = set(fieldnames)
+    missing_labels = []
+
+    for col in required_columns:
+        names = col["names"]
+        if not any(n in present for n in names):
+            # Use the first name as the human-readable label in the error message
+            missing_labels.append(names[0])
+
+    if missing_labels:
+        cols_str = ", ".join(missing_labels)
+        plural = "s" if len(missing_labels) > 1 else ""
+        return (
+            f"Your file is missing required column{plural}: {cols_str}. "
+            f"Please use the downloadable template and make sure these columns "
+            f"are present, then try again."
+        )
+    return None
 
 
 def validate_rows(rows: list[dict], row_transform) -> tuple[list[dict], list[dict]]:

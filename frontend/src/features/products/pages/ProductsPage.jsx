@@ -695,6 +695,27 @@ export default function ProductsPage() {
               )
             },
           },
+          {
+            key:      'prod_profit_margin',
+            label:    'Margin',
+            sortable: true,
+            width:    80,
+            render: (row) => {
+              const margin = row.prod_profit_margin
+              if (margin == null) {
+                return isTierLocked
+                  ? <LockedCell message="Upgrade to view" />
+                  : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
+              }
+              const isNeg  = Number(margin) < 0
+              return (
+                <span style={{ fontSize: 13, fontWeight: 600, color: isNeg ? 'var(--danger-text)' : 'var(--success-text)' }}>
+                  {Number(margin).toFixed(1)}%
+                </span>
+              )
+            },
+          },
+
         ]
       : []),
     {

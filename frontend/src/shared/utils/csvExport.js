@@ -221,6 +221,8 @@ export const PRODUCT_CSV_COLUMNS = [
     format: (val) => val != null ? String(val) : '' },
   { key: 'prod_cost_price',     label: 'Cost Price' },
   { key: 'prod_profit',         label: 'Profit' },
+  { key: 'prod_profit_margin',  label: 'Margin %',
+    format: (val) => val != null ? `${Number(val).toFixed(1)}%` : '' },
   { key: 'prod_stock_qty',      label: 'Stock Qty' },
   { key: 'prod_low_stock_alert',label: 'Low Stock Alert' },
   { key: 'tax_rate',            label: 'Tax Rate %',

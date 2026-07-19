@@ -112,7 +112,12 @@ async def get_product_with_profit(db: AsyncSession, prod_id, business_id: str):
             SELECT
                 p.prod_id, p.business_id, p.category_id, p.prod_name,
                 p.prod_sell_price, p.prod_mrp,
-                p.prod_cost_price, p.prod_profit,
+                p.prod_cost_price,
+                (p.prod_sell_price - p.prod_cost_price) AS prod_profit,
+                CASE WHEN p.prod_sell_price > 0
+                  THEN ROUND(((p.prod_sell_price - p.prod_cost_price) / p.prod_sell_price) * 100, 2)
+                  ELSE 0
+                END AS prod_profit_margin,
                 p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
                 p.tax_code, p.barcode, p.unit, p.is_deleted,
                 p.prod_created_at, p.updated_at,
@@ -153,7 +158,8 @@ def row_to_dict(row, show_profit: bool = True, include_audit: bool = True):
         # MRP FEATURE: None when not set — frontend treats None as "no MRP"
         "prod_mrp":             float(row.prod_mrp) if row.prod_mrp is not None else None,
         "prod_cost_price":      float(row.prod_cost_price) if show_profit else None,
-        "prod_profit":          float(row.prod_profit) if (show_profit and row.prod_profit is not None) else None,
+        "prod_profit":          float(row.prod_profit) if show_profit else None,
+        "prod_profit_margin":   float(row.prod_profit_margin) if show_profit else None,
         "prod_stock_qty":       row.prod_stock_qty,
         "prod_low_stock_alert": row.prod_low_stock_alert,
         "tax_rate":             float(row.tax_rate) if row.tax_rate is not None else 0,
@@ -684,7 +690,8 @@ async def get_all_products(
         "prod_sell_price":      "p.prod_sell_price",
         "prod_mrp":             "p.prod_mrp",
         "prod_cost_price":      "p.prod_cost_price",
-        "prod_profit":          "p.prod_profit",
+        "prod_profit":          "(p.prod_sell_price - p.prod_cost_price)",
+        "prod_profit_margin":   "CASE WHEN p.prod_sell_price > 0 THEN ROUND(((p.prod_sell_price - p.prod_cost_price) / p.prod_sell_price) * 100, 2) ELSE 0 END",
         "prod_stock_qty":       "p.prod_stock_qty",
         "tax_rate":             "p.tax_rate",
         "updated_at":           "p.updated_at",
@@ -694,6 +701,7 @@ async def get_all_products(
     if not show_profit:
         SORTABLE.pop("prod_cost_price", None)
         SORTABLE.pop("prod_profit", None)
+        SORTABLE.pop("prod_profit_margin", None)
     order_col = SORTABLE.get(sort_by, "p.prod_name")
     order_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
 
@@ -724,7 +732,12 @@ async def get_all_products(
             SELECT
                 p.prod_id, p.business_id, p.category_id, p.prod_name,
                 p.prod_sell_price, p.prod_mrp,
-                p.prod_cost_price, p.prod_profit,
+                p.prod_cost_price,
+                (p.prod_sell_price - p.prod_cost_price) AS prod_profit,
+                CASE WHEN p.prod_sell_price > 0
+                  THEN ROUND(((p.prod_sell_price - p.prod_cost_price) / p.prod_sell_price) * 100, 2)
+                  ELSE 0
+                END AS prod_profit_margin,
                 p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
                 p.tax_code, p.barcode, p.unit,
                 p.prod_created_at, p.updated_at,
@@ -943,7 +956,12 @@ async def get_product(
             SELECT
                 p.prod_id, p.business_id, p.category_id, p.prod_name,
                 p.prod_sell_price, p.prod_mrp,
-                p.prod_cost_price, p.prod_profit,
+                p.prod_cost_price,
+                (p.prod_sell_price - p.prod_cost_price) AS prod_profit,
+                CASE WHEN p.prod_sell_price > 0
+                  THEN ROUND(((p.prod_sell_price - p.prod_cost_price) / p.prod_sell_price) * 100, 2)
+                  ELSE 0
+                END AS prod_profit_margin,
                 p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
                 p.tax_code, p.barcode, p.unit, p.is_deleted,
                 p.prod_created_at, p.updated_at,

@@ -367,7 +367,12 @@ async def get_category(
         text("""
             SELECT
                 prod_id, prod_name, prod_sell_price, prod_cost_price,
-                prod_profit, prod_stock_qty, prod_low_stock_alert,
+                (prod_sell_price - prod_cost_price) AS prod_profit,
+                CASE WHEN prod_sell_price > 0
+                  THEN ROUND(((prod_sell_price - prod_cost_price) / prod_sell_price) * 100, 2)
+                  ELSE 0
+                END AS prod_profit_margin,
+                prod_stock_qty, prod_low_stock_alert,
                 tax_rate, tax_code, barcode, unit, prod_created_at, updated_at
             FROM products
             WHERE category_id = CAST(:cid AS uuid)
@@ -394,7 +399,8 @@ async def get_category(
             "prod_name":            p.prod_name,
             "prod_sell_price":      float(p.prod_sell_price),
             "prod_cost_price":      float(p.prod_cost_price) if show_profit else None,
-            "prod_profit":          float(p.prod_profit) if (show_profit and p.prod_profit is not None) else None,
+            "prod_profit":          float(p.prod_profit) if show_profit else None,
+            "prod_profit_margin":   float(p.prod_profit_margin) if show_profit else None,
             "prod_stock_qty":       p.prod_stock_qty,
             "prod_low_stock_alert": p.prod_low_stock_alert,
             "tax_rate":             float(p.tax_rate) if p.tax_rate else 0,

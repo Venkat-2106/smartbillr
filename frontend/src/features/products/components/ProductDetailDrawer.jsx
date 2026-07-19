@@ -143,6 +143,10 @@ function buildProductPrintHTML(business, product, detail, summary, stockHistory,
           <div style="font-size:15px;font-weight:800;color:#10B981;word-break:break-all;">${formatCurrency(p.prod_profit ?? product.prod_profit ?? 0, country)}</div>
         </div>
         <div style="${cardStyle}">
+          <div style="${labelStyle}">Margin</div>
+          <div style="font-size:15px;font-weight:800;color:#10B981;word-break:break-all;">${p.prod_profit_margin != null || product.prod_profit_margin != null ? `${Number(p.prod_profit_margin ?? product.prod_profit_margin ?? 0).toFixed(1)}%` : '—'}</div>
+        </div>
+        <div style="${cardStyle}">
           <div style="${labelStyle}">Current Stock</div>
           <div style="font-size:15px;font-weight:800;color:${stockColor};word-break:break-all;">${p.prod_stock_qty ?? product.prod_stock_qty} ${p.unit || product.unit || 'pcs'}</div>
         </div>
@@ -486,12 +490,23 @@ export default function ProductDetailDrawer({ product, onClose }) {
                   } />
                 )}
                 {canViewProfit && (
-                  <InfoRow label="Profit Margin" value={
-                    detail?.prod_profit != null
-                      ? formatCurrency(detail.prod_profit, country)
-                      : product.prod_profit != null
-                        ? formatCurrency(product.prod_profit, country)
-                        : isTierLocked ? 'Upgrade to view' : '—'
+                  <InfoRow label="Profit" value={
+                    isTierLocked
+                      ? 'Upgrade to view'
+                      : (() => {
+                          const profit = detail?.prod_profit ?? product.prod_profit
+                          return profit != null ? formatCurrency(profit, country) : '—'
+                        })()
+                  } />
+                )}
+                {canViewProfit && (
+                  <InfoRow label="Margin" value={
+                    isTierLocked
+                      ? 'Upgrade to view'
+                      : (() => {
+                          const margin = detail?.prod_profit_margin ?? product.prod_profit_margin
+                          return margin != null ? `${Number(margin).toFixed(1)}%` : '—'
+                        })()
                   } />
                 )}
                 <InfoRow label="Category"       value={detail?.category_name || product.category_name || '—'} />

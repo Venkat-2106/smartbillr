@@ -31,7 +31,7 @@ from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryRespons
 from app.models.category import Category
 from app.utils.timestamp import fmt_ts
 from app.utils.subscription_features import check_feature_access
-from app.utils.bulk_import import parse_csv_file, validate_rows, check_required_headers
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_required_headers, friendly_db_error
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from typing import Optional
 import uuid
@@ -212,11 +212,14 @@ async def import_categories(
             params[f"uid_{i}"] = r["uid"]
         params["bid"] = business_id
 
-        await db.execute(text(f"""
-            INSERT INTO categories (category_id, business_id, category_name, created_by, updated_by)
-            VALUES {placeholders}
-        """), params)
-        created = len(new_rows)
+        try:
+            await db.execute(text(f"""
+                INSERT INTO categories (category_id, business_id, category_name, created_by, updated_by)
+                VALUES {placeholders}
+            """), params)
+            created = len(new_rows)
+        except Exception as e:
+            duplicate_errors.append({"row": 0, "message": friendly_db_error(e, context="category insert batch")})
 
     await db.commit()
     await async_set_rls_gucs_after_commit(db, current_user)

@@ -414,6 +414,10 @@ function CurrentStockTab({ canViewProfit, isTierLocked, canAdjust }) {
             endpoint="/stock/import"
             title="Stock"
             columns={STOCK_IMPORT_TEMPLATE}
+            requiredColumns={[
+              { key: 'qty', label: 'Quantity', alternates: ['quantity'] },
+              { key: 'product_id', label: 'Product ID', alternates: ['prod_id', 'barcode', 'Barcode', 'prod_name', 'product_name', 'Product Name'] },
+            ]}
           />
         </div>
       </div>

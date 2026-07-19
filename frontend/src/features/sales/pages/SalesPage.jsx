@@ -258,6 +258,11 @@ export default function SalesPage() {
                 endpoint="/sales/import"
                 title="Sales"
                 columns={SALES_IMPORT_TEMPLATE}
+                requiredColumns={[
+                  { key: 'qty', label: 'Quantity', alternates: ['quantity'] },
+                  { key: 'unit_price', label: 'Unit Price', alternates: ['price'] },
+                  { key: 'prod_name', label: 'Product Name', alternates: ['product_name', 'barcode', 'Barcode'] },
+                ]}
               />
             )}
             {canCreate && (

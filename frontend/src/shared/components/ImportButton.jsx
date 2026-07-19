@@ -126,11 +126,14 @@ export default function ImportButton({
 
       const { summary, errors, message } = response.data;
 
-      if (!summary || summary.errors === summary.valid_rows) {
-        // All rows failed
-        toast.error(message || 'Import failed — all rows had errors', { duration: 6000 });
+      const savedCount = (summary?.created || 0) + (summary?.updated || 0);
+
+      if (!summary || savedCount === 0) {
+        // No rows were actually saved — this is a failure even if the server
+        // returned 200 (bulk-import endpoints always return success_response).
+        toast.error(message || 'Import failed — no rows were saved', { duration: 6000 });
       } else {
-        // Success with some errors
+        // At least some rows were saved
         const errorCount = summary.errors || errors?.length || 0;
         const successMsg = errorCount > 0
           ? `${message} (${errors?.length || 0} rows had errors)`
@@ -138,11 +141,11 @@ export default function ImportButton({
 
         toast.success(successMsg, { duration: errorCount > 0 ? 6000 : 3500 });
 
-        if (errorCount > 0 && errors?.length > 0 && errors.length <= 20) {
-          const lines = errors.slice(0, 5)
+        if (errorCount > 0 && errors?.length > 0) {
+          const lines = errors.slice(0, 10)
             .map(e => e.row === 0 ? e.message : `Row ${e.row}: ${e.message}`);
-          if (errors.length > 5) {
-            lines.push(`+ ${errors.length - 5} more row(s) with errors`);
+          if (errors.length > 10) {
+            lines.push(`+ ${errors.length - 10} more row(s) with errors`);
           }
           const errorDetails = lines.join('\n');
           if (errorDetails) {

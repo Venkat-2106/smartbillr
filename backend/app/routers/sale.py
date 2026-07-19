@@ -454,12 +454,17 @@ async def import_sales(
             elif row.get("cust_name"):
                 cust_id = cust_map.get(row["cust_name"])
 
+            # If a customer reference was provided but not found, reject the row
+            if (row.get("cust_phone") or row.get("cust_name")) and not cust_id:
+                sale_errors.append({"row": row_num, "message": f'Customer "{row.get("cust_phone") or row.get("cust_name")}" not found. Leave this column blank for a walk-in sale, or add the customer first.'})
+                continue
+
             # Resolve product
             raw_key = row.get("prod_name")
             prod_key = raw_key.strip().lower() if raw_key else row.get("barcode")
             prod_info = product_map.get(prod_key) if prod_key else None
             if not prod_info:
-                sale_errors.append({"row": row_num, "message": "product not found"})
+                sale_errors.append({"row": row_num, "message": f'Row {row_num}: Product "{row.get("prod_name") or row.get("barcode")}" not found — check the spelling, or that the product exists.'})
                 continue
 
             try:

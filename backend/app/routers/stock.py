@@ -740,7 +740,7 @@ async def import_stock_adjustments(
             # Resolve product
             lookup_key = pid or barcode or prod_name or None
             if not lookup_key or lookup_key not in product_map:
-                adjustment_errors.append({"row": row_num, "message": f"product not found"})
+                adjustment_errors.append({"row": row_num, "message": f'Product "{pid or barcode or prod_name}" not found — check the spelling, barcode, or product ID.'})
                 continue
 
             (resolved_pid, prev_stock, resolved_name) = product_map[lookup_key]

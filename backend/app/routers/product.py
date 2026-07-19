@@ -103,6 +103,9 @@ router = APIRouter(prefix="/v1/products", tags=["Products"])
 
 REQUIRED_PRODUCT_COLUMNS = [
     {"names": ["prod_name", "name", "Product Name"]},
+    {"names": ["category_name", "Category", "Category Name"]},
+    {"names": ["prod_sell_price", "sell_price", "Sell Price"]},
+    {"names": ["prod_cost_price", "cost_price", "Cost Price"]},
 ]
 
 # ── Permission code constant ─────────────────────────────────────────────────
@@ -376,10 +379,19 @@ async def import_products(
         if not name:
             return None, "prod_name is required"
 
-        # Optional fields with sanitization
-        category_name = (row.get("category_name") or row.get("Category") or "").strip() or None
+        category_name = (row.get("category_name") or row.get("Category") or "").strip()
+        if not category_name:
+            return None, "category_name is required"
+
         sell_price = row.get("prod_sell_price") or row.get("sell_price") or row.get("Sell Price")
+        if sell_price is None or str(sell_price).strip() == "":
+            return None, "prod_sell_price is required"
+
         cost_price = row.get("prod_cost_price") or row.get("cost_price") or row.get("Cost Price")
+        if cost_price is None or str(cost_price).strip() == "":
+            return None, "prod_cost_price is required"
+
+        # Optional fields with sanitization
         mrp = row.get("prod_mrp") or row.get("mrp") or row.get("MRP")
         stock_qty = row.get("prod_stock_qty") or row.get("stock_qty") or row.get("Stock Qty") or "0"
         low_stock_alert = row.get("prod_low_stock_alert") or row.get("low_stock_alert") or row.get("Low Stock Alert") or "10"
@@ -390,8 +402,7 @@ async def import_products(
 
         # Sanitize strings (CSV-safe: strips formula-injection characters)
         name = strip_and_escape_csv_value(name)
-        if category_name:
-            category_name = strip_and_escape_csv_value(category_name)
+        category_name = strip_and_escape_csv_value(category_name)
         if tax_code:
             tax_code = strip_and_escape_csv_value(tax_code)
         if barcode:
@@ -401,8 +412,8 @@ async def import_products(
 
         # Validate numeric fields
         try:
-            sell_price = float(sell_price) if sell_price is not None and sell_price != "" else 0.0
-            cost_price = float(cost_price) if cost_price is not None and cost_price != "" else 0.0
+            sell_price = float(sell_price)
+            cost_price = float(cost_price)
             mrp = float(mrp) if mrp is not None and mrp != "" else None
             stock_qty = int(float(stock_qty)) if stock_qty is not None and stock_qty != "" else 0
             low_stock_alert = int(float(low_stock_alert)) if low_stock_alert is not None and low_stock_alert != "" else 10
@@ -467,6 +478,30 @@ async def import_products(
 
             for r in cat_rows:
                 category_map[r.category_name.lower()] = str(r.category_id)
+
+    # ── 4b. Verify every row's category exists — reject unmatched names ─────
+    unmatched_cat_errors = []
+    filtered_rows = []
+    for r in valid_rows:
+        cat_name = r.get("category_name")
+        if cat_name and cat_name.lower() not in category_map:
+            unmatched_cat_errors.append({
+                "row": r["_row_number"],
+                "message": f'Category "{cat_name}" does not exist. Leave this column blank to import without a category, or add the category first.'
+            })
+        else:
+            filtered_rows.append(r)
+
+    if unmatched_cat_errors:
+        errors.extend(unmatched_cat_errors)
+    valid_rows = filtered_rows
+
+    if not valid_rows:
+        return success_response({
+            "message": f"Import completed: 0 created, 0 updated, {len(errors)} errors",
+            "summary": {"total_rows": 0, "valid_rows": 0, "created": 0, "updated": 0, "errors": len(errors)},
+            "errors": errors
+        })
 
     # ── 5. Fetch existing product names & barcodes for duplicate detection (batch) ──────
     existing_names = {}

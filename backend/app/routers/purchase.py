@@ -740,12 +740,17 @@ async def import_purchases(
             elif row.get("supp_name"):
                 supp_id = supplier_map.get(row["supp_name"])
 
+            # If a supplier reference was provided but not found, reject the row
+            if (row.get("supp_phone") or row.get("supp_name")) and not supp_id:
+                purchase_errors.append({"row": row_num, "message": f'Supplier "{row.get("supp_phone") or row.get("supp_name")}" not found. Leave this column blank, or add the supplier first.'})
+                continue
+
             # Resolve product
             raw_key = row.get("prod_name")
             prod_key = raw_key.strip().lower() if raw_key else row.get("barcode")
             prod_info = product_map.get(prod_key) if prod_key else None
             if not prod_info:
-                purchase_errors.append({"row": row_num, "message": "product not found"})
+                purchase_errors.append({"row": row_num, "message": f'Row {row_num}: Product "{row.get("prod_name") or row.get("barcode")}" not found — check the spelling, or that the product exists.'})
                 continue
 
             try:

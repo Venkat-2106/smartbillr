@@ -27,7 +27,24 @@ from app.utils.usage_limits import count_entities_async, count_monthly_async
 logger = logging.getLogger(__name__)
 
 MAX_IMPORT_ROWS = 1000   # hard cap per uploaded file (data rows, excluding header)
+MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024  # 5 MB — mirrors ImportButton.jsx's frontend limit
 CHUNK_SIZE = 100          # rows per INSERT statement
+
+
+def validate_upload_file(file) -> str | None:
+    """
+    Checks filename extension and declared content-type before reading
+    the file into memory. Returns an error string, or None if OK.
+    This prevents oversized or non-CSV files from being loaded into RAM.
+    """
+    if file.filename and not file.filename.lower().endswith(".csv"):
+        return "Please upload a CSV file (.csv)."
+    if file.content_type not in (
+        "text/csv", "application/vnd.ms-excel", "application/csv", "text/plain",
+        "application/octet-stream",  # some clients send this for .csv uploads
+    ):
+        return "Please upload a CSV file (.csv)."
+    return None
 
 
 def parse_csv_file(file_bytes: bytes) -> tuple[list[dict], list[str] | None, str | None]:

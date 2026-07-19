@@ -74,7 +74,7 @@ from app.utils.payment_helpers import record_payment_and_sync_async, calculate_p
 from app.utils.currency import get_currency_symbol
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 from app.utils.subscription_features import check_feature_access
-from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list, friendly_db_error, check_required_headers
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, chunk_list, friendly_db_error, check_required_headers, validate_upload_file, MAX_IMPORT_FILE_BYTES
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 import uuid
 
@@ -203,8 +203,17 @@ async def import_sales(
     business_id = current_user["business_id"]
     user_id = current_user["user_id"]
 
+    # ── 0. Validate upload file type & size ───────────────────────────────────
+    file_error = validate_upload_file(file)
+    if file_error:
+        return error_response(file_error, 400)
+
     # ── 1. Parse CSV ──────────────────────────────────────────────────────────
     file_bytes = await file.read()
+
+    if len(file_bytes) > MAX_IMPORT_FILE_BYTES:
+        return error_response("File is too large — maximum 5 MB.", 400)
+
     rows, fieldnames, parse_error = parse_csv_file(file_bytes)
     if parse_error:
         return error_response(parse_error, 400)

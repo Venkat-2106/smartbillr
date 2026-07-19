@@ -31,7 +31,7 @@ from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryRespons
 from app.models.category import Category
 from app.utils.timestamp import fmt_ts
 from app.utils.subscription_features import check_feature_access
-from app.utils.bulk_import import parse_csv_file, validate_rows, check_required_headers, friendly_db_error
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_required_headers, friendly_db_error, validate_upload_file, MAX_IMPORT_FILE_BYTES
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from typing import Optional
 import uuid
@@ -128,8 +128,17 @@ async def import_categories(
     business_id = current_user["business_id"]
     user_id = current_user["user_id"]
 
+    # ── 0. Validate upload file type & size ───────────────────────────────────
+    file_error = validate_upload_file(file)
+    if file_error:
+        return error_response(file_error, 400)
+
     # ── 1. Parse CSV ──────────────────────────────────────────────────────────
     file_bytes = await file.read()
+
+    if len(file_bytes) > MAX_IMPORT_FILE_BYTES:
+        return error_response("File is too large — maximum 5 MB.", 400)
+
     rows, fieldnames, parse_error = parse_csv_file(file_bytes)
     if parse_error:
         return error_response(parse_error, 400)

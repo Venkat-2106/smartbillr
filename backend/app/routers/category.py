@@ -31,7 +31,7 @@ from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryRespons
 from app.models.category import Category
 from app.utils.timestamp import fmt_ts
 from app.utils.subscription_features import check_feature_access
-from app.utils.bulk_import import parse_csv_file, validate_rows, chunk_list
+from app.utils.bulk_import import parse_csv_file, validate_rows
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from typing import Optional
 import uuid
@@ -169,45 +169,63 @@ async def import_categories(
         for r in existing_rows:
             existing_names[r.lname] = str(r.category_id)
 
-    # ── 5. Upsert in chunks ────────────────────────────────────────────────────
+    # ── 5. Bulk upsert — single multi-row INSERT + UPDATE ─────────────────────
+    new_rows = []
+    update_rows = []
+
+    for row in valid_rows:
+        row_num = row.pop("_row_number")
+        name = row["category_name"]
+        name_lower = name.lower()
+
+        if name_lower in existing_names:
+            update_rows.append({"name": name, "cid": existing_names[name_lower], "uid": user_id})
+        else:
+            new_cat_id = str(uuid.uuid4())
+            new_rows.append({"cid": new_cat_id, "bid": business_id, "name": name, "uid": user_id})
+            existing_names[name_lower] = new_cat_id
+
     created = 0
     updated = 0
-    upsert_errors = []
 
-    for chunk in chunk_list(valid_rows):
-        for row in chunk:
-            row_num = row.pop("_row_number")
-            name = row["category_name"]
-            name_lower = name.lower()
+    if new_rows:
+        placeholders = ", ".join([
+            f"(:cid_{i}, CAST(:bid AS uuid), :name_{i}, CAST(:uid_{i} AS uuid), CAST(:uid_{i} AS uuid))"
+            for i in range(len(new_rows))
+        ])
+        params = {}
+        for i, r in enumerate(new_rows):
+            params[f"cid_{i}"] = r["cid"]
+            params[f"name_{i}"] = r["name"]
+            params[f"uid_{i}"] = r["uid"]
+        params["bid"] = business_id
 
-            try:
-                if name_lower in existing_names:
-                    # UPDATE existing
-                    cat_id = existing_names[name_lower]
-                    await db.execute(text("""
-                        UPDATE categories
-                        SET category_name = :name,
-                            updated_by = CAST(:uid AS uuid)
-                        WHERE category_id = CAST(:cid AS uuid)
-                          AND business_id = CAST(:bid AS uuid)
-                    """), {"name": name, "cid": cat_id, "bid": business_id, "uid": user_id})
-                    updated += 1
-                else:
-                    # INSERT new
-                    new_cat_id = str(uuid.uuid4())
-                    await db.execute(text("""
-                        INSERT INTO categories (category_id, business_id, category_name, created_by, updated_by)
-                        VALUES (CAST(:cid AS uuid), CAST(:bid AS uuid), :name, CAST(:uid AS uuid), CAST(:uid AS uuid))
-                    """), {"cid": new_cat_id, "bid": business_id, "name": name, "uid": user_id})
-                    existing_names[name_lower] = new_cat_id  # prevent dup within same import
-                    created += 1
-            except Exception as e:
-                upsert_errors.append({"row": row_num, "message": str(e)})
+        await db.execute(text(f"""
+            INSERT INTO categories (category_id, business_id, category_name, created_by, updated_by)
+            VALUES {placeholders}
+        """), params)
+        created = len(new_rows)
 
-        await db.commit()
-        await async_set_rls_gucs_after_commit(db, current_user)
+    if update_rows:
+        case_parts = []
+        params = {"bid": business_id}
+        for i, r in enumerate(update_rows):
+            case_parts.append(f"WHEN category_id = CAST(:cid_{i} AS uuid) THEN CAST(:uid_{i} AS uuid)")
+            params[f"cid_{i}"] = r["cid"]
+            params[f"uid_{i}"] = r["uid"]
 
-    all_errors = errors + upsert_errors
+        await db.execute(text(f"""
+            UPDATE categories
+            SET updated_by = CASE {" ".join(case_parts)} END
+            WHERE business_id = CAST(:bid AS uuid)
+              AND category_id IN ({", ".join([f"CAST(:cid_{i} AS uuid)" for i in range(len(update_rows))])})
+        """), params)
+        updated = len(update_rows)
+
+    await db.commit()
+    await async_set_rls_gucs_after_commit(db, current_user)
+
+    all_errors = errors
 
     return success_response({
         "message": f"Import completed: {created} created, {updated} updated, {len(all_errors)} errors",

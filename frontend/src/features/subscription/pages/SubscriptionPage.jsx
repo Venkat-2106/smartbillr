@@ -1,3 +1,8 @@
+// FIX (2026-07-18): Subscription date display
+//   Trial and subscription end dates were shown independently (both visible
+//   simultaneously when trial_end_at persists after upgrading to paid).
+//   Now gated on subscription_type: trial → trial_end_at, paid → subscription_end_at.
+
 import { useNavigate } from 'react-router-dom'
 import { Spinner, Button } from '../../../shared/components'
 import { useSubscription } from '../hooks/useSubscription'

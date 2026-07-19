@@ -3,6 +3,10 @@
 # ── ASYNC MIGRATION NOTE (2026-07) ──────────────────────────────────────────
 #
 # This router was migrated from sync SQLAlchemy (psycopg2) to async
+#
+# FIX (2026-07-18): /import trailing slash
+#   Added @router.post("/import/") alongside "/import" to handle trailing-slash
+#   requests that match /{category_id}/ (GET-only) and return 405.
 # (asyncpg).  Key patterns to be aware of:
 #
 #   - All Session usage → AsyncSession (get_async_db dependency).
@@ -110,6 +114,7 @@ async def create_category(
 # ══════════════════════════════════════════════════════════════════
 # POST /categories/import → Bulk import categories from CSV
 # ══════════════════════════════════════════════════════════════════
+@router.post("/import/")
 @router.post("/import")
 async def import_categories(
     file: UploadFile = File(...),

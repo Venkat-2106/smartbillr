@@ -15,6 +15,11 @@
 //   Finding #14 — .bento-grid.bento-grid-12 for metric cards
 //   Finding #15 — Dismissible error banners with role="alert" on each tab
 //   See UI_UX_AUDIT_REPORT.md
+//
+// FIX (2026-07-18):
+//   Stock Value MetricCard — added locked={canViewProfit && isTierLocked} to
+//   show inline lock icon + "Upgrade" badge (same pattern as Sales/Dashboard).
+//   ImportButton endpoint: removed /v1 prefix (baseURL already contains it).
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -406,7 +411,7 @@ function CurrentStockTab({ canViewProfit, isTierLocked, canAdjust }) {
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <ExportButton onFetch={handleExport} filename="stock" columns={csvColumns} />
           <ImportButton
-            endpoint="/v1/stock/import"
+            endpoint="/stock/import"
             title="Stock"
             columns={STOCK_IMPORT_TEMPLATE}
           />

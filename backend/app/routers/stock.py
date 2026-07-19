@@ -292,6 +292,10 @@ async def get_movement(
 #   - LEFT JOIN categories for category_name (same as products list)
 #   - prod_cost_price / stock_value gated by view_product_profit, mirroring
 #     row_to_dict(show_profit=...) in product.py
+#
+# FIX (2026-07-18): get_all_movements date parsing
+#   date_from / date_to were passed as raw ISO strings to asyncpg, which
+#   expects datetime objects. Added datetime.fromisoformat() parsing.
 # ─────────────────────────────────────────
 @router.get("/current")
 async def get_current_stock(

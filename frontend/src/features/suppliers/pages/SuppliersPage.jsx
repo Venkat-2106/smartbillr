@@ -11,6 +11,9 @@
 //   Finding #15 — Dismissible error banner with role="alert"
 //   Finding #16 — useEffect dependency list corrected: [editTarget] → [editTarget, editForm]
 //   See UI_UX_AUDIT_REPORT.md
+//
+// FIX (2026-07-18):
+//   ImportButton endpoint: removed /v1 prefix (baseURL already contains it).
 
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -248,7 +251,7 @@ export default function SuppliersPage() {
             />
             {canManage && (
               <ImportButton
-                endpoint="/v1/suppliers/import"
+                endpoint="/suppliers/import"
                 title="Suppliers"
                 columns={SUPPLIER_IMPORT_TEMPLATE}
               />

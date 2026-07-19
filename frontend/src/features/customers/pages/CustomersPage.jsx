@@ -17,6 +17,9 @@
 //   Finding #15 — Dismissible error banner with role="alert"
 //   See UI_UX_AUDIT_REPORT.md
 //
+// FIX (2026-07-18):
+//   ImportButton endpoint: removed /v1 prefix (baseURL already contains it).
+//
 //   Pagination is always shown (no activeSearch/activeDateFilter hide logic
 //   needed — server handles filtering so pagination is always accurate).
 
@@ -398,7 +401,7 @@ export default function CustomersPage() {
             />
             {canManage && (
               <ImportButton
-                endpoint="/v1/customers/import"
+                endpoint="/customers/import"
                 title="Customers"
                 columns={CUSTOMER_IMPORT_TEMPLATE}
               />

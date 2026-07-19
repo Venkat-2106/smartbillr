@@ -3,6 +3,9 @@
 // EXPORT FIX (2026-06-06):
 //   ExportButton switched from data={exportData} → onFetch={...}
 //   handleExport now added to useCategories() destructuring.
+//
+// FIX (2026-07-18):
+//   ImportButton endpoint: removed /v1 prefix (baseURL already contains it).
 //   The exportData useMemo block is removed (no longer needed).
 //   All other code is unchanged — layout, columns, modals, styles are identical.
 //
@@ -238,7 +241,7 @@ export default function CategoriesPage() {
             />
             {canManage && (
             <ImportButton
-              endpoint="/v1/categories/import"
+              endpoint="/categories/import"
               title="Categories"
               columns={CATEGORY_IMPORT_TEMPLATE}
             />

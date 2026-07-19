@@ -8,6 +8,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 //   Finding #14 — .bento-grid.bento-grid-12 for metric cards
 //   Finding #15 — Dismissible error banner with role="alert"
 //   See UI_UX_AUDIT_REPORT.md
+//
+// FIX (2026-07-18):
+//   ImportButton endpoint: removed /v1 prefix (baseURL already contains it).
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSales } from '../hooks/useSales';
@@ -252,7 +255,7 @@ export default function SalesPage() {
             <ExportButton onFetch={handleExport} filename="sales" columns={SALES_CSV_COLUMNS} />
             {canCreate && (
               <ImportButton
-                endpoint="/v1/sales/import"
+                endpoint="/sales/import"
                 title="Sales"
                 columns={SALES_IMPORT_TEMPLATE}
               />

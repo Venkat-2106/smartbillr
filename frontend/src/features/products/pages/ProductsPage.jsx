@@ -19,6 +19,12 @@
 //   See UI_UX_AUDIT_REPORT.md
 //   No layout, column, modal, permission, or architecture changes.
 //
+// FIX (2026-07-18):
+//   Stock Value MetricCard — changed locked={canViewProfit && isTierLocked} to
+//   locked={isTierLocked} (canViewProfit from useFeatureAccess is false when
+//   tier-locked, so the && always evaluated to false).
+//   ImportButton endpoint: removed /v1 prefix (baseURL already contains it).
+//
 // VALIDATION CHANGES (2026-06-06):
 //
 // ── Feature 1: Cost Price vs Sale Price Confirmation ─────────────────────────
@@ -787,7 +793,7 @@ export default function ProductsPage() {
             />
             {canManage && (
               <ImportButton
-                endpoint="/v1/products/import"
+                endpoint="/products/import"
                 title="Products"
                 columns={PRODUCT_IMPORT_TEMPLATE}
               />

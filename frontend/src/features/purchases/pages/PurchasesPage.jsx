@@ -8,6 +8,9 @@ import { useState, useMemo, useEffect } from 'react'
 //   Finding #14 — .bento-grid.bento-grid-12 for metric cards
 //   Finding #15 — Dismissible error banner with role="alert"
 //   See UI_UX_AUDIT_REPORT.md
+//
+// FIX (2026-07-18):
+//   ImportButton endpoint: removed /v1 prefix (baseURL already contains it).
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { usePurchases } from '../hooks/usePurchases'
@@ -220,7 +223,7 @@ export default function PurchasesPage() {
             />
             {canCreate && (
               <ImportButton
-                endpoint="/v1/purchases/import"
+                endpoint="/purchases/import"
                 title="Purchases"
                 columns={PURCHASE_IMPORT_TEMPLATE}
               />

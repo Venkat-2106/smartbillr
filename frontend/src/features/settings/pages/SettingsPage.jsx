@@ -1,3 +1,7 @@
+// FIX (2026-07-18): Subscription date display
+//   Same fix as SubscriptionPage — trial/subscription end dates gated on
+//   subscription_type to prevent both dates showing simultaneously.
+
 import { useState, useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'

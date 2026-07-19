@@ -4,10 +4,14 @@
 // Triggers a file input, uploads the CSV to the backend, and shows
 // a summary dialog with created/updated/error counts.
 //
+// FIX (2026-07-18): endpoint paths must NOT include /v1 prefix.
+//   baseURL (import.meta.env.VITE_API_URL) already contains /v1.
+//   Using "/v1/..." creates a double prefix → 404.
+//
 // USAGE:
 //
 //   <ImportButton
-//     endpoint="/v1/categories/import"
+//     endpoint="/categories/import"
 //     title="Import Categories"
 //     filename="categories.csv"
 //     instructions="Download our template, fill it in, and upload it."

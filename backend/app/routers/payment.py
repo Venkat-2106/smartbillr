@@ -288,11 +288,11 @@ async def get_all_payments(
 
     if date_from:
         where_clauses.append("p.payment_paid_at >= CAST(:date_from AS timestamptz)")
-        params["date_from"] = date_from
+        params["date_from"] = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
 
     if date_to:
         where_clauses.append("p.payment_paid_at <= CAST(:date_to AS timestamptz)")
-        params["date_to"] = date_to
+        params["date_to"] = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
 
     where_sql = " AND ".join(where_clauses)
 

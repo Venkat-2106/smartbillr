@@ -33,6 +33,7 @@ from app.schemas.sales_return import SalesReturnCreate, SalesReturnUpdate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
+from datetime import datetime, timezone
 import logging
 from decimal import Decimal
 import uuid
@@ -388,11 +389,11 @@ async def get_all_sales_returns(
 
     if date_from:
         extra_where += " AND sr.return_created_at >= :date_from"
-        params["date_from"] = date_from
+        params["date_from"] = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
 
     if date_to:
         extra_where += " AND sr.return_created_at <= :date_to"
-        params["date_to"] = date_to
+        params["date_to"] = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
 
     params["offset"] = pagination["offset"]
     params["limit"] = pagination["limit"]

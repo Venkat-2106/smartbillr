@@ -45,6 +45,7 @@ from app.utils.usage_limits import check_create_allowed_async, fetch_subscriptio
 from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, friendly_db_error, check_required_headers, validate_upload_file, MAX_IMPORT_FILE_BYTES
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from typing import Optional
+from datetime import datetime, timezone
 import uuid
 
 router = APIRouter(prefix="/v1/customers", tags=["Customers"])
@@ -443,11 +444,11 @@ async def get_all_customers(
     # This mirrors the pattern in sale.py (the reference implementation).
     if updated_from:
         extra_where += " AND c.updated_at >= :updated_from"
-        params["updated_from"] = updated_from
+        params["updated_from"] = datetime.fromisoformat(updated_from.replace("Z", "+00:00"))
 
     if updated_to:
         extra_where += " AND c.updated_at <= :updated_to"
-        params["updated_to"] = updated_to
+        params["updated_to"] = datetime.fromisoformat(updated_to.replace("Z", "+00:00"))
 
     rows = (await db.execute(
         text(f"""

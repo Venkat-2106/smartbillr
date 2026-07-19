@@ -52,27 +52,34 @@ const SECTIONS = {
 }
 
 // ─── Date Range Presets ────────────────────────────────────────────────────────
+function formatLocalDate(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 function getDatePreset(preset) {
   const now = new Date()
-  const today = now.toISOString().split('T')[0]
+  const today = formatLocalDate(now)
   switch (preset) {
     case 'today':
       return { dateFrom: today, dateTo: today }
     case 'week': {
       const d = new Date(now); d.setDate(d.getDate() - 6)
-      return { dateFrom: d.toISOString().split('T')[0], dateTo: today }
+      return { dateFrom: formatLocalDate(d), dateTo: today }
     }
     case 'month': {
       const d = new Date(now); d.setDate(1)
-      return { dateFrom: d.toISOString().split('T')[0], dateTo: today }
+      return { dateFrom: formatLocalDate(d), dateTo: today }
     }
     case 'quarter': {
       const d = new Date(now); d.setMonth(d.getMonth() - 3)
-      return { dateFrom: d.toISOString().split('T')[0], dateTo: today }
+      return { dateFrom: formatLocalDate(d), dateTo: today }
     }
     case 'year': {
       const d = new Date(now); d.setFullYear(d.getFullYear() - 1)
-      return { dateFrom: d.toISOString().split('T')[0], dateTo: today }
+      return { dateFrom: formatLocalDate(d), dateTo: today }
     }
     case 'all':
       return { dateFrom: '', dateTo: '' }

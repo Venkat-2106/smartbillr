@@ -58,6 +58,7 @@ from app.utils.usage_limits import check_create_allowed_async, fetch_subscriptio
 from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, friendly_db_error, check_required_headers, validate_upload_file, MAX_IMPORT_FILE_BYTES
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from app.utils.bulk_stock_adjust import bulk_check_and_reduce_stock
+from datetime import datetime, timezone
 import logging
 from decimal import Decimal
 import uuid
@@ -1045,11 +1046,11 @@ async def get_all_purchases(
 
     if date_from:
         extra_where += " AND p.pur_created_at >= :date_from"
-        params["date_from"] = date_from
+        params["date_from"] = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
 
     if date_to:
         extra_where += " AND p.pur_created_at <= :date_to"
-        params["date_to"] = date_to
+        params["date_to"] = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
 
     params["offset"] = pagination["offset"]
     params["limit"]  = pagination["limit"]

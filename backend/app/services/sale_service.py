@@ -6,6 +6,7 @@ from app.models.sale import Sale
 
 from app.utils.payment_helpers import record_payment_and_sync_async, calculate_payment_status
 from app.utils.timestamp import fmt_ts
+from datetime import datetime, timezone
 import uuid
 import re
 
@@ -298,11 +299,11 @@ async def get_sales_list(db: AsyncSession, business_id: str, pagination: dict, s
 
     if date_from:
         extra_where += " AND s.sales_created_at >= :date_from"
-        params["date_from"] = date_from
+        params["date_from"] = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
 
     if date_to:
         extra_where += " AND s.sales_created_at <= :date_to"
-        params["date_to"] = date_to
+        params["date_to"] = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
 
     data_sql = f"""
         SELECT s.sales_id, s.invoice_no, s.customer_id,

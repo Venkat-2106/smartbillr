@@ -43,6 +43,7 @@ from app.schemas.expense import ExpenseCreate, ExpenseUpdate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts, fmt_date
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/v1/expenses", tags=["Expenses"])
 
@@ -162,11 +163,11 @@ async def get_all_expenses(
 
     if date_from:
         extra_where += " AND e.expense_date >= :date_from"
-        params["date_from"] = date_from
+        params["date_from"] = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
 
     if date_to:
         extra_where += " AND e.expense_date <= :date_to"
-        params["date_to"] = date_to
+        params["date_to"] = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
 
     params["offset"] = pagination["offset"]
     params["limit"] = pagination["limit"]

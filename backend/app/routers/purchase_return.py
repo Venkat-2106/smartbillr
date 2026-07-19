@@ -30,6 +30,7 @@ from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.bulk_stock_adjust import bulk_check_and_reduce_stock
 from decimal import Decimal
+from datetime import datetime, timezone
 import uuid
 import logging
 
@@ -388,11 +389,11 @@ async def get_all_purchase_returns(
 
     if date_from:
         extra_where += " AND pr.return_created_at >= :date_from"
-        params["date_from"] = date_from
+        params["date_from"] = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
 
     if date_to:
         extra_where += " AND pr.return_created_at <= :date_to"
-        params["date_to"] = date_to
+        params["date_to"] = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
 
     params["offset"] = pagination["offset"]
     params["limit"] = pagination["limit"]

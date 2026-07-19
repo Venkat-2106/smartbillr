@@ -34,6 +34,7 @@ from app.utils.subscription_features import check_feature_access
 from app.utils.bulk_import import parse_csv_file, validate_rows, check_required_headers, friendly_db_error, validate_upload_file, MAX_IMPORT_FILE_BYTES
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from typing import Optional
+from datetime import datetime, timezone
 import uuid
 
 router = APIRouter(
@@ -294,11 +295,11 @@ async def get_categories(
     # to UTC). Compare directly — no CAST to date (which would use server UTC timezone).
     if updated_from:
         extra_where += " AND c.updated_at >= :updated_from"
-        params["updated_from"] = updated_from
+        params["updated_from"] = datetime.fromisoformat(updated_from.replace("Z", "+00:00"))
 
     if updated_to:
         extra_where += " AND c.updated_at <= :updated_to"
-        params["updated_to"] = updated_to
+        params["updated_to"] = datetime.fromisoformat(updated_to.replace("Z", "+00:00"))
 
     rows = (await db.execute(
         text(f"""

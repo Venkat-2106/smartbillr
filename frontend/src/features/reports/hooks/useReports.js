@@ -1,14 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
 import * as api from '../api/reportsApi'
 import useAuthStore from '../../../store/authStore'
+import { localDayStartUTC, localDayEndUTC } from '../../../shared/utils/dateUtils'
 
 // ─── Shared query defaults ──────────────────────────────────────────────────
 const DEFAULT_STALE = 5 * 60 * 1000
 
 function dateParams(dateFrom, dateTo) {
   const p = {}
-  if (dateFrom) p.date_from = dateFrom
-  if (dateTo) p.date_to = dateTo
+  if (dateFrom) p.date_from = localDayStartUTC(dateFrom)
+  if (dateTo)   p.date_to   = localDayEndUTC(dateTo)
   return p
 }
 

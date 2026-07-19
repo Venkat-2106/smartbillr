@@ -2693,29 +2693,31 @@ async def get_login_activities(
     if "staff.manage" not in perms:
         return success_response([])
 
-    date_where, dp = _date_col("al", "created_at", date_from, date_to)
+    date_where, dp = _date_col("p", "last_login_at", date_from, date_to)
 
-    # Intentionally fixed LIMIT 200 — audit trail page-size cap, not a bug.
     rows = await db.execute(text(f"""
         SELECT
-            al.audit_id, al.user_id, al.created_at,
-            COALESCE(p.full_name, 'System') AS user_name
-        FROM audit_logs al
-        LEFT JOIN profiles p ON p.id = al.user_id
-        WHERE al.business_id = CAST(:bid AS uuid)
-          AND al.action_type = 'login'
+            p.id,
+            p.full_name,
+            p.email,
+            p.created_at,
+            p.last_login_at,
+            p.last_logout_at
+        FROM profiles p
+        WHERE p.business_id = CAST(:bid AS uuid)
           {date_where}
-        ORDER BY al.created_at DESC
-        LIMIT 200
+        ORDER BY p.last_login_at DESC NULLS LAST
     """), {"bid": bid, **dp})
     rows = rows.fetchall()
 
     return success_response([
         {
-            "audit_id": str(r.audit_id),
-            "user_id": str(r.user_id) if r.user_id else None,
-            "user_name": r.user_name,
-            "login_at": str(r.created_at),
+            "user_id": str(r.id),
+            "full_name": r.full_name,
+            "email": r.email,
+            "created_at": str(r.created_at) if r.created_at else None,
+            "last_login_at": str(r.last_login_at) if r.last_login_at else None,
+            "last_logout_at": str(r.last_logout_at) if r.last_logout_at else None,
         }
         for r in rows
     ])

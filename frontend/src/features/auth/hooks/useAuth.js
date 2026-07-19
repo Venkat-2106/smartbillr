@@ -13,6 +13,7 @@ import { loginWithEmail, refreshAccessToken } from '../api/authApi'
 import useAuthStore from '../../../store/authStore'
 import api from '../../../api/axios'
 import supabase from '../../../lib/supabaseClient'
+import { queryClient } from '../../../app/providers'
 
 export function useLogin() {
   const [isLoading, setIsLoading] = useState(false)
@@ -113,11 +114,12 @@ export function useLogin() {
     } catch {
       // Clear locally even if backend call fails
     }
+    queryClient.clear()
     useAuthStore.getState().clearAuth()
     setPendingSession(null)
     setIsLoading(false)
     toast('Login cancelled. The new session has been logged out.')
-    navigate('/login', { replace: true })
+    window.location.href = '/login'
   }
 
   return { login, isLoading, pendingSession, confirmSession, cancelSession }
@@ -129,7 +131,6 @@ export function useLogin() {
 // so the user is never stuck logged in.
 export function useLogout() {
   const clearAuth = useAuthStore((state) => state.clearAuth)
-  const navigate  = useNavigate()
   const [isLoading, setIsLoading] = useState(false)
 
   async function logout() {
@@ -139,9 +140,10 @@ export function useLogout() {
     } catch {
       // Backend unreachable or token already invalid — still clear local state
     } finally {
+      queryClient.clear()
       clearAuth()
       toast.success('Logged out successfully')
-      navigate('/login')
+      window.location.href = '/login'
       setIsLoading(false)
     }
   }

@@ -20,6 +20,7 @@
 import axios from 'axios'
 import useAuthStore from '../store/authStore'
 import { refreshAccessToken } from '../features/auth/api/authApi'
+import { queryClient } from '../app/providers'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -72,6 +73,7 @@ api.interceptors.request.use(async (config) => {
       // FIXED proactive refresh failure redirects instead of falling through with stale token
       } catch (err) {
         processQueue(err, null)
+        queryClient.clear()
         useAuthStore.getState().clearAuth()
         if (!window.location.pathname.includes('/login')) {
           window.location.href = '/login'
@@ -107,6 +109,7 @@ api.interceptors.response.use(
 
     const { refreshToken } = useAuthStore.getState()
     if (!refreshToken) {
+      queryClient.clear()
       useAuthStore.getState().clearAuth()
       if (!window.location.pathname.includes('/login')) {
         window.location.href = '/login'
@@ -137,6 +140,7 @@ api.interceptors.response.use(
       return api(originalRequest)
     } catch (refreshError) {
       processQueue(refreshError, null)
+      queryClient.clear()
       useAuthStore.getState().clearAuth()
       if (!window.location.pathname.includes('/login')) {
         window.location.href = '/login'

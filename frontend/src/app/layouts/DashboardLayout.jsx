@@ -715,9 +715,11 @@ export default function DashboardLayout() {
     } catch {
       // ignore
     }
+    const { queryClient } = await import('../../app/providers')
+    queryClient.clear()
     useAuthStore.getState().clearAuth()
     toast.success('Signed out successfully')
-    navigate('/login')
+    window.location.href = '/login'
   }
 
   const visibleNav = useMemo(() =>

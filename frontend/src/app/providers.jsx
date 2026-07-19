@@ -4,7 +4,7 @@ import { ShortcutProvider } from '../shared/hooks/useShortcut'
 
 // QueryClient = the brain that manages all API data caching
 // We configure it once here and share it with the whole app
-const queryClient = new QueryClient({
+export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,              // if API fails, try once more (not forever)

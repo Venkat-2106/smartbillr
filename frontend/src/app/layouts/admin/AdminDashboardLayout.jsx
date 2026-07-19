@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import useAuthStore from '../../../store/authStore'
 import api from '../../../api/axios'
+import { queryClient } from '../../providers'
 
 export default function AdminDashboardLayout() {
   const [showLogout, setShowLogout] = useState(false)
@@ -14,10 +15,11 @@ export default function AdminDashboardLayout() {
     try {
       await api.post('/superadmin/logout')
     } catch {}
+    queryClient.clear()
     clearAuth()
     setSuperAdmin(false)
     toast.success('Signed out')
-    navigate('/admin/login')
+    window.location.href = '/admin/login'
   }
 
   return (

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import useAuthStore from '../../store/authStore'
 import api from '../../api/axios'
 import toast from 'react-hot-toast'
+import { queryClient } from '../../app/providers'
 
 export function usePermissionsSync() {
   const token = useAuthStore((s) => s.token)
@@ -47,6 +48,7 @@ export function usePermissionsSync() {
     if (!error) return
     const status = error?.response?.status
     if (status === 403 || status === 404) {
+      queryClient.clear()
       useAuthStore.getState().clearAuth()
       if (!window.location.pathname.includes('/login')) {
         window.location.href = '/login'

@@ -169,9 +169,9 @@ async def import_categories(
         for r in existing_rows:
             existing_names[r.lname] = str(r.category_id)
 
-    # ── 5. Bulk upsert — single multi-row INSERT + UPDATE ─────────────────────
+    # ── 5. Bulk insert — skip duplicates entirely, no update ───────────────────
     new_rows = []
-    update_rows = []
+    duplicate_errors = []
 
     for row in valid_rows:
         row_num = row.pop("_row_number")
@@ -179,14 +179,13 @@ async def import_categories(
         name_lower = name.lower()
 
         if name_lower in existing_names:
-            update_rows.append({"name": name, "cid": existing_names[name_lower], "uid": user_id})
+            duplicate_errors.append({"row": row_num, "message": f"'{name}' already exists"})
         else:
             new_cat_id = str(uuid.uuid4())
             new_rows.append({"cid": new_cat_id, "bid": business_id, "name": name, "uid": user_id})
             existing_names[name_lower] = new_cat_id
 
     created = 0
-    updated = 0
 
     if new_rows:
         placeholders = ", ".join([
@@ -206,34 +205,18 @@ async def import_categories(
         """), params)
         created = len(new_rows)
 
-    if update_rows:
-        case_parts = []
-        params = {"bid": business_id}
-        for i, r in enumerate(update_rows):
-            case_parts.append(f"WHEN category_id = CAST(:cid_{i} AS uuid) THEN CAST(:uid_{i} AS uuid)")
-            params[f"cid_{i}"] = r["cid"]
-            params[f"uid_{i}"] = r["uid"]
-
-        await db.execute(text(f"""
-            UPDATE categories
-            SET updated_by = CASE {" ".join(case_parts)} END
-            WHERE business_id = CAST(:bid AS uuid)
-              AND category_id IN ({", ".join([f"CAST(:cid_{i} AS uuid)" for i in range(len(update_rows))])})
-        """), params)
-        updated = len(update_rows)
-
     await db.commit()
     await async_set_rls_gucs_after_commit(db, current_user)
 
-    all_errors = errors
+    all_errors = errors + duplicate_errors
 
     return success_response({
-        "message": f"Import completed: {created} created, {updated} updated, {len(all_errors)} errors",
+        "message": f"Import completed: {created} created, 0 updated, {len(all_errors)} errors",
         "summary": {
             "total_rows": len(rows),
             "valid_rows": len(valid_rows),
             "created": created,
-            "updated": updated,
+            "updated": 0,
             "errors": len(all_errors)
         },
         "errors": all_errors

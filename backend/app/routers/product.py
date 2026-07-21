@@ -551,6 +551,9 @@ async def import_products(
                 continue
 
             if name_lower in existing_names:
+                if not is_update_mode:
+                    upsert_errors.append({"row": row_num, "message": f'Product "{name}" already exists. Existing products cannot be imported using Bulk Create. Please use Bulk Update instead.'})
+                    continue
                 pid = existing_names[name_lower]
                 if barcode:
                     if barcode in existing_barcodes and existing_barcodes[barcode] != pid:

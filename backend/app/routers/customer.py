@@ -244,6 +244,9 @@ async def import_customers(
 
             matched = False
             if phone and phone in existing_phones:
+                if not is_update_mode:
+                    upsert_errors.append({"row": row_num, "message": f'Customer with phone "{phone}" already exists. Existing customers cannot be imported using Bulk Create. Please use Bulk Update instead.'})
+                    continue
                 update_rows.append({"cid": existing_phones[phone], "uid": user_id, **row})
                 matched = True
             elif is_update_mode:

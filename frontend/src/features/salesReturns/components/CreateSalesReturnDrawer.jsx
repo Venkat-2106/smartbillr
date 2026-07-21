@@ -6,7 +6,7 @@ import { fetchSale } from '../../sales/api/salesApi'
 import { z } from 'zod'
 import { createSalesReturn } from '../api/salesReturnsApi'
 import { Button, Spinner } from '../../../shared/components'
-import { selectStyle, textareaStyle } from '../../../shared/components/FormField'
+import { textareaStyle } from '../../../shared/components/FormField'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate } from '../../../shared/utils/formatDate'
 import useAuthStore from '../../../store/authStore'
@@ -31,6 +31,7 @@ export default function CreateSalesReturnDrawer({ saleId, onClose }) {
 
   useEffect(() => {
     if (sale?.items) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setItems(
         sale.items.map((item) => ({
           product_id: item.product_id,

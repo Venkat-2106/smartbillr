@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect } from 'react'
+﻿import { useState, useMemo, useCallback, useEffect } from 'react'
 
 // UI/UX Audit (2026-07-18):
 //   Finding #6  — EmptyState with built-in context icon replaces inline SVG
@@ -8,7 +8,7 @@
 //   See UI_UX_AUDIT_REPORT.md
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useNavigate } from 'react-router-dom'
+
 
 import {
   Button, Input, Modal, Table, Badge, SearchBar,
@@ -113,7 +113,6 @@ function buildColumns(canManage, onEdit, onDeactivate) {
 }
 
 export default function StaffPage() {
-  const navigate = useNavigate()
   const { can } = usePermissions()
   const canManage = can('staff.manage')
 
@@ -131,6 +130,7 @@ export default function StaffPage() {
   } = useStaff()
 
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setBannerDismissed(false) }, [isError])
 
   const [showAdd, setShowAdd] = useState(false)
@@ -154,10 +154,10 @@ export default function StaffPage() {
     setShowAdd(true)
   }
 
-  function handleOpenEdit(staff) {
+  const handleOpenEdit = useCallback((staff) => {
     setEditingStaff(staff)
     editForm.reset({ full_name: staff.full_name, role: staff.role || 'staff' })
-  }
+  }, [editForm])
 
   function onAddSubmit(data) {
     createStaff(data, { onSuccess: () => { setShowAdd(false); addForm.reset(ADD_DEFAULTS) } })
@@ -178,7 +178,7 @@ export default function StaffPage() {
 
   const columns = useMemo(
     () => buildColumns(canManage, handleOpenEdit, handleDeactivateClick),
-    [canManage]
+    [canManage, handleOpenEdit]
   )
 
   return (

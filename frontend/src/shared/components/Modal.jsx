@@ -64,7 +64,7 @@ export default function Modal({
   // ── Focus trap ──────────────────────────────────────────────────────────────
   const panelRef      = useRef(null)
   const onCloseRef    = useRef(onClose)
-  onCloseRef.current  = onClose
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
 
   useEffect(() => {
     if (!open) return

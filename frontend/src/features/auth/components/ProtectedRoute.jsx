@@ -16,6 +16,7 @@ export default function ProtectedRoute({ children, permission = null }) {
   useEffect(() => {
     if (hydrated) return
     const unsub = useAuthStore.persist?.onFinishHydration?.(() => setHydrated(true))
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (useAuthStore.persist?.hasHydrated?.()) setHydrated(true)
     return () => unsub?.()
   }, [hydrated])

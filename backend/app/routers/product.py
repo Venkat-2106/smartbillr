@@ -399,6 +399,11 @@ async def import_products(
 
         mrp = row.get("prod_mrp") or row.get("mrp") or row.get("MRP")
         stock_qty = row.get("prod_stock_qty") or row.get("stock_qty") or row.get("Stock Qty") or "0"
+        if is_update_mode:
+            raw_stock = row.get("prod_stock_qty") or row.get("stock_qty") or row.get("Stock Qty")
+            if raw_stock is not None and str(raw_stock).strip() != "" and str(raw_stock).strip() != "0":
+                return None, "Stock Quantity cannot be updated via Product Bulk Import. Use the Stock page to update stock."
+            stock_qty = None
         low_stock_alert = row.get("prod_low_stock_alert") or row.get("low_stock_alert") or row.get("Low Stock Alert") or "10"
         tax_rate = row.get("tax_rate") or row.get("Tax Rate") or row.get("Tax Rate %") or "0"
         tax_code = (row.get("tax_code") or row.get("Tax Code") or "").strip() or None

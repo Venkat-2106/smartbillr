@@ -45,7 +45,7 @@
 //     onChange={(val) => setState(val)}
 //   />
 
-import { getStatesForCountry, hasStateDropdown } from '../data/countryStates';
+import { getStatesForCountry } from '../data/countryStates';
 
 // Import selectStyle from where you store it.
 // If it's still in FormField.jsx, import from there:

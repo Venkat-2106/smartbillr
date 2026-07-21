@@ -19,11 +19,6 @@ export default function ExpensesSection({ dateFrom, dateTo }) {
     return trend.data.map(d => ({ label: d.label, value: Math.round(d.amount) }))
   }, [trend.data])
 
-  const categoryData = useMemo(() => {
-    if (!Array.isArray(byCategory.data)) return []
-    return byCategory.data.map(d => ({ label: d.category, value: d.total_amount }))
-  }, [byCategory.data])
-
   const distData = useMemo(() => {
     if (!distribution.data?.categories) return []
     return distribution.data.categories.map(d => ({ label: d.category, value: d.amount, pct: d.percentage }))

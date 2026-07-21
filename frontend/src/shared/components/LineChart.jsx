@@ -4,8 +4,8 @@ const W = 600, H = 180, PAD_L = 56, PAD_R = 20, PAD_T = 20, PAD_B = 40
 const chartW = W - PAD_L - PAD_R
 const chartH = H - PAD_T - PAD_B
 
-export default function LineChart({ data = [], accentColor, areaColor, loading, error }) {
-  const points = Array.isArray(data) ? data : []
+export default function LineChart({ data = [], accentColor, loading, error }) {
+  const points = useMemo(() => Array.isArray(data) ? data : [], [data])
 
   const { maxVal, coords, yTicks } = useMemo(() => {
     const maxVal = Math.max(...points.map(p => p.value ?? 0), 1)

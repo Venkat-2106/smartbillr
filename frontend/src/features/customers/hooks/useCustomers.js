@@ -115,7 +115,7 @@ export function useCustomers() {
   })
 
   // ── Unwrap pagination envelope ───────────────────────────────────────────
-  const { items: customers, pagination, totalItems, totalPages } = unwrapPagination(serverData)
+  const { items: customers, totalItems, totalPages } = unwrapPagination(serverData)
 
   // ── LAZY EXPORT ──────────────────────────────────────────────────────────
   // Only runs when the Export button is clicked.

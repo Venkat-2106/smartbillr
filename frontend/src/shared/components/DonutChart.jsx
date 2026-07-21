@@ -9,30 +9,34 @@ export default function DonutChart({ data = [], size = 140, loading, error, cent
 
   const cx = size / 2, cy = size / 2, r = size * 0.38, hole = size * 0.22
 
-  function polarToXY(angle, radius) {
-    return { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) }
-  }
-
-  function arcPath(start, end) {
-    const largeArc = end - start > Math.PI ? 1 : 0
-    const o1 = polarToXY(start, r), o2 = polarToXY(end, r)
-    const i1 = polarToXY(end, hole), i2 = polarToXY(start, hole)
-    return `M ${o1.x} ${o1.y} A ${r} ${r} 0 ${largeArc} 1 ${o2.x} ${o2.y} L ${i1.x} ${i1.y} A ${hole} ${hole} 0 ${largeArc} 0 ${i2.x} ${i2.y} Z`
-  }
-
   const arcs = useMemo(() => {
-    let startAngle = -Math.PI / 2
+    function polarToXY(angle, radius) {
+      return { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) }
+    }
+
+    function arcPath(start, end) {
+      const largeArc = end - start > Math.PI ? 1 : 0
+      const o1 = polarToXY(start, r), o2 = polarToXY(end, r)
+      const i1 = polarToXY(end, hole), i2 = polarToXY(start, hole)
+      return `M ${o1.x} ${o1.y} A ${r} ${r} 0 ${largeArc} 1 ${o2.x} ${o2.y} L ${i1.x} ${i1.y} A ${hole} ${hole} 0 ${largeArc} 0 ${i2.x} ${i2.y} Z`
+    }
+
     const defaultColors = ['var(--accent-600)', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#0EA5E9', '#F97316', '#06B6D4']
+    const total = segments.reduce((s, d) => s + (d.value ?? 0), 0) || 1
+    const cumulativeSweep = segments.reduce((acc, seg) => {
+      const sweep = (seg.value ?? 0) / total * 2 * Math.PI
+      acc.push(acc.length > 0 ? acc[acc.length - 1] + sweep : -Math.PI / 2 + sweep)
+      return acc
+    }, [])
     return segments.map((seg, i) => {
-      const sweep = (seg.value ?? 0) / Math.max((segments.reduce((s, d) => s + (d.value ?? 0), 0) || 1), 1) * 2 * Math.PI
-      const end = startAngle + sweep
-      const path = sweep > 0.001 ? arcPath(startAngle, end) : null
-      startAngle = end
-      const total = segments.reduce((s, d) => s + (d.value ?? 0), 0) || 1
+      const start = i === 0 ? -Math.PI / 2 : cumulativeSweep[i - 1]
+      const end = cumulativeSweep[i]
+      const sweep = end - start
+      const path = sweep > 0.001 ? arcPath(start, end) : null
       const pct = total > 0 ? Math.round(((seg.value ?? 0) / total) * 100) : 0
       return { ...seg, path, color: seg.color || defaultColors[i % defaultColors.length], pct }
     })
-  }, [segments])
+  }, [segments, cx, cy, r, hole])
 
   if (error) {
     return <div style={{ padding: 40, textAlign: 'center', color: 'var(--danger-text)', fontSize: 13 }}>Failed to load.</div>

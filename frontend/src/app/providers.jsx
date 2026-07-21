@@ -1,18 +1,7 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { ShortcutProvider } from '../shared/hooks/useShortcut'
-
-// QueryClient = the brain that manages all API data caching
-// We configure it once here and share it with the whole app
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,              // if API fails, try once more (not forever)
-      staleTime: 5 * 60 * 1000,  // data stays "fresh" for 5 minutes
-      refetchOnWindowFocus: false, // don't refetch just because user switches tabs
-    },
-  },
-})
+import { queryClient } from './queryClient'
 
 export default function Providers({ children }) {
   return (

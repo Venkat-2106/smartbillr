@@ -3,7 +3,7 @@ import { BentoCard, LineChart, BarChart } from '../../../shared/components'
 import UpgradeBlur from '../../../shared/components/UpgradeBlur'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { getTaxLabel } from '../../../shared/utils/formatTax'
-import { usePurchaseSummary, usePurchaseTrend, usePurchasesBySupplier, usePurchasesByProduct, usePurchaseTaxSummary, useReportCountry } from '../hooks/useReports'
+import { usePurchaseSummary, usePurchaseTrend, usePurchasesBySupplier, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, ChartCard, InfoCard } from '../components/shared'
 import { useFeatureAccess } from '../../../shared/hooks/useFeatureAccess'
 
@@ -13,8 +13,6 @@ export default function PurchasesSection({ dateFrom, dateTo }) {
   const summary = usePurchaseSummary(dateFrom, dateTo)
   const trend = usePurchaseTrend(period, dateFrom, dateTo)
   const bySupplier = usePurchasesBySupplier(dateFrom, dateTo)
-  const byProduct = usePurchasesByProduct(dateFrom, dateTo)
-  const taxSummary = usePurchaseTaxSummary(dateFrom, dateTo)
   const country = useReportCountry()
 
   const trendData = useMemo(() => {

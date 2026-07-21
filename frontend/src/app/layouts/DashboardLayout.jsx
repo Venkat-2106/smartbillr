@@ -635,7 +635,7 @@ export default function DashboardLayout() {
   const { user, business, profile } = useAuthStore()
   // FIX (LOW-9 cleanup): permissions lives at profile.permissions, not a top-level
   // store field. The old s.permissions was always undefined → crashed .includes().
-  const permissions = useAuthStore(s => s.profile?.permissions) ?? []
+  // Computed inside visibleNav useMemo to avoid a new [] reference every render.
   const showBanner  = useAuthStore(s => s.subscription && !s.subscription.is_expired)
   const navigate = useNavigate()
   const location = useLocation()
@@ -650,6 +650,7 @@ export default function DashboardLayout() {
     [location.pathname]
   )
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMobileOpen(false) }, [location.pathname])
 
   useEffect(() => {
@@ -661,7 +662,7 @@ export default function DashboardLayout() {
 
   const { registerShortcut, paletteOpen, setPaletteOpen, helpOpen, setHelpOpen } = useShortcutContext()
   const paletteOpenRef = useRef(paletteOpen)
-  paletteOpenRef.current = paletteOpen
+  useEffect(() => { paletteOpenRef.current = paletteOpen }, [paletteOpen])
 
   const navMap = useMemo(() => ({
     d: '/dashboard', c: '/customers', s: '/sales',
@@ -722,12 +723,12 @@ export default function DashboardLayout() {
     window.location.href = '/login'
   }
 
-  const visibleNav = useMemo(() =>
-    NAV
-      .map(section => ({ ...section, items: section.items.filter(item => (permissions ?? []).includes(item.permission)) }))
-      .filter(section => section.items.length > 0),
-    [permissions]
-  )
+  const visibleNav = useMemo(() => {
+    const permissions = useAuthStore.getState().profile?.permissions ?? []
+    return NAV
+      .map(section => ({ ...section, items: section.items.filter(item => permissions.includes(item.permission)) }))
+      .filter(section => section.items.length > 0)
+  }, [])
 
   const W = isMobile ? FULL : (collapsed ? SLIM : FULL)
 

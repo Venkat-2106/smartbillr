@@ -58,7 +58,7 @@ export function usePurchaseReturns() {
     enabled:         !!user,
   })
 
-  const { items: returns, pagination, totalItems, totalPages } = tbl.unwrapPagination(serverData)
+  const { items: returns, totalItems, totalPages } = tbl.unwrapPagination(serverData)
 
   async function handleExport() {
     try {

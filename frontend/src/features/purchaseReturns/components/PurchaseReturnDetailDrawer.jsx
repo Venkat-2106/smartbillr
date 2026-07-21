@@ -107,7 +107,7 @@ export default function PurchaseReturnDetailDrawer({ returnId, onClose, onStatus
       queryClient.invalidateQueries({ queryKey: ['purchaseReturns'] })
       if (onStatusUpdate) onStatusUpdate()
     },
-    onError: (err) => {
+    onError: () => {
       setActionLoading(false)
     },
   })

@@ -12,9 +12,10 @@ export default function BarChart({ data = [], bars = 8, loading, error, valueLab
   }
 
   if (loading) {
+    const SKELETON_WIDTHS = [82, 65, 91, 74, 88]
     return <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} style={{ height: 24, width: `${60 + Math.random() * 40}%`, background: 'var(--bg-hover)', borderRadius: 6, animation: 'pulse-shimmer 1.5s ease-in-out infinite' }} />
+      {SKELETON_WIDTHS.map((w, i) => (
+        <div key={i} style={{ height: 24, width: `${w}%`, background: 'var(--bg-hover)', borderRadius: 6, animation: 'pulse-shimmer 1.5s ease-in-out infinite' }} />
       ))}
     </div>
   }

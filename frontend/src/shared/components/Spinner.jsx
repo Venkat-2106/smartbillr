@@ -24,7 +24,6 @@ export default function Spinner({
   size  = 32,
   center = false,
   label,
-  color,          // kept for API compat, not used in logo mark
 }) {
   // Normalise string sizes to px numbers
   const SIZE_MAP = { sm: 20, md: 28, lg: 48 }

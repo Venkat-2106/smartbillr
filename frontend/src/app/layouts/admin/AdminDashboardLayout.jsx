@@ -1,20 +1,19 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import useAuthStore from '../../../store/authStore'
 import api from '../../../api/axios'
-import { queryClient } from '../../providers'
+import { queryClient } from '../../queryClient'
 
 export default function AdminDashboardLayout() {
   const [showLogout, setShowLogout] = useState(false)
   const { user, clearAuth, setSuperAdmin } = useAuthStore()
-  const navigate = useNavigate()
   const userName = user?.email?.split('@')[0] || 'Admin'
 
   async function handleLogout() {
     try {
       await api.post('/superadmin/logout')
-    } catch {}
+    } catch { /* non-critical */ }
     queryClient.clear()
     clearAuth()
     setSuperAdmin(false)

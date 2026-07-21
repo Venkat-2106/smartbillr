@@ -26,7 +26,7 @@ const ICONS = {
 // ── Sales Trend Chart ──────────────────────────────────────────────
 function SalesTrendChart({ period, onPeriodChange }) {
   const { data: raw, isLoading, isError } = useSalesTrend(period)
-  const points = Array.isArray(raw) ? raw : []
+  const points = useMemo(() => Array.isArray(raw) ? raw : [], [raw])
 
   const W = 600, H = 200, PAD_L = 56, PAD_R = 20, PAD_T = 30, PAD_B = 40
   const chartW = W - PAD_L - PAD_R
@@ -41,7 +41,7 @@ function SalesTrendChart({ period, onPeriodChange }) {
     }))
     const yTicks = [...new Set([0, Math.ceil(maxVal / 2), maxVal])]
     return { maxVal, coords, yTicks }
-  }, [points])
+  }, [points, chartH, chartW])
 
   function smoothPath(pts) {
     if (pts.length < 2) return ''

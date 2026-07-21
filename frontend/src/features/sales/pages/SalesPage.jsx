@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 // UI/UX Audit (2026-07-18):
 //   Finding #1  — PageHeader replaces inline page title markup
@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSales } from '../hooks/useSales';
 import { fetchSalesSummary } from '../api/salesApi';
+import { SALES_CSV_COLUMNS } from '../../../shared/utils/csvExport';
 import SaleDetailDrawer from '../components/SaleDetailDrawer';
 import {
   Table, Button, Badge, SearchBar,
@@ -48,7 +49,7 @@ export default function SalesPage() {
   const [showUpgradeBanner, setShowUpgradeBanner] = useState(true);
 
   const {
-    sales, isLoading, hasData, isError,
+    sales, isLoading, isError,
     totalItems, totalPages,
     search, setSearch,
     statusFilter, setStatusFilter,
@@ -59,10 +60,11 @@ export default function SalesPage() {
     drawerSale, setDrawerSale,
     statusMutation,
     deleteSale, isDeleting,
-    isExporting, handleExport,
+    handleExport,
   } = useSales();
 
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setBannerDismissed(false) }, [isError])
 
   const { data: salesSummary, isLoading: summaryLoading } = useQuery({
@@ -226,9 +228,9 @@ export default function SalesPage() {
         </button>
       ),
     },
-  ], []);
+  ], [country]);
 
-  const handleRowClick = useCallback((row) => setDrawerSale(row), [])
+  const handleRowClick = useCallback((row) => setDrawerSale(row), [setDrawerSale])
 
   const { selectedIndex, setSelectedIndex } = useTableKeyboardNav({
     rows: sales,

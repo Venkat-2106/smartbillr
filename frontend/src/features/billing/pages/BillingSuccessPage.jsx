@@ -1,15 +1,13 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useCheckoutStatus } from '../hooks/useCheckout'
-import useAuthStore from '../../../store/authStore'
 import { Spinner } from '../../../shared/components'
 
 export default function BillingSuccessPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const paymentId = searchParams.get('payment_id') || searchParams.get('session_id')
-  const { data: status, isLoading } = useCheckoutStatus(paymentId)
-  const refetchSubscription = useAuthStore((s) => s.setProfile)
+  const { data: status } = useCheckoutStatus(paymentId)
 
   const [elapsed, setElapsed] = useState(0)
 

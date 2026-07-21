@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 
 // UI/UX Audit (2026-07-18) — Finding #13:
 //   Added dirty-form protection: snapshot of initial form state via useState

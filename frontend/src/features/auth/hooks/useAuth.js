@@ -13,7 +13,7 @@ import { loginWithEmail, refreshAccessToken } from '../api/authApi'
 import useAuthStore from '../../../store/authStore'
 import api from '../../../api/axios'
 import supabase from '../../../lib/supabaseClient'
-import { queryClient } from '../../../app/providers'
+import { queryClient } from '../../../app/queryClient'
 
 export function useLogin() {
   const [isLoading, setIsLoading] = useState(false)
@@ -55,7 +55,7 @@ export function useLogin() {
     }
   }
 
-  async function completeLogin(token, user, refreshToken) {
+  async function completeLogin() {
     try {
       const [bizResult, profileResult, subResult] = await Promise.allSettled([
         api.get('/businesses/me'),
@@ -89,7 +89,7 @@ export function useLogin() {
 
       toast.success('Welcome back!')
       navigate('/dashboard')
-    } catch (err) {
+    } catch {
       toast.error('Failed to load profile. Please try again.')
     } finally {
       setIsLoading(false)

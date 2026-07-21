@@ -183,7 +183,7 @@ function Table({
                       animationDelay: `${delay}ms`,
                     }}
                   >
-                    {columns.map((col, ci) => (
+                    {columns.map((col) => (
                       <td
                         key={col.key}
                         style={{

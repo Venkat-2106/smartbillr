@@ -54,12 +54,14 @@ export default function SuppliersPage() {
 
   const {
     suppliers, handleExport, isLoading, isError,
-    totalItems, totalPages, pagination,
+    totalItems, pagination,
     search, setSearch,
-    dateFrom, dateTo, handleDateChange,
+    dateFrom,  setDateFrom,
+    dateTo,    setDateTo,
+    handleDateChange,
     activeSearch, activeDateFilter,
     sortKey, sortDir, handleSort,
-    page, setPage,
+    setPage,
     drawerSupplier, setDrawerSupplier,
     showAdd,      setShowAdd,
     editTarget,   setEditTarget,
@@ -68,6 +70,7 @@ export default function SuppliersPage() {
   } = useSuppliers();
 
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   React.useEffect(() => { setBannerDismissed(false) }, [isError])
 
   /* ── Add form ─────────────────────────────────────────────────────────── */
@@ -231,7 +234,7 @@ export default function SuppliersPage() {
         </div>
       ),
     }] : []),
-  ], [canManage]);
+  ], [canManage, setDeleteTarget, setEditTarget]);
 
   /* ── Render ───────────────────────────────────────────────────────────── */
   return (

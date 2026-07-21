@@ -31,7 +31,6 @@ const PAGE_SIZE = 20
 // ── useStock — Current Stock tab ──────────────────────────────────────────────
 export function useStock() {
   const user        = useAuthStore(s => s.user)
-  const queryClient = useQueryClient()
 
   const [search,     setSearchRaw]     = useState('')
   const [categoryId, setCategoryIdRaw] = useState('')

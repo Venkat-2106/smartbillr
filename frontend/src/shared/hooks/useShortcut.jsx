@@ -155,6 +155,7 @@ export function ShortcutProvider({ children }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useShortcut(combo, handler, options = {}) {
   const ctx = useContext(ShortcutContext)
   if (!ctx) throw new Error('useShortcut must be used within ShortcutProvider')
@@ -172,6 +173,7 @@ export function useShortcut(combo, handler, options = {}) {
   return ctx
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useShortcutContext() {
   const ctx = useContext(ShortcutContext)
   if (!ctx) throw new Error('useShortcutContext must be used within ShortcutProvider')

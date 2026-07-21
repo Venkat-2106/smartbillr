@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { usePlans, useCheckout } from '../hooks/useCheckout'
@@ -111,7 +111,7 @@ export default function PricingPage() {
       amount: data.amount,
       currency: data.currency,
       order_id: data.razorpay_order_id,
-      handler: function (response) {
+      handler: function () {
         navigate(`/billing/success?payment_id=${data.payment_id}`)
       },
       modal: {

@@ -33,7 +33,7 @@ export default function useTableKeyboardNav({
       if (prev == null) return 0
       return Math.max(prev - 1, 0)
     })
-  }, [rowCount])
+  }, [])
 
   const getSelectedRow = useCallback(() => {
     if (selectedIndex == null || selectedIndex >= rows.length) return null

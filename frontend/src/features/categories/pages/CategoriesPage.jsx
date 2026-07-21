@@ -89,7 +89,6 @@ export default function CategoriesPage() {
   const {
     categories,         // current page rows (already filtered + sorted by server)
     pagination,
-    page,
     setPage,
     totalItems,         // server-side total (reflects active filters)
     search,

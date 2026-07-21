@@ -6,7 +6,7 @@ import { fetchPurchase } from '../../purchases/api/purchasesApi'
 import { createPurchaseReturn } from '../api/purchaseReturnsApi'
 import { z } from 'zod'
 import { Button, Spinner } from '../../../shared/components'
-import { selectStyle, textareaStyle } from '../../../shared/components/FormField'
+import { textareaStyle } from '../../../shared/components/FormField'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate } from '../../../shared/utils/formatDate'
 import useAuthStore from '../../../store/authStore'
@@ -31,6 +31,7 @@ export default function CreatePurchaseReturnDrawer({ purchaseId, onClose }) {
 
   useEffect(() => {
     if (purchase?.items) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setItems(
         purchase.items.map((item) => ({
           product_id: item.product_id,

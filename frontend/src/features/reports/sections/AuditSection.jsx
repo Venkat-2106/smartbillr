@@ -12,7 +12,7 @@ export default function AuditSection({ dateFrom, dateTo }) {
   const activities = useUserActivities(dateFrom, dateTo, { enabled: isAdmin })
   const logins = useLoginActivities(dateFrom, dateTo, { enabled: isAdmin })
   const changes = useDataChanges(dateFrom, dateTo, { enabled: isAdmin })
-  const exports = useExportActivities(dateFrom, dateTo, { enabled: isAdmin })
+  useExportActivities(dateFrom, dateTo, { enabled: isAdmin })
 
   const [selectedChange, setSelectedChange] = useState(null)
 

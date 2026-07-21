@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect } from 'react'
+﻿import { useState, useMemo, useCallback, useEffect } from 'react'
 
 // UI/UX Audit (2026-07-18):
 //   Finding #1  — PageHeader replaces inline page title markup
@@ -191,6 +191,7 @@ export default function ExpensesPage() {
   } = useExpenses()
 
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setBannerDismissed(false) }, [isError])
 
   const { data: expenseSummary, isLoading: summaryLoading } = useQuery({
@@ -231,7 +232,7 @@ export default function ExpensesPage() {
     setShowModal(true)
   }
 
-  function handleOpenEdit(expense) {
+  const handleOpenEdit = useCallback((expense) => {
     setEditingExpense(expense)
     reset({
       expense_category: expense.expense_category || '',
@@ -240,7 +241,7 @@ export default function ExpensesPage() {
       expense_notes: expense.expense_notes || '',
     })
     setShowModal(true)
-  }
+  }, [reset])
 
   function handleCloseModal() {
     setShowModal(false)
@@ -279,7 +280,7 @@ export default function ExpensesPage() {
 
   const columns = useMemo(
     () => buildColumns(canManage, handleOpenEdit, handleDeleteClick, country),
-    [canManage, country]
+    [canManage, country, handleOpenEdit]
   )
 
   function handleDateChange(field, value) {

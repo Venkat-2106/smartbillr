@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { BentoCard, LineChart, BarChart, EmptyState, UpgradeBlur } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
-import { useGrossProfit, useProfitByProduct, useProfitByCategory, useProfitByCustomer, useProfitTrend, useReportCountry } from '../hooks/useReports'
+import { useGrossProfit, useProfitByProduct, useProfitByCategory, useProfitTrend, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, ChartCard, InfoCard } from '../components/shared'
 
 export default function ProfitSection({ dateFrom, dateTo }) {
@@ -9,7 +9,6 @@ export default function ProfitSection({ dateFrom, dateTo }) {
   const grossProfit = useGrossProfit(dateFrom, dateTo)
   const byProduct = useProfitByProduct(dateFrom, dateTo)
   const byCategory = useProfitByCategory(dateFrom, dateTo)
-  const byCustomer = useProfitByCustomer(dateFrom, dateTo)
   const trend = useProfitTrend(period, dateFrom, dateTo)
   const country = useReportCountry()
 

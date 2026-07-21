@@ -42,13 +42,14 @@ export default function AdminBusinessesPage() {
       const resp = await api.get('/superadmin/businesses', { params })
       setRows(resp.data.items || [])
       setPagination(resp.data.pagination)
-    } catch (err) {
+    } catch {
       toast.error('Failed to load businesses')
     } finally {
       setLoading(false)
     }
   }, [page, sortKey, sortDir, search])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchData() }, [fetchData])
 
   function handleSort(key) {

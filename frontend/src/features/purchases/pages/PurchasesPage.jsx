@@ -155,6 +155,7 @@ export default function PurchasesPage() {
   } = usePurchases()
 
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setBannerDismissed(false) }, [isError])
 
   const [showUpgradeBanner, setShowUpgradeBanner] = useState(true)

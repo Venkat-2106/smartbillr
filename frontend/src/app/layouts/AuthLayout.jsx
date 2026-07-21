@@ -136,7 +136,7 @@ export default function AuthLayout({ children }) {
           </h2>
           <p style={{
             fontSize: '1rem', color: 'var(--text-secondary, #CBD5E1)',
-            lineHeight: 1.65, marginTop: 16, margin: 0, marginTop: 16,
+            lineHeight: 1.65, margin: 0, marginTop: 16,
             fontWeight: 400,
           }}>
             Smart invoicing, inventory tracking, payments &amp; analytics —<br />all in one platform designed for modern businesses.

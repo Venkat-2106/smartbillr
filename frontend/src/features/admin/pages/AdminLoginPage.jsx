@@ -24,7 +24,7 @@ export default function AdminLoginPage() {
 
       setAuth(token, user, supabaseData.refresh_token)
 
-      const resp = await api.get('/superadmin/businesses?page=1&limit=1')
+      await api.get('/superadmin/businesses?page=1&limit=1')
       setSuperAdmin(true)
       toast.success('Signed in as super admin')
       navigate('/admin/businesses')

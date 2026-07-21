@@ -20,7 +20,7 @@
 import axios from 'axios'
 import useAuthStore from '../store/authStore'
 import { refreshAccessToken } from '../features/auth/api/authApi'
-import { queryClient } from '../app/providers'
+import { queryClient } from '../app/queryClient'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,

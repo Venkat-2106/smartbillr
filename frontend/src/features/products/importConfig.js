@@ -6,6 +6,7 @@
 import {
   PRODUCT_IMPORT_TEMPLATE,
   PRODUCT_IMPORT_SAMPLES,
+  PRODUCT_UPDATE_TEMPLATE,
   PRODUCT_UPDATE_SAMPLES,
 } from '../../shared/utils/csvExport'
 import {
@@ -28,6 +29,7 @@ export const productImportConfig = {
     guidelines: PRODUCT_GUIDELINES,
   },
   update: {
+    columns: PRODUCT_UPDATE_TEMPLATE,
     sampleRows: PRODUCT_UPDATE_SAMPLES,
     requiredColumns: [],
     guidelines: PRODUCT_UPDATE_GUIDELINES,

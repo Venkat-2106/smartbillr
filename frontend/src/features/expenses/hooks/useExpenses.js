@@ -58,7 +58,7 @@ export function useExpenses() {
     enabled:         !!user,
   })
 
-  const { items: expenses, pagination, totalItems, totalPages } = tbl.unwrapPagination(serverData)
+  const { items: expenses, totalItems, totalPages } = tbl.unwrapPagination(serverData)
 
   async function handleExport() {
     try {

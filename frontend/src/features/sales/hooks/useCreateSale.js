@@ -64,7 +64,6 @@ export default function useCreateSale() {
 
   // ── Stock override dialog state ───────────────────────────────────────────
   const [stockErrors,  setStockErrors]  = useState([]);
-  const [pendingBody,  setPendingBody]  = useState(null);
 
   // ── Fetch customers ────────────────────────────────────────────────────────
   const { data: allCustomers = [], isLoading: loadingCust } = useQuery({
@@ -174,7 +173,7 @@ export default function useCreateSale() {
                   unit_price:     Number(product.prod_sell_price) || 0,
                   quantity:       qty,
                   tax_rate:       Number(product.tax_rate) || 0,
-                  prod_stock_qty: Number(product.prod_stock_qty) ?? null,
+                  prod_stock_qty: Number.isFinite(Number(product.prod_stock_qty)) ? Number(product.prod_stock_qty) : null,
                 }
               : i
           );
@@ -189,7 +188,7 @@ export default function useCreateSale() {
           unit_price: Number(product.prod_sell_price) || 0,
           quantity:   qty,
           tax_rate:   Number(product.tax_rate) || 0,
-          prod_stock_qty: Number(product.prod_stock_qty) ?? null,
+          prod_stock_qty: Number.isFinite(Number(product.prod_stock_qty)) ? Number(product.prod_stock_qty) : null,
         }, newItem()];
       });
       toast.success(`Added: ${product.prod_name}`, { duration: 1500 });
@@ -252,7 +251,6 @@ export default function useCreateSale() {
       const responseData = err?.response?.data;
       if (responseData?.error_code === 'INSUFFICIENT_STOCK' && responseData?.stock_errors?.length > 0) {
         setStockErrors(responseData.stock_errors);
-        setPendingBody(buildBody(false));
         return;
       }
       toast.error(responseData?.message || 'Failed to create invoice');
@@ -262,13 +260,11 @@ export default function useCreateSale() {
   // ── Stock override handlers ──────────────────────────────────────────────
   const handleStockOverrideConfirm = useCallback(() => {
     setStockErrors([]);
-    setPendingBody(null);
     mutation.mutate(buildBody(true));
   }, [mutation, buildBody]);
 
   const handleStockOverrideCancel = useCallback(() => {
     setStockErrors([]);
-    setPendingBody(null);
   }, []);
 
   // ── Line item handlers ────────────────────────────────────────────────────
@@ -290,7 +286,7 @@ export default function useCreateSale() {
           mrp:            Number(product.prod_mrp) || 0,
           unit_price:     Number(product.prod_sell_price) || 0,
           tax_rate:       Number(product.tax_rate) || 0,
-          prod_stock_qty: Number(product.prod_stock_qty) ?? null,
+          prod_stock_qty: Number.isFinite(Number(product.prod_stock_qty)) ? Number(product.prod_stock_qty) : null,
         };
       });
       return isLast ? [...updated, newItem()] : updated;

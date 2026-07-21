@@ -93,7 +93,7 @@ import {
   useUpdateProduct,
   useDeleteProduct,
 } from '../hooks/useProducts'
-import { checkBarcode, fetchProductByBarcode, fetchProductSummary } from '../api/productsApi'
+import { fetchProductByBarcode, fetchProductSummary } from '../api/productsApi'
 import ProductDetailDrawer from '../components/ProductDetailDrawer'
 import AddProductModal from '../components/AddProductModal'
 import EditProductModal from '../components/EditProductModal'
@@ -263,7 +263,6 @@ export default function ProductsPage() {
   const {
     products,
     pagination,
-    page,
     setPage,
     search,
     setSearch,
@@ -282,6 +281,7 @@ export default function ProductsPage() {
   } = useProducts()
 
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setBannerDismissed(false) }, [isError])
 
   // LOCAL sort + date state REMOVED:
@@ -775,7 +775,7 @@ export default function ProductsPage() {
           ),
         }]
       : []),
-  ], [canViewProfit, canManage, countryCode])
+  ], [canViewProfit, canManage, countryCode, isTierLocked, setEditTarget, setDeleteTarget])
 
   const activeSearch     = search.trim().length > 0
   const activeDateFilter = dateFrom || dateTo

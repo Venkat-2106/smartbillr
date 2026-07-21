@@ -17,7 +17,6 @@ import {
 } from '../../../shared/utils/printUtils'
 import useAuthStore from '../../../store/authStore'
 
-const STATUS_VARIANT = { pending: 'warning', approved: 'success', rejected: 'danger' }
 const STATUS_LABEL = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' }
 
 function StatusBadge({ status }) {
@@ -108,7 +107,7 @@ export default function SalesReturnDetailDrawer({ returnId, onClose, onStatusUpd
       queryClient.invalidateQueries({ queryKey: ['salesReturns'] })
       if (onStatusUpdate) onStatusUpdate()
     },
-    onError: (err) => {
+    onError: () => {
       setActionLoading(false)
     },
   })

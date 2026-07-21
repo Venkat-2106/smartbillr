@@ -21,7 +21,7 @@
 //   show inline lock icon + "Upgrade" badge (same pattern as Sales/Dashboard).
 //   ImportButton endpoint: removed /v1 prefix (baseURL already contains it).
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import {
@@ -223,7 +223,7 @@ function CurrentStockTab({ canViewProfit, isTierLocked, canAdjust }) {
     status,     setStatus,
     isActive,   setIsActive,
     sortKey, sortDir, handleSort,
-    page, setPage,
+    setPage,
     handleExport,
   } = useStock()
 
@@ -235,6 +235,7 @@ function CurrentStockTab({ canViewProfit, isTierLocked, canAdjust }) {
   })
 
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setBannerDismissed(false) }, [isError])
 
   const csvColumns    = canViewProfit ? STOCK_CSV_COLUMNS : STOCK_CSV_COLUMNS_NO_PROFIT
@@ -393,7 +394,7 @@ function CurrentStockTab({ canViewProfit, isTierLocked, canAdjust }) {
           ),
         }]
       : []),
-  ], [canViewProfit, canAdjust, handleAdjustClick, countryCode])
+  ], [canViewProfit, canAdjust, handleAdjustClick, countryCode, isTierLocked])
 
   return (
     <>
@@ -600,11 +601,12 @@ function StockMovementsTab({ active }) {
     dateFrom, setDateFrom,
     dateTo,   setDateTo,
     sortKey, sortDir, handleSort,
-    page, setPage,
+    setPage,
     handleExport,
   } = useStockMovements({ active })
 
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setBannerDismissed(false) }, [isError])
 
   const activeFilters = Boolean(search.trim() || moveType || dateFrom || dateTo)
@@ -819,14 +821,15 @@ function StockMovementsTab({ active }) {
 function LowStockAlertsTab({ active }) {
   const {
     alerts, pagination, totalItems, isLoading, isError,
-    page, setPage,
+    setPage,
     refetch,
   } = useStockAlerts({ active })
 
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setBannerDismissed(false) }, [isError])
 
-  const { markRead, isMarkingRead } = useStockAlertRead()
+  const { markRead } = useStockAlertRead()
 
   const handleAlertClick = useCallback((row) => {
     // Only mark as read if it is currently unread

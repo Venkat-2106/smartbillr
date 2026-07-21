@@ -180,8 +180,6 @@ function buildColumns(onRowClick, country) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function PaymentsPage() {
-  const hasPermission = useAuthStore(s => s.hasPermission)
-  const canManage     = hasPermission('payments.manage')
   const business      = useAuthStore(s => s.business)
   const country       = business?.business_country_code || 'IN'
 
@@ -194,13 +192,13 @@ export default function PaymentsPage() {
     dateTo,    setDateTo,
     sortKey,   sortDir, handleSort,
     page,      setPage, totalPages, totalItems,
-    pagination: paginationObj,
     handleExport,
     recordPayment,
     isRecording,
   } = usePayments()
 
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setBannerDismissed(false) }, [isError])
 
   const { data: paymentSummary, isLoading: summaryLoading } = useQuery({
@@ -220,7 +218,7 @@ export default function PaymentsPage() {
 
   const columns = useMemo(
     () => buildColumns(setSelectedSaleId, country),
-    [country] // eslint-disable-line react-hooks/exhaustive-deps
+    [country]
   )
 
   function handleDateChange(field, value) {

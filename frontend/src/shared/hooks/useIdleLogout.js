@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import useAuthStore from '../../store/authStore'
 import api from '../../api/axios'
-import { queryClient } from '../../app/providers'
+import { queryClient } from '../../app/queryClient'
 
 const EVENTS = ['mousedown', 'keydown', 'scroll', 'touchstart']
 

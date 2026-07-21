@@ -28,7 +28,7 @@ import { Button, Spinner, EmptyState, Pagination } from '../../../shared/compone
 import { useCustomer } from '../hooks/useCustomers'
 import { formatDate }     from '../../../shared/utils/formatDate'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
-import { COUNTRY_MAP }    from './CustomerForm'
+import { COUNTRY_MAP }    from './countryData'
 import {
   buildPrintHeader,
   buildPrintWatermark,

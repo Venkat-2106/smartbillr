@@ -314,7 +314,7 @@ export default function PaymentHistoryDrawer({ saleId, onClose, onRecorded, isRe
               )}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {data.payment_history?.map((p, i) => (
+                {data.payment_history?.map((p) => (
                   <div
                     key={p.payment_id}
                     style={{

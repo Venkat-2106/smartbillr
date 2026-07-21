@@ -11,7 +11,7 @@ import { useMemo } from 'react'
 import { formatDate } from '../../../shared/utils/formatDate'
 import {
   SUBSCRIPTION_DISPLAY_NAMES as DISPLAY_NAMES,
-  PLAN_ORDER, NEXT_TIER, getSubscriptionDisplayName,
+  PLAN_ORDER, NEXT_TIER,
 } from '../../../shared/utils/subscriptionUtils'
 
 const FEATURES = [

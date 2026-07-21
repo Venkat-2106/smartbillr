@@ -11,7 +11,7 @@ export { default as Pagination }     from './Pagination';
 export { default as ConfirmDialog }  from './ConfirmDialog';
 export { default as PageHeader }     from './PageHeader';
 export { default as FormField }      from './FormField';
-export { selectStyle, textareaStyle } from './FormField';
+export { selectStyle, textareaStyle } from './formStyles';
 export { default as DateRangeFilter } from './DateRangeFilter';
 export { default as SelectField }    from './SelectField';
 export { default as StateDropdown }  from './StateDropdown';

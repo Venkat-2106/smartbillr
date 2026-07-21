@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, lazy, Suspense } from 'react'
-import { useNavigate } from 'react-router-dom'
+
 import { usePermissions } from '../../../shared/hooks/usePermissions'
 import { SectionSkeleton } from '../components/shared'
 
@@ -93,7 +93,6 @@ function getDatePreset(preset) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function ReportsPage() {
-  const navigate = useNavigate()
   const { can } = usePermissions()
   const canFinancial = can('dashboard.financial')
   const [activeTab, setActiveTab] = useState('summary')

@@ -476,6 +476,20 @@ export const PRODUCT_IMPORT_TEMPLATE = [
   { key: 'unit',                label: 'Unit' },
 ];
 
+/** Update template for Products (Stock Qty excluded — use Stock page) */
+export const PRODUCT_UPDATE_TEMPLATE = [
+  { key: 'prod_name',           label: 'Product Name' },
+  { key: 'category_name',       label: 'Category' },
+  { key: 'prod_sell_price',     label: 'Sell Price' },
+  { key: 'prod_cost_price',     label: 'Cost Price' },
+  { key: 'prod_mrp',            label: 'MRP' },
+  { key: 'prod_low_stock_alert',label: 'Low Stock Alert' },
+  { key: 'tax_rate',            label: 'Tax Rate %' },
+  { key: 'tax_code',            label: 'Tax Code' },
+  { key: 'barcode',             label: 'Barcode' },
+  { key: 'unit',                label: 'Unit' },
+];
+
 /** Import template for Stock */
 export const STOCK_IMPORT_TEMPLATE = [
   { key: 'product_id',       label: 'Product ID' },
@@ -540,8 +554,8 @@ export const PRODUCT_IMPORT_SAMPLES = [
 
 /** Minimal sample rows for the Product Bulk Update template — only Product Name + the fields to update */
 export const PRODUCT_UPDATE_SAMPLES = [
-  ['Wheat Flour 5kg', '', '', '', '', '', '', '18', 'GST', '', ''],
-  ['Sugar 1kg', '', '', '', '', '', '', '5', '', '', 'pcs'],
+  ['Wheat Flour 5kg', '', '', '', '', '', '18', 'GST', '', ''],
+  ['Sugar 1kg', '', '', '', '', '', '5', '', '', 'pcs'],
 ];
 
 export const STOCK_IMPORT_SAMPLES = [

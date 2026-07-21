@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import useAuthStore from '../../store/authStore'
 import api from '../../api/axios'
 import toast from 'react-hot-toast'
-import { queryClient } from '../../app/providers'
+import { queryClient } from '../../app/queryClient'
 
 export function usePermissionsSync() {
   const token = useAuthStore((s) => s.token)

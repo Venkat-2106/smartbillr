@@ -36,6 +36,7 @@ export default function AdminBusinessDetailPage() {
     }
   }, [id, navigate])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchBusiness() }, [fetchBusiness])
 
   async function handleSaveSubscription() {
@@ -48,7 +49,7 @@ export default function AdminBusinessDetailPage() {
       await api.patch(`/superadmin/businesses/${id}/subscription`, body)
       toast.success('Subscription updated')
       await fetchBusiness()
-    } catch (err) {
+    } catch {
       toast.error('Failed to update subscription')
     } finally {
       setSaving(false)

@@ -21,7 +21,7 @@
 // OR with a React Hook Form register:
 //   <SelectField {...register('payment_method')} options={PAYMENT_OPTIONS} />
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 export default function SelectField({
   value,

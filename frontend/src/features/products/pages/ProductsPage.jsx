@@ -68,8 +68,8 @@ import {
   Pagination,
   SearchBar,
   ExportButton,
-  ImportButton,
-  ImportGuidelines,
+  BulkImportPanel,
+  BulkImportGuidelines,
   MetricCard,
   BentoCard,
   PageHeader,
@@ -77,8 +77,8 @@ import {
   LockedCell,
 } from '../../../shared/components'
 
-import { PRODUCT_CSV_COLUMNS, PRODUCT_CSV_COLUMNS_NO_PROFIT, PRODUCT_IMPORT_TEMPLATE, PRODUCT_IMPORT_SAMPLES } from '../../../shared/utils/csvExport'
-import { PRODUCT_GUIDELINES } from '../../../shared/utils/importGuidelines'
+import { PRODUCT_CSV_COLUMNS, PRODUCT_CSV_COLUMNS_NO_PROFIT } from '../../../shared/utils/csvExport'
+import { productImportConfig } from '../importConfig'
 import { usePermissions }       from '../../../shared/hooks/usePermissions'
 import { useFeatureAccess }     from '../../../shared/hooks/useFeatureAccess'
 import { formatDate }           from '../../../shared/utils/formatDate'
@@ -814,20 +814,7 @@ export default function ProductsPage() {
               filename="products"
               columns={csvColumns}
             />
-            {canManage && (
-              <ImportButton
-                endpoint="/products/import"
-                title="Products"
-                columns={PRODUCT_IMPORT_TEMPLATE}
-                sampleRows={PRODUCT_IMPORT_SAMPLES}
-                requiredColumns={[
-                  { key: 'prod_name',       label: 'Product Name', alternates: ['name'] },
-                  { key: 'category_name',   label: 'Category',     alternates: ['Category'] },
-                  { key: 'prod_sell_price', label: 'Sell Price',   alternates: ['sell_price'] },
-                  { key: 'prod_cost_price', label: 'Cost Price',   alternates: ['cost_price'] },
-                ]}
-              />
-            )}
+            <BulkImportPanel config={productImportConfig} canImport={canManage} />
             {canManage && (
               <Button
                 variant="primary"
@@ -842,6 +829,8 @@ export default function ProductsPage() {
         }
       />
 
+      <BulkImportGuidelines config={productImportConfig} />
+
       {showUpgradeBanner && subscription?.subscription_type === 'trial' && (
         <UpgradePrompt
           variant="banner"
@@ -851,12 +840,7 @@ export default function ProductsPage() {
         />
       )}
 
-      <ImportGuidelines
-        guidelines={PRODUCT_GUIDELINES}
-        columns={PRODUCT_IMPORT_TEMPLATE}
-        sampleRows={PRODUCT_IMPORT_SAMPLES}
-        templateName="products"
-      />
+
 
       {/* METRIC CARDS */}
       <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>

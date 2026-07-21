@@ -37,15 +37,14 @@ import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
 import {
   Button, Input, Modal, Table, SearchBar,
   Pagination, ConfirmDialog,
-  FormField, StateDropdown, ExportButton,   ImportButton,
-  ImportGuidelines,
+  FormField, StateDropdown, ExportButton, BulkImportPanel, BulkImportGuidelines,
   DateRangeFilter, EmptyState,
   MetricCard, BentoCard, UpgradePrompt, PageHeader,
 } from '../../../shared/components'
 
 import { selectStyle, textareaStyle } from '../../../shared/components/FormField'
-import { CUSTOMER_CSV_COLUMNS, CUSTOMER_IMPORT_TEMPLATE, CUSTOMER_IMPORT_SAMPLES }       from '../../../shared/utils/csvExport'
-import { CUSTOMER_GUIDELINES } from '../../../shared/utils/importGuidelines'
+import { CUSTOMER_CSV_COLUMNS }       from '../../../shared/utils/csvExport'
+import { customerImportConfig } from '../importConfig'
 import { COUNTRIES }                  from '../../../shared/data/countries'
 import { formatCurrency }             from '../../../shared/utils/formatCurrency'
 import { formatDate }                 from '../../../shared/utils/formatDate'
@@ -401,15 +400,7 @@ export default function CustomersPage() {
               filename="customers"
               columns={CUSTOMER_CSV_COLUMNS}
             />
-            {canManage && (
-              <ImportButton
-                endpoint="/customers/import"
-                title="Customers"
-                columns={CUSTOMER_IMPORT_TEMPLATE}
-                sampleRows={CUSTOMER_IMPORT_SAMPLES}
-                requiredColumns={[{ key: 'cust_name', label: 'Customer Name', alternates: ['name'] }]}
-              />
-            )}
+            <BulkImportPanel config={customerImportConfig} canImport={canManage} />
             <Button
               variant="primary"
               leftIcon={<span style={{ fontSize: 16, lineHeight: 1 }}>+</span>}
@@ -422,6 +413,8 @@ export default function CustomersPage() {
         }
       />
 
+      <BulkImportGuidelines config={customerImportConfig} />
+
       {showUpgradeBanner && subscription?.subscription_type === 'trial' && (
         <UpgradePrompt
           variant="banner"
@@ -431,12 +424,7 @@ export default function CustomersPage() {
         />
       )}
 
-      <ImportGuidelines
-        guidelines={CUSTOMER_GUIDELINES}
-        columns={CUSTOMER_IMPORT_TEMPLATE}
-        sampleRows={CUSTOMER_IMPORT_SAMPLES}
-        templateName="customers"
-      />
+
 
       {/* METRIC CARDS */}
       <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>

@@ -93,7 +93,7 @@ from app.utils.queries import fetch_stock_kpi_counts_async
 from app.utils.timestamp import fmt_ts
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 from app.utils.subscription_features import check_feature_access
-from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, friendly_db_error, check_required_headers, validate_upload_file, MAX_IMPORT_FILE_BYTES
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, friendly_db_error, check_required_headers, validate_upload_file, MAX_IMPORT_FILE_BYTES, bulk_import_scaffold
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from sqlalchemy.exc import IntegrityError
 from typing import Optional
@@ -357,50 +357,46 @@ async def create_product(
 async def import_products(
     file: UploadFile = File(...),
     current_user: dict = Depends(require_permission("products.edit")),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    mode: Optional[str] = Query(default="create", description="Import mode: 'create' (default) or 'update'"),
 ):
-    business_id = current_user["business_id"]
-    user_id = current_user["user_id"]
+    is_update_mode = (mode or "").lower() == "update"
 
-    # ── 0. Validate upload file type & size ───────────────────────────────────
-    file_error = validate_upload_file(file)
-    if file_error:
-        return error_response(file_error, 400)
-
-    # ── 1. Parse CSV ──────────────────────────────────────────────────────────
-    file_bytes = await file.read()
-
-    if len(file_bytes) > MAX_IMPORT_FILE_BYTES:
-        return error_response("File is too large — maximum 5 MB.", 400)
-
-    rows, fieldnames, parse_error = parse_csv_file(file_bytes)
-    if parse_error:
-        return error_response(parse_error, 400)
-
-    header_error = check_required_headers(fieldnames, REQUIRED_PRODUCT_COLUMNS)
-    if header_error:
-        return error_response(header_error, 400)
-
-    # ── 2. Row transform: validate & sanitize each row ────────────────────────
     def row_transform(row: dict, row_num: int):
-        # Required field: prod_name
         name = (row.get("prod_name") or row.get("name") or row.get("Product Name") or "").strip()
         if not name:
             return None, "Product Name is required"
 
-        category_name = (row.get("category_name") or row.get("Category") or "").strip()
-        if not category_name:
+        category_name = (row.get("category_name") or row.get("Category") or "").strip() or None
+        if not is_update_mode and not category_name:
             return None, "Category is required"
 
-        sell_price = row.get("prod_sell_price") or row.get("sell_price") or row.get("Sell Price")
-        if sell_price is None or str(sell_price).strip() == "":
+        sell_price_raw = row.get("prod_sell_price") or row.get("sell_price") or row.get("Sell Price")
+        if sell_price_raw is not None and str(sell_price_raw).strip() != "":
+            try:
+                sell_price = float(sell_price_raw)
+            except ValueError:
+                return None, "Sell Price must be a valid number"
+            if sell_price < 0:
+                return None, "Sell Price cannot be negative"
+        elif not is_update_mode:
             return None, "Sell Price is required"
+        else:
+            sell_price = None
 
-        cost_price = row.get("prod_cost_price") or row.get("cost_price") or row.get("Cost Price")
-        if cost_price is None or str(cost_price).strip() == "":
+        cost_price_raw = row.get("prod_cost_price") or row.get("cost_price") or row.get("Cost Price")
+        if cost_price_raw is not None and str(cost_price_raw).strip() != "":
+            try:
+                cost_price = float(cost_price_raw)
+            except ValueError:
+                return None, "Cost Price must be a valid number"
+            if cost_price < 0:
+                return None, "Cost Price cannot be negative"
+        elif not is_update_mode:
             return None, "Cost Price is required"
+        else:
+            cost_price = None
 
-        # Optional fields with sanitization
         mrp = row.get("prod_mrp") or row.get("mrp") or row.get("MRP")
         stock_qty = row.get("prod_stock_qty") or row.get("stock_qty") or row.get("Stock Qty") or "0"
         low_stock_alert = row.get("prod_low_stock_alert") or row.get("low_stock_alert") or row.get("Low Stock Alert") or "10"
@@ -409,9 +405,9 @@ async def import_products(
         barcode = (row.get("barcode") or row.get("Barcode") or "").strip() or None
         unit = (row.get("unit") or row.get("Unit") or "pcs").strip()
 
-        # Sanitize strings (CSV-safe: strips formula-injection characters)
         name = strip_and_escape_csv_value(name)
-        category_name = strip_and_escape_csv_value(category_name)
+        if category_name:
+            category_name = strip_and_escape_csv_value(category_name)
         if tax_code:
             tax_code = strip_and_escape_csv_value(tax_code)
         if barcode:
@@ -419,10 +415,7 @@ async def import_products(
         if unit:
             unit = strip_and_escape_csv_value(unit)
 
-        # Validate numeric fields
         try:
-            sell_price = float(sell_price)
-            cost_price = float(cost_price)
             mrp = float(mrp) if mrp is not None and mrp != "" else None
             stock_qty = int(float(stock_qty)) if stock_qty is not None and stock_qty != "" else 0
             low_stock_alert = int(float(low_stock_alert)) if low_stock_alert is not None and low_stock_alert != "" else 10
@@ -430,8 +423,11 @@ async def import_products(
         except ValueError:
             return None, "invalid numeric value in price, stock, or tax fields"
 
-        if sell_price < 0 or cost_price < 0 or (mrp is not None and mrp < 0):
-            return None, "prices cannot be negative"
+        if sell_price is not None and cost_price is not None and not is_update_mode:
+            if sell_price < 0 or cost_price < 0:
+                return None, "prices cannot be negative"
+        if (mrp is not None and mrp < 0):
+            return None, "MRP cannot be negative"
         if stock_qty < 0 or low_stock_alert < 0:
             return None, "stock quantities cannot be negative"
         if tax_rate < 0 or tax_rate > 100:
@@ -452,254 +448,225 @@ async def import_products(
             "_row_number": row_num
         }, None
 
-    valid_rows, errors = validate_rows(rows, row_transform)
+    async def upsert(valid_rows, db, business_id, user_id):
+        category_map = {}
+        if valid_rows:
+            category_names = list(set(r["category_name"] for r in valid_rows if r.get("category_name")))
+            if category_names:
+                placeholders = ", ".join([f":cat_{i}" for i in range(len(category_names))])
+                params = {"bid": business_id}
+                for i, cn in enumerate(category_names):
+                    params[f"cat_{i}"] = cn
 
-    # ── 3. Check bulk create tier limit ───────────────────────────────────────
-    sub_type = current_user.get("subscription_type") or await fetch_subscription_type_async(db, business_id)
-    allowed_count, limit_msg = await check_bulk_create_allowed(
-        db, business_id, sub_type, "max_products", "products", len(valid_rows)
+                cat_rows = (await db.execute(text(f"""
+                    SELECT category_id, category_name
+                    FROM categories
+                    WHERE business_id = CAST(:bid AS uuid)
+                      AND category_name IN ({placeholders})
+                      AND is_deleted = false
+                """), params)).fetchall()
+
+                for r in cat_rows:
+                    category_map[r.category_name.lower()] = str(r.category_id)
+
+        unmatched_cat_errors = []
+        filtered_rows = []
+        for r in valid_rows:
+            cat_name = r.get("category_name")
+            if cat_name and cat_name.lower() not in category_map:
+                unmatched_cat_errors.append({
+                    "row": r["_row_number"],
+                    "message": f'Category "{cat_name}" does not exist. Leave this column blank to import without a category, or add the category first.'
+                })
+            else:
+                filtered_rows.append(r)
+
+        valid_rows = filtered_rows
+        errors = unmatched_cat_errors
+
+        if not valid_rows:
+            return 0, 0, errors
+
+        existing_names = {}
+        existing_barcodes = {}
+        if valid_rows:
+            name_list = [r["prod_name"] for r in valid_rows]
+            barcode_list = [r["barcode"] for r in valid_rows if r.get("barcode")]
+
+            if name_list:
+                placeholders = ", ".join([f":name_{i}" for i in range(len(name_list))])
+                params = {"bid": business_id}
+                for i, n in enumerate(name_list):
+                    params[f"name_{i}"] = n.lower()
+
+                existing_rows = (await db.execute(text(f"""
+                    SELECT prod_id, LOWER(prod_name) as lname
+                    FROM products
+                    WHERE business_id = CAST(:bid AS uuid)
+                      AND LOWER(prod_name) IN ({placeholders})
+                      AND is_deleted = false
+                """), params)).fetchall()
+
+                for r in existing_rows:
+                    existing_names[r.lname] = str(r.prod_id)
+
+            if barcode_list:
+                placeholders = ", ".join([f":bc_{i}" for i in range(len(barcode_list))])
+                params = {"bid": business_id}
+                for i, b in enumerate(barcode_list):
+                    params[f"bc_{i}"] = b
+
+                existing_rows = (await db.execute(text(f"""
+                    SELECT prod_id, barcode
+                    FROM products
+                    WHERE business_id = CAST(:bid AS uuid)
+                      AND barcode IN ({placeholders})
+                      AND is_deleted = false
+                """), params)).fetchall()
+
+                for r in existing_rows:
+                    existing_barcodes[r.barcode] = str(r.prod_id)
+
+        new_rows = []
+        update_rows = []
+        upsert_errors = []
+        batch_barcodes = {}
+        seen_in_file_names = {}
+
+        for row in valid_rows:
+            row_num = row.pop("_row_number")
+            name = row["prod_name"]
+            name_lower = name.lower()
+            barcode = row.get("barcode")
+            category_name = row.get("category_name")
+            category_id = category_map.get(category_name.lower()) if category_name else None
+
+            if name_lower in seen_in_file_names:
+                upsert_errors.append({"row": row_num, "message": f'Duplicate product name "{name}" also appears on row {seen_in_file_names[name_lower]} — only the first occurrence will be imported.'})
+                continue
+
+            if name_lower in existing_names:
+                pid = existing_names[name_lower]
+                if barcode:
+                    if barcode in existing_barcodes and existing_barcodes[barcode] != pid:
+                        upsert_errors.append({"row": row_num, "message": f'Barcode "{barcode}" is already assigned to another product. Please use a unique barcode.'})
+                        continue
+                    if barcode in batch_barcodes:
+                        upsert_errors.append({"row": row_num, "message": f'Barcode "{barcode}" is duplicated in this import file.'})
+                        continue
+                update_rows.append({"pid": pid, "uid": user_id, "cat_id": category_id, **row})
+            else:
+                if is_update_mode:
+                    upsert_errors.append({"row": row_num, "message": f'Product "{name}" does not exist. Only existing products can be updated.'})
+                    continue
+                if not category_name:
+                    upsert_errors.append({"row": row_num, "message": "Category is required for new products."})
+                    continue
+                if row.get("prod_sell_price") is None:
+                    upsert_errors.append({"row": row_num, "message": "Sell Price is required for new products."})
+                    continue
+                if row.get("prod_cost_price") is None:
+                    upsert_errors.append({"row": row_num, "message": "Cost Price is required for new products."})
+                    continue
+                if barcode:
+                    if barcode in existing_barcodes:
+                        upsert_errors.append({"row": row_num, "message": f'Barcode "{barcode}" is already used by another product.'})
+                        continue
+                    if barcode in batch_barcodes:
+                        upsert_errors.append({"row": row_num, "message": f'Barcode "{barcode}" is duplicated in this import file.'})
+                        continue
+                new_prod_id = str(uuid.uuid4())
+                new_rows.append({"pid": new_prod_id, "bid": business_id, "uid": user_id, "cat_id": category_id, **row})
+                existing_names[name_lower] = new_prod_id
+                seen_in_file_names[name_lower] = row_num
+                if barcode:
+                    existing_barcodes[barcode] = new_prod_id
+                    batch_barcodes[barcode] = new_prod_id
+
+        created = 0
+        updated = 0
+
+        for i, r in enumerate(new_rows):
+            try:
+                async with db.begin_nested():
+                    await db.execute(text("""
+                        INSERT INTO products (
+                            prod_id, business_id, category_id, prod_name,
+                            prod_sell_price, prod_mrp, prod_cost_price,
+                            prod_stock_qty, prod_low_stock_alert, tax_rate,
+                            tax_code, barcode, unit,
+                            prod_created_at, created_by, updated_by
+                        ) VALUES (
+                            CAST(:pid AS uuid), CAST(:bid AS uuid), CAST(:cat_id AS uuid),
+                            :name, :sell_price, :mrp, :cost_price,
+                            :stock_qty, :low_stock_alert, :tax_rate,
+                            :tax_code, :barcode, :unit,
+                            NOW(), CAST(:uid AS uuid), CAST(:uid AS uuid)
+                        )
+                    """), {
+                        "pid": r["pid"], "bid": business_id, "cat_id": r["cat_id"],
+                        "name": r["prod_name"], "sell_price": r["prod_sell_price"],
+                        "mrp": r["prod_mrp"], "cost_price": r["prod_cost_price"],
+                        "stock_qty": r["prod_stock_qty"], "low_stock_alert": r["prod_low_stock_alert"],
+                        "tax_rate": r["tax_rate"], "tax_code": r["tax_code"],
+                        "barcode": r["barcode"], "unit": r["unit"], "uid": r["uid"],
+                    })
+                    created += 1
+            except Exception as e:
+                upsert_errors.append({"row": r.get("_row_number", i + 1), "message": friendly_db_error(e, context=f"product insert row {r.get('_row_number', i + 1)}")})
+
+        _UPDATE_FIELD_MAP = [
+            ("prod_sell_price",      "sell_price",       lambda r: r.get("prod_sell_price")),
+            ("prod_cost_price",      "cost_price",       lambda r: r.get("prod_cost_price")),
+            ("prod_mrp",             "mrp",              lambda r: r.get("prod_mrp")),
+            ("prod_low_stock_alert", "low_stock_alert",  lambda r: r.get("prod_low_stock_alert")),
+            ("tax_rate",             "tax_rate",          lambda r: r.get("tax_rate")),
+            ("tax_code",             "tax_code",          lambda r: r.get("tax_code")),
+            ("barcode",              "barcode",           lambda r: r.get("barcode")),
+            ("unit",                 "unit",              lambda r: r.get("unit")),
+            ("category_id",          "cat_id",            lambda r: r.get("cat_id")),
+        ]
+        for i, r in enumerate(update_rows):
+            try:
+                set_clauses = ["updated_by = CAST(:uid AS uuid)"]
+                params = {"pid": r["pid"], "bid": business_id, "uid": r["uid"]}
+
+                for col, param_name, getter in _UPDATE_FIELD_MAP:
+                    value = getter(r)
+                    if value is not None:
+                        if col == "category_id":
+                            set_clauses.append(f"{col} = CAST(:{param_name} AS uuid)")
+                        else:
+                            set_clauses.append(f"{col} = :{param_name}")
+                        params[param_name] = value
+
+                if len(set_clauses) == 1:
+                    updated += 1
+                    continue
+
+                async with db.begin_nested():
+                    await db.execute(text(f"""
+                        UPDATE products
+                        SET {', '.join(set_clauses)}
+                        WHERE prod_id = CAST(:pid AS uuid)
+                          AND business_id = CAST(:bid AS uuid)
+                    """), params)
+                    updated += 1
+            except Exception as e:
+                upsert_errors.append({"row": r.get("_row_number", i + 1), "message": friendly_db_error(e, context=f"product update row {r.get('_row_number', i + 1)}")})
+
+        return created, updated, upsert_errors
+
+    return await bulk_import_scaffold(
+        file=file,
+        db=db,
+        current_user=current_user,
+        row_transform=row_transform,
+        required_columns=REQUIRED_PRODUCT_COLUMNS,
+        required_columns_update=[{"names": ["prod_name", "name", "Product Name"]}],
+        upsert_fn=upsert,
+        is_update_mode=is_update_mode,
     )
-    if allowed_count == 0:
-        return error_response(limit_msg, 403)
-
-    # Trim valid_rows to allowed_count if partial import
-    if allowed_count < len(valid_rows):
-        valid_rows = valid_rows[:allowed_count]
-        errors.append({"row": 0, "message": limit_msg})
-
-    # ── 4. Resolve category names to category_ids (batch) ─────────────────────
-    category_map = {}  # category_name (lower) -> category_id
-    if valid_rows:
-        category_names = list(set(r["category_name"] for r in valid_rows if r.get("category_name")))
-        if category_names:
-            placeholders = ", ".join([f":cat_{i}" for i in range(len(category_names))])
-            params = {"bid": business_id}
-            for i, cn in enumerate(category_names):
-                params[f"cat_{i}"] = cn
-
-            cat_rows = (await db.execute(text(f"""
-                SELECT category_id, category_name
-                FROM categories
-                WHERE business_id = CAST(:bid AS uuid)
-                  AND category_name IN ({placeholders})
-                  AND is_deleted = false
-            """), params)).fetchall()
-
-            for r in cat_rows:
-                category_map[r.category_name.lower()] = str(r.category_id)
-
-    # ── 4b. Verify every row's category exists — reject unmatched names ─────
-    unmatched_cat_errors = []
-    filtered_rows = []
-    for r in valid_rows:
-        cat_name = r.get("category_name")
-        if cat_name and cat_name.lower() not in category_map:
-            unmatched_cat_errors.append({
-                "row": r["_row_number"],
-                "message": f'Category "{cat_name}" does not exist. Leave this column blank to import without a category, or add the category first.'
-            })
-        else:
-            filtered_rows.append(r)
-
-    if unmatched_cat_errors:
-        errors.extend(unmatched_cat_errors)
-    valid_rows = filtered_rows
-
-    if not valid_rows:
-        return success_response({
-            "message": f"Import completed: 0 created, 0 updated, {len(errors)} errors",
-            "summary": {"total_rows": 0, "valid_rows": 0, "created": 0, "updated": 0, "errors": len(errors)},
-            "errors": errors
-        })
-
-    # ── 5. Fetch existing product names & barcodes for duplicate detection (batch) ──────
-    existing_names = {}
-    existing_barcodes = {}
-    if valid_rows:
-        name_list = [r["prod_name"] for r in valid_rows]
-        barcode_list = [r["barcode"] for r in valid_rows if r.get("barcode")]
-
-        if name_list:
-            placeholders = ", ".join([f":name_{i}" for i in range(len(name_list))])
-            params = {"bid": business_id}
-            for i, n in enumerate(name_list):
-                params[f"name_{i}"] = n.lower()
-
-            existing_rows = (await db.execute(text(f"""
-                SELECT prod_id, LOWER(prod_name) as lname
-                FROM products
-                WHERE business_id = CAST(:bid AS uuid)
-                  AND LOWER(prod_name) IN ({placeholders})
-                  AND is_deleted = false
-            """), params)).fetchall()
-
-            for r in existing_rows:
-                existing_names[r.lname] = str(r.prod_id)
-
-        if barcode_list:
-            placeholders = ", ".join([f":bc_{i}" for i in range(len(barcode_list))])
-            params = {"bid": business_id}
-            for i, b in enumerate(barcode_list):
-                params[f"bc_{i}"] = b
-
-            existing_rows = (await db.execute(text(f"""
-                SELECT prod_id, barcode
-                FROM products
-                WHERE business_id = CAST(:bid AS uuid)
-                  AND barcode IN ({placeholders})
-                  AND is_deleted = false
-            """), params)).fetchall()
-
-            for r in existing_rows:
-                existing_barcodes[r.barcode] = str(r.prod_id)
-
-    # ── 6. Batch upsert — single multi-row INSERT + UPDATE ─────────────────────
-    # Same batch pattern as customer/supplier.py, but more complex:
-    #   - Duplicate key = prod_name (lowercased), with secondary barcode dedup
-    #   - category_name resolved to category_id via category_map (can be None → NULL)
-    #   - prod_profit is DB-generated (computed column) — excluded from INSERT
-    #   - 11 updatable columns vs 7 in customer/supplier
-    #   - category_id uses CAST(:param AS uuid) (handles NULL → NULL safely in PG)
-    new_rows = []
-    update_rows = []
-    upsert_errors = []
-    # Track barcodes seen in this import batch to catch in-file duplicates
-    # before they hit the DB (complements existing_barcodes from DB lookup).
-    batch_barcodes = {}
-    # Track product names seen in this import file to catch in-file duplicates.
-    # If two rows share the same name, only the first is used — the later
-    # duplicate is skipped with a clear error message.
-    seen_in_file_names = {}
-
-    for row in valid_rows:
-        row_num = row.pop("_row_number")
-        name = row["prod_name"]
-        name_lower = name.lower()
-        barcode = row.get("barcode")
-        category_name = row.get("category_name")
-        category_id = category_map.get(category_name.lower()) if category_name else None
-
-        # ── In-file name duplicate check ──────────────────────────────────────
-        # Two rows in the same CSV sharing a product name → skip the later one.
-        if name_lower in seen_in_file_names:
-            upsert_errors.append({"row": row_num, "message": f'Duplicate product name "{name}" also appears on row {seen_in_file_names[name_lower]} — only the first occurrence will be imported.'})
-            continue
-
-        if name_lower in existing_names:
-            # ── UPDATE path: product already exists ──────────────────────────
-            pid = existing_names[name_lower]
-            # Barcode uniqueness: allow if same product, reject if different product
-            if barcode:
-                if barcode in existing_barcodes and existing_barcodes[barcode] != pid:
-                    upsert_errors.append({"row": row_num, "message": f'Barcode "{barcode}" is already assigned to another product. Please use a unique barcode.'})
-                    continue
-                if barcode in batch_barcodes:
-                    upsert_errors.append({"row": row_num, "message": f'Barcode "{barcode}" is duplicated in this import file.'})
-                    continue
-            update_rows.append({"pid": pid, "uid": user_id, "cat_id": category_id, **row})
-        else:
-            # ── NEW path: product doesn't exist yet ──────────────────────────
-            # Barcode must not exist at all (DB or in-batch)
-            if barcode:
-                if barcode in existing_barcodes:
-                    upsert_errors.append({"row": row_num, "message": f'Barcode "{barcode}" is already used by another product.'})
-                    continue
-                if barcode in batch_barcodes:
-                    upsert_errors.append({"row": row_num, "message": f'Barcode "{barcode}" is duplicated in this import file.'})
-                    continue
-            new_prod_id = str(uuid.uuid4())
-            new_rows.append({"pid": new_prod_id, "bid": business_id, "uid": user_id, "cat_id": category_id, **row})
-            existing_names[name_lower] = new_prod_id
-            seen_in_file_names[name_lower] = row_num
-            if barcode:
-                existing_barcodes[barcode] = new_prod_id
-                batch_barcodes[barcode] = new_prod_id
-
-    created = 0
-    updated = 0
-
-    # --- Per-row INSERT for new products (SAVEPOINT per row) ---
-    # Each row gets its own SAVEPOINT via db.begin_nested(). If one row fails
-    # (e.g. unforeseen unique constraint), only that row is rolled back — the
-    # rest of the batch continues. This replaces the single multi-row INSERT
-    # that would kill the entire batch on one conflict.
-    # Excludes prod_profit — it's a DB-generated/computed column.
-    for i, r in enumerate(new_rows):
-        try:
-            async with db.begin_nested():
-                await db.execute(text("""
-                    INSERT INTO products (
-                        prod_id, business_id, category_id, prod_name,
-                        prod_sell_price, prod_mrp, prod_cost_price,
-                        prod_stock_qty, prod_low_stock_alert, tax_rate,
-                        tax_code, barcode, unit,
-                        prod_created_at, created_by, updated_by
-                    ) VALUES (
-                        CAST(:pid AS uuid), CAST(:bid AS uuid), CAST(:cat_id AS uuid),
-                        :name, :sell_price, :mrp, :cost_price,
-                        :stock_qty, :low_stock_alert, :tax_rate,
-                        :tax_code, :barcode, :unit,
-                        NOW(), CAST(:uid AS uuid), CAST(:uid AS uuid)
-                    )
-                """), {
-                    "pid": r["pid"], "bid": business_id, "cat_id": r["cat_id"],
-                    "name": r["prod_name"], "sell_price": r["prod_sell_price"],
-                    "mrp": r["prod_mrp"], "cost_price": r["prod_cost_price"],
-                    "stock_qty": r["prod_stock_qty"], "low_stock_alert": r["prod_low_stock_alert"],
-                    "tax_rate": r["tax_rate"], "tax_code": r["tax_code"],
-                    "barcode": r["barcode"], "unit": r["unit"], "uid": r["uid"],
-                })
-                created += 1
-        except Exception as e:
-            upsert_errors.append({"row": r.get("_row_number", i + 1), "message": friendly_db_error(e, context=f"product insert row {r.get('_row_number', i + 1)}")})
-
-    # --- Per-row UPDATE for existing products (SAVEPOINT per row) ---
-    # Same SAVEPOINT pattern as INSERT: one failed update doesn't kill the batch.
-    for i, r in enumerate(update_rows):
-        try:
-            async with db.begin_nested():
-                await db.execute(text("""
-                    UPDATE products
-                    SET prod_sell_price      = :sell_price,
-                        prod_cost_price      = :cost_price,
-                        prod_mrp             = :mrp,
-                        prod_low_stock_alert = :low_stock_alert,
-                        tax_rate             = :tax_rate,
-                        tax_code             = :tax_code,
-                        barcode              = :barcode,
-                        unit                 = :unit,
-                        category_id          = CAST(:cat_id AS uuid),
-                        updated_by           = CAST(:uid AS uuid)
-                    WHERE prod_id = CAST(:pid AS uuid)
-                      AND business_id = CAST(:bid AS uuid)
-                """), {
-                    "pid": r["pid"], "bid": business_id,
-                    "sell_price": r["prod_sell_price"], "cost_price": r["prod_cost_price"],
-                    "mrp": r["prod_mrp"], "low_stock_alert": r["prod_low_stock_alert"],
-                    "tax_rate": r["tax_rate"], "tax_code": r["tax_code"],
-                    "barcode": r["barcode"], "unit": r["unit"],
-                    "cat_id": r["cat_id"], "uid": r["uid"],
-                })
-                updated += 1
-        except Exception as e:
-            upsert_errors.append({"row": r.get("_row_number", i + 1), "message": friendly_db_error(e, context=f"product update row {r.get('_row_number', i + 1)}")})
-
-    await db.commit()
-    await async_set_rls_gucs_after_commit(db, current_user)
-
-    all_errors = errors + upsert_errors
-
-    return success_response({
-        "message": f"Import completed: {created} created, {updated} updated, {len(all_errors)} errors",
-        "summary": {
-            "total_rows": len(rows),
-            "valid_rows": len(valid_rows),
-            "created": created,
-            "updated": updated,
-            "errors": len(all_errors)
-        },
-        "errors": all_errors
-    })
 
 
 # ─────────────────────────────────────────

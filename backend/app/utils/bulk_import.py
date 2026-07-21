@@ -16,6 +16,9 @@ are identical across all of them:
   4. Chunked-batch helper so large imports insert in groups instead of
      one-row-at-a-time (mirrors the batching approach already used in
      bulk_stock_adjust.py).
+  5. Import scaffold — standardised boilerplate for the file-validation →
+     CSV-parse → header-check → row-validate → tier-limit → commit →
+     response pipeline that every import endpoint repeats.
 """
 import csv
 import io
@@ -247,3 +250,108 @@ def friendly_db_error(e: Exception, context: str = "this batch") -> str:
         "that all required fields are filled in correctly, refer to the "
         "Import Guidelines on this page, and try again."
     )
+
+
+# ─── IMPORT SCAFFOLD ──────────────────────────────────────────────────────────
+# Standardises the file-validation → CSV-parse → header-check → row-validate →
+# tier-limit → commit → response pipeline that every import endpoint repeats.
+#
+# Each module provides:
+#   row_transform       — (row, row_num) -> (clean_dict | None, error_str | None)
+#   required_columns    — list of {"names": [...]} for header validation
+#   upsert_fn           — async (rows, db, business_id, user_id) -> (created, updated, errors[])
+#   is_update_mode      — bool, controls which header set to validate against
+#   tier_limit_fn       — optional async (rows) -> (limited_rows, limit_error_msg | None)
+#                         If None, tier limiting is skipped entirely.
+
+
+async def bulk_import_scaffold(
+    *,
+    file,
+    db,
+    current_user: dict,
+    row_transform,
+    required_columns: list[dict],
+    required_columns_update: list[dict] | None = None,
+    upsert_fn,
+    is_update_mode: bool = False,
+    tier_limit_fn=None,
+):
+    """
+    Standard import boilerplate shared across all import endpoints.
+
+    Handles: file validation → CSV parsing → header checking → row
+    validation → optional tier limiting → commit → success response.
+
+    The caller provides:
+      row_transform        — entity-specific row validation function
+      required_columns     — header requirements for create mode
+      required_columns_update — header requirements for update mode (optional)
+      upsert_fn            — async function performing the actual DB upsert
+      is_update_mode       — whether this is an update import
+      tier_limit_fn        — optional tier-limit callback (None = no limit)
+
+    upsert_fn signature:
+        async (valid_rows, db, business_id, user_id) -> (created, updated, upsert_errors)
+        where upsert_errors is a list of {"row": int, "message": str}
+
+    tier_limit_fn signature:
+        async (valid_rows) -> (limited_rows, limit_error_msg | None)
+    """
+    from app.utils.response import error_response, success_response
+    from app.middleware.rbac import async_set_rls_gucs_after_commit
+
+    # ── 0. Validate upload file type & size ───────────────────────────────────
+    file_error = validate_upload_file(file)
+    if file_error:
+        return error_response(file_error, 400)
+
+    # ── 1. Parse CSV ──────────────────────────────────────────────────────────
+    file_bytes = await file.read()
+
+    if len(file_bytes) > MAX_IMPORT_FILE_BYTES:
+        return error_response("File is too large — maximum 5 MB.", 400)
+
+    rows, fieldnames, parse_error = parse_csv_file(file_bytes)
+    if parse_error:
+        return error_response(parse_error, 400)
+
+    # ── 2. Header check ───────────────────────────────────────────────────────
+    headers_to_check = required_columns
+    if is_update_mode and required_columns_update is not None:
+        headers_to_check = required_columns_update
+    header_error = check_required_headers(fieldnames, headers_to_check)
+    if header_error:
+        return error_response(header_error, 400)
+
+    # ── 3. Row validation ─────────────────────────────────────────────────────
+    valid_rows, errors = validate_rows(rows, row_transform)
+
+    # ── 4. Tier limit (optional) ──────────────────────────────────────────────
+    if tier_limit_fn and valid_rows:
+        valid_rows, limit_msg = await tier_limit_fn(valid_rows)
+        if limit_msg:
+            errors.append({"row": 0, "message": limit_msg})
+
+    # ── 5. Module-specific upsert logic ───────────────────────────────────────
+    business_id = current_user["business_id"]
+    user_id = current_user["user_id"]
+    created, updated, upsert_errors = await upsert_fn(valid_rows, db, business_id, user_id)
+
+    # ── 6. Commit ─────────────────────────────────────────────────────────────
+    await db.commit()
+    await async_set_rls_gucs_after_commit(db, current_user)
+
+    all_errors = errors + upsert_errors
+
+    return success_response({
+        "message": f"Import completed: {created} created, {updated} updated, {len(all_errors)} errors",
+        "summary": {
+            "total_rows": len(rows),
+            "valid_rows": len(valid_rows),
+            "created": created,
+            "updated": updated,
+            "errors": len(all_errors),
+        },
+        "errors": all_errors,
+    })

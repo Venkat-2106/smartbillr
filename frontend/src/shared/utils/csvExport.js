@@ -538,6 +538,12 @@ export const PRODUCT_IMPORT_SAMPLES = [
   ['Sugar 1kg', 'Grocery', '48', '42', '48', '120', '25', '5', '', '2135484233', 'pcs'],
 ];
 
+/** Minimal sample rows for the Product Bulk Update template — only Product Name + the fields to update */
+export const PRODUCT_UPDATE_SAMPLES = [
+  ['Wheat Flour 5kg', '', '', '', '', '', '', '18', 'GST', '', ''],
+  ['Sugar 1kg', '', '', '', '', '', '', '5', '', '', 'pcs'],
+];
+
 export const STOCK_IMPORT_SAMPLES = [
   ['', '2135484232', 'Wheat Flour 5kg', 'add', '20', 'Restocked from warehouse'],
   ['', '2135484233', 'Sugar 1kg', 'remove', '5', 'Damaged goods'],
@@ -551,4 +557,52 @@ export const PURCHASE_IMPORT_SAMPLES = [
 export const SALES_IMPORT_SAMPLES = [
   ['9876543210', 'Rahul Sharma', 'Wheat Flour 5kg', '2135484232', '2', '245', '0', 'cash', 'paid', '490', 'false'],
   ['9876543211', 'Priya Patel', 'Sugar 1kg', '2135484233', '3', '48', '0', 'upi', 'paid', '144', 'false'],
+];
+
+// ─── UPDATE MODE IMPORT TEMPLATES ─────────────────────────────────────────────
+// Minimal templates for update mode — only the lookup key + fields to update.
+
+/** Import template for Categories (update mode) */
+export const CATEGORY_UPDATE_TEMPLATE = [
+  { key: 'category_name', label: 'Category Name' },
+];
+
+/** Minimal sample rows for Category Bulk Update template */
+export const CATEGORY_UPDATE_SAMPLES = [
+  ['Grocery'],
+  ['Electronics'],
+];
+
+/** Import template for Customers (update mode) */
+export const CUSTOMER_UPDATE_TEMPLATE = [
+  { key: 'cust_name',         label: 'Customer Name' },
+  { key: 'cust_phone',        label: 'Phone' },
+  { key: 'cust_email',        label: 'Email' },
+  { key: 'cust_address',      label: 'Address' },
+  { key: 'cust_state',        label: 'State' },
+  { key: 'cust_country_code', label: 'Country Code' },
+  { key: 'cust_tax_number',   label: 'Tax / GST Number' },
+];
+
+/** Minimal sample rows for Customer Bulk Update template */
+export const CUSTOMER_UPDATE_SAMPLES = [
+  ['Rahul Sharma', '', '', '', '', '', '27AABCU9603R1ZM'],
+  ['Priya Patel', '', 'priya.updated@example.com', '', '', '', ''],
+];
+
+/** Import template for Suppliers (update mode) */
+export const SUPPLIER_UPDATE_TEMPLATE = [
+  { key: 'supp_name',         label: 'Supplier Name' },
+  { key: 'supp_phone',        label: 'Phone' },
+  { key: 'supp_email',        label: 'Email' },
+  { key: 'supp_address',      label: 'Address' },
+  { key: 'supp_state',        label: 'State' },
+  { key: 'supp_country_code', label: 'Country' },
+  { key: 'supp_tax_number',   label: 'Tax Number' },
+];
+
+/** Minimal sample rows for Supplier Bulk Update template */
+export const SUPPLIER_UPDATE_SAMPLES = [
+  ['Fresh Foods Ltd', '', 'updated@freshfoods.com', '', '', '', ''],
+  ['Global Traders', '', '', '', '', '', ''],
 ];

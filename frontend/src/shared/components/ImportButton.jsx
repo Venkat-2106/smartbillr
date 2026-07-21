@@ -53,7 +53,11 @@ export default function ImportButton({
   requiredColumns = null, // array of {key, label, alternates?} — checked against CSV headers before upload
   sampleRows = [], // array of arrays — sample data rows included in the downloaded template
   disabled = false,
+  mode = null,      // string — optional query param appended to endpoint (e.g. "update")
   onSuccess,       // callback after successful import
+  hideTemplate = false, // boolean — when true, hides the standalone Template button
+  compact = false,  // boolean — when true, renders a smaller button without label prefix
+  buttonStyle = {}, // object — extra styles applied to the Import button
 }) {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
@@ -121,7 +125,8 @@ export default function ImportButton({
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await api.post(endpoint, formData, {
+      const url = mode ? `${endpoint}?mode=${mode}` : endpoint;
+      const response = await api.post(url, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
@@ -191,6 +196,8 @@ export default function ImportButton({
     }
   }
 
+  const modeLabel = mode === 'update' ? 'Update' : 'Import';
+
   return (
     <>
       <input
@@ -200,7 +207,7 @@ export default function ImportButton({
         onChange={handleFileSelected}
         style={{ display: 'none' }}
       />
-      {columns && (
+      {!hideTemplate && columns && (
         <Button
           variant="outline"
           onClick={handleDownloadTemplate}
@@ -216,10 +223,14 @@ export default function ImportButton({
         onClick={triggerFileInput}
         loading={uploading}
         disabled={disabled || uploading}
-        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+        style={{ display: 'flex', alignItems: 'center', gap: '6px', ...buttonStyle }}
       >
         {!uploading && <UploadIcon />}
-        {uploading ? `Importing ${title}...` : `Import ${title}`}
+        {uploading
+          ? `Importing ${title}...`
+          : compact
+            ? modeLabel
+            : `${modeLabel} ${title}`}
       </Button>
     </>
   );

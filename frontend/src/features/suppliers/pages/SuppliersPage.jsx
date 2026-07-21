@@ -24,13 +24,13 @@ import SupplierDetailDrawer from '../components/SupplierDetailDrawer';
 import {
   Button, Modal, Table, EmptyState, SearchBar,
   Pagination, ConfirmDialog, PageHeader, FormField,
-  DateRangeFilter, ExportButton, ImportButton, ImportGuidelines, StateDropdown, UpgradePrompt,
+  DateRangeFilter, ExportButton, BulkImportPanel, BulkImportGuidelines, StateDropdown, UpgradePrompt,
 } from '../../../shared/components';
 import useAuthStore from '../../../store/authStore';
 import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav';
 import { selectStyle, textareaStyle } from '../../../shared/components/FormField';
-import { SUPPLIER_CSV_COLUMNS, SUPPLIER_IMPORT_TEMPLATE, SUPPLIER_IMPORT_SAMPLES } from '../../../shared/utils/csvExport';
-import { SUPPLIER_GUIDELINES } from '../../../shared/utils/importGuidelines';
+import { SUPPLIER_CSV_COLUMNS } from '../../../shared/utils/csvExport';
+import { supplierImportConfig } from '../importConfig';
 import { usePermissions } from '../../../shared/hooks/usePermissions';
 import { formatDate } from '../../../shared/utils/formatDate';
 import { COUNTRIES } from '../../../shared/data/countries';
@@ -250,15 +250,7 @@ export default function SuppliersPage() {
               filename="suppliers"
               columns={SUPPLIER_CSV_COLUMNS}
             />
-            {canManage && (
-              <ImportButton
-                endpoint="/suppliers/import"
-                title="Suppliers"
-                columns={SUPPLIER_IMPORT_TEMPLATE}
-                sampleRows={SUPPLIER_IMPORT_SAMPLES}
-                requiredColumns={[{ key: 'supp_name', label: 'Supplier Name', alternates: ['name'] }]}
-              />
-            )}
+            <BulkImportPanel config={supplierImportConfig} canImport={canManage} />
             {canManage && (
               <Button
                 variant="primary"
@@ -272,6 +264,8 @@ export default function SuppliersPage() {
         }
       />
 
+      <BulkImportGuidelines config={supplierImportConfig} />
+
       {showUpgradeBanner && subscription?.subscription_type === 'trial' && (
         <UpgradePrompt
           variant="banner"
@@ -281,12 +275,7 @@ export default function SuppliersPage() {
         />
       )}
 
-      <ImportGuidelines
-        guidelines={SUPPLIER_GUIDELINES}
-        columns={SUPPLIER_IMPORT_TEMPLATE}
-        sampleRows={SUPPLIER_IMPORT_SAMPLES}
-        templateName="suppliers"
-      />
+
 
       {/* Toolbar */}
       <div style={{

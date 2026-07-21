@@ -32,13 +32,13 @@ import {
   Input,
   SearchBar,
   ExportButton,
-  ImportButton,
-  ImportGuidelines,
+  BulkImportPanel,
+  BulkImportGuidelines,
   DateRangeFilter
 } from '../../../shared/components'
 
-import { CATEGORY_CSV_COLUMNS, CATEGORY_IMPORT_TEMPLATE, CATEGORY_IMPORT_SAMPLES } from '../../../shared/utils/csvExport'
-import { CATEGORY_GUIDELINES } from '../../../shared/utils/importGuidelines'
+import { CATEGORY_CSV_COLUMNS } from '../../../shared/utils/csvExport'
+import { categoryImportConfig } from '../importConfig'
 import { usePermissions }        from '../../../shared/hooks/usePermissions'
 import { formatDate }            from '../../../shared/utils/formatDate'
 
@@ -241,15 +241,7 @@ export default function CategoriesPage() {
               filename="categories"
               columns={CATEGORY_CSV_COLUMNS}
             />
-            {canManage && (
-            <ImportButton
-              endpoint="/categories/import"
-              title="Categories"
-              columns={CATEGORY_IMPORT_TEMPLATE}
-              sampleRows={CATEGORY_IMPORT_SAMPLES}
-              requiredColumns={[{ key: 'category_name', label: 'Category Name', alternates: ['name'] }]}
-            />
-            )}
+            <BulkImportPanel config={categoryImportConfig} canImport={canManage} />
             {canManage && (
               <Button
                 variant="primary"
@@ -264,12 +256,8 @@ export default function CategoriesPage() {
         }
       />
 
-      <ImportGuidelines
-        guidelines={CATEGORY_GUIDELINES}
-        columns={CATEGORY_IMPORT_TEMPLATE}
-        sampleRows={CATEGORY_IMPORT_SAMPLES}
-        templateName="categories"
-      />
+
+      <BulkImportGuidelines config={categoryImportConfig} />
 
       {/* Toolbar */}
       <div style={{

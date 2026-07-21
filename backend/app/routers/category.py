@@ -31,7 +31,7 @@ from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryRespons
 from app.models.category import Category
 from app.utils.timestamp import fmt_ts
 from app.utils.subscription_features import check_feature_access
-from app.utils.bulk_import import parse_csv_file, validate_rows, check_required_headers, friendly_db_error, validate_upload_file, MAX_IMPORT_FILE_BYTES
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_required_headers, friendly_db_error, validate_upload_file, MAX_IMPORT_FILE_BYTES, bulk_import_scaffold
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from typing import Optional
 from datetime import datetime, timezone
@@ -124,129 +124,111 @@ async def create_category(
 async def import_categories(
     file: UploadFile = File(...),
     current_user: dict = Depends(require_permission("products.edit")),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    mode: Optional[str] = Query(default="create", description="Import mode: 'create' (default) or 'update'"),
 ):
-    business_id = current_user["business_id"]
-    user_id = current_user["user_id"]
+    is_update_mode = (mode or "").lower() == "update"
 
-    # ── 0. Validate upload file type & size ───────────────────────────────────
-    file_error = validate_upload_file(file)
-    if file_error:
-        return error_response(file_error, 400)
-
-    # ── 1. Parse CSV ──────────────────────────────────────────────────────────
-    file_bytes = await file.read()
-
-    if len(file_bytes) > MAX_IMPORT_FILE_BYTES:
-        return error_response("File is too large — maximum 5 MB.", 400)
-
-    rows, fieldnames, parse_error = parse_csv_file(file_bytes)
-    if parse_error:
-        return error_response(parse_error, 400)
-
-    header_error = check_required_headers(fieldnames, REQUIRED_CATEGORY_COLUMNS)
-    if header_error:
-        return error_response(header_error, 400)
-
-    # ── 2. Row transform: validate & sanitize each row ────────────────────────
     def row_transform(row: dict, row_num: int):
-        # Required field: category_name
         name = row.get("category_name") or row.get("name") or row.get("Category Name") or ""
         name = name.strip()
         if not name:
             return None, "category_name is required"
-
-        # Sanitize (CSV-safe: strips formula-injection characters)
         name = strip_and_escape_csv_value(name)
-
         return {"category_name": name, "_row_number": row_num}, None
 
-    valid_rows, errors = validate_rows(rows, row_transform)
+    async def upsert(valid_rows, db, business_id, user_id):
+        existing_names = {}
+        if valid_rows:
+            name_list = [r["category_name"] for r in valid_rows]
+            placeholders = ", ".join([f":name_{i}" for i in range(len(name_list))])
+            params = {"bid": business_id}
+            for i, n in enumerate(name_list):
+                params[f"name_{i}"] = n.lower()
 
-    # ── 3. No tier limit for categories (uncapped) — skip check_bulk_create_allowed
-    # But still enforce max import rows (handled by parse_csv_file)
+            existing_rows = (await db.execute(text(f"""
+                SELECT category_id, LOWER(category_name) as lname
+                FROM categories
+                WHERE business_id = CAST(:bid AS uuid)
+                  AND LOWER(category_name) IN ({placeholders})
+                  AND is_deleted = false
+            """), params)).fetchall()
 
-    # ── 4. Fetch existing category names for duplicate detection (single query) ─
-    existing_names = {}
-    if valid_rows:
-        name_list = [r["category_name"] for r in valid_rows]
-        # Batch fetch existing names (case-insensitive)
-        placeholders = ", ".join([f":name_{i}" for i in range(len(name_list))])
-        params = {"bid": business_id}
-        for i, n in enumerate(name_list):
-            params[f"name_{i}"] = n.lower()
+            for r in existing_rows:
+                existing_names[r.lname] = str(r.category_id)
 
-        existing_rows = (await db.execute(text(f"""
-            SELECT category_id, LOWER(category_name) as lname
-            FROM categories
-            WHERE business_id = CAST(:bid AS uuid)
-              AND LOWER(category_name) IN ({placeholders})
-              AND is_deleted = false
-        """), params)).fetchall()
+        new_rows = []
+        update_rows = []
+        upsert_errors = []
 
-        for r in existing_rows:
-            existing_names[r.lname] = str(r.category_id)
+        for row in valid_rows:
+            row_num = row.pop("_row_number")
+            name = row["category_name"]
+            name_lower = name.lower()
 
-    # ── 5. Bulk insert — skip duplicates entirely, no update ───────────────────
-    # Batch approach: single multi-row INSERT replaces per-row loop (N db calls → 1).
-    # Duplicates (by lowercased category_name) are rejected with an error message
-    # that the frontend ImportButton.jsx already renders in its toast.
-    new_rows = []
-    duplicate_errors = []
+            if name_lower in existing_names:
+                if is_update_mode:
+                    update_rows.append({"cid": existing_names[name_lower], "uid": user_id, "name": name})
+                else:
+                    upsert_errors.append({"row": row_num, "message": f"'{name}' already exists"})
+            else:
+                if is_update_mode:
+                    upsert_errors.append({"row": row_num, "message": f'Category "{name}" does not exist. Only existing categories can be updated.'})
+                    continue
+                new_cat_id = str(uuid.uuid4())
+                new_rows.append({"cid": new_cat_id, "bid": business_id, "name": name, "uid": user_id})
+                existing_names[name_lower] = new_cat_id
 
-    for row in valid_rows:
-        row_num = row.pop("_row_number")
-        name = row["category_name"]
-        name_lower = name.lower()
+        created = 0
+        updated = 0
 
-        if name_lower in existing_names:
-            duplicate_errors.append({"row": row_num, "message": f"'{name}' already exists"})
-        else:
-            new_cat_id = str(uuid.uuid4())
-            new_rows.append({"cid": new_cat_id, "bid": business_id, "name": name, "uid": user_id})
-            existing_names[name_lower] = new_cat_id
+        if new_rows:
+            placeholders = ", ".join([
+                f"(:cid_{i}, CAST(:bid AS uuid), :name_{i}, CAST(:uid_{i} AS uuid), CAST(:uid_{i} AS uuid))"
+                for i in range(len(new_rows))
+            ])
+            params = {}
+            for i, r in enumerate(new_rows):
+                params[f"cid_{i}"] = r["cid"]
+                params[f"name_{i}"] = r["name"]
+                params[f"uid_{i}"] = r["uid"]
+            params["bid"] = business_id
 
-    created = 0
+            try:
+                await db.execute(text(f"""
+                    INSERT INTO categories (category_id, business_id, category_name, created_by, updated_by)
+                    VALUES {placeholders}
+                """), params)
+                created = len(new_rows)
+            except Exception as e:
+                upsert_errors.append({"row": 0, "message": friendly_db_error(e, context="category insert batch")})
 
-    if new_rows:
-        # Build one INSERT with indexed params (:cid_0, :cid_1, …) so asyncpg
-        # sends a single prepared statement instead of N individual executions.
-        placeholders = ", ".join([
-            f"(:cid_{i}, CAST(:bid AS uuid), :name_{i}, CAST(:uid_{i} AS uuid), CAST(:uid_{i} AS uuid))"
-            for i in range(len(new_rows))
-        ])
-        params = {}
-        for i, r in enumerate(new_rows):
-            params[f"cid_{i}"] = r["cid"]
-            params[f"name_{i}"] = r["name"]
-            params[f"uid_{i}"] = r["uid"]
-        params["bid"] = business_id
+        for i, r in enumerate(update_rows):
+            try:
+                async with db.begin_nested():
+                    await db.execute(text("""
+                        UPDATE categories
+                        SET category_name = :name,
+                            updated_by = CAST(:uid AS uuid)
+                        WHERE category_id = CAST(:cid AS uuid)
+                          AND business_id = CAST(:bid AS uuid)
+                    """), {"cid": r["cid"], "bid": business_id, "name": r["name"], "uid": r["uid"]})
+                    updated += 1
+            except Exception as e:
+                upsert_errors.append({"row": i + 1, "message": friendly_db_error(e, context=f"category update row {i + 1}")})
 
-        try:
-            await db.execute(text(f"""
-                INSERT INTO categories (category_id, business_id, category_name, created_by, updated_by)
-                VALUES {placeholders}
-            """), params)
-            created = len(new_rows)
-        except Exception as e:
-            duplicate_errors.append({"row": 0, "message": friendly_db_error(e, context="category insert batch")})
+        return created, updated, upsert_errors
 
-    await db.commit()
-    await async_set_rls_gucs_after_commit(db, current_user)
-
-    all_errors = errors + duplicate_errors
-
-    return success_response({
-        "message": f"Import completed: {created} created, 0 updated, {len(all_errors)} errors",
-        "summary": {
-            "total_rows": len(rows),
-            "valid_rows": len(valid_rows),
-            "created": created,
-            "updated": 0,
-            "errors": len(all_errors)
-        },
-        "errors": all_errors
-    })
+    return await bulk_import_scaffold(
+        file=file,
+        db=db,
+        current_user=current_user,
+        row_transform=row_transform,
+        required_columns=REQUIRED_CATEGORY_COLUMNS,
+        required_columns_update=[{"names": ["category_name", "name", "Category Name"]}],
+        upsert_fn=upsert,
+        is_update_mode=is_update_mode,
+    )
 
 
 # ══════════════════════════════════════════════════════════════════

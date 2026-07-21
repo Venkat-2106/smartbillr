@@ -42,7 +42,7 @@ from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.subscription_features import check_feature_access
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
-from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, friendly_db_error, check_required_headers, validate_upload_file, MAX_IMPORT_FILE_BYTES
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, friendly_db_error, check_required_headers, validate_upload_file, MAX_IMPORT_FILE_BYTES, bulk_import_scaffold
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from typing import Optional
 from datetime import datetime, timezone
@@ -143,38 +143,16 @@ async def create_customer(
 async def import_customers(
     file: UploadFile = File(...),
     current_user: dict = Depends(require_permission("customers.manage")),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    mode: Optional[str] = Query(default="create", description="Import mode: 'create' (default) or 'update'"),
 ):
-    business_id = current_user["business_id"]
-    user_id = current_user["user_id"]
+    is_update_mode = (mode or "").lower() == "update"
 
-    # ── 0. Validate upload file type & size ───────────────────────────────────
-    file_error = validate_upload_file(file)
-    if file_error:
-        return error_response(file_error, 400)
-
-    # ── 1. Parse CSV ──────────────────────────────────────────────────────────
-    file_bytes = await file.read()
-
-    if len(file_bytes) > MAX_IMPORT_FILE_BYTES:
-        return error_response("File is too large — maximum 5 MB.", 400)
-
-    rows, fieldnames, parse_error = parse_csv_file(file_bytes)
-    if parse_error:
-        return error_response(parse_error, 400)
-
-    header_error = check_required_headers(fieldnames, REQUIRED_CUSTOMER_COLUMNS)
-    if header_error:
-        return error_response(header_error, 400)
-
-    # ── 2. Row transform: validate & sanitize each row ────────────────────────
     def row_transform(row: dict, row_num: int):
-        # Required field: cust_name
         name = (row.get("cust_name") or row.get("name") or row.get("Customer Name") or "").strip()
         if not name:
             return None, "cust_name is required"
 
-        # Optional fields with sanitization
         phone = (row.get("cust_phone") or row.get("phone") or row.get("Phone") or "").strip() or None
         email = (row.get("cust_email") or row.get("email") or row.get("Email") or "").strip() or None
         address = (row.get("cust_address") or row.get("address") or row.get("Address") or "").strip() or None
@@ -182,7 +160,6 @@ async def import_customers(
         country_code = (row.get("cust_country_code") or row.get("country_code") or row.get("Country Code") or "").strip() or None
         tax_number = (row.get("cust_tax_number") or row.get("tax_number") or row.get("Tax Number") or "").strip() or None
 
-        # Sanitize all string fields (CSV-safe: strips formula-injection characters)
         name = strip_and_escape_csv_value(name)
         if phone:
             phone = strip_and_escape_csv_value(phone)
@@ -197,7 +174,6 @@ async def import_customers(
         if tax_number:
             tax_number = strip_and_escape_csv_value(tax_number)
 
-        # Validate email format if provided
         if email and "@" not in email:
             return None, "invalid email format"
 
@@ -212,174 +188,169 @@ async def import_customers(
             "_row_number": row_num
         }, None
 
-    valid_rows, errors = validate_rows(rows, row_transform)
+    async def upsert(valid_rows, db, business_id, user_id):
+        existing_phones = {}
+        if valid_rows:
+            phone_list = [r["cust_phone"] for r in valid_rows if r.get("cust_phone")]
+            if phone_list:
+                placeholders = ", ".join([f":phone_{i}" for i in range(len(phone_list))])
+                params = {"bid": business_id}
+                for i, p in enumerate(phone_list):
+                    params[f"phone_{i}"] = p
 
-    # ── 3. Check bulk create tier limit ───────────────────────────────────────
-    sub_type = current_user.get("subscription_type") or await fetch_subscription_type_async(db, business_id)
-    allowed_count, limit_msg = await check_bulk_create_allowed(
-        db, business_id, sub_type, "max_customers", "customers", len(valid_rows)
-    )
-    if allowed_count == 0:
-        return error_response(limit_msg, 403)
+                existing_rows = (await db.execute(text(f"""
+                    SELECT cust_id, cust_phone
+                    FROM customers
+                    WHERE business_id = CAST(:bid AS uuid)
+                      AND cust_phone IN ({placeholders})
+                      AND is_deleted = false
+                """), params)).fetchall()
 
-    # Trim valid_rows to allowed_count if partial import
-    if allowed_count < len(valid_rows):
-        valid_rows = valid_rows[:allowed_count]
-        errors.append({"row": 0, "message": limit_msg})
+                for r in existing_rows:
+                    existing_phones[r.cust_phone] = str(r.cust_id)
 
-    # ── 4. Fetch existing phones for duplicate detection (single query) ───────
-    existing_phones = {}
-    if valid_rows:
-        phone_list = [r["cust_phone"] for r in valid_rows if r.get("cust_phone")]
-        if phone_list:
-            placeholders = ", ".join([f":phone_{i}" for i in range(len(phone_list))])
+        existing_names = {}
+        if valid_rows and is_update_mode:
+            name_list = [r["cust_name"] for r in valid_rows if r.get("cust_name")]
+            if name_list:
+                placeholders = ", ".join([f":name_{i}" for i in range(len(name_list))])
+                params = {"bid": business_id}
+                for i, n in enumerate(name_list):
+                    params[f"name_{i}"] = n.lower()
+
+                existing_rows = (await db.execute(text(f"""
+                    SELECT cust_id, LOWER(cust_name) as lname
+                    FROM customers
+                    WHERE business_id = CAST(:bid AS uuid)
+                      AND LOWER(cust_name) IN ({placeholders})
+                      AND is_deleted = false
+                """), params)).fetchall()
+
+                for r in existing_rows:
+                    existing_names[r.lname] = str(r.cust_id)
+
+        new_rows = []
+        update_rows = []
+        seen_in_file = {}
+        upsert_errors = []
+
+        for row in valid_rows:
+            row_num = row.pop("_row_number")
+            phone = row.get("cust_phone")
+
+            if phone and phone in seen_in_file:
+                upsert_errors.append({"row": row_num, "message": f'Duplicate phone "{phone}" also appears on row {seen_in_file[phone]} — only the first occurrence will be imported.'})
+                continue
+
+            matched = False
+            if phone and phone in existing_phones:
+                update_rows.append({"cid": existing_phones[phone], "uid": user_id, **row})
+                matched = True
+            elif is_update_mode:
+                name_lower = row.get("cust_name", "").lower()
+                if name_lower in existing_names:
+                    update_rows.append({"cid": existing_names[name_lower], "uid": user_id, **row})
+                    matched = True
+                else:
+                    upsert_errors.append({"row": row_num, "message": f'Customer "{row.get("cust_name")}" does not exist. Only existing customers can be updated.'})
+                    continue
+
+            if not matched:
+                new_cust_id = str(uuid.uuid4())
+                new_rows.append({"cid": new_cust_id, "bid": business_id, "uid": user_id, **row})
+                if phone:
+                    existing_phones[phone] = new_cust_id
+                    seen_in_file[phone] = row_num
+
+        created = 0
+        updated = 0
+
+        if new_rows:
+            placeholders = ", ".join([
+                f"(:cid_{i}, CAST(:bid AS uuid), :name_{i}, :phone_{i}, :email_{i}, :address_{i}, :state_{i}, :country_code_{i}, :tax_number_{i}, CAST(:uid_{i} AS uuid))"
+                for i in range(len(new_rows))
+            ])
             params = {"bid": business_id}
-            for i, p in enumerate(phone_list):
-                params[f"phone_{i}"] = p
+            for i, r in enumerate(new_rows):
+                params[f"cid_{i}"] = r["cid"]
+                params[f"name_{i}"] = r["cust_name"]
+                params[f"phone_{i}"] = r["cust_phone"]
+                params[f"email_{i}"] = r["cust_email"]
+                params[f"address_{i}"] = r["cust_address"]
+                params[f"state_{i}"] = r["cust_state"]
+                params[f"country_code_{i}"] = r["cust_country_code"]
+                params[f"tax_number_{i}"] = r["cust_tax_number"]
+                params[f"uid_{i}"] = r["uid"]
 
-            existing_rows = (await db.execute(text(f"""
-                SELECT cust_id, cust_phone
-                FROM customers
-                WHERE business_id = CAST(:bid AS uuid)
-                  AND cust_phone IN ({placeholders})
-                  AND is_deleted = false
-            """), params)).fetchall()
+            try:
+                await db.execute(text(f"""
+                    INSERT INTO customers (
+                        cust_id, business_id, cust_name, cust_phone, cust_email,
+                        cust_address, cust_state, cust_country_code, cust_tax_number,
+                        updated_by
+                    ) VALUES {placeholders}
+                """), params)
+                created = len(new_rows)
+            except Exception as e:
+                upsert_errors.append({"row": 0, "message": friendly_db_error(e, context="customer insert batch")})
 
-            for r in existing_rows:
-                existing_phones[r.cust_phone] = str(r.cust_id)
+        if update_rows:
+            case_name = []
+            case_email = []
+            case_address = []
+            case_state = []
+            case_country = []
+            case_tax = []
+            case_uid = []
+            params = {"bid": business_id}
+            for i, r in enumerate(update_rows):
+                case_name.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :name_{i}")
+                case_email.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :email_{i}")
+                case_address.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :address_{i}")
+                case_state.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :state_{i}")
+                case_country.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :country_code_{i}")
+                case_tax.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :tax_number_{i}")
+                case_uid.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN CAST(:uid_{i} AS uuid)")
+                params[f"cid_{i}"] = r["cid"]
+                params[f"name_{i}"] = r["cust_name"]
+                params[f"email_{i}"] = r["cust_email"]
+                params[f"address_{i}"] = r["cust_address"]
+                params[f"state_{i}"] = r["cust_state"]
+                params[f"country_code_{i}"] = r["cust_country_code"]
+                params[f"tax_number_{i}"] = r["cust_tax_number"]
+                params[f"uid_{i}"] = r["uid"]
 
-    # ── 5. Batch upsert — single multi-row INSERT + UPDATE ─────────────────────
-    # Batch approach: replaces per-row db.execute() loop (N calls) with:
-    #   1. One multi-row INSERT for new rows
-    #   2. One CASE-WHEN UPDATE for existing rows
-    #   3. Single commit (down from N commits)
-    # Duplicate key = cust_phone. Rows with existing phone → update, else → insert.
-    # Updated fields: name, email, address, state, country_code, tax_number.
-    new_rows = []
-    update_rows = []
-    # Track phones seen in this import file to catch in-file duplicates.
-    # If two rows share the same phone, only the first is used — the later
-    # duplicate is skipped with a clear error message.
-    seen_in_file = {}
+            cid_list = ", ".join([f"CAST(:cid_{i} AS uuid)" for i in range(len(update_rows))])
 
-    for row in valid_rows:
-        row_num = row.pop("_row_number")
-        phone = row.get("cust_phone")
+            try:
+                await db.execute(text(f"""
+                    UPDATE customers
+                    SET cust_name         = CASE {" ".join(case_name)} END,
+                        cust_email        = CASE {" ".join(case_email)} END,
+                        cust_address      = CASE {" ".join(case_address)} END,
+                        cust_state        = CASE {" ".join(case_state)} END,
+                        cust_country_code = CASE {" ".join(case_country)} END,
+                        cust_tax_number   = CASE {" ".join(case_tax)} END,
+                        updated_by        = CASE {" ".join(case_uid)} END
+                    WHERE business_id = CAST(:bid AS uuid)
+                      AND cust_id IN ({cid_list})
+                """), params)
+                updated = len(update_rows)
+            except Exception as e:
+                upsert_errors.append({"row": 0, "message": friendly_db_error(e, context="customer update batch")})
 
-        # ── In-file duplicate check ───────────────────────────────────────────
-        # Two rows in the same CSV sharing a phone → skip the later one.
-        if phone and phone in seen_in_file:
-            errors.append({"row": row_num, "message": f'Duplicate phone "{phone}" also appears on row {seen_in_file[phone]} — only the first occurrence will be imported.'})
-            continue
+        return created, updated, upsert_errors
 
-        if phone and phone in existing_phones:
-            update_rows.append({"cid": existing_phones[phone], "uid": user_id, **row})
-        else:
-            new_cust_id = str(uuid.uuid4())
-            new_rows.append({"cid": new_cust_id, "bid": business_id, "uid": user_id, **row})
-            if phone:
-                existing_phones[phone] = new_cust_id
-                seen_in_file[phone] = row_num
-
-    created = 0
-    updated = 0
-    upsert_errors = []
-
-    # --- Single multi-row INSERT for new customers ---
-    if new_rows:
-        # Indexed params (:cid_0, :cid_1, …) let asyncpg batch-bind in one round-trip.
-        placeholders = ", ".join([
-            f"(:cid_{i}, CAST(:bid AS uuid), :name_{i}, :phone_{i}, :email_{i}, :address_{i}, :state_{i}, :country_code_{i}, :tax_number_{i}, CAST(:uid_{i} AS uuid))"
-            for i in range(len(new_rows))
-        ])
-        params = {"bid": business_id}
-        for i, r in enumerate(new_rows):
-            params[f"cid_{i}"] = r["cid"]
-            params[f"name_{i}"] = r["cust_name"]
-            params[f"phone_{i}"] = r["cust_phone"]
-            params[f"email_{i}"] = r["cust_email"]
-            params[f"address_{i}"] = r["cust_address"]
-            params[f"state_{i}"] = r["cust_state"]
-            params[f"country_code_{i}"] = r["cust_country_code"]
-            params[f"tax_number_{i}"] = r["cust_tax_number"]
-            params[f"uid_{i}"] = r["uid"]
-
-        try:
-            await db.execute(text(f"""
-                INSERT INTO customers (
-                    cust_id, business_id, cust_name, cust_phone, cust_email,
-                    cust_address, cust_state, cust_country_code, cust_tax_number,
-                    updated_by
-                ) VALUES {placeholders}
-            """), params)
-            created = len(new_rows)
-        except Exception as e:
-            upsert_errors.append({"row": 0, "message": friendly_db_error(e, context="customer insert batch")})
-
-    # --- Single CASE-WHEN UPDATE for existing customers ---
-    # Uses "col = CASE WHEN id = :pid_0 THEN val_0 WHEN id = :pid_1 THEN val_1 END"
-    # pattern to update many rows in one statement, filtered by WHERE id IN (…).
-    if update_rows:
-        case_name = []
-        case_email = []
-        case_address = []
-        case_state = []
-        case_country = []
-        case_tax = []
-        case_uid = []
-        params = {"bid": business_id}
-        for i, r in enumerate(update_rows):
-            case_name.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :name_{i}")
-            case_email.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :email_{i}")
-            case_address.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :address_{i}")
-            case_state.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :state_{i}")
-            case_country.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :country_code_{i}")
-            case_tax.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN :tax_number_{i}")
-            case_uid.append(f"WHEN cust_id = CAST(:cid_{i} AS uuid) THEN CAST(:uid_{i} AS uuid)")
-            params[f"cid_{i}"] = r["cid"]
-            params[f"name_{i}"] = r["cust_name"]
-            params[f"email_{i}"] = r["cust_email"]
-            params[f"address_{i}"] = r["cust_address"]
-            params[f"state_{i}"] = r["cust_state"]
-            params[f"country_code_{i}"] = r["cust_country_code"]
-            params[f"tax_number_{i}"] = r["cust_tax_number"]
-            params[f"uid_{i}"] = r["uid"]
-
-        cid_list = ", ".join([f"CAST(:cid_{i} AS uuid)" for i in range(len(update_rows))])
-
-        try:
-            await db.execute(text(f"""
-                UPDATE customers
-                SET cust_name         = CASE {" ".join(case_name)} END,
-                    cust_email        = CASE {" ".join(case_email)} END,
-                    cust_address      = CASE {" ".join(case_address)} END,
-                    cust_state        = CASE {" ".join(case_state)} END,
-                    cust_country_code = CASE {" ".join(case_country)} END,
-                    cust_tax_number   = CASE {" ".join(case_tax)} END,
-                    updated_by        = CASE {" ".join(case_uid)} END
-                WHERE business_id = CAST(:bid AS uuid)
-                  AND cust_id IN ({cid_list})
-            """), params)
-            updated = len(update_rows)
-        except Exception as e:
-            upsert_errors.append({"row": 0, "message": friendly_db_error(e, context="customer update batch")})
-
-    await db.commit()
-    await async_set_rls_gucs_after_commit(db, current_user)
-
-    all_errors = errors + upsert_errors
-
-    return success_response({
-        "message": f"Import completed: {created} created, {updated} updated, {len(all_errors)} errors",
-        "summary": {
-            "total_rows": len(rows),
-            "valid_rows": len(valid_rows),
-            "created": created,
-            "updated": updated,
-            "errors": len(all_errors)
-        },
-        "errors": all_errors
-    })
+    return await bulk_import_scaffold(
+        file=file,
+        db=db,
+        current_user=current_user,
+        row_transform=row_transform,
+        required_columns=REQUIRED_CUSTOMER_COLUMNS,
+        required_columns_update=[{"names": ["cust_name", "name", "Customer Name"]}],
+        upsert_fn=upsert,
+        is_update_mode=is_update_mode,
+    )
 
 
 # ══════════════════════════════════════════════════════════════════

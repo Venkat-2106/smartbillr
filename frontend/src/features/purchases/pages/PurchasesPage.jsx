@@ -9,8 +9,6 @@ import { useState, useMemo, useEffect } from 'react'
 //   Finding #15 — Dismissible error banner with role="alert"
 //   See UI_UX_AUDIT_REPORT.md
 //
-// FIX (2026-07-18):
-//   ImportButton endpoint: removed /v1 prefix (baseURL already contains it).
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { usePurchases } from '../hooks/usePurchases'
@@ -20,15 +18,14 @@ import PurchaseDetailDrawer, { DrawerOverlay }
   from '../components/PurchaseDetailDrawer'
 import {
   Table, Badge, SearchBar, Button,
-  Pagination, DateRangeFilter, ExportButton, ImportButton, ImportGuidelines,
+  Pagination, DateRangeFilter, ExportButton,
   EmptyState, BentoCard, MetricCard, SkeletonTable,
   ConfirmDialog, UpgradePrompt, PageHeader,
 } from '../../../shared/components'
 import { selectStyle } from '../../../shared/components/FormField'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate } from '../../../shared/utils/formatDate'
-import { PURCHASE_CSV_COLUMNS, PURCHASE_IMPORT_TEMPLATE, PURCHASE_IMPORT_SAMPLES } from '../../../shared/utils/csvExport'
-import { PURCHASE_GUIDELINES } from '../../../shared/utils/importGuidelines'
+import { PURCHASE_CSV_COLUMNS } from '../../../shared/utils/csvExport'
 import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
 
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' }
@@ -222,19 +219,7 @@ export default function PurchasesPage() {
               filename="purchases"
               columns={PURCHASE_CSV_COLUMNS}
             />
-            {canCreate && (
-              <ImportButton
-                endpoint="/purchases/import"
-                title="Purchases"
-                columns={PURCHASE_IMPORT_TEMPLATE}
-                sampleRows={PURCHASE_IMPORT_SAMPLES}
-                requiredColumns={[
-                  { key: 'qty', label: 'Quantity', alternates: ['quantity'] },
-                  { key: 'unit_price', label: 'Unit Price', alternates: ['price'] },
-                  { key: 'prod_name', label: 'Product Name', alternates: ['product_name', 'barcode', 'Barcode'] },
-                ]}
-              />
-            )}
+
             {canCreate && (
               <Button variant="primary" onClick={() => navigate('/purchases/new')}>
                 + New Purchase
@@ -253,12 +238,6 @@ export default function PurchasesPage() {
         />
       )}
 
-      <ImportGuidelines
-        guidelines={PURCHASE_GUIDELINES}
-        columns={PURCHASE_IMPORT_TEMPLATE}
-        sampleRows={PURCHASE_IMPORT_SAMPLES}
-        templateName="purchases"
-      />
 
       {/* METRIC CARDS */}
       <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>

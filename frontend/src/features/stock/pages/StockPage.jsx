@@ -32,8 +32,8 @@ import {
   Pagination,
   SearchBar,
   ExportButton,
-  ImportButton,
-  ImportGuidelines,
+  BulkImportPanel,
+  BulkImportGuidelines,
   DateRangeFilter,
   MetricCard,
   BentoCard,
@@ -43,8 +43,8 @@ import {
   LockedCell,
 } from '../../../shared/components'
 
-import { STOCK_CSV_COLUMNS, STOCK_CSV_COLUMNS_NO_PROFIT, STOCK_IMPORT_TEMPLATE, STOCK_IMPORT_SAMPLES } from '../../../shared/utils/csvExport'
-import { STOCK_GUIDELINES } from '../../../shared/utils/importGuidelines'
+import { STOCK_CSV_COLUMNS, STOCK_CSV_COLUMNS_NO_PROFIT } from '../../../shared/utils/csvExport'
+import { stockImportConfig } from '../importConfig'
 import { usePermissions }  from '../../../shared/hooks/usePermissions'
 import { useFeatureAccess } from '../../../shared/hooks/useFeatureAccess'
 import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
@@ -412,25 +412,11 @@ function CurrentStockTab({ canViewProfit, isTierLocked, canAdjust }) {
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <ExportButton onFetch={handleExport} filename="stock" columns={csvColumns} />
-          <ImportButton
-            endpoint="/stock/import"
-            title="Stock"
-            columns={STOCK_IMPORT_TEMPLATE}
-            sampleRows={STOCK_IMPORT_SAMPLES}
-            requiredColumns={[
-              { key: 'qty', label: 'Quantity', alternates: ['quantity'] },
-              { key: 'product_id', label: 'Product ID', alternates: ['prod_id', 'barcode', 'Barcode', 'prod_name', 'product_name', 'Product Name'] },
-            ]}
-          />
+          <BulkImportPanel config={stockImportConfig} canImport={true} />
         </div>
       </div>
 
-      <ImportGuidelines
-        guidelines={STOCK_GUIDELINES}
-        columns={STOCK_IMPORT_TEMPLATE}
-        sampleRows={STOCK_IMPORT_SAMPLES}
-        templateName="stock"
-      />
+      <BulkImportGuidelines config={stockImportConfig} />
 
       {/* METRIC CARDS */}
       <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>

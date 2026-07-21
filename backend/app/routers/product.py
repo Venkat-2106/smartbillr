@@ -539,7 +539,7 @@ async def import_products(
         seen_in_file_names = {}
 
         for row in valid_rows:
-            row_num = row.pop("_row_number")
+            row_num = row.get("_row_number")
             name = row["prod_name"]
             name_lower = name.lower()
             barcode = row.get("barcode")
@@ -594,74 +594,98 @@ async def import_products(
         created = 0
         updated = 0
 
-        for i, r in enumerate(new_rows):
+        if new_rows:
+            placeholders = ", ".join([
+                f"(:pid_{i}, CAST(:bid AS uuid), CAST(:cat_id_{i} AS uuid), :name_{i}, :sell_price_{i}, :mrp_{i}, :cost_price_{i}, :stock_qty_{i}, :low_stock_alert_{i}, :tax_rate_{i}, :tax_code_{i}, :barcode_{i}, :unit_{i}, NOW(), CAST(:uid_{i} AS uuid), CAST(:uid_{i} AS uuid))"
+                for i in range(len(new_rows))
+            ])
+            params = {"bid": business_id}
+            for i, r in enumerate(new_rows):
+                params[f"pid_{i}"] = r["pid"]
+                params[f"cat_id_{i}"] = r["cat_id"]
+                params[f"name_{i}"] = r["prod_name"]
+                params[f"sell_price_{i}"] = r["prod_sell_price"]
+                params[f"mrp_{i}"] = r["prod_mrp"]
+                params[f"cost_price_{i}"] = r["prod_cost_price"]
+                params[f"stock_qty_{i}"] = r["prod_stock_qty"]
+                params[f"low_stock_alert_{i}"] = r["prod_low_stock_alert"]
+                params[f"tax_rate_{i}"] = r["tax_rate"]
+                params[f"tax_code_{i}"] = r["tax_code"]
+                params[f"barcode_{i}"] = r["barcode"]
+                params[f"unit_{i}"] = r["unit"]
+                params[f"uid_{i}"] = r["uid"]
+
             try:
-                async with db.begin_nested():
-                    await db.execute(text("""
-                        INSERT INTO products (
-                            prod_id, business_id, category_id, prod_name,
-                            prod_sell_price, prod_mrp, prod_cost_price,
-                            prod_stock_qty, prod_low_stock_alert, tax_rate,
-                            tax_code, barcode, unit,
-                            prod_created_at, created_by, updated_by
-                        ) VALUES (
-                            CAST(:pid AS uuid), CAST(:bid AS uuid), CAST(:cat_id AS uuid),
-                            :name, :sell_price, :mrp, :cost_price,
-                            :stock_qty, :low_stock_alert, :tax_rate,
-                            :tax_code, :barcode, :unit,
-                            NOW(), CAST(:uid AS uuid), CAST(:uid AS uuid)
-                        )
-                    """), {
-                        "pid": r["pid"], "bid": business_id, "cat_id": r["cat_id"],
-                        "name": r["prod_name"], "sell_price": r["prod_sell_price"],
-                        "mrp": r["prod_mrp"], "cost_price": r["prod_cost_price"],
-                        "stock_qty": r["prod_stock_qty"], "low_stock_alert": r["prod_low_stock_alert"],
-                        "tax_rate": r["tax_rate"], "tax_code": r["tax_code"],
-                        "barcode": r["barcode"], "unit": r["unit"], "uid": r["uid"],
-                    })
-                    created += 1
+                await db.execute(text(f"""
+                    INSERT INTO products (
+                        prod_id, business_id, category_id, prod_name,
+                        prod_sell_price, prod_mrp, prod_cost_price,
+                        prod_stock_qty, prod_low_stock_alert, tax_rate,
+                        tax_code, barcode, unit,
+                        prod_created_at, created_by, updated_by
+                    ) VALUES {placeholders}
+                """), params)
+                created = len(new_rows)
             except Exception as e:
-                upsert_errors.append({"row": r.get("_row_number", i + 1), "message": friendly_db_error(e, context=f"product insert row {r.get('_row_number', i + 1)}")})
+                upsert_errors.append({"row": 0, "message": friendly_db_error(e, context="product insert batch")})
 
-        _UPDATE_FIELD_MAP = [
-            ("prod_sell_price",      "sell_price",       lambda r: r.get("prod_sell_price")),
-            ("prod_cost_price",      "cost_price",       lambda r: r.get("prod_cost_price")),
-            ("prod_mrp",             "mrp",              lambda r: r.get("prod_mrp")),
-            ("prod_low_stock_alert", "low_stock_alert",  lambda r: r.get("prod_low_stock_alert")),
-            ("tax_rate",             "tax_rate",          lambda r: r.get("tax_rate")),
-            ("tax_code",             "tax_code",          lambda r: r.get("tax_code")),
-            ("barcode",              "barcode",           lambda r: r.get("barcode")),
-            ("unit",                 "unit",              lambda r: r.get("unit")),
-            ("category_id",          "cat_id",            lambda r: r.get("cat_id")),
-        ]
-        for i, r in enumerate(update_rows):
+        if update_rows:
+            case_sell_price = []
+            case_cost_price = []
+            case_mrp = []
+            case_low_stock = []
+            case_tax_rate = []
+            case_tax_code = []
+            case_barcode = []
+            case_unit = []
+            case_cat_id = []
+            case_uid = []
+            params = {"bid": business_id}
+            for i, r in enumerate(update_rows):
+                pid_ref = f"pid_{i}"
+                case_sell_price.append(f"WHEN prod_id = CAST(:{pid_ref} AS uuid) THEN COALESCE(:sell_price_{i}, prod_sell_price)")
+                case_cost_price.append(f"WHEN prod_id = CAST(:{pid_ref} AS uuid) THEN COALESCE(:cost_price_{i}, prod_cost_price)")
+                case_mrp.append(f"WHEN prod_id = CAST(:{pid_ref} AS uuid) THEN COALESCE(:mrp_{i}, prod_mrp)")
+                case_low_stock.append(f"WHEN prod_id = CAST(:{pid_ref} AS uuid) THEN COALESCE(:low_stock_alert_{i}, prod_low_stock_alert)")
+                case_tax_rate.append(f"WHEN prod_id = CAST(:{pid_ref} AS uuid) THEN COALESCE(:tax_rate_{i}, tax_rate)")
+                case_tax_code.append(f"WHEN prod_id = CAST(:{pid_ref} AS uuid) THEN COALESCE(:tax_code_{i}, tax_code)")
+                case_barcode.append(f"WHEN prod_id = CAST(:{pid_ref} AS uuid) THEN COALESCE(:barcode_{i}, barcode)")
+                case_unit.append(f"WHEN prod_id = CAST(:{pid_ref} AS uuid) THEN COALESCE(:unit_{i}, unit)")
+                case_cat_id.append(f"WHEN prod_id = CAST(:{pid_ref} AS uuid) THEN COALESCE(CAST(:cat_id_{i} AS uuid), category_id)")
+                case_uid.append(f"WHEN prod_id = CAST(:{pid_ref} AS uuid) THEN CAST(:uid_{i} AS uuid)")
+                params[pid_ref] = r["pid"]
+                params[f"sell_price_{i}"] = r.get("prod_sell_price")
+                params[f"cost_price_{i}"] = r.get("prod_cost_price")
+                params[f"mrp_{i}"] = r.get("prod_mrp")
+                params[f"low_stock_alert_{i}"] = r.get("prod_low_stock_alert")
+                params[f"tax_rate_{i}"] = r.get("tax_rate")
+                params[f"tax_code_{i}"] = r.get("tax_code")
+                params[f"barcode_{i}"] = r.get("barcode")
+                params[f"unit_{i}"] = r.get("unit")
+                params[f"cat_id_{i}"] = r.get("cat_id")
+                params[f"uid_{i}"] = r["uid"]
+
+            pid_list = ", ".join([f"CAST(:pid_{i} AS uuid)" for i in range(len(update_rows))])
+
             try:
-                set_clauses = ["updated_by = CAST(:uid AS uuid)"]
-                params = {"pid": r["pid"], "bid": business_id, "uid": r["uid"]}
-
-                for col, param_name, getter in _UPDATE_FIELD_MAP:
-                    value = getter(r)
-                    if value is not None:
-                        if col == "category_id":
-                            set_clauses.append(f"{col} = CAST(:{param_name} AS uuid)")
-                        else:
-                            set_clauses.append(f"{col} = :{param_name}")
-                        params[param_name] = value
-
-                if len(set_clauses) == 1:
-                    updated += 1
-                    continue
-
-                async with db.begin_nested():
-                    await db.execute(text(f"""
-                        UPDATE products
-                        SET {', '.join(set_clauses)}
-                        WHERE prod_id = CAST(:pid AS uuid)
-                          AND business_id = CAST(:bid AS uuid)
-                    """), params)
-                    updated += 1
+                await db.execute(text(f"""
+                    UPDATE products
+                    SET prod_sell_price    = CASE {" ".join(case_sell_price)} END,
+                        prod_cost_price    = CASE {" ".join(case_cost_price)} END,
+                        prod_mrp           = CASE {" ".join(case_mrp)} END,
+                        prod_low_stock_alert = CASE {" ".join(case_low_stock)} END,
+                        tax_rate           = CASE {" ".join(case_tax_rate)} END,
+                        tax_code           = CASE {" ".join(case_tax_code)} END,
+                        barcode            = CASE {" ".join(case_barcode)} END,
+                        unit               = CASE {" ".join(case_unit)} END,
+                        category_id        = CASE {" ".join(case_cat_id)} END,
+                        updated_by         = CASE {" ".join(case_uid)} END
+                    WHERE prod_id IN ({pid_list})
+                      AND business_id = CAST(:bid AS uuid)
+                """), params)
+                updated = len(update_rows)
             except Exception as e:
-                upsert_errors.append({"row": r.get("_row_number", i + 1), "message": friendly_db_error(e, context=f"product update row {r.get('_row_number', i + 1)}")})
+                upsert_errors.append({"row": 0, "message": friendly_db_error(e, context="product update batch")})
 
         return created, updated, upsert_errors
 

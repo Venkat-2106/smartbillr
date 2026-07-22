@@ -73,10 +73,10 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
   const resetHighlight = useCallback(() => setHighlightedIndex(-1), []);
 
   return (
-    /* FIX L3: grid template matches updated header */
+    /* FIX L3: grid template matches updated header — 8 columns */
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '2fr 80px 110px 72px 100px 28px',
+      gridTemplateColumns: '1fr 90px 100px 72px 110px 72px 100px 28px',
       gap: 8, alignItems: 'center',
       padding: '9px 0',
       borderBottom: '1px solid var(--border)',
@@ -94,11 +94,6 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
           }}>
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {item.prod_name}
-              {availableQty !== null && (
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>
-                  ({availableQty} left)
-                </span>
-              )}
             </span>
             <button
               type="button"
@@ -151,7 +146,7 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
                           {formatCurrency(p.prod_sell_price, country)}
                         </div>
                         {p.prod_stock_qty != null && (
-                          <div style={{ fontSize: 11, color: p.prod_stock_qty > 0 ? '#059669' : '#ef4444', marginTop: 1 }}>
+                          <div style={{ fontSize: 11, color: p.prod_stock_qty > 0 ? 'var(--success-text)' : 'var(--danger-text)', marginTop: 1 }}>
                             {p.prod_stock_qty} left
                           </div>
                         )}
@@ -176,6 +171,15 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
         )}
       </div>
 
+      {/* Barcode */}
+      <span style={{
+        fontSize: 12, color: 'var(--text-muted)',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        lineHeight: 1.4,
+      }}>
+        {item.barcode || '—'}
+      </span>
+
       {/* Quantity */}
       <div style={{ position: 'relative' }}>
         <input
@@ -184,7 +188,7 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
           onChange={e => onQtyChange(item._id, 'quantity', Math.max(1, Number(e.target.value) || 1))}
           style={{
             ...NUM_INPUT_STYLE,
-            borderColor: overStock ? '#F59E0B' : undefined,
+            borderColor: overStock ? 'var(--warning)' : undefined,
           }}
           title={overStock ? `Only ${availableQty} in stock — override will be needed` : undefined}
         />
@@ -192,11 +196,13 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
           <span style={{
             position: 'absolute', top: -4, right: -4,
             width: 8, height: 8, borderRadius: '50%',
-            background: '#F59E0B',
+            background: 'var(--warning)',
             border: '1.5px solid var(--bg-card)',
           }} />
         )}
       </div>
+
+      {/* Unit Price */}
 
       <input
         type="number" min="0" step="0.01"
@@ -210,6 +216,22 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
         onChange={e => onTaxChange(item._id, 'tax_rate', Number(e.target.value) || 0)}
         style={NUM_INPUT_STYLE}
       />
+
+      {/* Stock */}
+      <span style={{
+        fontSize: 12, fontWeight: 600,
+        color: availableQty !== null
+          ? availableQty === 0
+            ? 'var(--danger-text)'
+            : overStock
+              ? 'var(--warning-text)'
+              : 'var(--text-secondary)'
+          : 'var(--text-muted)',
+        textAlign: 'center',
+      }}>
+        {availableQty !== null ? availableQty : '—'}
+      </span>
+
       <span style={{
         fontSize: 13, fontWeight: 700,
         color: 'var(--text-primary)', textAlign: 'right',
@@ -224,7 +246,7 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
         style={{
           background: 'none', border: 'none', padding: 4,
           cursor: canRemove ? 'pointer' : 'not-allowed',
-          color: canRemove ? '#ef4444' : 'var(--text-muted)',
+          color: canRemove ? 'var(--danger-text)' : 'var(--text-muted)',
           fontSize: 20, lineHeight: 1, borderRadius: 6,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}

@@ -779,3 +779,23 @@ kbd kbd { border: none; padding: 0; background: none; box-shadow: none; }
 @media (max-width: 640px) {
   .pagination-jump { display: none !important; }
 }
+
+/* ─── Create Sale Page Responsive ───────────────────────────── */
+@media (max-width: 900px) {
+  .create-sale-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .create-sale-bottom-bar {
+    position: sticky;
+    bottom: 0;
+    background: var(--bg-page);
+    border-top: 1px solid var(--border);
+    padding: 12px 0;
+    z-index: 10;
+  }
+}
+@media (max-width: 640px) {
+  .create-sale-grid {
+    gap: 12px !important;
+  }
+}

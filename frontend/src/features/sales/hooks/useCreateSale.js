@@ -39,6 +39,8 @@ export default function useCreateSale() {
   const itemsRef = useRef(items);
   useEffect(() => { itemsRef.current = items; }, [items]);
 
+  const shouldResetRef = useRef(false);
+
   // ── Barcode state ─────────────────────────────────────────────────────────
   const [barcodeInput,   setBarcodeInput]   = useState('');
   const [barcodeError,   setBarcodeError]   = useState('');
@@ -169,6 +171,7 @@ export default function useCreateSale() {
                   ...i,
                   product_id:     product.prod_id,
                   prod_name:      product.prod_name,
+                  barcode:        product.barcode || '',
                   mrp:            Number(product.prod_mrp) || 0,
                   unit_price:     Number(product.prod_sell_price) || 0,
                   quantity:       qty,
@@ -184,6 +187,7 @@ export default function useCreateSale() {
           _id:        `${Date.now()}-${Math.random()}`,
           product_id: product.prod_id,
           prod_name:  product.prod_name,
+          barcode:    product.barcode || '',
           mrp:        Number(product.prod_mrp) || 0,
           unit_price: Number(product.prod_sell_price) || 0,
           quantity:   qty,
@@ -238,14 +242,19 @@ export default function useCreateSale() {
       queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
       queryClient.invalidateQueries({ queryKey: ['sales-trend'] });
       const inv = data?.invoice_no || '';
-      toast.success(`Invoice${inv ? ` ${inv}` : ''} created successfully!`);
-      navigate('/sales', {
-        state: {
-          openInvoice: data?.sales_id,
-          autoPrint:   autoPrint,
-          invoiceNo:   inv,
-        },
-      });
+      if (shouldResetRef.current) {
+        shouldResetRef.current = false;
+        toast.success(`Invoice${inv ? ` ${inv}` : ''} created! Starting new invoice.`);
+      } else {
+        toast.success(`Invoice${inv ? ` ${inv}` : ''} created successfully!`);
+        navigate('/sales', {
+          state: {
+            openInvoice: data?.sales_id,
+            autoPrint:   autoPrint,
+            invoiceNo:   inv,
+          },
+        });
+      }
     },
     onError: (err) => {
       const responseData = err?.response?.data;
@@ -283,6 +292,7 @@ export default function useCreateSale() {
           ...item,
           product_id:     product.prod_id,
           prod_name:      product.prod_name,
+          barcode:        product.barcode || '',
           mrp:            Number(product.prod_mrp) || 0,
           unit_price:     Number(product.prod_sell_price) || 0,
           tax_rate:       Number(product.tax_rate) || 0,
@@ -383,6 +393,21 @@ export default function useCreateSale() {
   const handleSubmitRef = useRef(handleSubmit);
   useEffect(() => { handleSubmitRef.current = handleSubmit; });
 
+  // ── Form reset ──────────────────────────────────────────────────────────
+  const resetForm = useCallback(() => {
+    setCustomerId('');
+    setPaymentMethod('cash');
+    setPaymentStatus('paid');
+    setPaidAmount('');
+    setItems([newItem()]);
+    setBarcodeInput('');
+    setBarcodeError('');
+    setSearchMap({});
+    setOpenDropMap({});
+    setActiveItemSearch('');
+    setStockErrors([]);
+  }, []);
+
   // ── Auto-focus barcode once customers load ────────────────────────────────
   useEffect(() => {
     if (!loadingCust) {
@@ -467,5 +492,7 @@ export default function useCreateSale() {
 
     handleSubmit, isPending: mutation.isPending,
     parsedPaidAmount,
+    shouldResetRef: shouldResetRef,
+    resetForm,
   };
 }

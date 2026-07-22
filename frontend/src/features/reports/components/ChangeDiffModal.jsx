@@ -3,6 +3,17 @@ import { formatDateTime } from '../../../shared/utils/formatDate'
 
 function formatValue(val) {
   if (val === null || val === undefined) return '—'
+  // Resolved FK: backend sends { id: "...", name: "Product Name" }
+  if (typeof val === 'object' && val !== null && 'id' in val && 'name' in val) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{val.name}</span>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>
+          ({String(val.id).slice(0, 8)}…)
+        </span>
+      </span>
+    )
+  }
   if (typeof val === 'object') return JSON.stringify(val, null, 2)
   return String(val)
 }
@@ -49,6 +60,19 @@ const fieldStyle = {
   whiteSpace: 'nowrap',
 }
 
+const FIELD_LABELS = {
+  product_id: 'Product',
+  customer_id: 'Customer',
+  category_id: 'Category',
+  supp_id: 'Supplier',
+  business_id: 'Business',
+  sale_id: 'Sale',
+  pur_id: 'Purchase',
+  created_by: 'Created By',
+  updated_by: 'Updated By',
+  user_id: 'User',
+}
+
 export default function ChangeDiffModal({ open, onClose, record }) {
   if (!record) return null
 
@@ -56,7 +80,7 @@ export default function ChangeDiffModal({ open, onClose, record }) {
   const actionLabel = record.action_type.charAt(0).toUpperCase() + record.action_type.slice(1)
 
   const afterColor = record.action_type === 'delete'
-    ? 'var(--danger-text, #DC2626)'
+    ? 'var(--danger-text)'
     : 'var(--accent-600)'
 
   return (
@@ -82,7 +106,7 @@ export default function ChangeDiffModal({ open, onClose, record }) {
             <tbody>
               {rows.map(r => (
                 <tr key={r.field}>
-                  <td style={fieldStyle}>{r.field}</td>
+                  <td style={fieldStyle}>{FIELD_LABELS[r.field] || r.field}</td>
                   <td style={{ ...tdBase, color: record.action_type === 'delete' ? afterColor : 'var(--text-secondary)', fontFamily: 'var(--font-mono, monospace)', fontSize: 13 }}>
                     {formatValue(r.old)}
                   </td>

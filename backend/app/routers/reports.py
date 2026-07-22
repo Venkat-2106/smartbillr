@@ -36,9 +36,10 @@
 #     .fetchone()/.fetchall() — never reference a stale name (e.g. "result").
 
 from fastapi import APIRouter, Depends, Query
-from typing import Optional
+from typing import Optional, Dict, Any, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+import re
 from app.database import get_async_db
 from app.middleware.rbac import require_permission
 from app.utils.timestamp import fmt_ts
@@ -80,6 +81,121 @@ def _date_col(table_alias: str, col: str, date_from: Optional[str], date_to: Opt
         clause += f" AND {table_alias}.{col} < CAST(:date_to AS timestamp) + INTERVAL '1 day'"
         params["date_to"] = datetime.fromisoformat(date_to.replace("Z", ""))
     return clause, params
+
+
+# ── Audit log FK name resolution ─────────────────────────────────────────────
+# Maps FK column names to (referenced_table, referenced_pk, name_column).
+# Used by _resolve_audit_names to replace raw UUIDs in old_data/new_data
+# with human-readable names before sending to the frontend.
+
+FK_MAP: Dict[str, tuple] = {
+    "product_id":    ("products",   "prod_id",      "prod_name"),
+    "customer_id":   ("customers",  "cust_id",      "cust_name"),
+    "category_id":   ("categories", "category_id",  "category_name"),
+    "supp_id":       ("suppliers",  "supp_id",      "supp_name"),
+    "business_id":   ("businesses", "business_id",  "business_name"),
+    "sale_id":       ("sales",      "sales_id",     "invoice_no"),
+    "pur_id":        ("purchases",  "pur_id",       "pur_id"),
+    "created_by":    ("profiles",   "id",           "full_name"),
+    "updated_by":    ("profiles",   "id",           "full_name"),
+    "user_id":       ("profiles",   "id",           "full_name"),
+}
+
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+
+
+def _is_uuid(val: Any) -> bool:
+    return isinstance(val, str) and bool(_UUID_RE.match(val))
+
+
+async def _resolve_audit_names(
+    db: AsyncSession,
+    records: List[Dict[str, Any]],
+) -> Dict[str, str]:
+    """Batch-resolve FK UUIDs in audit old_data/new_data to human-readable names.
+
+    Returns a flat lookup dict: { "products:<uuid>": "Widget", ... }.
+    The caller spreads this into old_data/new_data values.
+    """
+    # Collect (fk_column, uuid) pairs from all records
+    to_resolve: Dict[str, set] = {col: set() for col in FK_MAP}
+
+    for rec in records:
+        for data_key in ("old_data", "new_data"):
+            data = rec.get(data_key) or {}
+            if not isinstance(data, dict):
+                continue
+            for col in FK_MAP:
+                val = data.get(col)
+                if _is_uuid(val):
+                    to_resolve[col].add(val)
+
+    # Deduplicate by referenced table: table → {uuid: set of cols}
+    table_ids: Dict[str, Dict[str, set]] = {}
+    for col, uuids in to_resolve.items():
+        if not uuids:
+            continue
+        ref_table, _, _ = FK_MAP[col]
+        if ref_table not in table_ids:
+            table_ids[ref_table] = {}
+        for uid in uuids:
+            table_ids[ref_table].setdefault(uid, set()).add(col)
+
+    # Batch-query each referenced table once
+    lookup: Dict[str, str] = {}
+    for ref_table, id_cols in table_ids.items():
+        all_ids = list(id_cols.keys())
+        if not all_ids:
+            continue
+
+        # Determine which name column to use — all columns referencing the
+        # same table share the same name column (e.g. profiles → full_name).
+        sample_col = next(iter(next(iter(id_cols.values()))))
+        _, ref_pk, name_col = FK_MAP[sample_col]
+
+        # Build parameterised placeholders ($1, $2, ...)
+        placeholders = ", ".join(f":id_{i}" for i in range(len(all_ids)))
+        params = {f"id_{i}": uid for i, uid in enumerate(all_ids)}
+
+        rows = await db.execute(
+            text(
+                f"SELECT {ref_pk}, {name_col} FROM {ref_table} "
+                f"WHERE {ref_pk} IN ({placeholders})"
+            ),
+            params,
+        )
+        for row in rows.fetchall():
+            lookup[f"{ref_table}:{row[0]}"] = row[1]
+
+    return lookup
+
+
+def _enrich_data(
+    data: Any,
+    lookup: Dict[str, str],
+) -> Any:
+    """Walk a dict/list structure and replace FK UUIDs with {id, name} objects."""
+    if isinstance(data, dict):
+        result = {}
+        for key, val in data.items():
+            if key in FK_MAP and _is_uuid(val):
+                ref_table, _, _ = FK_MAP[key]
+                resolved_name = lookup.get(f"{ref_table}:{val}")
+                if resolved_name:
+                    result[key] = {"id": val, "name": resolved_name}
+                else:
+                    result[key] = val
+            elif isinstance(val, (dict, list)):
+                result[key] = _enrich_data(val, lookup)
+            else:
+                result[key] = val
+        return result
+    elif isinstance(data, list):
+        return [_enrich_data(item, lookup) for item in data]
+    return data
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2665,7 +2781,7 @@ async def get_user_activities(
     """), params)
     rows = rows.fetchall()
 
-    return success_response([
+    records = [
         {
             "audit_id": str(r.audit_id),
             "user_id": str(r.user_id) if r.user_id else None,
@@ -2678,7 +2794,16 @@ async def get_user_activities(
             "created_at": str(r.created_at),
         }
         for r in rows
-    ])
+    ]
+
+    # Resolve FK UUIDs to human-readable names (product_id → prod_name, etc.)
+    lookup = await _resolve_audit_names(db, records)
+    if lookup:
+        for rec in records:
+            rec["old_data"] = _enrich_data(rec["old_data"], lookup)
+            rec["new_data"] = _enrich_data(rec["new_data"], lookup)
+
+    return success_response(records)
 
 
 @router.get("/audit/login-activities")
@@ -2761,7 +2886,7 @@ async def get_data_changes(
     """), params)
     rows = rows.fetchall()
 
-    return success_response([
+    records = [
         {
             "audit_id": str(r.audit_id),
             "user_id": str(r.user_id) if r.user_id else None,
@@ -2774,7 +2899,16 @@ async def get_data_changes(
             "created_at": str(r.created_at),
         }
         for r in rows
-    ])
+    ]
+
+    # Resolve FK UUIDs to human-readable names (product_id → prod_name, etc.)
+    lookup = await _resolve_audit_names(db, records)
+    if lookup:
+        for rec in records:
+            rec["old_data"] = _enrich_data(rec["old_data"], lookup)
+            rec["new_data"] = _enrich_data(rec["new_data"], lookup)
+
+    return success_response(records)
 
 
 # ── SECURITY NOTE — Future export endpoints ──────────────────────────

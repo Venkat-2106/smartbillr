@@ -216,6 +216,7 @@ export const SUPPLIER_CSV_COLUMNS = [
 /** Column config for Products export — WITH profit fields (admin + manager) */
 export const PRODUCT_CSV_COLUMNS = [
   { key: 'prod_name',           label: 'Product Name' },
+  { key: 'category_name',       label: 'Category' },
   { key: 'prod_sell_price',     label: 'Sell Price' },
   { key: 'prod_mrp',            label: 'MRP',
     format: (val) => val != null ? String(val) : '' },
@@ -244,6 +245,7 @@ export const PRODUCT_CSV_COLUMNS = [
 /** Column config for Products export — WITHOUT profit fields (staff only) */
 export const PRODUCT_CSV_COLUMNS_NO_PROFIT = [
   { key: 'prod_name',           label: 'Product Name' },
+  { key: 'category_name',       label: 'Category' },
   { key: 'prod_sell_price',     label: 'Sell Price' },
   { key: 'prod_mrp',            label: 'MRP',
     format: (val) => val != null ? String(val) : '' },

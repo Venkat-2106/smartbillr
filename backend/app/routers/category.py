@@ -170,7 +170,7 @@ async def import_categories(
                 if is_update_mode:
                     update_rows.append({"cid": existing_names[name_lower], "uid": user_id, "name": name})
                 else:
-                    upsert_errors.append({"row": row_num, "message": f"'{name}' already exists"})
+                    upsert_errors.append({"row": row_num, "message": f'Category "{name}" already exists. Rows with an existing category name are skipped during Bulk Create.'})
             else:
                 if is_update_mode:
                     upsert_errors.append({"row": row_num, "message": f'Category "{name}" does not exist. Only existing categories can be updated.'})

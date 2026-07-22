@@ -461,18 +461,18 @@ async def import_products(
                 placeholders = ", ".join([f":cat_{i}" for i in range(len(category_names))])
                 params = {"bid": business_id}
                 for i, cn in enumerate(category_names):
-                    params[f"cat_{i}"] = cn
+                    params[f"cat_{i}"] = cn.lower()
 
                 cat_rows = (await db.execute(text(f"""
-                    SELECT category_id, category_name
+                    SELECT category_id, LOWER(category_name) as lname
                     FROM categories
                     WHERE business_id = CAST(:bid AS uuid)
-                      AND category_name IN ({placeholders})
+                      AND LOWER(category_name) IN ({placeholders})
                       AND is_deleted = false
                 """), params)).fetchall()
 
                 for r in cat_rows:
-                    category_map[r.category_name.lower()] = str(r.category_id)
+                    category_map[r.lname] = str(r.category_id)
 
         unmatched_cat_errors = []
         filtered_rows = []
@@ -505,10 +505,10 @@ async def import_products(
                     params[f"name_{i}"] = n.lower()
 
                 existing_rows = (await db.execute(text(f"""
-                    SELECT prod_id, LOWER(prod_name) as lname
+                    SELECT prod_id, LOWER(TRIM(BOTH FROM prod_name)) as lname
                     FROM products
                     WHERE business_id = CAST(:bid AS uuid)
-                      AND LOWER(prod_name) IN ({placeholders})
+                      AND LOWER(TRIM(BOTH FROM prod_name)) IN ({placeholders})
                       AND is_deleted = false
                 """), params)).fetchall()
 
@@ -790,13 +790,15 @@ async def get_all_products(
                 p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
                 p.tax_code, p.barcode, p.unit,
                 p.prod_created_at, p.updated_at,
-                p.updated_by,
+                p.created_by, p.updated_by,
                 c.category_name,
-                pr.full_name AS last_updated_by,
+                pr1.full_name AS last_updated_by,
+                pr2.full_name AS created_by_name,
                 COUNT(*) OVER() AS total_count
             FROM products p
             LEFT JOIN categories c ON c.category_id = p.category_id
-            LEFT JOIN profiles   pr ON pr.id = p.updated_by
+            LEFT JOIN profiles   pr1 ON pr1.id = p.updated_by
+            LEFT JOIN profiles   pr2 ON pr2.id = p.created_by
             WHERE p.business_id = CAST(:business_id AS uuid)
               AND p.is_deleted   = false
               {extra_where}
@@ -810,7 +812,7 @@ async def get_all_products(
 
     return success_response(
         pagination_response(
-            [row_to_dict(r, show_profit=show_profit, include_audit=False) for r in rows],
+            [row_to_dict(r, show_profit=show_profit, include_audit=True) for r in rows],
             total,
             pagination["page"],
             pagination["limit"],

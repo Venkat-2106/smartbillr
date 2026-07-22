@@ -70,14 +70,14 @@ export const CATEGORY_UPDATE_GUIDELINES = {
 
 // ─── CUSTOMERS (CREATE MODE) ─────────────────────────────────────────────────
 // Source: customerSchema.js (Zod) + routers/customer.py (Pydantic + router)
-// Behavior: Phone match → UPDATE (upsert). No phone match → CREATE.
+// Behavior: Phone exists → ERROR (row skipped). No phone match → create.
 
 export const CUSTOMER_GUIDELINES = {
   title: 'How to Create Customers',
-  description: 'Each row creates a new customer. Rows with a phone number matching an existing customer will update that customer instead of creating a new one.',
+  description: 'Each row creates a new customer. Rows with a phone number matching an existing customer are reported as errors and skipped.',
   fields: [
     { name: 'Customer Name', required: true, note: 'Max 100 characters.' },
-    { name: 'Phone',          required: false, note: 'If this matches an existing customer, that record is updated instead of creating a new one.' },
+    { name: 'Phone',          required: false, note: 'Must be unique. If it matches an existing customer, the row is rejected.' },
     { name: 'Email',          required: false, note: 'Must be a valid email format if provided.' },
     { name: 'Address',        required: false, note: 'Max 300 characters.' },
     { name: 'State',          required: false, note: 'Must be a valid state/province for the selected country.' },
@@ -86,7 +86,7 @@ export const CUSTOMER_GUIDELINES = {
   ],
   rules: [
     'Customer Name is required and cannot be empty.',
-    'If a Phone number matches an existing customer, the existing record is updated — a duplicate is not created.',
+    'If a Phone number matches an existing customer, the row is skipped with an error — use Bulk Update to modify existing customers.',
     'If no Phone is provided, a new customer is always created.',
     'Email must contain "@" if provided.',
     'If the same Phone number appears more than once in your file, only the first row is imported — later duplicates are reported as errors and skipped.',
@@ -128,14 +128,14 @@ export const CUSTOMER_UPDATE_GUIDELINES = {
 
 // ─── SUPPLIERS (CREATE MODE) ─────────────────────────────────────────────────
 // Source: supplierSchema.js (Zod) + routers/supplier.py (Pydantic + router)
-// Behavior: Phone match → UPDATE (upsert). No phone match → CREATE.
+// Behavior: Phone exists → ERROR (row skipped). No phone match → create.
 
 export const SUPPLIER_GUIDELINES = {
   title: 'How to Create Suppliers',
-  description: 'Each row creates a new supplier. Rows with a phone number matching an existing supplier will update that supplier instead of creating a new one.',
+  description: 'Each row creates a new supplier. Rows with a phone number matching an existing supplier are reported as errors and skipped.',
   fields: [
     { name: 'Supplier Name', required: true, note: 'Max 100 characters.' },
-    { name: 'Phone',         required: false, note: 'If this matches an existing supplier, that record is updated instead of creating a new one. Must not contain "@".' },
+    { name: 'Phone',         required: false, note: 'Must be unique. If it matches an existing supplier, the row is rejected. Must not contain "@".' },
     { name: 'Email',         required: false, note: 'Must be a valid email format if provided.' },
     { name: 'Address',       required: false },
     { name: 'State',         required: false, note: 'Must be a valid state/province for the selected country.' },
@@ -144,7 +144,7 @@ export const SUPPLIER_GUIDELINES = {
   ],
   rules: [
     'Supplier Name is required and cannot be empty.',
-    'If a Phone number matches an existing supplier, the existing record is updated — a duplicate is not created.',
+    'If a Phone number matches an existing supplier, the row is skipped with an error — use Bulk Update to modify existing suppliers.',
     'If no Phone is provided, a new supplier is always created.',
     'Phone field must not contain "@" — use the Email column for email addresses.',
     'Email must contain "@" if provided.',
@@ -187,20 +187,20 @@ export const SUPPLIER_UPDATE_GUIDELINES = {
 
 // ─── PRODUCTS (CREATE MODE) ──────────────────────────────────────────────────
 // Source: productSchemas.js (Zod) + productFormShared.js (units) + routers/product.py
-// Behavior: Name match → UPDATE (existing product updated). No name match → CREATE.
+// Behavior: Name exists → ERROR (row skipped). Name doesn't exist → create.
 
 export const PRODUCT_GUIDELINES = {
   title: 'How to Create Products',
-  description: 'Each row creates a new product. If the product name already exists, only the columns present in your file are updated — fields left out stay unchanged.',
+  description: 'Each row creates a new product. Rows with a product name that already exists are reported as errors and skipped.',
   warning: [
     'Stock Quantity cannot be updated via Product Bulk Import. The Stock Qty column is used as opening stock when creating new products only.',
     'To update stock for existing products, use the Stock page — Stock Adjustment or Bulk Stock Update.',
   ],
   fields: [
-    { name: 'Product Name',    required: true,  note: 'Max 100 characters. Required — used to look up existing products (case-insensitive match).' },
-    { name: 'Category',        required: false, note: 'Required for new products. Must match an existing category name. Leave blank to skip on updates.' },
-    { name: 'Sell Price',      required: false, note: 'Required for new products. Must be 0 or greater. Leave blank to skip on updates.' },
-    { name: 'Cost Price',      required: false, note: 'Required for new products. Must be 0 or greater. Leave blank to skip on updates.' },
+    { name: 'Product Name',    required: true,  note: 'Max 100 characters. Case-insensitive duplicates are rejected.' },
+    { name: 'Category',        required: true,  note: 'Must match an existing category name.' },
+    { name: 'Sell Price',      required: true,  note: 'Must be 0 or greater.' },
+    { name: 'Cost Price',      required: true,  note: 'Must be 0 or greater.' },
     { name: 'MRP',             required: false, note: 'Must be >= Sell Price if provided. Leave empty or 0 if not applicable.' },
     { name: 'Stock Qty',       required: false, note: 'Opening stock for new products only. Ignored for existing products.' },
     { name: 'Low Stock Alert', required: false, note: 'Whole number, 0 or greater. Defaults to 10.' },
@@ -210,8 +210,9 @@ export const PRODUCT_GUIDELINES = {
     { name: 'Unit',            required: false, note: 'One of: pcs, kg, g, litre, ml, box, pack, pair, set, dozen. Defaults to pcs.' },
   ],
   rules: [
-    'Product Name is required and is used to look up existing products (case-insensitive).',
-    'Category, Sell Price, and Cost Price are required when creating new products — they are optional for updates.',
+    'Product Name is required and cannot be empty.',
+    'Product names are unique within your business — if the name already exists (case-insensitive), the row is skipped with an error.',
+    'Category, Sell Price, and Cost Price are required for new products.',
     'For updates, only include the fields you want to change — fields left blank or missing from the CSV keep their existing values.',
     'Category must already exist — create categories first before importing products.',
     'Sell Price and Cost Price must be 0 or greater.',

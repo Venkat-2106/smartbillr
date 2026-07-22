@@ -12,6 +12,7 @@ class SaleItemCreate(BaseModel):
     product_id: UUID
     sale_item_quantity: int
     sale_item_unit_price: Decimal
+    tax_rate: Optional[Decimal] = None
 
     @field_validator("sale_item_quantity")
     @classmethod

@@ -162,8 +162,11 @@ async def insert_sale_items(db: AsyncSession, business_id: str, new_sale_id: str
         product = product_cache[str(item.product_id)]
         item_mrp = str(product.prod_mrp) if product.prod_mrp is not None else None
         cost_price = str(product.prod_cost_price) if product.prod_cost_price is not None else None
+        # Use frontend tax_rate if provided (> 0), otherwise let the DB trigger
+        # fall back to the product's master tax_rate.
+        gst_rate = str(item.tax_rate) if item.tax_rate is not None and item.tax_rate > 0 else None
         value_clauses.append(
-            f"(:bid_{idx}, :sid_{idx}, :pid_{idx}, :qty_{idx}, :price_{idx}, :mrp_{idx}, :cost_{idx})"
+            f"(:bid_{idx}, :sid_{idx}, :pid_{idx}, :qty_{idx}, :price_{idx}, :mrp_{idx}, :cost_{idx}, :gst_{idx})"
         )
         value_params[f"bid_{idx}"] = business_id
         value_params[f"sid_{idx}"] = new_sale_id
@@ -172,13 +175,14 @@ async def insert_sale_items(db: AsyncSession, business_id: str, new_sale_id: str
         value_params[f"price_{idx}"] = str(item.sale_item_unit_price)
         value_params[f"mrp_{idx}"] = item_mrp
         value_params[f"cost_{idx}"] = cost_price
+        value_params[f"gst_{idx}"] = gst_rate
 
     await db.execute(
         text(f"""
             INSERT INTO sale_items (
                 business_id, sale_id, product_id,
                 sale_item_quantity, sale_item_unit_price,
-                item_mrp, sale_item_cost_price_at_sale
+                item_mrp, sale_item_cost_price_at_sale, gst_rate
             ) VALUES
             {','.join(value_clauses)}
         """),

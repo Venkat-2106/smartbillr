@@ -40,6 +40,8 @@ export default function CreateSalePage() {
   const navigate = useNavigate();
   const business  = useAuthStore(s => s.business);
   const country   = business?.business_country_code || 'IN';
+  const isGstRegistered = business?.is_gst_registered || false;
+  const taxLabel = isGstRegistered ? 'GST' : 'Tax';
   const {
     customers, loadingCust,
     customerId, handleCustomerChange,
@@ -194,7 +196,7 @@ export default function CreateSalePage() {
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Tax</span>
+              <span style={{ color: 'var(--text-secondary)' }}>{taxLabel}</span>
               <span style={{ fontWeight: 600 }}>{formatCurrency(totals.taxTotal, country)}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1.5px solid var(--border)', paddingTop: 8, marginTop: 4 }}>
@@ -378,7 +380,7 @@ export default function CreateSalePage() {
               gap: 8, paddingBottom: 8,
               borderBottom: '1px solid var(--border)', marginBottom: 4,
             }}>
-              {['Product', 'Barcode', 'Qty', 'Unit Price', 'Tax %', 'Stock', 'Total', ''].map((h, i) => (
+              {['Product', 'Barcode', 'Qty', 'Unit Price', `${taxLabel} %`, 'Stock', 'Total', ''].map((h, i) => (
                 <span key={i} style={{
                   fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
                   textTransform: 'uppercase', letterSpacing: '0.07em',

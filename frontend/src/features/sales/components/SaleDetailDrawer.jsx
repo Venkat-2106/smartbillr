@@ -273,6 +273,16 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, isError, detail, sale?._autoPrint]);
 
+  // Sync displayStatus once the real sale detail loads — the initial
+  // `sale` prop may be a placeholder (e.g. right after creating a sale)
+  // with no sales_payment_status, which would otherwise leave the
+  // badge stuck on the useState default.
+  useEffect(() => {
+    if (detail?.sales_payment_status) {
+      setDisplayStatus(detail.sales_payment_status);
+    }
+  }, [detail?.sales_payment_status]);
+
   if (!sale) return null;
 
   const subtotal    = detail?.sales_total_amount  ?? sale.sales_total_amount ?? 0;

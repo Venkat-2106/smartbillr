@@ -233,8 +233,11 @@ export function buildPrintHeader(business = {}) {
 
   const addressLine = [address, state].filter(Boolean).join(', ');
 
-  // Use country-aware tax label (GSTIN for India, Tax Number for others)
-  const taxLabel = country === 'IN' ? 'GSTIN' : `${getTaxLabel(country)} Number`;
+  // Use country-aware tax label (GSTIN for India when GST-registered, Tax Number for others)
+  const isGstRegistered = business?.is_gst_registered || false
+  const taxLabel = country === 'IN' && isGstRegistered
+    ? 'GSTIN'
+    : `${getTaxLabel(country, isGstRegistered)} Number`
 
   return `
     <div style="

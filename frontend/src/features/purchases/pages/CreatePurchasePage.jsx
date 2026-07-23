@@ -32,6 +32,7 @@ import { searchProductsLean }   from '../../sales/api/salesApi'
 import { Button, PageHeader, FormField, ConfirmDialog } from '../../../shared/components'
 import { selectStyle }          from '../../../shared/components/FormField'
 import { formatCurrency }       from '../../../shared/utils/formatCurrency'
+import { getTaxLabel }          from '../../../shared/utils/formatTax'
 import useAuthStore             from '../../../store/authStore'
 import { useDebounce }          from '../../../shared/hooks/useDebounce'
 import PurchaseLineItemRow      from '../components/PurchaseLineItemRow'
@@ -68,7 +69,7 @@ export default function CreatePurchasePage() {
   const business  = useAuthStore(s => s.business)
   const country   = business?.business_country_code || 'IN'
   const isGstRegistered = business?.is_gst_registered || false
-  const taxLabel = isGstRegistered ? 'GST' : 'Tax'
+  const taxLabel = getTaxLabel(country, isGstRegistered)
 
   // ── Form state ───────────────────────────────────────────────────────────
   const [suppId,        setSuppId]        = useState('')

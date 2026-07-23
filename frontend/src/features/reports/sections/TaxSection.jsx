@@ -5,6 +5,7 @@ import { getTaxLabel } from '../../../shared/utils/formatTax'
 import { useTaxCollected, useTaxPaid, useTaxLiability, useTaxByRate, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, InfoCard, DataTable } from '../components/shared'
 import { useFeatureAccess } from '../../../shared/hooks/useFeatureAccess'
+import useAuthStore from '../../../store/authStore'
 
 export default function TaxSection({ dateFrom, dateTo }) {
   const { reason } = useFeatureAccess('financial_reports')
@@ -13,12 +14,14 @@ export default function TaxSection({ dateFrom, dateTo }) {
   const liability = useTaxLiability(dateFrom, dateTo)
   const byRate = useTaxByRate(dateFrom, dateTo)
   const country = useReportCountry()
+  const business = useAuthStore(s => s.business)
+  const isGstRegistered = business?.is_gst_registered || false
 
   const totalCollected = collected.data?.total_tax ?? 0
   const totalPaid = paid.data?.total_tax ?? 0
   const netLiability = liability.data?.net_tax_liability
 
-  const taxLabel = getTaxLabel(country)
+  const taxLabel = getTaxLabel(country, isGstRegistered)
   const collectedSub = country === 'IN'
     ? `CGST: ${formatCurrency(collected.data?.total_cgst ?? 0, country)} · SGST: ${formatCurrency(collected.data?.total_sgst ?? 0, country)}`
     : undefined

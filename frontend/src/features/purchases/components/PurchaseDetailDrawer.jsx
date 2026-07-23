@@ -81,6 +81,7 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
   const [showReturnDrawer, setShowReturnDrawer] = useState(false)
   const business  = useAuthStore(s => s.business)
   const country   = business?.business_country_code || 'IN'
+  const isGstRegistered = business?.is_gst_registered || false
 
   const { can } = usePermissions()
 
@@ -288,7 +289,7 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
                 if (tt === 'igst') {
                   return <SummaryRow label="IGST" value={formatCurrency(data.pur_igst_total || 0, country)} />
                 }
-                return <SummaryRow label={getTaxLabel(country)} value={formatCurrency(data.pur_tax_total || 0, country)} />
+                return <SummaryRow label={getTaxLabel(country, isGstRegistered)} value={formatCurrency(data.pur_tax_total || 0, country)} />
               })()}
               <SummaryRow label="Total"            value={formatCurrency(data.pur_final_amount || 0, country)} bold />
             </div>
@@ -339,7 +340,7 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
                     </div>
                     {(item.gst_rate || 0) > 0 && (
                       <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
-                        {getTaxLabel(country)} {item.gst_rate}%
+                        {getTaxLabel(country, isGstRegistered)} {item.gst_rate}%
                       </div>
                     )}
                   </div>

@@ -81,9 +81,10 @@ function buildInvoiceHTML(
   business, detail, sale, items,
   cgst, sgst, igst, subtotal, taxTotal, discount, finalAmount, totalPaid, remaining
 ) {
-  // FIX: Derive `country` from the `business` parameter so formatCurrency/getTaxLabel
-  // work inside this top-level function (was previously undefined — caused print crash).
+  // FIX: Derive `country` and `isGstRegistered` from the `business` parameter
+  // so formatCurrency/getTaxLabel work inside this top-level function.
   const country   = business?.business_country_code || 'IN';
+  const isGstRegistered = business?.is_gst_registered || false;
   const payStatus = detail?.sales_payment_status || sale.sales_payment_status || 'pending';
   const payMethod = escapeHTML((detail?.sales_payment_method || sale.sales_payment_method || '—')
     .replace(/_/g, ' ').toUpperCase());
@@ -109,7 +110,7 @@ function buildInvoiceHTML(
     }
     if (taxType === 'generic' && taxTotal > 0) {
       return `
-        <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">${getTaxLabel(country)}</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(taxTotal, country)}</td></tr>
+        <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">${getTaxLabel(country, isGstRegistered)}</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(taxTotal, country)}</td></tr>
       `;
     }
     return '';
@@ -150,7 +151,7 @@ function buildInvoiceHTML(
       <th style="text-align:center;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Qty</th>
       <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">MRP</th>
       <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Rate</th>
-      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">${getTaxLabel(country)}</th>
+      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">${getTaxLabel(country, isGstRegistered)}</th>
       <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#059669;text-transform:uppercase;letter-spacing:0.05em;">Discount</th>
       <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Total</th>
     </tr>
@@ -159,7 +160,7 @@ function buildInvoiceHTML(
       <th style="text-align:left;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Item</th>
       <th style="text-align:center;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Qty</th>
       <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Rate</th>
-      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">${getTaxLabel(country)}</th>
+      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">${getTaxLabel(country, isGstRegistered)}</th>
       <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Total</th>
     </tr>
   `;
@@ -213,7 +214,7 @@ function buildInvoiceHTML(
         <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">Subtotal</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(subtotal, country)}</td></tr>
         ${discount > 0 ? `<tr><td style="padding:4px 0;color:#059669;font-size:10.5px;">Discount</td><td style="padding:4px 0;text-align:right;font-size:10.5px;color:#059669;">−${formatCurrency(discount, country)}</td></tr>` : ''}
         ${gstBreakdown}
-        <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">${getTaxLabel(country)} Total</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(taxTotal, country)}</td></tr>
+        <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">${getTaxLabel(country, isGstRegistered)} Total</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(taxTotal, country)}</td></tr>
         <tr style="border-top:2px solid #111827;">
           <td style="padding:8px 0 4px;font-size:14px;font-weight:900;color:#111827;">Grand Total</td>
           <td style="padding:8px 0 4px;text-align:right;font-size:14px;font-weight:900;color:#111827;">${formatCurrency(finalAmount, country)}</td>
@@ -243,6 +244,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
   const [showReturnDrawer, setShowReturnDrawer] = useState(false);
   const business  = useAuthStore(s => s.business);
   const country   = business?.business_country_code || 'IN';
+  const isGstRegistered = business?.is_gst_registered || false;
 
   const { can } = usePermissions();
 
@@ -814,7 +816,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                 if (tt === 'generic' && taxTotal > 0) {
                   return (
                     <DrawerSection title="Tax Breakdown">
-                      <InfoRow label={getTaxLabel(country)} value={formatCurrency(taxTotal, country)} isLast />
+                      <InfoRow label={getTaxLabel(country, isGstRegistered)} value={formatCurrency(taxTotal, country)} isLast />
                     </DrawerSection>
                   );
                 }
@@ -832,7 +834,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                     }
                   />
                 )}
-                <InfoRow label={`${getTaxLabel(country)} Total`}  value={formatCurrency(taxTotal, country)} />
+                <InfoRow label={`${getTaxLabel(country, isGstRegistered)} Total`}  value={formatCurrency(taxTotal, country)} />
                 <InfoRow label="Total"
                   value={
                     <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>

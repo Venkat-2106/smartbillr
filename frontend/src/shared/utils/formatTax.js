@@ -13,16 +13,27 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Returns the correct tax label for a given country code.
+ * Returns the correct tax label for a given country code and GST registration status.
+ *
+ * For India: returns 'GST' only when isGstRegistered is strictly true;
+ * otherwise returns 'Tax' (the business is not GST-registered).
+ * For all other countries: the label is always driven by country code alone
+ * (VAT, Sales Tax, etc.) regardless of registration status.
+ *
+ * @param {string} countryCode    - ISO 3166-1 alpha-2 country code
+ * @param {boolean} isGstRegistered - whether the business is registered for GST
  *
  * Examples:
- *   getTaxLabel('IN')  → 'GST'
- *   getTaxLabel('US')  → 'Sales Tax'
- *   getTaxLabel('GB')  → 'VAT'
- *   getTaxLabel('AE')  → 'VAT'
- *   getTaxLabel('XX')  → 'Tax'  ← unknown country, safe generic fallback
+ *   getTaxLabel('IN', true)   → 'GST'
+ *   getTaxLabel('IN', false)  → 'Tax'
+ *   getTaxLabel('US', false)  → 'Sales Tax'
+ *   getTaxLabel('GB', true)   → 'VAT'
+ *   getTaxLabel('XX', false)  → 'Tax'  ← unknown country, safe generic fallback
  */
-export function getTaxLabel(countryCode = '') {
+export function getTaxLabel(countryCode = '', isGstRegistered = false) {
+  if ((countryCode || '').toUpperCase() === 'IN' && !isGstRegistered) {
+    return 'Tax'
+  }
   const map = {
     IN: 'GST',
     US: 'Sales Tax',
@@ -72,15 +83,21 @@ export function detectTaxType(record) {
 
 /**
  * Returns tax breakdown labels for India (CGST + SGST or IGST).
- * For non-India countries, returns a single 'Tax' label.
+ * For non-India countries or non-GST-registered Indian businesses,
+ * returns a single 'Tax' label.
+ *
+ * @param {string} countryCode    - ISO 3166-1 alpha-2 country code
+ * @param {string} saleType       - 'intrastate' or 'interstate'
+ * @param {boolean} isGstRegistered - whether the business is registered for GST
  *
  * Usage:
- *   getTaxBreakdown('IN', 'intrastate') → ['CGST', 'SGST']
- *   getTaxBreakdown('IN', 'interstate') → ['IGST']
- *   getTaxBreakdown('US')              → ['Tax']
+ *   getTaxBreakdown('IN', 'intrastate', true) → ['CGST', 'SGST']
+ *   getTaxBreakdown('IN', 'interstate', true) → ['IGST']
+ *   getTaxBreakdown('IN', 'intrastate', false) → ['Tax']
+ *   getTaxBreakdown('US', 'intrastate', false) → ['Tax']
  */
-export function getTaxBreakdown(countryCode = '', saleType = 'intrastate') {
-  if ((countryCode || '').toUpperCase() === 'IN') {
+export function getTaxBreakdown(countryCode = '', saleType = 'intrastate', isGstRegistered = false) {
+  if ((countryCode || '').toUpperCase() === 'IN' && isGstRegistered) {
     return saleType === 'interstate' ? ['IGST'] : ['CGST', 'SGST']
   }
   return ['Tax']
@@ -89,11 +106,16 @@ export function getTaxBreakdown(countryCode = '', saleType = 'intrastate') {
 /**
  * Formats a tax amount with its label.
  *
+ * @param {number} amount
+ * @param {string} countryCode
+ * @param {boolean} isGstRegistered
+ *
  * Example:
- *   formatTaxAmount(90, 'IN') → 'GST: ₹90.00'
+ *   formatTaxAmount(90, 'IN', true)  → 'GST: ₹90.00'
+ *   formatTaxAmount(90, 'IN', false) → 'Tax: ₹90.00'
  */
-export function formatTaxAmount(amount, countryCode = '') {
+export function formatTaxAmount(amount, countryCode = '', isGstRegistered = false) {
   if (amount === null || amount === undefined || isNaN(amount)) return '—'
-  const label = getTaxLabel(countryCode)
+  const label = getTaxLabel(countryCode, isGstRegistered)
   return `${label}: ${Number(amount).toFixed(2)}`
 }

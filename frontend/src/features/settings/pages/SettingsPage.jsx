@@ -39,7 +39,8 @@ export default function SettingsPage() {
   // FIX: Tax Settings tab shown for ALL countries. Labels inside the tab
   // use getTaxLabel() for country-appropriate text (GST, VAT, Sales Tax, etc.)
   const country = business?.business_country_code || ''
-  const taxLabel = getTaxLabel(country)
+  const isGstRegistered = business?.is_gst_registered || false
+  const taxLabel = getTaxLabel(country, isGstRegistered)
   const tabs = BASE_TABS
 
   const {

@@ -125,7 +125,7 @@ export default function AdminBusinessDetailPage() {
           {row('Name', biz.business_name)}
           {row('Email', biz.business_email)}
           {row('Phone', biz.business_phone)}
-          {row(biz.business_country_code === 'IN' ? 'GSTIN' : `${getTaxLabel(biz.business_country_code)} Number`, biz.gstin)}
+          {row(biz.business_country_code === 'IN' && biz.is_gst_registered ? 'GSTIN' : `${getTaxLabel(biz.business_country_code, biz.is_gst_registered)} Number`, biz.gstin)}
           {row('State', biz.business_state)}
           {row('Country', biz.business_country_code)}
           {row('Created', biz.created_at ? new Date(biz.created_at).toLocaleDateString() : '—')}

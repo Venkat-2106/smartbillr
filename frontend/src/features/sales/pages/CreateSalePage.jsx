@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button, FormField, Modal } from '../../../shared/components';
 import { selectStyle } from '../../../shared/components/FormField';
 import { formatCurrency } from '../../../shared/utils/formatCurrency';
+import { getTaxLabel } from '../../../shared/utils/formatTax';
 import { NUM_INPUT_STYLE } from '../../../shared/constants/styles';
 import SaleLineItemRow from '../components/SaleLineItemRow';
 import OrderSummaryRow from '../components/OrderSummaryRow';
@@ -41,7 +42,7 @@ export default function CreateSalePage() {
   const business  = useAuthStore(s => s.business);
   const country   = business?.business_country_code || 'IN';
   const isGstRegistered = business?.is_gst_registered || false;
-  const taxLabel = isGstRegistered ? 'GST' : 'Tax';
+  const taxLabel = getTaxLabel(country, isGstRegistered);
   const {
     customers, loadingCust,
     customerId, handleCustomerChange,

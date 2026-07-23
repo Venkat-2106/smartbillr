@@ -6,6 +6,7 @@ import { getTaxLabel } from '../../../shared/utils/formatTax'
 import { usePurchaseSummary, usePurchaseTrend, usePurchasesBySupplier, useReportCountry } from '../hooks/useReports'
 import { StatCard, SectionTitle, ChartCard, InfoCard } from '../components/shared'
 import { useFeatureAccess } from '../../../shared/hooks/useFeatureAccess'
+import useAuthStore from '../../../store/authStore'
 
 export default function PurchasesSection({ dateFrom, dateTo }) {
   const { reason } = useFeatureAccess('financial_reports')
@@ -14,6 +15,8 @@ export default function PurchasesSection({ dateFrom, dateTo }) {
   const trend = usePurchaseTrend(period, dateFrom, dateTo)
   const bySupplier = usePurchasesBySupplier(dateFrom, dateTo)
   const country = useReportCountry()
+  const business = useAuthStore(s => s.business)
+  const isGstRegistered = business?.is_gst_registered || false
 
   const trendData = useMemo(() => {
     if (!Array.isArray(trend.data)) return []
@@ -29,7 +32,7 @@ export default function PurchasesSection({ dateFrom, dateTo }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14, marginBottom: 20 }}>
         {[
           { label: 'Total Spend', value: s ? formatCurrency(s.total_amount, country) : '—', sub: `${s?.total_purchases ?? 0} purchases`, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg> },
-          { label: `${getTaxLabel(country)} Total`, value: s ? formatCurrency(s.total_tax, country) : '—', sub: country === 'IN' ? `CGST: ${formatCurrency(s?.total_cgst ?? 0, country)} · SGST: ${formatCurrency(s?.total_sgst ?? 0, country)}` : undefined, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> },
+          { label: `${getTaxLabel(country, isGstRegistered)} Total`, value: s ? formatCurrency(s.total_tax, country) : '—', sub: country === 'IN' && isGstRegistered ? `CGST: ${formatCurrency(s?.total_cgst ?? 0, country)} · SGST: ${formatCurrency(s?.total_sgst ?? 0, country)}` : undefined, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> },
           { label: 'Paid', value: s?.paid_count ?? '—', sub: 'Completed purchases', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> },
           { label: 'Pending', value: s?.pending_count ?? '—', sub: 'Unpaid purchases', icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
         ].map((c, i) => <StatCard key={i} {...c} loading={summary.isLoading} />)}

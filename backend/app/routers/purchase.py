@@ -207,10 +207,10 @@ async def create_purchase(
         return error_response(msg, status_code=403)
 
     try:
-        # Step 1 → Get business country and state for tax engine
+        # Step 1 → Get business country, state, and GST registration for tax engine
         business = (await db.execute(
             text("""
-                SELECT business_country_code, business_state
+                SELECT business_country_code, business_state, is_gst_registered
                 FROM businesses
                 WHERE business_id = CAST(:bid AS uuid)
             """),
@@ -219,6 +219,7 @@ async def create_purchase(
 
         biz_country = (business.business_country_code or "").strip() if business else ""
         biz_state   = (business.business_state or "").strip()         if business else ""
+        biz_gst_registered = bool(business.is_gst_registered)         if business else False
 
         # Step 2 → Get supplier country + state (needed for GST inter/intra detection)
         supp_country = ""
@@ -266,11 +267,11 @@ async def create_purchase(
 
             # ── CENTRALIZED TAX ENGINE ────────────────────────────────────────
             # calculate_item_tax() applies the full global rule set:
-            #   non-India biz               → generic_tax only
-            #   India + foreign supplier    → IGST
-            #   India + same-state supplier → CGST + SGST
-            #   India + blank-state supplier→ CGST + SGST (safe default)
-            #   India + diff-state supplier → IGST
+            #   non-India biz OR not GST-registered → generic_tax only
+            #   India + GST-registered + foreign supplier → IGST
+            #   India + GST-registered + same-state supplier → CGST + SGST
+            #   India + GST-registered + blank-state supplier → CGST + SGST
+            #   India + GST-registered + diff-state supplier → IGST
             tax_calc = calculate_item_tax(
                 unit_price                = item.item_unit_price,
                 quantity                  = item.pur_item_qty,
@@ -279,6 +280,7 @@ async def create_purchase(
                 business_state            = biz_state,
                 counterparty_country_code = supp_country,
                 counterparty_state        = supp_state,
+                business_gst_registered   = biz_gst_registered,
             )
 
             total_amount += tax_calc["subtotal"]

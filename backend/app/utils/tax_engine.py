@@ -11,10 +11,13 @@
 #
 # TAX DETERMINATION RULES
 # ───────────────────────
-# Step 1: If business_country != "IN" → use generic tax_total only.
-#          No CGST/SGST/IGST logic at all.
+# Step 1: If business_country != "IN" OR business is not GST-registered
+#          → use generic tax_total only. No CGST/SGST/IGST logic at all.
+#          An Indian business that has not registered for GST is treated the
+#          same as a non-Indian business — generic tax bucket only.
 #
-# Step 2: Business is in India. Check counterparty (customer or supplier):
+# Step 2: Business is in India AND GST-registered. Check counterparty
+#         (customer or supplier):
 #   Rule 1: counterparty_country != "IN" → IGST (cross-border supply)
 #   Rule 2: counterparty_country == "IN", state blank → CGST + SGST
 #            (walk-in / unknown state defaults to intrastate)
@@ -39,13 +42,14 @@ from typing import Optional
 # ─────────────────────────────────────────────────────────────────────────────
 
 def calculate_item_tax(
-    unit_price:             Decimal,
-    quantity:               int,
-    tax_rate:               Decimal,
-    business_country_code:  str,
-    business_state:         str,
+    unit_price:              Decimal,
+    quantity:                int,
+    tax_rate:                Decimal,
+    business_country_code:   str,
+    business_state:          str,
     counterparty_country_code: Optional[str],   # customer or supplier country
-    counterparty_state:     Optional[str],       # customer or supplier state
+    counterparty_state:      Optional[str],      # customer or supplier state
+    business_gst_registered: bool = False,
 ) -> dict:
     """
     Calculate tax breakdown for a single line item.
@@ -59,6 +63,12 @@ def calculate_item_tax(
         item_tax_total     — total tax regardless of type (cgst+sgst+igst OR generic)
         item_total_with_tax— subtotal + item_tax_total
         tax_type           — "cgst_sgst" | "igst" | "generic" (for logging/debug)
+
+    Parameters:
+        business_gst_registered — whether the business is registered for GST.
+            When False (or the business is outside India), all tax is routed
+            to the generic bucket regardless of country. Only Indian businesses
+            with is_gst_registered=True get CGST/SGST/IGST logic.
     """
     subtotal  = unit_price * quantity
     total_tax = (subtotal * tax_rate) / Decimal("100")
@@ -68,6 +78,7 @@ def calculate_item_tax(
         business_state           = (business_state or "").strip().lower(),
         counterparty_country_code= (counterparty_country_code or "").strip().upper(),
         counterparty_state       = (counterparty_state or "").strip().lower(),
+        business_gst_registered  = business_gst_registered,
     )
 
     cgst         = Decimal("0")
@@ -108,6 +119,7 @@ def _determine_tax_type(
     business_state:            str,
     counterparty_country_code: str,
     counterparty_state:        str,
+    business_gst_registered:   bool,
 ) -> str:
     """
     Returns "cgst_sgst", "igst", or "generic".
@@ -115,11 +127,11 @@ def _determine_tax_type(
     All inputs must already be stripped and uppercased/lowercased by caller.
     """
 
-    # ── Step 1: Non-Indian business → generic tax only ────────────────────────
-    if business_country_code != "IN":
+    # ── Step 1: Non-Indian business OR not GST-registered → generic tax only ──
+    if business_country_code != "IN" or not business_gst_registered:
         return "generic"
 
-    # ── Step 2: Indian business — apply GST rules ─────────────────────────────
+    # ── Step 2: Indian business AND GST-registered — apply GST rules ────────────
 
     # Rule 1: counterparty is outside India → IGST (cross-border)
     # Only triggers when counterparty_country_code is explicitly non-India.

@@ -322,7 +322,10 @@ export default function SettingsPage() {
                         {taxLabel} Registered
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                        Enable if your business is registered for {taxLabel}
+                        {country !== 'IN'
+                          ? `${taxLabel} registration is only available for Indian businesses`
+                          : `Enable if your business is registered for ${taxLabel}`
+                        }
                       </div>
                     </div>
                     <label style={{
@@ -332,15 +335,17 @@ export default function SettingsPage() {
                       <input
                         type="checkbox"
                         {...register('is_gst_registered')}
+                        disabled={country !== 'IN'}
                         style={{ opacity: 0, width: 0, height: 0 }}
                         aria-label={`${taxLabel} registered`}
                       />
                       <span style={{
                         position: 'absolute', inset: 0,
-                        background: isGstRegistered ? 'var(--accent-600)' : 'var(--bg-card)',
+                        background: country !== 'IN' ? 'var(--bg-muted)' : isGstRegistered ? 'var(--accent-600)' : 'var(--bg-card)',
                         border: '1px solid var(--border)',
                         borderRadius: 24,
                         transition: '0.2s',
+                        opacity: country !== 'IN' ? 0.5 : 1,
                       }}>
                         <span style={{
                           position: 'absolute', top: 2,

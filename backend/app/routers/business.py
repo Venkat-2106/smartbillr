@@ -54,8 +54,22 @@ async def update_my_business(
     if not business:
         return error_response("Business not found", 404)
 
-    # Only update fields that were actually sent
+    # ── FIX 3: Validate GST registration consistency ──
+    # Prevent toggling is_gst_registered=true for non-Indian businesses
+    # or when GSTIN is empty (the backend is the source of truth for business_country_code).
     update_data = payload.dict(exclude_unset=True)
+    new_is_gst = update_data.get("is_gst_registered")
+    new_gstin  = update_data.get("gstin")
+    effective_country = business.business_country_code or "IN"
+    effective_gst_registered = new_is_gst if new_is_gst is not None else (business.is_gst_registered or False)
+    effective_gstin = new_gstin if new_gstin is not None else (business.gstin or "")
+
+    if effective_gst_registered:
+        if effective_country != "IN":
+            return error_response("GST registration is only available for Indian businesses.", 400)
+        if not effective_gstin:
+            return error_response("GSTIN is required when GST registration is enabled.", 400)
+
     for field, value in update_data.items():
         setattr(business, field, value)
 

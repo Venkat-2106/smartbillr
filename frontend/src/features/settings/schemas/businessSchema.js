@@ -9,4 +9,20 @@ export const businessSchema = z.object({
   business_country_code: z.string().max(5).optional().or(z.literal('')),
   gstin: z.string().max(50).optional().or(z.literal('')),
   is_gst_registered: z.boolean().optional(),
-})
+}).refine(
+  (data) => {
+    if (data.is_gst_registered) {
+      if (data.business_country_code && data.business_country_code !== 'IN') {
+        return false
+      }
+      if (!data.gstin || data.gstin.trim() === '') {
+        return false
+      }
+    }
+    return true
+  },
+  {
+    message: 'GST registration is only available for Indian businesses with a valid GSTIN',
+    path: ['is_gst_registered'],
+  }
+)

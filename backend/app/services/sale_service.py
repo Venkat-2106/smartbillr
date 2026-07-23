@@ -162,9 +162,12 @@ async def insert_sale_items(db: AsyncSession, business_id: str, new_sale_id: str
         product = product_cache[str(item.product_id)]
         item_mrp = str(product.prod_mrp) if product.prod_mrp is not None else None
         cost_price = str(product.prod_cost_price) if product.prod_cost_price is not None else None
-        # Use frontend tax_rate if provided (> 0), otherwise let the DB trigger
-        # fall back to the product's master tax_rate.
-        gst_rate = str(item.tax_rate) if item.tax_rate is not None and item.tax_rate > 0 else None
+        # Pass frontend tax_rate to DB when provided (including zero — lets the
+        # user explicitly override a product's master rate).  The DB trigger
+        # fn_sale_stock_movement only uses NEW.gst_rate when > 0; a NULL
+        # gst_rate still causes the trigger to fall back to the product's
+        # master tax_rate.
+        gst_rate = str(item.tax_rate) if item.tax_rate is not None else None
         value_clauses.append(
             f"(:bid_{idx}, :sid_{idx}, :pid_{idx}, :qty_{idx}, :price_{idx}, :mrp_{idx}, :cost_{idx}, :gst_{idx})"
         )

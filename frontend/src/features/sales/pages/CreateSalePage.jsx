@@ -470,7 +470,7 @@ export default function CreateSalePage() {
                   muted
                 />
               )}
-              <OrderSummaryRow label="Tax" value={formatCurrency(totals.taxTotal, country)} muted />
+              <OrderSummaryRow label={taxLabel} value={formatCurrency(totals.taxTotal, country)} muted />
               <div style={{ borderTop: '1.5px solid var(--border)', paddingTop: 10, marginTop: 2 }}>
                 <OrderSummaryRow label="Grand Total" value={formatCurrency(totals.grandTotal, country)} bold />
               </div>

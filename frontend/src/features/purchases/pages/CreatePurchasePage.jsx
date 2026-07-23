@@ -67,6 +67,8 @@ export default function CreatePurchasePage() {
   const queryClient = useQueryClient()
   const business  = useAuthStore(s => s.business)
   const country   = business?.business_country_code || 'IN'
+  const isGstRegistered = business?.is_gst_registered || false
+  const taxLabel = isGstRegistered ? 'GST' : 'Tax'
 
   // ── Form state ───────────────────────────────────────────────────────────
   const [suppId,        setSuppId]        = useState('')
@@ -452,7 +454,7 @@ export default function CreatePurchasePage() {
                 gap: 10, paddingBottom: 10,
                 borderBottom: '1px solid var(--border)', marginBottom: 4,
               }}>
-                {['Product', 'Qty', 'Cost Price', 'Tax %', 'Total', ''].map((h, i) => (
+                {['Product', 'Qty', 'Cost Price', `${taxLabel} %`, 'Total', ''].map((h, i) => (
                   <span key={i} style={{
                     fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
                     textTransform: 'uppercase', letterSpacing: '0.07em',
@@ -513,7 +515,7 @@ export default function CreatePurchasePage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <PurchaseOrderSummaryRow label="Subtotal" value={formatCurrency(totals.subtotal, country)} />
                 {totals.taxTotal > 0 && (
-                  <PurchaseOrderSummaryRow label="Tax" value={formatCurrency(totals.taxTotal, country)} muted />
+                  <PurchaseOrderSummaryRow label={taxLabel} value={formatCurrency(totals.taxTotal, country)} muted />
                 )}
                 {totals.discountAmt > 0 && (
                   <PurchaseOrderSummaryRow

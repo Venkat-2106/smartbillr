@@ -13,7 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSales } from '../hooks/useSales';
 import { fetchSalesSummary } from '../api/salesApi';
-import { SALES_CSV_COLUMNS } from '../../../shared/utils/csvExport';
+import { getSalesCsvColumns } from '../../../shared/utils/csvExport';
 import SaleDetailDrawer from '../components/SaleDetailDrawer';
 import {
   Table, Button, Badge, SearchBar,
@@ -251,7 +251,7 @@ export default function SalesPage() {
         onBack={() => navigate('/dashboard')}
         action={
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <ExportButton onFetch={handleExport} filename="sales" columns={SALES_CSV_COLUMNS} />
+            <ExportButton onFetch={handleExport} filename="sales" columns={getSalesCsvColumns(country)} />
             {canCreate && (
               <Button variant="primary" onClick={() => navigate('/sales/new')} data-shortcut="new">
                 + New Invoice

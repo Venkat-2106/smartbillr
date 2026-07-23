@@ -21,9 +21,9 @@ export function useUpdateBusiness() {
     mutationFn: updateBusiness,
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['business'] })
-      const business = data?.data
-      if (business) {
-        useAuthStore.getState().setBusiness(business)
+      // success_response() returns the object directly — no { data: ... } wrapper
+      if (data) {
+        useAuthStore.getState().setBusiness(data)
       }
       toast.success('Settings saved')
     },

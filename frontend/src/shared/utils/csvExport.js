@@ -325,6 +325,42 @@ export const SALES_CSV_COLUMNS = [
     format: (val) => formatDateCSV(val) },
 ];
 
+/**
+ * Returns country-aware sales CSV columns.
+ * For India: includes CGST, SGST, IGST breakdown columns.
+ * For other countries: excludes GST-specific columns (uses generic Tax Total).
+ */
+export function getSalesCsvColumns(country = '') {
+  const c = (country || '').toUpperCase();
+  const taxFormatter = (val) => (val != null ? Number(val).toFixed(2) : '0.00');
+  const dateFormatter = (val) => formatDateCSV(val);
+
+  const baseColumns = [
+    { key: 'invoice_no',            label: 'Invoice No' },
+    { key: 'customer_name',         label: 'Customer' },
+    { key: 'sales_total_amount',    label: 'Subtotal', format: taxFormatter },
+    { key: 'tax_total',             label: 'Tax Total', format: taxFormatter },
+  ];
+
+  // India-specific CGST/SGST/IGST breakdown
+  if (c === 'IN') {
+    baseColumns.push(
+      { key: 'cgst_total', label: 'CGST', format: taxFormatter },
+      { key: 'sgst_total', label: 'SGST', format: taxFormatter },
+      { key: 'igst_total', label: 'IGST', format: taxFormatter },
+    );
+  }
+
+  baseColumns.push(
+    { key: 'sales_final_amount',    label: 'Total Amount', format: taxFormatter },
+    { key: 'sales_payment_status',  label: 'Payment Status' },
+    { key: 'sales_payment_method',  label: 'Payment Method' },
+    { key: 'sales_created_at',      label: 'Invoice Date', format: dateFormatter },
+  );
+
+  return baseColumns;
+}
+
 // ── PAYMENT CSV COLUMNS ───────────────────────────────────────────────────────
 export const PAYMENT_CSV_COLUMNS = [
   { key: 'invoice_no',          label: 'Invoice No' },
@@ -365,6 +401,44 @@ export const PURCHASE_CSV_COLUMNS = [
   { key: 'last_updated_by',    label: 'Last Updated By',
     format: (val) => val || '' },
 ];
+
+/**
+ * Returns country-aware purchase CSV columns.
+ * For India: includes CGST, SGST, IGST breakdown columns.
+ * For other countries: excludes GST-specific columns (uses generic Tax Total).
+ */
+export function getPurchaseCsvColumns(country = '') {
+  const c = (country || '').toUpperCase();
+  const taxFormatter = (val) => (val != null ? Number(val).toFixed(2) : '0.00');
+  const dateFormatter = (val) => formatDateCSV(val);
+
+  const baseColumns = [
+    { key: 'supp_name',          label: 'Supplier' },
+    { key: 'pur_total_amount',   label: 'Subtotal', format: taxFormatter },
+    { key: 'pur_discount',       label: 'Discount', format: taxFormatter },
+    { key: 'pur_tax_total',      label: 'Tax Total', format: taxFormatter },
+  ];
+
+  // India-specific CGST/SGST/IGST breakdown
+  if (c === 'IN') {
+    baseColumns.push(
+      { key: 'pur_cgst_total', label: 'CGST', format: taxFormatter },
+      { key: 'pur_sgst_total', label: 'SGST', format: taxFormatter },
+      { key: 'pur_igst_total', label: 'IGST', format: taxFormatter },
+    );
+  }
+
+  baseColumns.push(
+    { key: 'pur_final_amount',   label: 'Total Amount', format: taxFormatter },
+    { key: 'pur_payment_status', label: 'Payment Status' },
+    { key: 'pur_created_at',     label: 'Purchase Date', format: dateFormatter },
+    { key: 'updated_at',         label: 'Last Updated', format: dateFormatter },
+    { key: 'last_updated_by',    label: 'Last Updated By', format: (val) => val || '' },
+  );
+
+  return baseColumns;
+}
+
 // ── STOCK CSV COLUMNS (with cost price / stock value — view_product_profit) ───
 export const STOCK_CSV_COLUMNS = [
   { key: 'prod_name',           label: 'Product Name' },

@@ -25,7 +25,7 @@ import {
 import { selectStyle } from '../../../shared/components/FormField'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate } from '../../../shared/utils/formatDate'
-import { PURCHASE_CSV_COLUMNS } from '../../../shared/utils/csvExport'
+import { getPurchaseCsvColumns } from '../../../shared/utils/csvExport'
 import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
 
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' }
@@ -218,7 +218,7 @@ export default function PurchasesPage() {
             <ExportButton
               onFetch={handleExport}
               filename="purchases"
-              columns={PURCHASE_CSV_COLUMNS}
+              columns={getPurchaseCsvColumns(country)}
             />
 
             {canCreate && (

@@ -2,7 +2,7 @@
 //   Same fix as SubscriptionPage — trial/subscription end dates gated on
 //   subscription_type to prevent both dates showing simultaneously.
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from 'react-router-dom'
@@ -22,7 +22,7 @@ import { getTaxLabel } from '../../../shared/utils/formatTax'
 
 const BASE_TABS = [
   { key: 'general', label: 'Business Info' },
-  { key: 'tax', label: 'Tax Settings', gstOnly: true },
+  { key: 'tax', label: 'Tax Settings' },
   { key: 'pricing', label: 'Pricing & Plans' },
 ]
 
@@ -36,15 +36,11 @@ export default function SettingsPage() {
 
   const business = data?.data ?? data
 
-  // FIX: Tax Settings tab only shown for GST-using countries (IN, AU, SG, NZ).
-  // Labels inside the tab use getTaxLabel() for country-appropriate text.
+  // FIX: Tax Settings tab shown for ALL countries. Labels inside the tab
+  // use getTaxLabel() for country-appropriate text (GST, VAT, Sales Tax, etc.)
   const country = business?.business_country_code || ''
   const taxLabel = getTaxLabel(country)
-  const isGstCountry = taxLabel === 'GST'
-  const tabs = useMemo(
-    () => BASE_TABS.filter(t => !t.gstOnly || isGstCountry),
-    [isGstCountry]
-  )
+  const tabs = BASE_TABS
 
   const {
     register,

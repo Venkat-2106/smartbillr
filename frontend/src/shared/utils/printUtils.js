@@ -12,7 +12,7 @@
 //
 //   This file centralises the entire print system:
 //     - getPrintRoot()         → the hidden print node (injected once)
-//     - buildPrintHeader()     → store name, address, GSTIN, phone, email
+//     - buildPrintHeader()     → store name, address, tax number, phone, email
 //     - buildPrintWatermark()  → "SmartBillr" diagonal background watermark
 //     - buildPrintFooter()     → "Printed from SmartBillr · Generated on …"
 //     - buildPrintMetaRow()    → one labelled field row (reusable)
@@ -60,6 +60,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { formatGeneratedOn } from './formatDate';
+import { getTaxLabel } from './formatTax';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -228,8 +229,12 @@ export function buildPrintHeader(business = {}) {
   const gstin   = escapeHTML(business?.gstin            || '');
   const phone   = escapeHTML(business?.business_phone   || '');
   const email   = escapeHTML(business?.business_email   || '');
+  const country = business?.business_country_code || '';
 
   const addressLine = [address, state].filter(Boolean).join(', ');
+
+  // Use country-aware tax label (GSTIN for India, Tax Number for others)
+  const taxLabel = country === 'IN' ? 'GSTIN' : `${getTaxLabel(country)} Number`;
 
   return `
     <div style="
@@ -252,10 +257,10 @@ export function buildPrintHeader(business = {}) {
         ${email ? `<div style="font-size: 11px; color: #6b7280; margin-top: 1px;">✉ ${email}</div>` : ''}
       </div>
 
-      <!-- Right: GSTIN + Generated On -->
+      <!-- Right: Tax Number + Generated On -->
       <div style="text-align: right; flex: 0 1 auto;">
         ${gstin ? `
-          <div style="font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.07em;">GSTIN</div>
+          <div style="font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.07em;">${taxLabel}</div>
           <div style="font-size: 12px; font-weight: 700; color: #111827; font-family: monospace; letter-spacing: 0.05em;">${gstin}</div>
         ` : ''}
         <div style="margin-top: ${gstin ? '8px' : '0'};">

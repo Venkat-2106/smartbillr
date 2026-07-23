@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { Button, Badge, ConfirmDialog } from '../../../shared/components'
 import api from '../../../api/axios'
+import { getTaxLabel } from '../../../shared/utils/formatTax'
 
 const PLAN_OPTIONS = ['trial', 'monthly', 'annual', 'lifetime']
 const PAYMENT_STATUS_OPTIONS = ['pending', 'paid', 'suspended']
@@ -124,7 +125,7 @@ export default function AdminBusinessDetailPage() {
           {row('Name', biz.business_name)}
           {row('Email', biz.business_email)}
           {row('Phone', biz.business_phone)}
-          {row('GSTIN', biz.gstin)}
+          {row(biz.business_country_code === 'IN' ? 'GSTIN' : `${getTaxLabel(biz.business_country_code)} Number`, biz.gstin)}
           {row('State', biz.business_state)}
           {row('Country', biz.business_country_code)}
           {row('Created', biz.created_at ? new Date(biz.created_at).toLocaleDateString() : '—')}

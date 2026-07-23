@@ -43,6 +43,7 @@ export default function SalesPage() {
   const location = useLocation();
   const business       = useAuthStore(s => s.business);
   const country        = business?.business_country_code || 'IN';
+  const isGstRegistered = business?.is_gst_registered || false;
   const subscription   = useAuthStore(s => s.subscription);
   const hasPermission  = useAuthStore(s => s.hasPermission);
   const canCreate      = hasPermission('sales.create');
@@ -251,7 +252,7 @@ export default function SalesPage() {
         onBack={() => navigate('/dashboard')}
         action={
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <ExportButton onFetch={handleExport} filename="sales" columns={getSalesCsvColumns(country)} />
+            <ExportButton onFetch={handleExport} filename="sales" columns={getSalesCsvColumns(country, isGstRegistered)} />
             {canCreate && (
               <Button variant="primary" onClick={() => navigate('/sales/new')} data-shortcut="new">
                 + New Invoice

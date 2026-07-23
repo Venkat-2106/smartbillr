@@ -137,6 +137,7 @@ export default function PurchasesPage() {
   const subscription = useAuthStore(s => s.subscription)
   const business  = useAuthStore(s => s.business)
   const country   = business?.business_country_code || 'IN'
+  const isGstRegistered = business?.is_gst_registered || false
 
   const {
     purchases,
@@ -218,7 +219,7 @@ export default function PurchasesPage() {
             <ExportButton
               onFetch={handleExport}
               filename="purchases"
-              columns={getPurchaseCsvColumns(country)}
+              columns={getPurchaseCsvColumns(country, isGstRegistered)}
             />
 
             {canCreate && (

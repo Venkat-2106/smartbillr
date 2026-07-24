@@ -6,7 +6,6 @@ import {
   fetchAllExpensesForExport,
   fetchExpense,
   createExpense,
-  updateExpense,
   deleteExpense,
 } from '../api/expensesApi'
 import { localDayStartUTC, localDayEndUTC } from '../../../shared/utils/dateUtils'
@@ -90,17 +89,6 @@ export function useExpenses() {
     },
   })
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => updateExpense(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['expenses'] })
-      toast.success('Expense updated')
-    },
-    onError: (err) => {
-      toast.error(err?.response?.data?.message || 'Failed to update expense')
-    },
-  })
-
   const deleteMutation = useMutation({
     mutationFn: deleteExpense,
     onSuccess: () => {
@@ -130,10 +118,8 @@ export function useExpenses() {
     totalItems,
     handleExport,
     createExpense: (data, callbacks) => createMutation.mutate(data, callbacks),
-    updateExpense: (id, data, callbacks) => updateMutation.mutate({ id, data }, callbacks),
     deleteExpense: (id, callbacks) => deleteMutation.mutate(id, callbacks),
     isCreating: createMutation.isPending,
-    isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
   }
 }

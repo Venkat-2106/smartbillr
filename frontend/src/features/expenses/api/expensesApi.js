@@ -52,11 +52,6 @@ export async function createExpense(payload) {
   return res.data
 }
 
-export async function updateExpense(expenseId, payload) {
-  const res = await api.put(`/expenses/${expenseId}/`, payload)
-  return res.data
-}
-
 export async function deleteExpense(expenseId) {
   const res = await api.delete(`/expenses/${expenseId}/`)
   return res.data

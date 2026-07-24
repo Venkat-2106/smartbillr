@@ -25,8 +25,8 @@
 #   - (Future: sales returns, purchase returns may also auto-create.)
 #
 # IMPORTANT: Auto-generated expenses (source_type IS NOT NULL) cannot be
-# edited or deleted via the expense CRUD endpoints.  Both update_expense
-# and delete_expense check source_type and return HTTP 400 if set.
+# deleted via the expense CRUD endpoints.  delete_expense checks source_type
+# and returns HTTP 400 if set.
 # The user must modify the SOURCE record (e.g., the purchase) instead.
 # This prevents the expenses ledger from drifting out of sync with its
 # source module.
@@ -40,7 +40,7 @@ from sqlalchemy import select, text
 from app.database import get_async_db
 from app.middleware.rbac import require_permission, async_set_rls_gucs_after_commit
 from app.models.expense import Expense
-from app.schemas.expense import ExpenseCreate, ExpenseUpdate
+from app.schemas.expense import ExpenseCreate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts, fmt_date
@@ -325,57 +325,6 @@ async def get_expense(
     )
 
     return success_response(expense_dict)
-
-
-# ─────────────────────────────────────────
-# PUT /expenses/{expense_id} → Update expense
-# ─────────────────────────────────────────
-@router.put("/{expense_id}")
-async def update_expense(
-    expense_id: str,
-    data: ExpenseUpdate,
-    current_user: dict = Depends(require_permission("expenses.manage")),
-    db: AsyncSession = Depends(get_async_db)
-):
-    business_id = current_user["business_id"]
-
-    expense = (await db.execute(select(Expense).where(
-        Expense.expense_id == expense_id,
-        Expense.business_id == business_id,
-        Expense.is_deleted == False
-    ))).scalar_one_or_none()
-
-    if not expense:
-        return error_response("Expense not found", status_code=404)
-
-    if expense.source_type:
-        return error_response(
-            f"This expense was auto-generated from a {expense.source_type} and cannot be "
-            f"edited or deleted directly. Adjust the source {expense.source_type} instead.",
-            status_code=400
-        )
-
-    if data.expense_category is not None:
-        expense.expense_category = data.expense_category
-    if data.expense_amount is not None:
-        expense.expense_amount = data.expense_amount
-    if data.expense_date is not None:
-        expense.expense_date = data.expense_date
-    if data.expense_notes is not None:
-        expense.expense_notes = data.expense_notes
-
-    expense.updated_by = current_user["user_id"]
-
-    await db.commit()
-    await async_set_rls_gucs_after_commit(db, current_user)
-    await db.refresh(expense)
-
-    updated_by_name = current_user.get("full_name")
-
-    return success_response({
-        "message": "Expense updated successfully",
-        "expense": expense_to_dict(expense, last_updated_by=updated_by_name)
-    })
 
 
 # ─────────────────────────────────────────

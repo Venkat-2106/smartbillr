@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useCallback, useEffect } from 'react'
+﻿import { useState, useMemo, useEffect } from 'react'
 
 // UI/UX Audit (2026-07-18):
 //   Finding #1  — PageHeader replaces inline page title markup
@@ -49,7 +49,7 @@ const DEFAULT_VALUES = {
   expense_notes: '',
 }
 
-function buildColumns(canManage, onEdit, onDelete, country) {
+function buildColumns(canManage, onDelete, country) {
   const catLabels = ALLOWED_CATEGORIES.reduce((acc, c) => {
     acc[c.value] = c.label
     return acc
@@ -148,16 +148,9 @@ function buildColumns(canManage, onEdit, onDelete, country) {
     ...(canManage ? [{
       key: 'actions',
       label: '',
-      width: 140,
+      width: 100,
       render: (row) => (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={(e) => { e.stopPropagation(); onEdit(row) }}
-          >
-            Edit
-          </Button>
           <Button
             variant="danger"
             size="sm"
@@ -186,8 +179,8 @@ export default function ExpensesPage() {
     sortKey, sortDir, handleSort,
     page, setPage, totalPages, totalItems,
     handleExport,
-    createExpense, updateExpense, deleteExpense,
-    isCreating, isUpdating, isDeleting,
+    createExpense, deleteExpense,
+    isCreating, isDeleting,
   } = useExpenses()
 
   const [bannerDismissed, setBannerDismissed] = useState(false)
@@ -201,7 +194,6 @@ export default function ExpensesPage() {
   })
 
   const [showModal, setShowModal] = useState(false)
-  const [editingExpense, setEditingExpense] = useState(null)
   const [deletingExpense, setDeletingExpense] = useState(null)
   const [showDelete, setShowDelete] = useState(false)
   const [selectedExpenseId, setSelectedExpenseId] = useState(null)
@@ -210,11 +202,8 @@ export default function ExpensesPage() {
     rows: expenses,
     rowKey: 'expense_id',
     onEnterRow: (row) => setSelectedExpenseId(row.expense_id),
-    onEditRow: canManage ? (row) => handleOpenEdit(row) : undefined,
     onDeleteRow: canManage ? (row) => handleDeleteClick(row) : undefined,
   })
-
-  const isEditing = !!editingExpense?.expense_id
 
   const {
     register,
@@ -227,25 +216,12 @@ export default function ExpensesPage() {
   })
 
   function handleOpenAdd() {
-    setEditingExpense({})
     reset(DEFAULT_VALUES)
     setShowModal(true)
   }
 
-  const handleOpenEdit = useCallback((expense) => {
-    setEditingExpense(expense)
-    reset({
-      expense_category: expense.expense_category || '',
-      expense_amount: String(expense.expense_amount ?? ''),
-      expense_date: expense.expense_date || '',
-      expense_notes: expense.expense_notes || '',
-    })
-    setShowModal(true)
-  }, [reset])
-
   function handleCloseModal() {
     setShowModal(false)
-    setEditingExpense(null)
     reset(DEFAULT_VALUES)
   }
 
@@ -267,11 +243,7 @@ export default function ExpensesPage() {
     if (formData.expense_date) payload.expense_date = formData.expense_date
     if (formData.expense_notes) payload.expense_notes = formData.expense_notes
 
-    if (isEditing) {
-      updateExpense(editingExpense.expense_id, payload, { onSuccess: handleCloseModal })
-    } else {
-      createExpense(payload, { onSuccess: handleCloseModal })
-    }
+    createExpense(payload, { onSuccess: handleCloseModal })
   }
 
   function onConfirmDelete() {
@@ -279,8 +251,8 @@ export default function ExpensesPage() {
   }
 
   const columns = useMemo(
-    () => buildColumns(canManage, handleOpenEdit, handleDeleteClick, country),
-    [canManage, country, handleOpenEdit]
+    () => buildColumns(canManage, handleDeleteClick, country),
+    [canManage, country]
   )
 
   function handleDateChange(field, value) {
@@ -457,14 +429,12 @@ export default function ExpensesPage() {
         onPageChange={setPage}
       />
 
-      {/* ADD / EDIT MODAL */}
+      {/* ADD EXPENSE MODAL */}
       <Modal
         open={showModal}
         onClose={handleCloseModal}
-        title={isEditing ? 'Edit Expense' : 'Add Expense'}
-        subtitle={isEditing
-          ? ALLOWED_CATEGORIES.find(c => c.value === editingExpense?.expense_category)?.label || editingExpense?.expense_category
-          : 'Record a new business expense'}
+        title="Add Expense"
+        subtitle="Record a new business expense"
         size="md"
       >
         <form onSubmit={handleSubmit(onSubmit)} noValidate>
@@ -510,16 +480,16 @@ export default function ExpensesPage() {
               variant="ghost"
               type="button"
               onClick={handleCloseModal}
-              disabled={isCreating || isUpdating}
+              disabled={isCreating}
             >
               Cancel
             </Button>
             <Button
               type="submit"
               variant="primary"
-              loading={isCreating || isUpdating}
+              loading={isCreating}
             >
-              {isEditing ? 'Save Changes' : 'Add Expense'}
+              Add Expense
             </Button>
           </Modal.Footer>
         </form>
@@ -541,10 +511,6 @@ export default function ExpensesPage() {
         <ExpenseDetailDrawer
           expenseId={selectedExpenseId}
           onClose={() => setSelectedExpenseId(null)}
-          onEdit={(expense) => {
-            setSelectedExpenseId(null)
-            handleOpenEdit(expense)
-          }}
           canManage={canManage}
         />
       )}

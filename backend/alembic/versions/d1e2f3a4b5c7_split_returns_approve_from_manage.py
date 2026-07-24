@@ -1,4 +1,10 @@
-"""split returns approve from manage
+"""split returns approve from manage (2026-07)
+
+Permission split for sales_returns and purchase_returns:
+  - "manage" (staff, manager, admin): create, list, delete returns.
+  - "approve" (manager, admin only): change status via PUT (approve/reject).
+  Staff with manage-only can create returns but non-pending statuses are
+  silently downgraded to "pending" in the POST endpoint.
 
 Revision ID: d1e2f3a4b5c7
 Revises: c6d7e8f9a0b1

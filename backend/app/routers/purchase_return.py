@@ -191,6 +191,10 @@ async def validate_return_items(
 
 # ─────────────────────────────────────────────
 # POST /purchase-returns → Create a return
+# ── PERMISSION SPLIT (2026-07) ──────────────────────────────────────────────
+# Requires "purchase_returns.manage" (staff, manager, admin).
+# If the caller lacks "purchase_returns.approve", any non-pending status is
+# silently downgraded to "pending" so staff can create but not approve.
 # ─────────────────────────────────────────────
 @router.post("/")
 async def create_purchase_return(
@@ -201,6 +205,8 @@ async def create_purchase_return(
     business_id = current_user["business_id"]
     user_id     = current_user["user_id"]
 
+    # ── PERMISSION SPLIT (2026-07) ──────────────────────────────────────────
+    # Staff with manage-only cannot approve on create — silently downgrade.
     can_approve = "purchase_returns.approve" in current_user["permissions"]
     requested_status = data.return_status or "pending"
     if requested_status != "pending" and not can_approve:
@@ -477,6 +483,9 @@ async def get_purchase_return(
 # PUT /purchase-returns/{return_id} → Update status
 # When approved + restock=true → stock REDUCES
 # (goods physically left your warehouse back to supplier)
+# ── PERMISSION SPLIT (2026-07) ──────────────────────────────────────────────
+# Requires "purchase_returns.approve" — only admin/manager can approve/reject.
+# Staff with manage-only are blocked here (403).
 # ─────────────────────────────────────────────
 @router.put("/{return_id}")
 async def update_purchase_return(

@@ -137,6 +137,8 @@ function buildColumns(canManage, onDelete, country) {
 export default function PurchaseReturnsPage() {
   const navigate = useNavigate()
   const { can } = usePermissions()
+  // ── PERMISSION SPLIT (2026-07) ──────────────────────────────────────────
+  // canManage = create/list/delete; canApprove = approve/reject status change.
   const canManage = can('purchase_returns.manage')
   const canApprove = can('purchase_returns.approve')
   const business  = useAuthStore(s => s.business)

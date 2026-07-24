@@ -6,12 +6,18 @@ class P:
     SALES_EDIT = "sales.edit"
     SALES_DELETE = "sales.delete"
     SALES_RETURNS_MANAGE = "sales_returns.manage"
+    # ── PERMISSION SPLIT (2026-07) ──────────────────────────────────────────
+    # "manage" allows creating, listing, and deleting returns.
+    # "approve" allows changing status (approve/reject) via PUT.
+    # Staff get manage-only; admin/manager get both.
     SALES_RETURNS_APPROVE = "sales_returns.approve"
     PURCHASES_VIEW = "purchases.view"
     PURCHASES_CREATE = "purchases.create"
     PURCHASES_EDIT = "purchases.edit"
     PURCHASES_DELETE = "purchases.delete"
     PURCHASE_RETURNS_MANAGE = "purchase_returns.manage"
+    # ── PERMISSION SPLIT (2026-07) ──────────────────────────────────────────
+    # Same pattern as sales_returns: manage = CRUD, approve = status change.
     PURCHASE_RETURNS_APPROVE = "purchase_returns.approve"
     PAYMENTS_MANAGE = "payments.manage"
     CUSTOMERS_MANAGE = "customers.manage"
@@ -55,6 +61,9 @@ class P:
         REPORTS_VIEW,
     ]
 
+    # Staff get manage (create/list/delete) but NOT approve — they cannot
+    # change return status.  Non-pending statuses are silently downgraded
+    # to "pending" in the POST create endpoint if the caller lacks approve.
     STAFF = [
         DASHBOARD_VIEW,
         SALES_VIEW, SALES_CREATE,

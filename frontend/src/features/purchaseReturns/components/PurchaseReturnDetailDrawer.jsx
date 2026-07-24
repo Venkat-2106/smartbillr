@@ -84,6 +84,9 @@ function buildReturnPrintHTML(business, detail) {
   `
 }
 
+// ── PERMISSION SPLIT (2026-07) ──────────────────────────────────────────────
+// canApprove gates the Approve/Reject buttons (admin/manager only).
+// canManage is kept for other manage-level actions if needed in future.
 export default function PurchaseReturnDetailDrawer({ returnId, onClose, onStatusUpdate, canApprove, canManage }) {
   const [actionLoading, setActionLoading] = useState(false)
   const [printHovered, setPrintHovered] = useState(false)

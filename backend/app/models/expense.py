@@ -1,6 +1,7 @@
 from sqlalchemy import Column, String, Boolean, Text, Numeric, Date, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from app.database import Base
+from datetime import datetime, timezone
 import uuid
 
 
@@ -16,7 +17,8 @@ class Expense(Base):
     expense_notes = Column(Text, nullable=True)
     is_deleted = Column(Boolean, default=False)
     # FIX: DB type is timestamp without time zone — was incorrectly String
-    created_at = Column(DateTime, nullable=True)
+    # Default to NOW() if not explicitly set by the caller.
+    created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     created_by = Column(UUID(as_uuid=True), nullable=True)
     updated_at = Column(DateTime, nullable=True)
     # DB trigger trg_expenses_updated_by fires on every UPDATE and auto-sets

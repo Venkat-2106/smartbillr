@@ -200,6 +200,10 @@ async def validate_return_items(db: AsyncSession, sale_id: str, business_id: str
 #      columns (sale_item_id, unit_price, business_id, original_qty, original_unit_price).
 #      The DB trigger trg_sales_return_stock fires on sales_returns UPDATE to handle
 #      stock restocking when status changes to 'approved'.
+# ── PERMISSION SPLIT (2026-07) ──────────────────────────────────────────────
+# Requires "sales_returns.manage" (staff, manager, admin).
+# If the caller lacks "sales_returns.approve", any non-pending status is
+# silently downgraded to "pending" so staff can create but not approve.
 # ─────────────────────────────────────────
 @router.post("/")
 async def create_sales_return(
@@ -210,6 +214,8 @@ async def create_sales_return(
     business_id = current_user["business_id"]
     user_id = current_user["user_id"]
 
+    # ── PERMISSION SPLIT (2026-07) ──────────────────────────────────────────
+    # Staff with manage-only cannot approve on create — silently downgrade.
     can_approve = "sales_returns.approve" in current_user["permissions"]
     requested_status = data.return_status or "pending"
     if requested_status != "pending" and not can_approve:
@@ -492,6 +498,9 @@ async def get_sales_return(
 # The DB trigger trg_sales_return_stock fires on UPDATE to sales_returns.
 # When status becomes 'approved' and restock=true, it adds stock back automatically.
 # When status rolls back from 'approved', it reverses the stock addition.
+# ── PERMISSION SPLIT (2026-07) ──────────────────────────────────────────────
+# Requires "sales_returns.approve" — only admin/manager can approve/reject.
+# Staff with manage-only are blocked here (403).
 # ─────────────────────────────────────────
 @router.put("/{return_id}")
 async def update_sales_return(

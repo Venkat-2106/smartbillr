@@ -32,6 +32,7 @@
 # source module.
 # ─────────────────────────────────────────────────────────────────────────────
 
+import re
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -71,6 +72,22 @@ def expense_to_dict(e, last_updated_by=None):
     }
 
 
+def resolve_expense_notes(notes, source_type, source_id, **source_names):
+    """Replace raw UUIDs in auto-generated notes with human-readable names."""
+    if not notes or not source_id:
+        return notes
+    uuid_re = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', re.IGNORECASE)
+    if source_type == "purchase":
+        label = source_names.get("source_supplier")
+        if label:
+            return uuid_re.sub(label, notes)
+    if source_type == "sales_return":
+        label = source_names.get("source_invoice") or source_names.get("source_customer")
+        if label:
+            return uuid_re.sub(label, notes)
+    return notes
+
+
 def expense_to_dict_list(row):
     return {
         "expense_id":      str(row.expense_id),
@@ -78,7 +95,13 @@ def expense_to_dict_list(row):
         "expense_category": row.expense_category,
         "expense_amount":  float(row.expense_amount),
         "expense_date":    fmt_date(row.expense_date),
-        "expense_notes":   row.expense_notes,
+        "expense_notes":   resolve_expense_notes(
+            row.expense_notes, row.source_type,
+            getattr(row, "source_id", None),
+            source_supplier=getattr(row, "source_supplier", None),
+            source_invoice=getattr(row, "source_invoice", None),
+            source_customer=getattr(row, "source_customer", None),
+        ),
         "created_at":      fmt_ts(row.created_at),
         "updated_at":      fmt_ts(row.updated_at),
         "updated_by":      str(row.updated_by)  if row.updated_by  else None,
@@ -174,13 +197,26 @@ async def get_all_expenses(
 
     list_sql = f"""
         SELECT e.expense_id, e.business_id, e.expense_category,
-               e.expense_amount, e.expense_date, e.expense_notes,
+               e.expense_amount, e.expense_date,
                e.created_at, e.updated_at, e.updated_by,
                e.source_type, e.source_id,
                prof.full_name AS last_updated_by,
+               s.supp_name   AS source_supplier,
+               sl.invoice_no AS source_invoice,
+               sc.cust_name  AS source_customer,
+               e.expense_notes,
                COUNT(*) OVER() AS total_count
         FROM expenses e
         LEFT JOIN profiles prof ON prof.id = e.updated_by
+        LEFT JOIN purchases pur ON e.source_type = 'purchase'
+           AND e.source_id = pur.pur_id
+           AND pur.business_id = CAST(:bid AS uuid)
+        LEFT JOIN suppliers s ON pur.supp_id = s.supp_id
+        LEFT JOIN sales_returns sr ON e.source_type = 'sales_return'
+           AND e.source_id = sr.return_id
+           AND sr.business_id = CAST(:bid AS uuid)
+        LEFT JOIN sales sl ON sr.sale_id = sl.sales_id
+        LEFT JOIN customers sc ON sl.customer_id = sc.cust_id
         WHERE e.business_id = CAST(:bid AS uuid)
           AND e.is_deleted = false
         {extra_where}
@@ -258,7 +294,37 @@ async def get_expense(
     else:
         updated_by_name = None
 
-    return success_response(expense_to_dict(expense, last_updated_by=updated_by_name))
+    # Resolve source names for auto-generated expenses
+    source_supplier = source_invoice = source_customer = None
+    if expense.source_type == "purchase" and expense.source_id:
+        src_row = (await db.execute(text("""
+            SELECT s.supp_name
+            FROM purchases pur
+            LEFT JOIN suppliers s ON pur.supp_id = s.supp_id
+            WHERE pur.pur_id = :sid AND pur.business_id = CAST(:bid AS uuid)
+        """), {"sid": str(expense.source_id), "bid": business_id})).fetchone()
+        source_supplier = src_row.supp_name if src_row else None
+    elif expense.source_type == "sales_return" and expense.source_id:
+        src_row = (await db.execute(text("""
+            SELECT sl.invoice_no, sc.cust_name
+            FROM sales_returns sr
+            LEFT JOIN sales sl ON sr.sale_id = sl.sales_id
+            LEFT JOIN customers sc ON sl.customer_id = sc.cust_id
+            WHERE sr.return_id = :sid AND sr.business_id = CAST(:bid AS uuid)
+        """), {"sid": str(expense.source_id), "bid": business_id})).fetchone()
+        if src_row:
+            source_invoice = src_row.invoice_no
+            source_customer = src_row.cust_name
+
+    expense_dict = expense_to_dict(expense, last_updated_by=updated_by_name)
+    expense_dict["expense_notes"] = resolve_expense_notes(
+        expense.expense_notes, expense.source_type, expense.source_id,
+        source_supplier=source_supplier,
+        source_invoice=source_invoice,
+        source_customer=source_customer,
+    )
+
+    return success_response(expense_dict)
 
 
 # ─────────────────────────────────────────

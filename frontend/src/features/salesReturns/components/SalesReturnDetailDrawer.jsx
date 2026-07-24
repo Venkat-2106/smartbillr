@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { XMarkIcon, ArrowPathIcon, PrinterIcon } from '@heroicons/react/24/outline'
 import { fetchSalesReturn, updateSalesReturnStatus } from '../api/salesReturnsApi'
-import { Button, Spinner } from '../../../shared/components'
+import { Button, Spinner, ConfirmDialog } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate, formatDateTime } from '../../../shared/utils/formatDate'
 import {
@@ -87,6 +87,7 @@ function buildReturnPrintHTML(business, detail) {
 export default function SalesReturnDetailDrawer({ returnId, onClose, onStatusUpdate, canManage }) {
   const [actionLoading, setActionLoading] = useState(false)
   const [printHovered, setPrintHovered] = useState(false)
+  const [showApproveConfirm, setShowApproveConfirm] = useState(false)
   const queryClient = useQueryClient()
   const business  = useAuthStore(s => s.business)
   const country   = business?.business_country_code || 'IN'
@@ -113,6 +114,11 @@ export default function SalesReturnDetailDrawer({ returnId, onClose, onStatusUpd
   })
 
   function handleApprove() {
+    setShowApproveConfirm(true)
+  }
+
+  function confirmApprove() {
+    setShowApproveConfirm(false)
     setActionLoading(true)
     updateMutation.mutate(
       { id: returnId, payload: { return_status: 'approved', restock: detail?.restock ?? false } },
@@ -387,6 +393,18 @@ export default function SalesReturnDetailDrawer({ returnId, onClose, onStatusUpd
           ) : null}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={showApproveConfirm}
+        onClose={() => setShowApproveConfirm(false)}
+        onConfirm={confirmApprove}
+        title="Approve Return?"
+        message="Once a return is approved, it cannot be deleted. An expense entry will be created for the refund amount."
+        confirmText={actionLoading ? 'Approving\u2026' : 'Yes, Approve'}
+        cancelText="Cancel"
+        variant="warning"
+        loading={actionLoading}
+      />
     </>
   )
 }

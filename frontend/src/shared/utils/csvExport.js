@@ -302,7 +302,7 @@ export function getSalesCsvColumns(country = '', isGstRegistered = false) {
 
   const baseColumns = [
     { key: 'invoice_no',            label: 'Invoice No' },
-    { key: 'customer_name',         label: 'Customer' },
+    { key: 'customer_name',         label: 'Customer', format: (val) => val || 'Walk-in' },
     { key: 'sales_total_amount',    label: 'Subtotal', format: taxFormatter },
     { key: 'tax_total',             label: 'Tax Total', format: taxFormatter },
   ];
@@ -321,6 +321,8 @@ export function getSalesCsvColumns(country = '', isGstRegistered = false) {
     { key: 'sales_payment_status',  label: 'Payment Status' },
     { key: 'sales_payment_method',  label: 'Payment Method' },
     { key: 'sales_created_at',      label: 'Invoice Date', format: dateFormatter },
+    { key: 'updated_at',            label: 'Last Updated', format: dateFormatter },
+    { key: 'last_updated_by',       label: 'Last Updated By', format: (val) => val || '' },
   );
 
   return baseColumns;
@@ -340,6 +342,8 @@ export const PAYMENT_CSV_COLUMNS = [
   { key: 'payment_method',      label: 'Payment Method' },
   { key: 'payment_paid_at',     label: 'Last Payment Date',
     format: (val) => formatDateCSV(val) },
+  { key: 'last_updated_by',    label: 'Last Updated By',
+    format: (val) => val || '' },
 ];
 /** Column config for Purchases export */
 //

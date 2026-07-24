@@ -369,7 +369,7 @@ export default function SalesReturnDetailDrawer({ returnId, onClose, onStatusUpd
                       }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
-                            Product {String(item.product_id).slice(0, 8)}...
+                            {item.product_name || '—'}
                           </div>
                           <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
                             Qty: {item.return_qty} {'\u00D7'} {formatCurrency(item.refund_amount, country)}

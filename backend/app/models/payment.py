@@ -46,3 +46,6 @@ class Payment(Base):
     cumulative_paid = Column(Numeric(10, 2), nullable=True, default=0)  # ← NEW
 
     payment_paid_at = Column(DateTime, nullable=True, server_default=text("now()"))
+
+    updated_at = Column(DateTime, nullable=True, server_default=text("now()"))
+    updated_by = Column(UUID(as_uuid=True), nullable=True)

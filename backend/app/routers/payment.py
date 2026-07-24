@@ -93,7 +93,7 @@ SORTABLE = {
 # ─────────────────────────────────────────
 # HELPER — Format a payment row as a dict
 # ─────────────────────────────────────────
-def payment_to_dict(p) -> dict:
+def payment_to_dict(p, last_updated_by=None) -> dict:
     return {
         "payment_id":      str(p.payment_id),
         "business_id":     str(p.business_id),
@@ -103,7 +103,9 @@ def payment_to_dict(p) -> dict:
         "payment_method":  p.payment_method,
         "payment_status":  p.payment_status,
         "is_active":       p.is_active,
-        "payment_paid_at": fmt_ts(p.payment_paid_at)
+        "payment_paid_at": fmt_ts(p.payment_paid_at),
+        "updated_at":      fmt_ts(p.updated_at) if p.updated_at else None,
+        "last_updated_by": last_updated_by,
     }
 
 
@@ -300,6 +302,7 @@ async def get_all_payments(
         FROM payments p
         JOIN sales     s ON s.sales_id     = p.sale_id AND s.is_deleted = false
         LEFT JOIN customers c ON c.cust_id = s.customer_id
+        LEFT JOIN profiles prof ON prof.id = p.updated_by
         WHERE {where_sql}
     """
 
@@ -316,6 +319,8 @@ async def get_all_payments(
                 p.payment_status,
                 p.is_active,
                 p.payment_paid_at,
+                p.updated_at,
+                prof.full_name AS last_updated_by,
                 s.invoice_no,
                 s.sales_final_amount,
                 COALESCE(c.cust_name, 'Walk-in') AS customer_name,
@@ -343,6 +348,8 @@ async def get_all_payments(
             "payment_status":     r.payment_status,
             "is_active":          r.is_active,
             "payment_paid_at":    fmt_ts(r.payment_paid_at),
+            "updated_at":         fmt_ts(r.updated_at) if r.updated_at else None,
+            "last_updated_by":    r.last_updated_by,
             "invoice_no":         r.invoice_no         or "—",
             "customer_name":      r.customer_name      or "Walk-in",
             "sales_final_amount": float(sale_final),
@@ -475,4 +482,12 @@ async def get_payment(
     if not payment:
         return error_response("Payment not found", status_code=404)
 
-    return success_response(payment_to_dict(payment))
+    last_updated_by = None
+    if payment.updated_by:
+        row = (await db.execute(
+            text("SELECT full_name FROM profiles WHERE id = :uid"),
+            {"uid": str(payment.updated_by)}
+        )).scalar_one_or_none()
+        last_updated_by = row if row else None
+
+    return success_response(payment_to_dict(payment, last_updated_by=last_updated_by))

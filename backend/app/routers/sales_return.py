@@ -77,7 +77,7 @@ def return_to_dict(r, items):
         "restock": r.restock,
         "stock_updated": r.stock_updated,
         "refund_method": r.refund_method,
-        "approved_by": str(r.approved_by) if r.approved_by else None,
+        "approved_by": getattr(r, 'approved_by_name', None) or (str(r.approved_by) if r.approved_by else None),
         "approved_at": fmt_ts(r.approved_at),
         "rejected_reason": r.rejected_reason,
         "return_created_at": fmt_ts(r.return_created_at),
@@ -401,10 +401,12 @@ async def get_all_sales_returns(
     list_sql = f"""
         SELECT sr.*, s.invoice_no,
                prof.full_name AS last_updated_by,
+               prof2.full_name AS approved_by_name,
                COUNT(*) OVER() AS total_count
         FROM sales_returns sr
         LEFT JOIN sales s ON s.sales_id = sr.sale_id
         LEFT JOIN profiles prof ON prof.id = sr.updated_by
+        LEFT JOIN profiles prof2 ON prof2.id = sr.approved_by
         WHERE sr.business_id = CAST(:bid AS uuid)
         {extra_where}
         ORDER BY {order_col} {order_dir}
@@ -419,11 +421,13 @@ async def get_all_sales_returns(
     if ret_ids:
         all_items = (await db.execute(
             text("""
-                SELECT return_item_id, return_id, product_id,
-                       return_qty, unit_price AS refund_amount,
-                       (return_qty * unit_price) AS return_item_subtotal
-                FROM sales_return_items
-                WHERE return_id = ANY(CAST(:ids AS uuid[]))
+                SELECT sri.return_item_id, sri.return_id, sri.product_id,
+                       p.prod_name AS product_name,
+                       sri.return_qty, sri.unit_price AS refund_amount,
+                       (sri.return_qty * sri.unit_price) AS return_item_subtotal
+                FROM sales_return_items sri
+                LEFT JOIN products p ON p.prod_id = sri.product_id
+                WHERE sri.return_id = ANY(CAST(:ids AS uuid[]))
             """),
             # BUG FIX: asyncpg expects a Python list for array params, not a
             # manually-formatted "{uuid1,uuid2}" string (causes DataError).
@@ -456,19 +460,26 @@ async def get_sales_return(
 ):
     business_id = current_user["business_id"]
 
-    result = await db.execute(
-        select(SalesReturn).where(
-            SalesReturn.return_id == return_id,
-            SalesReturn.business_id == business_id
-        )
-    )
-    sales_return = result.scalar_one_or_none()
+    row = (await db.execute(
+        text("""
+            SELECT sr.*, s.invoice_no,
+                   prof.full_name AS last_updated_by,
+                   prof2.full_name AS approved_by_name
+            FROM sales_returns sr
+            LEFT JOIN sales s ON s.sales_id = sr.sale_id
+            LEFT JOIN profiles prof ON prof.id = sr.updated_by
+            LEFT JOIN profiles prof2 ON prof2.id = sr.approved_by
+            WHERE sr.return_id = CAST(:rid AS uuid)
+              AND sr.business_id = CAST(:bid AS uuid)
+        """),
+        {"rid": return_id, "bid": business_id}
+    )).fetchone()
 
-    if not sales_return:
+    if not row:
         return error_response("Sales return not found", status_code=404)
 
     items = await fetch_return_items(db, return_id)
-    return success_response(return_to_dict(sales_return, items))
+    return success_response(return_to_dict(row, items))
 
 
 # ─────────────────────────────────────────
@@ -531,13 +542,13 @@ async def update_sales_return(
         await db.execute(
             text("""
                 UPDATE sales_returns
-                SET return_status = :status,
+                SET return_status = CAST(:status AS text),
                     -- FIXED restock only written when explicitly provided (guarded by restock_provided)
                     restock = CASE WHEN :restock_provided THEN :restock ELSE restock END,
-                    approved_by = CASE WHEN :status = 'approved' THEN CAST(:approved_by AS uuid) ELSE approved_by END,
-                    approved_at = CASE WHEN :status = 'approved' THEN NOW() ELSE approved_at END,
+                    approved_by = CASE WHEN CAST(:status AS text) = 'approved' THEN CAST(:approved_by AS uuid) ELSE approved_by END,
+                    approved_at = CASE WHEN CAST(:status AS text) = 'approved' THEN NOW() ELSE approved_at END,
                     -- FIXED stock_updated only set on approved+restock
-                    stock_updated = CASE WHEN :status = 'approved' AND :restock_provided AND :restock = true THEN true ELSE stock_updated END
+                    stock_updated = CASE WHEN CAST(:status AS text) = 'approved' AND :restock_provided AND :restock = true THEN true ELSE stock_updated END
                 WHERE return_id = CAST(:return_id AS uuid)
                   AND business_id = CAST(:bid AS uuid)
             """),

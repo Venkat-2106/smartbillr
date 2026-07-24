@@ -558,14 +558,14 @@ async def update_purchase_return(
         # Update the return header
         await db.execute(text("""
             UPDATE purchase_returns
-            SET return_status   = :status,
+            SET return_status   = CAST(:status AS text),
                 restock         = :restock,
                 stock_updated   = :stock_updated,
                 rejected_reason = :rejected_reason,
-                approved_by     = CASE WHEN :status = 'approved'
+                approved_by     = CASE WHEN CAST(:status AS text) = 'approved'
                                        THEN CAST(:approved_by AS uuid)
                                        ELSE NULL END,
-                approved_at     = CASE WHEN :status = 'approved'
+                approved_at     = CASE WHEN CAST(:status AS text) = 'approved'
                                        THEN NOW()
                                        ELSE NULL END
             WHERE return_id    = CAST(:return_id AS uuid)

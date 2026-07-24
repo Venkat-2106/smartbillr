@@ -149,17 +149,7 @@ function buildColumns(onRowClick, country) {
         </span>
       ),
     },
-    {
-      key:      'updated_at',
-      label:    'Last Updated',
-      sortable: false,
-      width:    110,
-      render: (row) => (
-        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          {row.updated_at ? formatDate(row.updated_at) : '—'}
-        </span>
-      ),
-    },
+
     {
       key:      'last_updated_by',
       label:    'Last Updated By',
@@ -350,7 +340,7 @@ export default function PaymentsPage() {
       {/* TABLE — click row to open history drawer */}
       {isLoading ? (
         <BentoCard padding={false}>
-          <SkeletonTable rows={8} columns={10} />
+          <SkeletonTable rows={8} columns={9} />
         </BentoCard>
       ) : payments.length === 0 ? (
         <BentoCard>

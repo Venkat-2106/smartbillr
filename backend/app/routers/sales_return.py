@@ -562,6 +562,40 @@ async def update_sales_return(
             }
         )
 
+        # Auto-create expense when a return is approved with a positive refund
+        if data.return_status == "approved" and sales_return.return_amount and sales_return.return_amount > 0:
+            await db.execute(
+                text("""
+                    INSERT INTO expenses (
+                        expense_id, business_id, expense_category,
+                        expense_amount, expense_notes, created_by,
+                        source_type, source_id
+                    ) VALUES (
+                        CAST(:expense_id AS uuid),
+                        CAST(:business_id AS uuid),
+                        :expense_category,
+                        :expense_amount,
+                        :expense_notes,
+                        CAST(:created_by AS uuid),
+                        :source_type,
+                        CAST(:source_id AS uuid)
+                    )
+                    ON CONFLICT (business_id, source_type, source_id)
+                    WHERE is_deleted = false AND source_type IS NOT NULL
+                    DO NOTHING
+                """),
+                {
+                    "expense_id":       str(uuid.uuid4()),
+                    "business_id":      business_id,
+                    "expense_category": "other",
+                    "expense_amount":   str(sales_return.return_amount),
+                    "expense_notes":    f"Refund issued for sales return {return_id}",
+                    "created_by":       user_id,
+                    "source_type":      "sales_return",
+                    "source_id":        return_id
+                }
+            )
+
         await db.commit()
         # Re-set GUCs after commit (SET LOCAL is transaction-scoped)
         await async_set_rls_gucs_after_commit(db, current_user)

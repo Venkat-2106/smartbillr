@@ -84,7 +84,7 @@ function buildReturnPrintHTML(business, detail) {
   `
 }
 
-export default function PurchaseReturnDetailDrawer({ returnId, onClose, onStatusUpdate, canManage }) {
+export default function PurchaseReturnDetailDrawer({ returnId, onClose, onStatusUpdate, canApprove, canManage }) {
   const [actionLoading, setActionLoading] = useState(false)
   const [printHovered, setPrintHovered] = useState(false)
   const queryClient = useQueryClient()
@@ -234,7 +234,7 @@ export default function PurchaseReturnDetailDrawer({ returnId, onClose, onStatus
             </div>
           ) : detail ? (
             <>
-              {isPending && canManage && (
+              {isPending && canApprove && (
                 <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
                   <Button
                     variant="primary"

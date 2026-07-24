@@ -7,6 +7,10 @@
 //   Finding #12 — selectStyle applied to category filter select
 //   Finding #15 — Dismissible error banner with role="alert"
 //   See UI_UX_AUDIT_REPORT.md
+//
+// NOTE (2026-07): Expenses are immutable after creation — no Edit button,
+// no edit modal, no update API call.  The backend has no PUT endpoint for
+// expenses.  To correct an expense, delete it and create a new one.
 import { useQuery } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { fetchExpenseSummary } from '../api/expensesApi'

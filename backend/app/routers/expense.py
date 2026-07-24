@@ -32,6 +32,13 @@
 # source module.
 # ─────────────────────────────────────────────────────────────────────────────
 
+# NOTE (2026-07): Expenses are intentionally immutable after creation — there
+# is no PUT /{expense_id} endpoint.  This is by design:
+#   - Auto-generated expenses (source_type / source_id) must never drift
+#     from their source record (purchase, sales return, etc.).
+#   - User-created expenses are considered final ledger entries.
+#   - If an expense is wrong, delete it and create a new one.
+
 import re
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
@@ -72,6 +79,11 @@ def expense_to_dict(e, last_updated_by=None):
     }
 
 
+# NOTE (2026-07): Auto-generated expenses store raw UUIDs in expense_notes
+# (e.g. "Auto-recorded from purchase <uuid>").  resolve_expense_notes() swaps
+# those UUIDs for human-readable names (supplier name for purchases, invoice
+# number or customer name for sales returns) so the frontend displays friendly
+# text instead of raw identifiers.
 def resolve_expense_notes(notes, source_type, source_id, **source_names):
     """Replace raw UUIDs in auto-generated notes with human-readable names."""
     if not notes or not source_id:

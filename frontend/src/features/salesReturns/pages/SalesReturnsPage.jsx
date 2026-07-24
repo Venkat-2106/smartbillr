@@ -141,6 +141,7 @@ export default function SalesReturnsPage() {
   const navigate = useNavigate()
   const { can } = usePermissions()
   const canManage = can('sales_returns.manage')
+  const canApprove = can('sales_returns.approve')
   const business  = useAuthStore(s => s.business)
   const country   = business?.business_country_code || 'IN'
 
@@ -313,6 +314,7 @@ export default function SalesReturnsPage() {
           returnId={selectedReturnId}
           onClose={() => setSelectedReturnId(null)}
           onStatusUpdate={() => setSelectedReturnId(null)}
+          canApprove={canApprove}
           canManage={canManage}
         />
       )}

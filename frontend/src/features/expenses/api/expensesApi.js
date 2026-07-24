@@ -1,3 +1,7 @@
+// NOTE (2026-07): There is no updateExpense function — expenses are immutable
+// after creation (no PUT endpoint on the backend).  If an expense is wrong,
+// delete it and create a new one.
+
 import api from '../../../api/axios'
 
 export async function fetchExpenses({

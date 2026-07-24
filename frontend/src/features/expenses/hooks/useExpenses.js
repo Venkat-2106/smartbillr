@@ -1,3 +1,7 @@
+// NOTE (2026-07): Expenses are immutable after creation — there is no
+// updateMutation / updateExpense.  The backend exposes no PUT endpoint for
+// expenses.  To correct an expense, delete it and create a new one.
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast                                      from 'react-hot-toast'
 import useAuthStore                               from '../../../store/authStore'

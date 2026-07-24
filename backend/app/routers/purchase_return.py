@@ -201,6 +201,11 @@ async def create_purchase_return(
     business_id = current_user["business_id"]
     user_id     = current_user["user_id"]
 
+    can_approve = "purchase_returns.approve" in current_user["permissions"]
+    requested_status = data.return_status or "pending"
+    if requested_status != "pending" and not can_approve:
+        requested_status = "pending"
+
     try:
         # Step 1 → Check purchase exists and belongs to this business
         purchase = (await db.execute(text("""
@@ -260,7 +265,7 @@ async def create_purchase_return(
             "business_id":   str(business_id),
             "pur_id":        str(data.pur_id),
             "return_reason": data.return_reason,
-            "return_status": data.return_status,
+            "return_status": requested_status,
             "restock":       data.restock,
             "refund_method": data.refund_method,
             "return_amount": str(total_return_amount),
@@ -299,7 +304,7 @@ async def create_purchase_return(
         # NOTE: db.commit() intentionally moved to AFTER Step 6 so that the
         # return header, return items, and stock updates are all one atomic
         # transaction. If stock update fails, nothing is committed.
-        if data.return_status == "approved" and data.restock:
+        if requested_status == "approved" and data.restock:
             stock_err = await bulk_check_and_reduce_stock(
                 db,
                 business_id=str(business_id),
@@ -477,7 +482,7 @@ async def get_purchase_return(
 async def update_purchase_return(
     return_id: str,
     data: PurchaseReturnUpdate,
-    current_user: dict = Depends(require_permission("purchase_returns.manage")),
+    current_user: dict = Depends(require_permission("purchase_returns.approve")),
     db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]

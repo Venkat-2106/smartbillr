@@ -210,6 +210,11 @@ async def create_sales_return(
     business_id = current_user["business_id"]
     user_id = current_user["user_id"]
 
+    can_approve = "sales_returns.approve" in current_user["permissions"]
+    requested_status = data.return_status or "pending"
+    if requested_status != "pending" and not can_approve:
+        requested_status = "pending"
+
     try:
         # Step 1 → Validate sale exists
         result = await db.execute(
@@ -292,7 +297,7 @@ async def create_sales_return(
                 "sale_id": str(data.sale_id),
                 "return_amount": str(total_refund),
                 "return_reason": data.return_reason,
-                "return_status": data.return_status or "pending",
+                "return_status": requested_status,
                 "restock": data.restock,
                 "created_by": user_id
             }
@@ -492,7 +497,7 @@ async def get_sales_return(
 async def update_sales_return(
     return_id: str,
     data: SalesReturnUpdate,
-    current_user: dict = Depends(require_permission("sales_returns.manage")),
+    current_user: dict = Depends(require_permission("sales_returns.approve")),
     db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]

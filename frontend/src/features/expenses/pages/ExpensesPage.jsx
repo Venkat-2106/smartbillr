@@ -43,6 +43,7 @@ const ALLOWED_CATEGORIES = [
   { value: 'maintenance', label: 'Maintenance' },
   { value: 'marketing', label: 'Marketing' },
   { value: 'purchase', label: 'Purchase' },
+  { value: 'purchase_refund', label: 'Purchase Refund' },
   { value: 'other', label: 'Other' },
 ]
 
@@ -83,7 +84,13 @@ function buildColumns(canManage, onDelete, country) {
       sortable: true,
       width: 130,
       render: (row) => (
-        <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 14 }}>
+        // REFUND COLORING (2026-07): Negative amounts (purchase_refund credits)
+        // render in green to visually distinguish them from regular expenses.
+        <span style={{
+          fontWeight: 700,
+          color: row.expense_amount < 0 ? 'var(--success-text, #22C55E)' : 'var(--text-primary)',
+          fontSize: 14,
+        }}>
           {formatCurrency(row.expense_amount, country)}
         </span>
       ),
@@ -293,7 +300,13 @@ export default function ExpensesPage() {
         }
       />
 
-      {/* METRIC CARDS */}
+      {/* METRIC CARDS
+          ── EXPENSE COUNT SPLIT (2026-07) ────────────────────────────────────
+          "Total Expenses" shows only real expenses (excluding purchase_refund
+          credits).  "Purchase Refunds" shows the count of system-generated
+          refund entries (negative amounts from purchase returns).  The backend
+          /expenses/summary endpoint returns both expense_count and refund_count
+          via COUNT(*) FILTER on expense_category. */}
       <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>
         <MetricCard
           colSpan={4}
@@ -304,7 +317,19 @@ export default function ExpensesPage() {
             </svg>
           }
           label="Total Expenses"
-          value={expenseSummary?.total_count ?? totalItems}
+          value={expenseSummary?.expense_count ?? totalItems}
+          loading={isLoading || summaryLoading}
+        />
+        <MetricCard
+          colSpan={4}
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="1 4 1 10 7 10" />
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+            </svg>
+          }
+          label="Purchase Refunds"
+          value={expenseSummary?.refund_count ?? 0}
           loading={isLoading || summaryLoading}
         />
         <MetricCard
@@ -318,7 +343,7 @@ export default function ExpensesPage() {
             </svg>
           }
           label="Monthly Expenses"
-          value={expenseSummary?.monthly_count ?? 0}
+          value={formatCurrency(expenseSummary?.monthly_total ?? 0, country)}
           loading={isLoading || summaryLoading}
         />
       </div>

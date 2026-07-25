@@ -56,6 +56,8 @@ router = APIRouter(prefix="/v1/dashboard", tags=["Dashboard"])
 #     - pending_count      = COUNT of invoices with zero payments (bill created, not paid yet)
 #   Query 2 — Expenses aggregate:
 #     - total_expenses     = SUM of expense_amount across ALL non-deleted expenses
+#                            (excludes purchase_refund credits — they are supplier
+#                            credits, not business operating costs)
 #
 #   Query 3 — Customer + Product counts:
 #     - total_customers    = COUNT of non-deleted customers
@@ -120,7 +122,8 @@ async def get_dashboard_summary(
                         AND p.is_deleted   = false
                         AND p.prod_stock_qty <= p.prod_low_stock_alert)                   AS low_stock_alerts,
                     (SELECT COALESCE(SUM(expense_amount), 0) FROM expenses
-                      WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false)      AS total_expenses
+                      WHERE business_id = CAST(:bid AS uuid) AND is_deleted = false
+                        AND (expense_category IS NULL OR expense_category != 'purchase_refund'))  AS total_expenses
                 FROM sales
                 WHERE business_id = CAST(:bid AS uuid)
                   AND is_deleted   = false

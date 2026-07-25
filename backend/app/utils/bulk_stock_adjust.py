@@ -73,11 +73,19 @@ async def bulk_check_and_reduce_stock(
 
     # ── 2. Bulk UPDATE stock qty (single statement) ───────────────────────
     # FIXED parameterized to prevent SQL injection (was string-interpolated UUIDs)
+    #
+    # ASYNCPG TYPE CASTING (2026-07):
+    # asyncpg sends all text() bind parameters as PostgreSQL text type.
+    # In a VALUES clause, Postgres infers column types from the first
+    # parameter's wire type — so qty becomes `text` and the subtraction
+    # `integer - text` fails with UndefinedFunctionError.  The explicit
+    # CAST(:tag_qty AS integer) forces the correct type.  Same applies
+    # to stock_movements INSERT below.
     update_params: dict = {"uid": str(user_id), "bid": str(business_id)}
     update_parts = []
     for i, pid in enumerate(product_ids):
         tag = f"u{i}"
-        update_parts.append(f"(CAST(:{tag}_pid AS uuid), :{tag}_qty)")
+        update_parts.append(f"(CAST(:{tag}_pid AS uuid), CAST(:{tag}_qty AS integer))")
         update_params[f"{tag}_pid"] = pid
         update_params[f"{tag}_qty"] = qty_map[pid]
 
@@ -97,7 +105,7 @@ async def bulk_check_and_reduce_stock(
         tag = f"i{i}"
         value_clauses.append(
             f"(CAST(:{tag}_id AS uuid), CAST(:{tag}_pid AS uuid), "
-            f" CAST(:bid AS uuid), :{tag}_type, :{tag}_qty, :{tag}_ps, "
+            f" CAST(:bid AS uuid), :{tag}_type, CAST(:{tag}_qty AS integer), CAST(:{tag}_ps AS integer), "
             f" CAST(:rid AS uuid), :{tag}_notes, CAST(:uid AS uuid))"
         )
         params[f"{tag}_id"]     = str(uuid.uuid4())

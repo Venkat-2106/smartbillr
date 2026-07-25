@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'react-hot-toast'
 import { XMarkIcon, ArrowUturnDownIcon, PrinterIcon } from '@heroicons/react/24/outline'
 import { fetchPurchaseReturn, updatePurchaseReturnStatus } from '../api/purchaseReturnsApi'
 import { Button, Spinner } from '../../../shared/components'
+import ConfirmDialog from '../../../shared/components/ConfirmDialog'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate, formatDateTime } from '../../../shared/utils/formatDate'
 import {
@@ -89,6 +91,7 @@ function buildReturnPrintHTML(business, detail) {
 // canManage is kept for other manage-level actions if needed in future.
 export default function PurchaseReturnDetailDrawer({ returnId, onClose, onStatusUpdate, canApprove, canManage }) {
   const [actionLoading, setActionLoading] = useState(false)
+  const [showApproveConfirm, setShowApproveConfirm] = useState(false)
   const [printHovered, setPrintHovered] = useState(false)
   const queryClient = useQueryClient()
   const business  = useAuthStore(s => s.business)
@@ -104,24 +107,41 @@ export default function PurchaseReturnDetailDrawer({ returnId, onClose, onStatus
   const detail = data?.data ?? data
 
   const updateMutation = useMutation({
+    // ── CONFIRM + TOAST PATTERN (2026-07) ──────────────────────────────────
+    // Mirrors the sales return approval flow:
+    //   1. "Approve Return" button → opens ConfirmDialog (warning variant)
+    //   2. confirmApprove() → fires mutation, closes dialog
+    //   3. onSuccess → toast.success with server message, invalidate caches,
+    //      call onStatusUpdate() to close the drawer
+    //   4. onError → toast.error with server message
     mutationFn: ({ id, payload }) => updatePurchaseReturnStatus(id, payload),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      toast.success(data?.message || 'Return updated successfully')
       queryClient.invalidateQueries({ queryKey: ['purchaseReturn', returnId] })
       queryClient.invalidateQueries({ queryKey: ['purchaseReturns'] })
       if (onStatusUpdate) onStatusUpdate()
     },
-    onError: () => {
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Failed to update return')
       setActionLoading(false)
     },
   })
 
   function handleApprove() {
+    setShowApproveConfirm(true)
+  }
+
+  function confirmApprove() {
+    setShowApproveConfirm(false)
     setActionLoading(true)
     updateMutation.mutate(
       { id: returnId, payload: { return_status: 'approved', restock: detail?.restock ?? true } },
       { onSettled: () => setActionLoading(false) }
     )
   }
+
+  // canManage kept for future manage-level actions
+  void canManage
 
   function handleReject() {
     setActionLoading(true)
@@ -388,6 +408,18 @@ export default function PurchaseReturnDetailDrawer({ returnId, onClose, onStatus
           ) : null}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={showApproveConfirm}
+        onClose={() => setShowApproveConfirm(false)}
+        onConfirm={confirmApprove}
+        title="Approve Return?"
+        message="Once a return is approved, stock will be updated and the purchase due will be adjusted. This action cannot be undone."
+        confirmText={actionLoading ? 'Approving\u2026' : 'Yes, Approve'}
+        cancelText="Cancel"
+        variant="warning"
+        loading={actionLoading}
+      />
     </>
   )
 }

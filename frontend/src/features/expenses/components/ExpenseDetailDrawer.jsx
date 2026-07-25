@@ -17,6 +17,7 @@ import {
 import useAuthStore from '../../../store/authStore'
 
 const CATEGORY_LABELS = {
+  // Must stay in sync with backend ALLOWED_CATEGORIES and DB CHECK constraint
   rent: 'Rent',
   salary: 'Salary',
   electricity: 'Electricity',
@@ -24,6 +25,7 @@ const CATEGORY_LABELS = {
   maintenance: 'Maintenance',
   marketing: 'Marketing',
   purchase: 'Purchase',
+  purchase_refund: 'Purchase Refund',  // system-generated negative credit
   other: 'Other',
 }
 
@@ -119,7 +121,10 @@ export default function ExpenseDetailDrawer({ expenseId, onClose, onEdit, canMan
               <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0, lineHeight: 1.3 }}>
                 {detail ? (CATEGORY_LABELS[detail.expense_category] || detail.expense_category) : 'Expense'}
               </h2>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0' }}>
+              <p style={{
+                fontSize: 12, color: detail?.expense_amount < 0 ? 'var(--success-text, #22C55E)' : 'var(--text-muted)',
+                margin: '3px 0 0',
+              }}>
                 {detail ? formatCurrency(detail.expense_amount, country) : 'Loading\u2026'}
               </p>
             </div>
@@ -199,7 +204,10 @@ export default function ExpenseDetailDrawer({ expenseId, onClose, onEdit, canMan
                   <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
                     Amount
                   </div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--accent-600)' }}>
+                  <div style={{
+                    fontSize: 18, fontWeight: 800,
+                    color: detail.expense_amount < 0 ? 'var(--success-text, #22C55E)' : 'var(--accent-600)',
+                  }}>
                     {formatCurrency(detail.expense_amount, country)}
                   </div>
                 </div>

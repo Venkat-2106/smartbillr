@@ -5,7 +5,12 @@ from decimal import Decimal
 from datetime import date, datetime
 from app.schemas.validators import strip_and_escape_html
 
-ALLOWED_CATEGORIES = ["rent", "salary", "electricity", "internet", "maintenance", "marketing", "purchase", "other"]
+# ALLOWED_CATEGORIES must stay in sync with:
+#   - DB CHECK constraint: expenses_expense_category_check  (via ALTER TABLE)
+#   - Frontend: ExpensesPage.jsx ALLOWED_CATEGORIES
+#   - Frontend: ExpenseDetailDrawer.jsx CATEGORY_LABELS
+# "purchase_refund" is system-generated only (negative amount, not user-created).
+ALLOWED_CATEGORIES = ["rent", "salary", "electricity", "internet", "maintenance", "marketing", "purchase", "purchase_refund", "other"]
 
 class ExpenseCreate(BaseModel):
     expense_category: Optional[str] = None

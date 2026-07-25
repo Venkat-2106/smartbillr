@@ -253,7 +253,8 @@ async def get_report_summary(
                 COALESCE((SELECT SUM(pur_final_amount) FROM purchases pr
                            WHERE pr.business_id = CAST(:bid AS uuid) AND pr.is_deleted = false {date_where_p}), 0) AS total_purchases,
                 COALESCE((SELECT SUM(expense_amount) FROM expenses e
-                           WHERE e.business_id = CAST(:bid AS uuid) AND e.is_deleted = false {date_where_e}), 0) AS total_expenses,
+                           WHERE e.business_id = CAST(:bid AS uuid) AND e.is_deleted = false
+                             AND (e.expense_category IS NULL OR e.expense_category != 'purchase_refund') {date_where_e}), 0) AS total_expenses,
                 (SELECT COUNT(*) FROM sales s
                   WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {date_where_s}) AS total_invoices,
                 (SELECT COUNT(*) FROM purchases pr

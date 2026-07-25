@@ -61,6 +61,10 @@ async def fetch_return_items(db: AsyncSession, return_id: str):
 # ─────────────────────────────────────────────
 def return_to_dict(r, items):
     supp_name = getattr(r, 'supp_name', None)
+    # approved_by_name comes from the LEFT JOIN profiles ap query alias.
+    # Falls back to raw UUID string if the JOIN wasn't performed (e.g.
+    # when called from create_purchase_return's ORM result).
+    approved_by_name = getattr(r, 'approved_by_name', None)
     return {
         "return_id":         str(r.return_id),
         "business_id":       str(r.business_id),
@@ -71,7 +75,7 @@ def return_to_dict(r, items):
         "restock":           r.restock,
         "stock_updated":     r.stock_updated,
         "refund_method":     r.refund_method,
-        "approved_by":       str(r.approved_by) if r.approved_by else None,
+        "approved_by":       approved_by_name or (str(r.approved_by) if r.approved_by else None),
         "approved_at":       fmt_ts(r.approved_at),
         "rejected_reason":   r.rejected_reason,
         "return_amount":     float(r.return_amount) if r.return_amount else 0.0,
@@ -316,7 +320,7 @@ async def create_purchase_return(
                 business_id=str(business_id),
                 user_id=str(user_id),
                 items=data.items,
-                reference_id=new_return_id,
+                reference_id=str(data.pur_id),
                 movement_type="purchase_return",
                 movement_notes_prefix="Stock reduced from purchase return",
             )
@@ -412,11 +416,13 @@ async def get_all_purchase_returns(
     list_sql = f"""
         SELECT pr.*, s.supp_name,
                prof.full_name AS last_updated_by,
+               ap.full_name AS approved_by_name,
                COUNT(*) OVER() AS total_count
         FROM purchase_returns pr
         LEFT JOIN purchases p ON p.pur_id = pr.pur_id
         LEFT JOIN suppliers s ON s.supp_id = p.supp_id
         LEFT JOIN profiles prof ON prof.id = pr.updated_by
+        LEFT JOIN profiles ap ON ap.id = pr.approved_by
         WHERE pr.business_id = CAST(:bid AS uuid)
         {extra_where}
         ORDER BY {order_col} {order_dir}
@@ -464,19 +470,29 @@ async def get_purchase_return(
 ):
     business_id = current_user["business_id"]
 
-    result = await db.execute(
-        select(PurchaseReturn).where(
-            PurchaseReturn.return_id == return_id,
-            PurchaseReturn.business_id == business_id
-        )
-    )
-    purchase_return = result.scalar_one_or_none()
+    # ── RESOLVED NAMES (2026-07) ───────────────────────────────────────────
+    # JOINs suppliers (for supp_name) and profiles (for approved_by and
+    # last_updated_by) so the frontend shows human-readable names instead
+    # of raw UUIDs.  The old ORM select(PurchaseReturn) had no JOINs and
+    # return_to_dict's getattr(r, 'supp_name', None) always returned None.
+    result = (await db.execute(text("""
+        SELECT pr.*, s.supp_name,
+               prof.full_name AS last_updated_by,
+               ap.full_name AS approved_by_name
+        FROM purchase_returns pr
+        LEFT JOIN purchases p ON p.pur_id = pr.pur_id
+        LEFT JOIN suppliers s ON s.supp_id = p.supp_id
+        LEFT JOIN profiles prof ON prof.id = pr.updated_by
+        LEFT JOIN profiles ap ON ap.id = pr.approved_by
+        WHERE pr.return_id    = CAST(:rid AS uuid)
+          AND pr.business_id = CAST(:bid AS uuid)
+    """), {"rid": return_id, "bid": str(business_id)})).fetchone()
 
-    if not purchase_return:
+    if not result:
         return error_response("Purchase return not found", status_code=404)
 
     items = await fetch_return_items(db, return_id)
-    return success_response(return_to_dict(purchase_return, items))
+    return success_response(return_to_dict(result, items))
 
 
 # ─────────────────────────────────────────────
@@ -561,13 +577,142 @@ async def update_purchase_return(
                     business_id=str(business_id),
                     user_id=str(user_id),
                     items=item_rows,
-                    reference_id=return_id,
+                    reference_id=str(purchase_return.pur_id),
                     movement_type="purchase_return",
                     movement_notes_prefix="Stock reduced from purchase return",
                 )
                 if stock_err:
                     await db.rollback()
                     return error_response(stock_err, status_code=400)
+
+            # ── Process refund: reduce due or create negative expense ──────
+            #
+            # APPROVAL REFUND LOGIC (2026-07):
+            # When a purchase return is approved, the refund amount either:
+            #   (a) Reduces the remaining amount owed to the supplier
+            #       (covered_by_reducing_due = min(return_amount, remaining))
+            #   (b) Exceeds what's still owed — the excess is credited back to
+            #       the business as a negative expense (source_type =
+            #       "purchase_return", category = "purchase_refund").
+            #
+            # If the refund fully covers the remaining due, the purchase
+            # status is automatically updated to "paid".
+            #
+            # Formula:
+            #   remaining_before  = pur_final - total_paid - other_refunded
+            #   covered_by_reducing_due = min(return_amount, remaining_before)
+            #   excess_refund     = return_amount - covered_by_reducing_due
+            #
+            # other_refunded excludes THIS return (it hasn't been committed
+            # yet at this point in the flow).
+            return_amount = Decimal(str(purchase_return.return_amount or 0))
+
+            if return_amount > 0:
+                # Fetch purchase final amount
+                pur_row = (await db.execute(
+                    text("""
+                        SELECT pur_final_amount
+                        FROM purchases
+                        WHERE pur_id      = CAST(:pid AS uuid)
+                          AND business_id = CAST(:bid AS uuid)
+                    """),
+                    {"pid": str(purchase_return.pur_id), "bid": str(business_id)}
+                )).fetchone()
+                pur_final = Decimal(str(pur_row.pur_final_amount)) if pur_row and pur_row.pur_final_amount else Decimal("0")
+
+                # Fetch cumulative paid
+                pay_row = (await db.execute(
+                    text("""
+                        SELECT COALESCE(cumulative_paid, 0) AS total_paid
+                        FROM purchase_payments
+                        WHERE pur_id      = CAST(:pid AS uuid)
+                          AND business_id = CAST(:bid AS uuid)
+                          AND is_active   = true
+                    """),
+                    {"pid": str(purchase_return.pur_id), "bid": str(business_id)}
+                )).fetchone()
+                total_paid = Decimal(str(pay_row.total_paid)) if pay_row and pay_row.total_paid else Decimal("0")
+
+                # Fetch total refunded from OTHER already-approved returns (excluding this one)
+                other_ref_row = (await db.execute(
+                    text("""
+                        SELECT COALESCE(SUM(return_amount), 0) AS other_refunded
+                        FROM purchase_returns
+                        WHERE pur_id        = CAST(:pid AS uuid)
+                          AND business_id   = CAST(:bid AS uuid)
+                          AND return_status = 'approved'
+                          AND return_id    != CAST(:rid AS uuid)
+                    """),
+                    {"pid": str(purchase_return.pur_id), "bid": str(business_id), "rid": return_id}
+                )).fetchone()
+                other_refunded = Decimal(str(other_ref_row.other_refunded)) if other_ref_row and other_ref_row.other_refunded else Decimal("0")
+
+                remaining_before = max(Decimal("0"), pur_final - total_paid - other_refunded)
+                covered_by_reducing_due = min(return_amount, remaining_before)
+                excess_refund = (return_amount - covered_by_reducing_due).quantize(Decimal("0.01"))
+
+                # If the refund fully covers the remaining due, mark purchase as paid
+                new_remaining = remaining_before - covered_by_reducing_due
+                if new_remaining <= 0:
+                    await db.execute(text("""
+                        UPDATE purchases
+                        SET    pur_payment_status = 'paid',
+                               updated_by         = CAST(:uid AS uuid)
+                        WHERE  pur_id             = CAST(:pid AS uuid)
+                          AND  business_id        = CAST(:bid AS uuid)
+                    """), {
+                        "uid": str(user_id),
+                        "pid": str(purchase_return.pur_id),
+                        "bid": str(business_id),
+                    })
+
+                if excess_refund > 0:
+                    # Fetch supplier name for expense note
+                    supp_row = (await db.execute(
+                        text("""
+                            SELECT s.supp_name
+                            FROM purchases p
+                            LEFT JOIN suppliers s ON s.supp_id = p.supp_id
+                            WHERE p.pur_id = CAST(:pid AS uuid)
+                              AND p.business_id = CAST(:bid AS uuid)
+                        """),
+                        {"pid": str(purchase_return.pur_id), "bid": str(business_id)}
+                    )).fetchone()
+                    supplier_label = "Walk-in"
+                    if supp_row and supp_row.supp_name:
+                        supplier_label = supp_row.supp_name
+
+                    await db.execute(
+                        text("""
+                            INSERT INTO expenses (
+                                expense_id, business_id, expense_category,
+                                expense_amount, expense_notes, created_by,
+                                source_type, source_id
+                            ) VALUES (
+                                CAST(:expense_id AS uuid),
+                                CAST(:business_id AS uuid),
+                                :expense_category,
+                                :expense_amount,
+                                :expense_notes,
+                                CAST(:created_by AS uuid),
+                                :source_type,
+                                CAST(:source_id AS uuid)
+                            )
+                            ON CONFLICT (business_id, source_type, source_id)
+                            WHERE is_deleted = false AND source_type IS NOT NULL
+                            DO NOTHING
+                        """),
+                        {
+                            "expense_id":       str(uuid.uuid4()),
+                            "business_id":      str(business_id),
+                            "expense_category": "purchase_refund",
+                            "expense_amount":   str(-excess_refund),
+                            "expense_notes":    f"Refund credit from {supplier_label} — purchase return {return_id}",
+                            "created_by":       str(user_id),
+                            "source_type":      "purchase_return",
+                            "source_id":        return_id
+                        }
+                    )
 
         # Update the return header
         await db.execute(text("""
@@ -600,15 +745,22 @@ async def update_purchase_return(
         await async_set_rls_gucs_after_commit(db, current_user)
 
         # Refresh and return updated record
-        result = await db.execute(
-            select(PurchaseReturn).where(PurchaseReturn.return_id == return_id)
-        )
-        purchase_return = result.scalar_one_or_none()
+        refreshed = (await db.execute(text("""
+            SELECT pr.*, s.supp_name,
+                   prof.full_name AS last_updated_by,
+                   ap.full_name AS approved_by_name
+            FROM purchase_returns pr
+            LEFT JOIN purchases p ON p.pur_id = pr.pur_id
+            LEFT JOIN suppliers s ON s.supp_id = p.supp_id
+            LEFT JOIN profiles prof ON prof.id = pr.updated_by
+            LEFT JOIN profiles ap ON ap.id = pr.approved_by
+            WHERE pr.return_id = CAST(:rid AS uuid)
+        """), {"rid": return_id})).fetchone()
         items = await fetch_return_items(db, return_id)
 
         return success_response({
             "message": f"Purchase return {data.return_status} successfully",
-            "return":  return_to_dict(purchase_return, items)
+            "return":  return_to_dict(refreshed, items)
         })
 
     except Exception as e:

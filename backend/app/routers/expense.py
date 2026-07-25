@@ -257,10 +257,17 @@ async def get_expense_summary_kpi(
     db: AsyncSession = Depends(get_async_db)
 ):
     bid = current_user["business_id"]
+    # ── EXPENSE COUNT SPLIT (2026-07) ───────────────────────────────────────
+    # "Total Expenses" on the frontend now shows expense_count (excluding
+    # purchase_refund credits).  refund_count is the number of system-
+    # generated negative-amount entries from approved purchase returns.
     row = (await db.execute(text("""
         SELECT
             COUNT(*)                                                              AS total_count,
-            COUNT(*) FILTER (WHERE date_trunc('month', expense_date) = date_trunc('month', CURRENT_DATE)) AS monthly_count
+            COUNT(*) FILTER (WHERE expense_category != 'purchase_refund')          AS expense_count,
+            COUNT(*) FILTER (WHERE expense_category  = 'purchase_refund')          AS refund_count,
+            COALESCE(SUM(expense_amount) FILTER (WHERE expense_category != 'purchase_refund'
+                                                   AND date_trunc('month', expense_date) = date_trunc('month', CURRENT_DATE)), 0) AS monthly_total
         FROM expenses
         WHERE business_id = CAST(:bid AS uuid)
           AND is_deleted  = false
@@ -268,7 +275,9 @@ async def get_expense_summary_kpi(
 
     return success_response({
         "total_count":   int(row.total_count),
-        "monthly_count": int(row.monthly_count),
+        "expense_count": int(row.expense_count),
+        "refund_count":  int(row.refund_count),
+        "monthly_total": float(row.monthly_total),
     })
 
 

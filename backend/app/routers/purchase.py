@@ -755,9 +755,25 @@ async def get_purchase(
     purchase_data = purchase_row_to_dict(row, items)
     purchase_data["returns"]             = returns
     purchase_data["total_returns"]       = len(returns)
-    purchase_data["total_refund_amount"] = float(sum(r["return_amount"] for r in returns))
-    purchase_data["total_paid"]          = float(total_paid)
-    purchase_data["remaining_balance"]   = float(remaining_balance)
+
+    # ── PURCHASE RETURN REFUND (2026-07) ────────────────────────────────────
+    # Only approved returns reduce the amount owed to the supplier.
+    # Pending/rejected returns don't affect the balance.
+    # Formula: remaining = final_amount - total_paid - total_refunded
+    # The returned total_refunded is wrapped in Decimal(str(...)) because
+    # the serialized return_amount values are floats — Decimal cannot
+    # subtract floats directly (TypeError).
+    total_refunded = Decimal(str(sum(
+        r["return_amount"] for r in returns if r["return_status"] == "approved"
+    )))
+    purchase_data["total_refunded"]     = float(total_refunded)
+
+    # Adjust remaining_balance: approved returns reduce what the supplier is
+    # still owed.  The frontend "Due Amount" row and the payment-blocking
+    # logic in create_purchase_payment both rely on this value.
+    adjusted_remaining = max(Decimal("0"), pur_final - total_paid - total_refunded)
+    purchase_data["total_paid"]         = float(total_paid)
+    purchase_data["remaining_balance"]  = float(adjusted_remaining)
 
     return success_response(purchase_data)
 
@@ -822,9 +838,30 @@ async def update_purchase_status(
             {"pid": pur_id, "bid": business_id}
         )).fetchone()
         already_paid = Decimal(str(active_row.already_paid)) if active_row else Decimal("0")
-        remaining = max(Decimal("0"), final_amount - already_paid)
+
+        # Fetch total refunded from approved purchase returns
+        ref_row = (await db.execute(
+            text("""
+                SELECT COALESCE(SUM(return_amount), 0) AS total_refunded
+                FROM purchase_returns
+                WHERE pur_id        = CAST(:pid AS uuid)
+                  AND business_id   = CAST(:bid AS uuid)
+                  AND return_status = 'approved'
+            """),
+            {"pid": pur_id, "bid": business_id}
+        )).fetchone()
+        total_refunded = Decimal(str(ref_row.total_refunded)) if ref_row and ref_row.total_refunded else Decimal("0")
+
+        # ── REFUND-AWARE AUTO-PAY (2026-07) ────────────────────────────────
+        # When marking a purchase as "paid", only auto-pay the portion that
+        # hasn't already been covered by approved returns.  cumulative_paid
+        # is set to already_paid + remaining (not final_amount) so the
+        # payment ledger stays accurate.
+        # Remaining accounts for approved refunds — supplier already credited
+        remaining = max(Decimal("0"), final_amount - already_paid - total_refunded)
 
         if remaining > 0:
+            new_cumulative = (already_paid + remaining).quantize(Decimal("0.01"))
             new_payment_id = await record_purchase_payment_and_sync_async(
                 db              = db,
                 business_id     = business_id,
@@ -832,7 +869,7 @@ async def update_purchase_status(
                 payment_amount  = remaining,
                 payment_method  = "cash",
                 new_status      = "paid",
-                cumulative_paid = final_amount
+                cumulative_paid = new_cumulative
             )
 
             (await db.execute(
@@ -1055,18 +1092,38 @@ async def create_purchase_payment(
     )).fetchone()
 
     already_paid = Decimal(str(active_row.already_paid)) if active_row else Decimal("0")
+
+    # Fetch total refunded from approved purchase returns
+    ref_row = (await db.execute(
+        text("""
+            SELECT COALESCE(SUM(return_amount), 0) AS total_refunded
+            FROM purchase_returns
+            WHERE pur_id      = CAST(:pid AS uuid)
+              AND business_id = CAST(:bid AS uuid)
+              AND return_status = 'approved'
+        """),
+        {"pid": pur_id, "bid": business_id}
+    )).fetchone()
+    total_refunded = Decimal(str(ref_row.total_refunded)) if ref_row and ref_row.total_refunded else Decimal("0")
+
     new_payment  = data.payment_amount
     total_after  = already_paid + new_payment
 
-    # Block if already fully paid
-    if already_paid >= pur_final:
+    # ── REFUND-AWARE REMAINING BALANCE (2026-07) ───────────────────────────
+    # Approved purchase returns reduce the amount still owed.  Without this,
+    # a partial-paid purchase whose remaining was fully covered by a return
+    # would still allow overpayments.
+    # Remaining balance accounts for both payments and approved refunds
+    remaining_balance = (pur_final - already_paid - total_refunded).quantize(Decimal("0.01"))
+
+    # Block if already fully paid (including refunds)
+    if remaining_balance <= 0:
         return error_response(
             "This purchase is already fully paid. No further payments needed.",
             status_code=400
         )
 
     # Block overpayment
-    remaining_balance = (pur_final - already_paid).quantize(Decimal("0.01"))
     if new_payment > remaining_balance:
         return error_response(
             f"Payment of {new_payment} exceeds the remaining balance of "
@@ -1131,7 +1188,7 @@ async def create_purchase_payment(
         logging.exception("create_purchase_payment failed")
         return error_response("Failed to record payment. Please try again.", status_code=500)
 
-    new_remaining = (pur_final - total_after).quantize(Decimal("0.01"))
+    new_remaining = (pur_final - total_after - total_refunded).quantize(Decimal("0.01"))
 
     return success_response({
         "message":           "Payment recorded successfully",

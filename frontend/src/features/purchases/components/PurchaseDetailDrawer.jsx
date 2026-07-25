@@ -100,10 +100,15 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
         },
       })
     } else if (newStatus === 'paid') {
-      // Record full payment — compute remaining from current data
+      // Record full payment — compute remaining from current data.
+      // ── REFUND-AWARE REMAINING (2026-07) ──────────────────────────────────
+      // Approved purchase returns reduce the amount still owed.  The
+      // remaining is used both to determine whether to fire onRecordPayment
+      // vs onUpdateStatus, and as the payment_amount sent to the backend.
       const finalAmount = data.pur_final_amount || 0
       const alreadyPaid = data.total_paid || 0
-      const remaining = Math.max(0, finalAmount - alreadyPaid)
+      const totalRefunded = data.total_refunded || 0
+      const remaining = Math.max(0, finalAmount - alreadyPaid - totalRefunded)
       if (remaining > 0) {
         onRecordPayment(purId, {
           payment_amount: remaining,
@@ -371,6 +376,13 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
               <SummaryRow label="Total"            value={formatCurrency(data.pur_final_amount || 0, country)} bold />
               {data.total_paid > 0 && (
                 <SummaryRow label="Paid Amount"     value={formatCurrency(data.total_paid, country)} />
+              )}
+              {/* REFUND ROW (2026-07): Shows total approved purchase return
+                  amount.  Displayed in red with a minus sign to indicate
+                  credit back to the business.  The backend adjusts
+                  remaining_balance using this value. */}
+              {(data.total_refunded || 0) > 0 && (
+                <SummaryRow label="Refunded"         value={`− ${formatCurrency(data.total_refunded, country)}`} danger />
               )}
               {data.remaining_balance > 0 && (
                 <SummaryRow label="Due Amount"      value={formatCurrency(data.remaining_balance, country)} danger />

@@ -293,14 +293,20 @@ async def create_purchase(
             tax_total    += tax_calc["generic_tax_total"]
 
             calculated_items.append({
-                "product_id":    str(item.product_id),
-                "quantity":      item.pur_item_qty,
-                "unit_price":    str(item.item_unit_price),
-                "tax_rate":      str(tax_rate),
-                "cgst_amount":   str(tax_calc["cgst_amount"]),
-                "sgst_amount":   str(tax_calc["sgst_amount"]),
-                "igst_amount":   str(tax_calc["igst_amount"]),
-                "pur_tax_total": str(tax_calc["generic_tax_total"]),
+                "product_id":        str(item.product_id),
+                "quantity":          item.pur_item_qty,
+                "unit_price":        str(item.item_unit_price),
+                "tax_rate":          str(tax_rate),
+                "cgst_amount":       str(tax_calc["cgst_amount"]),
+                "sgst_amount":       str(tax_calc["sgst_amount"]),
+                "igst_amount":       str(tax_calc["igst_amount"]),
+                "pur_tax_total":     str(tax_calc["generic_tax_total"]),
+                # Snapshot: capture the product's current cost price BEFORE
+                # this purchase overwrites it (line ~390). Stored in
+                # purchase_items.prod_cost_price_before_purchase so
+                # delete_purchase can restore it if this purchase is deleted.
+                # Mirrors the sale_item_cost_price_at_sale pattern in sale_items.
+                "cost_price_before": str(product.prod_cost_price) if product.prod_cost_price is not None else None,
             })
 
         # Step 4 → Insert purchase header via raw SQL
@@ -345,13 +351,18 @@ async def create_purchase(
         # Step 5 → Insert purchase items (DB trigger auto-increases stock)
         # GENERATED columns (item_subtotal, item_tax_total, item_total_with_tax)
         # are never inserted — DB computes them.
+        # prod_cost_price_before_purchase: nullable snapshot of the product's cost
+        # price at the time of this purchase. NULL for pre-migration rows. Used by
+        # delete_purchase (with reduce_stock=true) to restore the prior cost price
+        # when this purchase is deleted.
         await db.execute(
             text("""
                 INSERT INTO purchase_items (
                     item_id, business_id, pur_id, product_id,
                     pur_item_qty, item_unit_price,
                     gst_rate, cgst_amount, sgst_amount,
-                    igst_amount, pur_tax_total
+                    igst_amount, pur_tax_total,
+                    prod_cost_price_before_purchase
                 ) VALUES (
                     CAST(:item_id AS uuid),
                     CAST(:business_id AS uuid),
@@ -359,22 +370,24 @@ async def create_purchase(
                     CAST(:product_id AS uuid),
                     :quantity, :unit_price,
                     :gst_rate, :cgst_amount, :sgst_amount,
-                    :igst_amount, :pur_tax_total
+                    :igst_amount, :pur_tax_total,
+                    :cost_price_before
                 )
             """),
             [
                 {
-                    "item_id":      str(uuid.uuid4()),
-                    "business_id":  business_id,
-                    "pur_id":       new_pur_id,
-                    "product_id":   calc["product_id"],
-                    "quantity":     calc["quantity"],
-                    "unit_price":   calc["unit_price"],
-                    "gst_rate":     calc["tax_rate"],
-                    "cgst_amount":  calc["cgst_amount"],
-                    "sgst_amount":  calc["sgst_amount"],
-                    "igst_amount":  calc["igst_amount"],
-                    "pur_tax_total": calc["pur_tax_total"],
+                    "item_id":           str(uuid.uuid4()),
+                    "business_id":       business_id,
+                    "pur_id":            new_pur_id,
+                    "product_id":        calc["product_id"],
+                    "quantity":          calc["quantity"],
+                    "unit_price":        calc["unit_price"],
+                    "tax_rate":          calc["tax_rate"],
+                    "cgst_amount":       calc["cgst_amount"],
+                    "sgst_amount":       calc["sgst_amount"],
+                    "igst_amount":       calc["igst_amount"],
+                    "pur_tax_total":     calc["pur_tax_total"],
+                    "cost_price_before": calc["cost_price_before"],
                 }
                 for calc in calculated_items
             ]
@@ -946,8 +959,12 @@ async def delete_purchase(
 
     stock_warnings = []
     if reduce_stock:
+        # Also fetch prod_cost_price_before_purchase — the snapshot of each
+        # product's cost price before this purchase set it. Used in step 3
+        # below to restore prod_cost_price when the purchase is deleted.
         items = (await db.execute(text("""
-            SELECT product_id, pur_item_qty FROM purchase_items
+            SELECT product_id, pur_item_qty, prod_cost_price_before_purchase
+            FROM purchase_items
             WHERE pur_id = CAST(:pur_id AS uuid) AND business_id = CAST(:bid AS uuid)
         """), {"pur_id": pur_id, "bid": business_id})).fetchall()
 
@@ -1009,7 +1026,38 @@ async def delete_purchase(
                     update_params
                 )
 
-                # 3. Multi-row INSERT into stock_movements
+                # 3. Restore prod_cost_price from snapshot where available.
+                #    Pre-migration purchase_items have NULL snapshots — those
+                #    products keep their current cost price unchanged (can't
+                #    recover what it was). Products with a snapshot get reverted,
+                #    and prod_profit (a generated column) auto-recomputes.
+                cost_items = [
+                    item for item in valid_items
+                    if getattr(item, "prod_cost_price_before_purchase", None) is not None
+                ]
+                if cost_items:
+                    cost_values = ", ".join(
+                        f"(CAST(:cpid_{i} AS uuid), :cprice_{i})"
+                        for i in range(len(cost_items))
+                    )
+                    cost_params = {"user_id": user_id, "business_id": business_id}
+                    for i, item in enumerate(cost_items):
+                        cost_params[f"cpid_{i}"] = str(item.product_id)
+                        cost_params[f"cprice_{i}"] = str(item.prod_cost_price_before_purchase)
+
+                    await db.execute(
+                        text(f"""
+                            UPDATE products
+                            SET prod_cost_price = v.cost_price::numeric,
+                                updated_by = CAST(:user_id AS uuid)
+                            FROM (VALUES {cost_values}) AS v(prod_id, cost_price)
+                            WHERE products.prod_id = v.prod_id::uuid
+                              AND products.business_id = CAST(:business_id AS uuid)
+                        """),
+                        cost_params
+                    )
+
+                # 4. Multi-row INSERT into stock_movements
                 insert_values = ", ".join(
                     f"(CAST(:mid_{i} AS uuid), CAST(:bid AS uuid), CAST(:pid_{i} AS uuid), :mtype_{i}, :mqty_{i}, :mprev_{i}, CAST(:pref AS uuid), :mnotes_{i}, CAST(:cby AS uuid))"
                     for i in range(len(valid_items))

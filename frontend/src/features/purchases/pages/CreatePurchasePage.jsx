@@ -23,7 +23,7 @@
 //   - Module-level NUM_INPUT_STYLE constant (FIX 4)
 //   - No product pre-loading — server-side search on demand (≥2 chars)
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useNavigate }          from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast }                from 'react-hot-toast'
@@ -106,6 +106,8 @@ export default function CreatePurchasePage() {
   const [suppSearch,       setSuppSearch]       = useState('')
   const [suppDropOpen,     setSuppDropOpen]      = useState(false)
   const [selectedSuppName, setSelectedSuppName] = useState('')
+  const [suppHighlightedIndex, setSuppHighlightedIndex] = useState(-1)
+  const suppInputRef = useRef(null)
 
   // ── Per-item product search state ─────────────────────────────────────────
   const [searchMap,        setSearchMap]   = useState({})
@@ -145,6 +147,7 @@ export default function CreatePurchasePage() {
     setSelectedSuppName('')
     setSuppId('')
     setSuppDropOpen(true)
+    setSuppHighlightedIndex(-1)
   }
 
   const handleSuppSelect = (s) => {
@@ -152,6 +155,7 @@ export default function CreatePurchasePage() {
     setSelectedSuppName(s.supp_name + (s.supp_phone ? ` — ${s.supp_phone}` : ''))
     setSuppSearch('')
     setSuppDropOpen(false)
+    setSuppHighlightedIndex(-1)
   }
 
   const handleWalkInSelect = () => {
@@ -159,6 +163,36 @@ export default function CreatePurchasePage() {
     setSelectedSuppName('')
     setSuppSearch('')
     setSuppDropOpen(false)
+    setSuppHighlightedIndex(-1)
+  }
+
+  const handleSuppKeyDown = (e) => {
+    if (!suppDropOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSuppDropOpen(true)
+      }
+      return
+    }
+    const itemCount = filteredSuppliers.length + 1
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setSuppHighlightedIndex(prev => (prev + 1) % itemCount)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setSuppHighlightedIndex(prev => (prev <= 0 ? itemCount - 1 : prev - 1))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (suppHighlightedIndex === 0) {
+        handleWalkInSelect()
+      } else if (suppHighlightedIndex - 1 < filteredSuppliers.length) {
+        handleSuppSelect(filteredSuppliers[suppHighlightedIndex - 1])
+      }
+    } else if (e.key === 'Escape') {
+      setSuppDropOpen(false)
+      setSuppHighlightedIndex(-1)
+      suppInputRef.current?.blur()
+    }
   }
 
   // ── Add-item button hover state ───────────────────────────────────────────
@@ -370,11 +404,13 @@ export default function CreatePurchasePage() {
               <FormField label="Search by name or phone">
                 <div style={{ position: 'relative' }}>
                   <input
+                    ref={suppInputRef}
                     type="text"
                     value={loadingSupp ? '' : (selectedSuppName || suppSearch)}
                     onChange={handleSuppInputChange}
                     onFocus={() => { if (!loadingSupp) setSuppDropOpen(true); }}
                     onBlur={() => setTimeout(() => setSuppDropOpen(false), 150)}
+                    onKeyDown={handleSuppKeyDown}
                     placeholder={loadingSupp ? 'Loading suppliers…' : 'Type supplier name or phone…'}
                     disabled={loadingSupp}
                     autoComplete="off"
@@ -412,7 +448,14 @@ export default function CreatePurchasePage() {
                       maxHeight: 240,
                       overflowY: 'auto',
                     }}>
-                      <div onMouseDown={handleWalkInSelect} style={dropItemStyle}>
+                      <div
+                        onMouseDown={handleWalkInSelect}
+                        onMouseEnter={() => setSuppHighlightedIndex(0)}
+                        style={{
+                          ...dropItemStyle,
+                          background: suppHighlightedIndex === 0 ? 'var(--bg-subtle)' : 'transparent',
+                        }}
+                      >
                         <span style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: 13 }}>
                           No Supplier (cash purchase)
                         </span>
@@ -422,8 +465,16 @@ export default function CreatePurchasePage() {
                           No suppliers match "{suppSearch}"
                         </div>
                       ) : (
-                        filteredSuppliers.map(s => (
-                          <div key={s.supp_id} onMouseDown={() => handleSuppSelect(s)} style={dropItemStyle}>
+                        filteredSuppliers.map((s, idx) => (
+                          <div
+                            key={s.supp_id}
+                            onMouseDown={() => handleSuppSelect(s)}
+                            onMouseEnter={() => setSuppHighlightedIndex(idx + 1)}
+                            style={{
+                              ...dropItemStyle,
+                              background: suppHighlightedIndex === idx + 1 ? 'var(--bg-subtle)' : 'transparent',
+                            }}
+                          >
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                               {s.supp_name}
                             </div>

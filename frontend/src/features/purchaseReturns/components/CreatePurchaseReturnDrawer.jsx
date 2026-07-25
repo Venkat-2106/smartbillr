@@ -52,7 +52,7 @@ export default function CreatePurchaseReturnDrawer({ purchaseId, onClose }) {
           z.object({
             product_id: z.string().uuid(),
             return_qty: z.coerce.number().int().positive(),
-            refund_amount: z.coerce.number().positive(),
+            refund_amount: z.coerce.number().min(0),
           })
         )
         .min(1, 'Select at least one item to return'),
@@ -94,7 +94,7 @@ export default function CreatePurchaseReturnDrawer({ purchaseId, onClose }) {
     items.forEach((item) => {
       const qty = Number(item.return_qty) || 0
       const amt = Number(item.refund_amount) || 0
-      if (qty > 0 && amt > 0) {
+      if (qty > 0) {
         refundTotal += qty * amt
         itemCount++
       }
@@ -104,7 +104,7 @@ export default function CreatePurchaseReturnDrawer({ purchaseId, onClose }) {
 
   const handleSubmit = () => {
     const selected = items.filter(
-      (item) => Number(item.return_qty) > 0 && Number(item.refund_amount) > 0
+      (item) => Number(item.return_qty) > 0
     )
     if (selected.length === 0) {
       toast.error('Select at least one item to return with a quantity and amount')

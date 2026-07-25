@@ -18,7 +18,7 @@
 //
 // Extracted from CreatePurchasePage.jsx (Step 5.16 refactor) — zero behaviour change.
 
-import { memo, useCallback, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { selectStyle }    from '../../../shared/components/FormField'
 import { NUM_INPUT_STYLE } from '../../../shared/constants/styles'
@@ -50,8 +50,16 @@ const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
 }) {
   const [hoveredProd, setHoveredProd] = useState(null)
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
+  const scrollRef = useRef(null)
   const business  = useAuthStore(s => s.business)
   const country   = business?.business_country_code || 'IN'
+
+  useEffect(() => {
+    if (scrollRef.current && highlightedIndex >= 0) {
+      const el = scrollRef.current.children[highlightedIndex]
+      el?.scrollIntoView({ block: 'nearest' })
+    }
+  }, [highlightedIndex])
 
   const onSearchKeyDown = useCallback((e) => {
     if (!isOpen || searchResults.length === 0) return
@@ -125,7 +133,7 @@ const PurchaseLineItemRow = memo(function PurchaseLineItemRow({
                 zIndex: 300,
               }}>
                 <DropdownMenu>
-                  <DropdownMenuScroll>
+                  <DropdownMenuScroll ref={scrollRef}>
                   {searchResults.length === 0 ? (
                     <DropdownMenuEmpty>
                       No products found for &quot;{searchText}&quot;

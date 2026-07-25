@@ -14,7 +14,7 @@
 //
 // Extracted from CreateSalePage.jsx (Step 5.16 refactor) — zero behaviour change.
 
-import { memo, useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { formatCurrency } from '../../../shared/utils/formatCurrency';
 import { selectStyle } from '../../../shared/components/FormField';
 import { NUM_INPUT_STYLE } from '../../../shared/constants/styles';
@@ -50,9 +50,17 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
   const availableQty = item.prod_stock_qty != null ? Number(item.prod_stock_qty) : null;
   const overStock = availableQty !== null && Number(item.quantity) > availableQty;
   const comboRef = useRef(null);
+  const scrollRef = useRef(null);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const business  = useAuthStore(s => s.business);
   const country   = business?.business_country_code || 'IN';
+
+  useEffect(() => {
+    if (scrollRef.current && highlightedIndex >= 0) {
+      const el = scrollRef.current.children[highlightedIndex];
+      el?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [highlightedIndex]);
 
   const onSearchKeyDown = useCallback((e) => {
     if (!isOpen || searchResults.length === 0) return;
@@ -118,7 +126,7 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
             {isOpen && searchText.length >= 2 && (
               <ProductSearchDropdownPortal anchorRef={comboRef}>
               <DropdownMenu>
-                <DropdownMenuScroll>
+                <DropdownMenuScroll ref={scrollRef}>
                 {searchResults.length === 0 ? (
                   <DropdownMenuEmpty>
                     No products found for &quot;{searchText}&quot;

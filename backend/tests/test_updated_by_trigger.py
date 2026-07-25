@@ -50,8 +50,8 @@ def _setup_test_row(conn, table: str, pk_column: str, pk_val: str):
     elif table == "expenses":
         conn.execute(
             text("""
-                INSERT INTO expenses (expense_id, business_id, expense_amount, expense_date)
-                VALUES (:pk, :bid, 100.00, CURRENT_DATE)
+                INSERT INTO expenses (expense_id, business_id, expense_category, expense_amount, expense_date)
+                VALUES (:pk, :bid, 'other', 100.00, CURRENT_DATE)
                 ON CONFLICT (expense_id) DO NOTHING
             """),
             {"pk": pk_val_str, "bid": BIZ_ID},

@@ -10,7 +10,7 @@ from app.schemas.validators import strip_and_escape_html
 #   - Frontend: ExpensesPage.jsx ALLOWED_CATEGORIES
 #   - Frontend: ExpenseDetailDrawer.jsx CATEGORY_LABELS
 # "purchase_refund" is system-generated only (negative amount, not user-created).
-ALLOWED_CATEGORIES = ["rent", "salary", "electricity", "internet", "maintenance", "marketing", "purchase", "purchase_refund", "other"]
+ALLOWED_CATEGORIES = ["rent", "salary", "electricity", "internet", "maintenance", "marketing", "purchase", "other"]
 
 class ExpenseCreate(BaseModel):
     expense_category: Optional[str] = None

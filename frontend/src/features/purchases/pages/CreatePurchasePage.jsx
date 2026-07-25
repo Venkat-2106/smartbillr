@@ -109,6 +109,14 @@ export default function CreatePurchasePage() {
   const [selectedSuppName, setSelectedSuppName] = useState('')
   const [suppHighlightedIndex, setSuppHighlightedIndex] = useState(-1)
   const suppInputRef = useRef(null)
+  const suppScrollRef = useRef(null)
+
+  useEffect(() => {
+    if (suppScrollRef.current && suppHighlightedIndex >= 0) {
+      const el = suppScrollRef.current.children[suppHighlightedIndex]
+      el?.scrollIntoView({ block: 'nearest' })
+    }
+  }, [suppHighlightedIndex])
 
   // ── Per-item product search state ─────────────────────────────────────────
   const [searchMap,        setSearchMap]   = useState({})
@@ -441,7 +449,7 @@ export default function CreatePurchasePage() {
                   )}
 
                   {suppDropOpen && !suppId && !loadingSupp && (
-                    <div style={{
+                    <div ref={suppScrollRef} style={{
                       position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
                       background: 'var(--bg-card)',
                       border: '1.5px solid var(--border)',

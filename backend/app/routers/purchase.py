@@ -436,34 +436,35 @@ async def create_purchase(
                 cumulative_paid = amount_to_pay
             )
 
-            (await db.execute(
-                text("""
-                    INSERT INTO expenses (
-                        expense_id, business_id, expense_category,
-                        expense_amount, expense_notes, created_by,
-                        source_type, source_id
-                    ) VALUES (
-                        CAST(:expense_id AS uuid),
-                        CAST(:business_id AS uuid),
-                        :expense_category,
-                        :expense_amount,
-                        :expense_notes,
-                        CAST(:created_by AS uuid),
-                        :source_type,
-                        CAST(:source_id AS uuid)
-                    )
-                """),
-                {
-                    "expense_id":       str(uuid.uuid4()),
-                    "business_id":      business_id,
-                    "expense_category": "purchase",
-                    "expense_amount":   str(amount_to_pay),
-                    "expense_notes":    f"Purchase from {supplier_label} — {datetime.now(timezone.utc).strftime('%d %b %Y')}",
-                    "created_by":       user_id,
-                    "source_type":      "purchase_payment",
-                    "source_id":        new_payment_id
-                }
-            ))
+            if amount_to_pay > 0:
+                (await db.execute(
+                    text("""
+                        INSERT INTO expenses (
+                            expense_id, business_id, expense_category,
+                            expense_amount, expense_notes, created_by,
+                            source_type, source_id
+                        ) VALUES (
+                            CAST(:expense_id AS uuid),
+                            CAST(:business_id AS uuid),
+                            :expense_category,
+                            :expense_amount,
+                            :expense_notes,
+                            CAST(:created_by AS uuid),
+                            :source_type,
+                            CAST(:source_id AS uuid)
+                        )
+                    """),
+                    {
+                        "expense_id":       str(uuid.uuid4()),
+                        "business_id":      business_id,
+                        "expense_category": "purchase",
+                        "expense_amount":   str(amount_to_pay),
+                        "expense_notes":    f"Purchase from {supplier_label} — {datetime.now(timezone.utc).strftime('%d %b %Y')}",
+                        "created_by":       user_id,
+                        "source_type":      "purchase_payment",
+                        "source_id":        new_payment_id
+                    }
+                ))
 
         # ── Revalidate low-stock alerts ──────────────────────────────────────
         # Purchase increases stock. Remove stale alerts for products now above

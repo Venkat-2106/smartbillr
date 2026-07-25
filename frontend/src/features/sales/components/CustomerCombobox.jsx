@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { selectStyle } from '../../../shared/components/FormField';
 import {
   DropdownMenu,
@@ -16,6 +16,14 @@ export default function CustomerCombobox({ customers = [], customerId, onChange,
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const boxRef = useRef(null);
   const inputRef = useRef(null);
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    if (scrollRef.current && highlightedIndex >= 0) {
+      const el = scrollRef.current.children[highlightedIndex];
+      el?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [highlightedIndex]);
 
   const selectedCust = useMemo(() => {
     if (!customerId) return null;
@@ -155,7 +163,7 @@ export default function CustomerCombobox({ customers = [], customerId, onChange,
             zIndex: 200,
           }}>
             <DropdownMenu>
-              <DropdownMenuScroll maxHeight={240}>
+              <DropdownMenuScroll maxHeight={240} ref={scrollRef}>
                 <DropdownMenuItem
                   highlighted={highlightedIndex === 0}
                   onMouseDown={handleWalkIn}

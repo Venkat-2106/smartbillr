@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator, ConfigDict
+from pydantic import BaseModel, field_validator, model_validator, ConfigDict
 from typing import Optional, List
 from uuid import UUID
 from decimal import Decimal
@@ -77,6 +77,7 @@ class PurchaseCreate(BaseModel):
     supp_id: Optional[UUID] = None
     pur_discount: Optional[Decimal] = Decimal("0")
     pur_payment_status: Optional[str] = "pending"
+    paid_amount: Optional[Decimal] = None
     items: List[PurchaseItemCreate]
 
     @field_validator("items")
@@ -100,6 +101,22 @@ class PurchaseCreate(BaseModel):
         if v is not None and v not in allowed:
             raise ValueError(f"Payment status must be one of: {allowed}")
         return v
+
+    @field_validator("paid_amount")
+    @classmethod
+    def paid_amount_must_be_positive(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError("Paid amount must be greater than zero")
+        return v
+
+    @model_validator(mode="after")
+    def validate_paid_amount_for_status(self):
+        if self.pur_payment_status == "partial":
+            if self.paid_amount is None or self.paid_amount <= 0:
+                raise ValueError("paid_amount is required and must be > 0 when payment status is 'partial'")
+        elif self.paid_amount is not None:
+            raise ValueError("paid_amount must only be provided when payment status is 'partial'")
+        return self
 
 
 class PurchaseOut(BaseModel):

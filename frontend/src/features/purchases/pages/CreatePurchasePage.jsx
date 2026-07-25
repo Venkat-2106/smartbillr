@@ -74,6 +74,7 @@ export default function CreatePurchasePage() {
   // ── Form state ───────────────────────────────────────────────────────────
   const [suppId,        setSuppId]        = useState('')
   const [paymentStatus, setPaymentStatus] = useState('pending')
+  const [paidAmount,    setPaidAmount]    = useState('')
   const [discount,      setDiscount]      = useState('')
   const [items,         setItems]         = useState([newItem()])
 
@@ -283,8 +284,9 @@ export default function CreatePurchasePage() {
     // BUG FIX: backend rejects item_unit_price <= 0 (price_must_be_positive
     // validator in PurchaseItemCreate). Frontend must align — was >= 0 before,
     // which let price=0 line items through, causing a 422 on submission.
-    items.every(i => i.product_id && Number(i.quantity) >= 1 && Number(i.unit_price) > 0),
-    [items]
+    items.every(i => i.product_id && Number(i.quantity) >= 1 && Number(i.unit_price) > 0) &&
+    (paymentStatus !== 'partial' || (Number(paidAmount) > 0 && Number(paidAmount) <= totals.grandTotal)),
+    [items, paymentStatus, paidAmount, totals.grandTotal]
   )
 
   // ── Work out which line items have a unit_price error (for inline feedback) ──
@@ -306,12 +308,13 @@ export default function CreatePurchasePage() {
     supp_id:            suppId || null,
     pur_discount:       Number(discount) || 0,
     pur_payment_status: paymentStatus,
+    paid_amount:        paymentStatus === 'partial' ? Number(paidAmount) : undefined,
     items: items.map(i => ({
       product_id:      i.product_id,
       pur_item_qty:    Number(i.quantity),
       item_unit_price: Number(i.unit_price),
     })),
-  }), [suppId, discount, paymentStatus, items])
+  }), [suppId, discount, paymentStatus, paidAmount, items])
 
   // ── Create purchase mutation ─────────────────────────────────────────────
   const mutation = useMutation({
@@ -593,10 +596,13 @@ export default function CreatePurchasePage() {
                 />
               </FormField>
 
-              <FormField label="Payment Status" style={{ marginBottom: 0 }}>
+              <FormField label="Payment Status" style={{ marginBottom: paymentStatus === 'partial' ? 0 : undefined }}>
                 <select
                   value={paymentStatus}
-                  onChange={e => setPaymentStatus(e.target.value)}
+                  onChange={e => {
+                    setPaymentStatus(e.target.value)
+                    if (e.target.value !== 'partial') setPaidAmount('')
+                  }}
                   className="sb-select"
                   style={selectStyle}
                 >
@@ -605,6 +611,26 @@ export default function CreatePurchasePage() {
                   <option value="paid">Paid</option>
                 </select>
               </FormField>
+
+              {paymentStatus === 'partial' && (
+                <FormField label="Partially Paid Amount" style={{ marginTop: 12, marginBottom: 0 }}>
+                  <input
+                    type="number" min="0.01" step="0.01"
+                    value={paidAmount}
+                    onChange={e => setPaidAmount(e.target.value)}
+                    placeholder="0.00"
+                    style={NUM_INPUT_STYLE}
+                  />
+                  {paidAmount && Number(paidAmount) > 0 && (
+                    <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 4 }}>
+                      Remaining: {formatCurrency(
+                        Math.max(0, totals.grandTotal - Number(paidAmount)),
+                        country
+                      )}
+                    </div>
+                  )}
+                </FormField>
+              )}
             </PurchaseSectionCard>
 
             <Button

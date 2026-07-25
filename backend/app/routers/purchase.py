@@ -404,26 +404,36 @@ async def create_purchase(
                 }
             )
 
-        # Step 6 → Auto-create expense + payment record when purchase is paid immediately
+        # Step 6 → Auto-create expense + payment record when purchase is paid/partial at creation
         # WHY: Cash purchase = money leaves the business immediately.
         # Without this, the accountant must manually add an expense for every
         # cash purchase — that is error-prone.
         # Routes through record_purchase_payment_and_sync_async so the
         # purchase_payments ledger is written at creation time (consistent
         # with payments recorded via POST /purchases/{id}/payments).
-        if data.pur_payment_status == "paid":
+        if data.pur_payment_status in ("paid", "partial"):
             pur_row      = await fetch_full_purchase(db, new_pur_id, business_id)
             final_amount = Decimal(str(pur_row.pur_final_amount)) if pur_row and pur_row.pur_final_amount else Decimal("0")
             supplier_label = supplier.supp_name if supplier else "Walk-in"
+
+            amount_to_pay = final_amount if data.pur_payment_status == "paid" else Decimal(str(data.paid_amount))
+
+            if data.pur_payment_status == "partial" and amount_to_pay > final_amount:
+                return error_response(
+                    f"Payment amount {amount_to_pay} exceeds the purchase total of {final_amount}.",
+                    status_code=400
+                )
+
+            computed_status = calculate_payment_status(amount_to_pay, final_amount)
 
             new_payment_id = await record_purchase_payment_and_sync_async(
                 db              = db,
                 business_id     = business_id,
                 pur_id          = new_pur_id,
-                payment_amount  = final_amount,
+                payment_amount  = amount_to_pay,
                 payment_method  = "cash",
-                new_status      = "paid",
-                cumulative_paid = final_amount
+                new_status      = computed_status,
+                cumulative_paid = amount_to_pay
             )
 
             (await db.execute(
@@ -447,7 +457,7 @@ async def create_purchase(
                     "expense_id":       str(uuid.uuid4()),
                     "business_id":      business_id,
                     "expense_category": "purchase",
-                    "expense_amount":   str(final_amount),
+                    "expense_amount":   str(amount_to_pay),
                     "expense_notes":    f"Purchase from {supplier_label} — {datetime.now(timezone.utc).strftime('%d %b %Y')}",
                     "created_by":       user_id,
                     "source_type":      "purchase_payment",

@@ -81,7 +81,15 @@ export function ShortcutProvider({ children }) {
       if (helpRef.current) { e.preventDefault(); closeHelp(); return }
     }
 
-    if (typingRef.current) return
+    // 'g'-prefix sequence keys are always blocked while typing —
+    // you don't want 'g'+letter firing while someone types a product name.
+    if (typingRef.current) {
+      if (pendingSeqRef.current) {
+        pendingSeqRef.current = null
+        return
+      }
+      if ((e.key === 'g' || e.key === 'G') && !e.ctrlKey && !e.altKey && !e.metaKey) return
+    }
 
     if (pendingSeqRef.current) {
       const seq = pendingSeqRef.current
@@ -112,6 +120,7 @@ export function ShortcutProvider({ children }) {
       const matcher = parseShortcut(combo)
       if (matchEvent(matcher, e)) {
         const opts = handlers[0]?.options || {}
+        if (typingRef.current && !opts.ignoreWhenTyping) continue
         if (opts.preventDefault !== false) e.preventDefault()
         handlers.forEach(h => h.handler(e))
         return

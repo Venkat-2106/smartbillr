@@ -40,27 +40,27 @@ export default function useTableKeyboardNav({
     return rows[selectedIndex]
   }, [selectedIndex, rows])
 
-  useShortcut('down', (e) => { e.preventDefault(); selectNext() }, { ignoreWhenTyping: false })
-  useShortcut('up', (e) => { e.preventDefault(); selectPrev() }, { ignoreWhenTyping: false })
+  useShortcut('down', (e) => { e.preventDefault(); selectNext() }, { ignoreWhenTyping: true })
+  useShortcut('up', (e) => { e.preventDefault(); selectPrev() }, { ignoreWhenTyping: true })
 
   useShortcut('enter', (e) => {
     e.preventDefault()
     const row = getSelectedRow()
     if (row) onEnterRow?.(row)
-  }, { ignoreWhenTyping: false })
+  }, { ignoreWhenTyping: true })
 
   useShortcut('e', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return
     e.preventDefault()
     const row = getSelectedRow()
     if (row) onEditRow?.(row)
-  }, { ignoreWhenTyping: false })
+  }, { ignoreWhenTyping: true })
 
   useShortcut('delete', (e) => {
     e.preventDefault()
     const row = getSelectedRow()
     if (row) onDeleteRow?.(row)
-  }, { ignoreWhenTyping: false })
+  }, { ignoreWhenTyping: true })
 
   useShortcut('space', (e) => {
     e.preventDefault()
@@ -74,17 +74,17 @@ export default function useTableKeyboardNav({
       return next
     })
     onSelectRow?.(row)
-  }, { ignoreWhenTyping: false })
+  }, { ignoreWhenTyping: true })
 
   useShortcut('shift+down', (e) => {
     e.preventDefault()
     selectNext()
-  }, { ignoreWhenTyping: false })
+  }, { ignoreWhenTyping: true })
 
   useShortcut('shift+up', (e) => {
     e.preventDefault()
     selectPrev()
-  }, { ignoreWhenTyping: false })
+  }, { ignoreWhenTyping: true })
 
   const clearSelection = useCallback(() => {
     setSelectedIndex(null)

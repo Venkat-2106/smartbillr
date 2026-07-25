@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { XMarkIcon, ArrowPathIcon, PrinterIcon } from '@heroicons/react/24/outline'
+import { toast } from 'react-hot-toast'
 import { fetchSalesReturn, updateSalesReturnStatus } from '../api/salesReturnsApi'
 import { Button, Spinner, ConfirmDialog } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
@@ -106,12 +107,14 @@ export default function SalesReturnDetailDrawer({ returnId, onClose, onStatusUpd
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }) => updateSalesReturnStatus(id, payload),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      toast.success(data?.message || 'Return updated successfully')
       queryClient.invalidateQueries({ queryKey: ['salesReturn', returnId] })
       queryClient.invalidateQueries({ queryKey: ['salesReturns'] })
       if (onStatusUpdate) onStatusUpdate()
     },
-    onError: () => {
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Failed to update return')
       setActionLoading(false)
     },
   })

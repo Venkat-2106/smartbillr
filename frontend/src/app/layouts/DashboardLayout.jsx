@@ -668,6 +668,7 @@ export default function DashboardLayout() {
     d: '/dashboard', c: '/customers', s: '/sales',
     p: '/products',  u: '/suppliers', t: '/stock',
     e: '/expenses',  r: '/reports',   h: '/settings',
+    b: '/purchases',
   }), [])
 
   const handleNav = useCallback((path) => { navigate(path) }, [navigate])

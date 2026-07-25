@@ -34,6 +34,7 @@ const SECTIONS = [
       { keys: 'G D', label: 'Go to Dashboard' },
       { keys: 'G C', label: 'Go to Customers' },
       { keys: 'G S', label: 'Go to Sales' },
+      { keys: 'G B', label: 'Go to Purchases' },
       { keys: 'G P', label: 'Go to Products' },
       { keys: 'G U', label: 'Go to Suppliers' },
       { keys: 'G T', label: 'Go to Stock' },

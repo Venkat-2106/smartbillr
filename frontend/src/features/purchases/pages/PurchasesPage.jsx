@@ -225,7 +225,7 @@ export default function PurchasesPage() {
             />
 
             {canCreate && (
-              <Button variant="primary" onClick={() => navigate('/purchases/new')}>
+              <Button variant="primary" onClick={() => navigate('/purchases/new')} data-shortcut="new">
                 + New Purchase
               </Button>
             )}

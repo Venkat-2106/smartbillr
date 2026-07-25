@@ -7,6 +7,7 @@ from app.models.sale import Sale
 from app.utils.payment_helpers import record_payment_and_sync_async, calculate_payment_status
 from app.utils.timestamp import fmt_ts
 from datetime import datetime, timezone
+import json
 import uuid
 import re
 
@@ -377,65 +378,65 @@ async def get_sales_list(db: AsyncSession, business_id: str, pagination: dict, s
 async def get_sale_detail(db: AsyncSession, business_id: str, sales_id: str):
     result = await db.execute(
         text("""
-            SELECT s.sales_id, s.business_id, s.customer_id,
-                   c.cust_name        AS customer_name,
-                   s.invoice_no,
-                   s.sales_total_amount, s.sales_discount,
-                   s.cgst_total, s.sgst_total, s.igst_total, s.tax_total,
-                   s.sales_final_amount, s.sales_payment_method,
-                   s.sales_payment_status, s.sales_created_at
-            FROM sales s
-            LEFT JOIN customers c ON c.cust_id = s.customer_id
-            WHERE s.sales_id    = CAST(:sid AS uuid)
-              AND s.business_id = CAST(:bid AS uuid)
-              AND s.is_deleted  = false
+            WITH sale_cte AS (
+                SELECT s.sales_id, s.business_id, s.customer_id,
+                       c.cust_name AS customer_name, s.invoice_no,
+                       s.sales_total_amount, s.sales_discount,
+                       s.cgst_total, s.sgst_total, s.igst_total, s.tax_total,
+                       s.sales_final_amount, s.sales_payment_method,
+                       s.sales_payment_status,
+                       to_char(s.sales_created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS sales_created_at
+                FROM sales s
+                LEFT JOIN customers c ON c.cust_id = s.customer_id
+                WHERE s.sales_id    = CAST(:sid AS uuid)
+                  AND s.business_id = CAST(:bid AS uuid)
+                  AND s.is_deleted  = false
+            ),
+            items_cte AS (
+                SELECT si.sale_item_id, si.product_id,
+                       p.prod_name AS product_name,
+                       si.sale_item_quantity, si.sale_item_unit_price,
+                       si.item_mrp, si.sale_item_subtotal, si.cgst_amount,
+                       si.sgst_amount, si.igst_amount, si.tax_amount,
+                       si.item_tax_total, si.item_total_with_tax
+                FROM sale_items si
+                LEFT JOIN products p ON p.prod_id = si.product_id
+                WHERE si.sale_id     = CAST(:sid AS uuid)
+                  AND si.business_id = CAST(:bid AS uuid)
+            ),
+            payment_cte AS (
+                SELECT COALESCE(cumulative_paid, 0) AS total_paid, payment_status
+                FROM payments
+                WHERE sale_id     = CAST(:sid AS uuid)
+                  AND business_id = CAST(:bid AS uuid)
+                  AND is_active   = true
+            )
+            SELECT
+                (SELECT row_to_json(sale_cte)::text FROM sale_cte) AS sale_json,
+                (SELECT COALESCE(json_agg(items_cte), '[]'::json)::text
+                                                       FROM items_cte) AS items_json,
+                (SELECT row_to_json(payment_cte)::text FROM payment_cte) AS payment_json
         """),
         {"sid": sales_id, "bid": business_id}
     )
-    sale = result.fetchone()
+    row = result.fetchone()
 
-    if not sale:
+    if not row or not row.sale_json:
         return None
 
-    items_result = await db.execute(
-        text("""
-            SELECT si.sale_item_id, si.product_id,
-                   p.prod_name         AS product_name,
-                   si.sale_item_quantity, si.sale_item_unit_price,
-                   si.item_mrp,
-                   si.sale_item_subtotal, si.cgst_amount, si.sgst_amount,
-                   si.igst_amount, si.tax_amount, si.item_tax_total, si.item_total_with_tax
-            FROM sale_items si
-            LEFT JOIN products p ON p.prod_id = si.product_id
-            WHERE si.sale_id     = CAST(:sid AS uuid)
-              AND si.business_id = CAST(:bid AS uuid)
-        """),
-        {"sid": sales_id, "bid": business_id}
-    )
-    items = items_result.fetchall()
+    sale = json.loads(row.sale_json, parse_float=Decimal)
+    items = json.loads(row.items_json, parse_float=Decimal)
+    active_payment = json.loads(row.payment_json, parse_float=Decimal) if row.payment_json else None
 
-    payment_result = await db.execute(
-        text("""
-            SELECT COALESCE(cumulative_paid, 0) AS total_paid,
-                   payment_status
-            FROM payments
-            WHERE sale_id      = CAST(:sid AS uuid)
-              AND business_id  = CAST(:bid AS uuid)
-              AND is_active    = true
-        """),
-        {"sid": sales_id, "bid": business_id}
-    )
-    active_payment = payment_result.fetchone()
-
-    sale_final = Decimal(str(sale.sales_final_amount)) if sale.sales_final_amount else Decimal("0")
-    total_paid = Decimal(str(active_payment.total_paid)) if active_payment else Decimal("0")
+    sale_final = Decimal(str(sale["sales_final_amount"])) if sale["sales_final_amount"] else Decimal("0")
+    total_paid = Decimal(str(active_payment["total_paid"])) if active_payment else Decimal("0")
     remaining = (sale_final - total_paid).quantize(Decimal("0.01"))
 
     items_data = []
     for i in items:
-        item_mrp_val = Decimal(str(i.item_mrp)) if i.item_mrp is not None else None
-        unit_price = Decimal(str(i.sale_item_unit_price))
-        qty = i.sale_item_quantity
+        item_mrp_val = Decimal(str(i["item_mrp"])) if i["item_mrp"] is not None else None
+        unit_price = Decimal(str(i["sale_item_unit_price"]))
+        qty = i["sale_item_quantity"]
 
         if item_mrp_val is not None and item_mrp_val > unit_price:
             discount_per_unit = (item_mrp_val - unit_price).quantize(Decimal("0.01"))
@@ -447,39 +448,39 @@ async def get_sale_detail(db: AsyncSession, business_id: str, sales_id: str):
             discount_pct = None
 
         items_data.append({
-            "sale_item_id": str(i.sale_item_id),
-            "product_id": str(i.product_id),
-            "product_name": i.product_name or "Unknown Product",
+            "sale_item_id": str(i["sale_item_id"]),
+            "product_id": str(i["product_id"]),
+            "product_name": i["product_name"] or "Unknown Product",
             "sale_item_quantity": qty,
-            "sale_item_unit_price": str(i.sale_item_unit_price),
-            "item_mrp": str(i.item_mrp) if i.item_mrp is not None else None,
+            "sale_item_unit_price": str(i["sale_item_unit_price"]),
+            "item_mrp": str(i["item_mrp"]) if i["item_mrp"] is not None else None,
             "item_discount_amount": str(discount_amount) if discount_amount is not None else None,
             "item_discount_pct": str(discount_pct) if discount_pct is not None else None,
-            "sale_item_subtotal": str(i.sale_item_subtotal) if i.sale_item_subtotal else None,
-            "cgst_amount": str(i.cgst_amount) if i.cgst_amount else None,
-            "sgst_amount": str(i.sgst_amount) if i.sgst_amount else None,
-            "igst_amount": str(i.igst_amount) if i.igst_amount else None,
-            "tax_amount": str(i.tax_amount) if i.tax_amount else None,
-            "item_tax_total": str(i.item_tax_total) if i.item_tax_total else None,
-            "item_total_with_tax": str(i.item_total_with_tax) if i.item_total_with_tax else None,
+            "sale_item_subtotal": str(i["sale_item_subtotal"]) if i["sale_item_subtotal"] else None,
+            "cgst_amount": str(i["cgst_amount"]) if i["cgst_amount"] else None,
+            "sgst_amount": str(i["sgst_amount"]) if i["sgst_amount"] else None,
+            "igst_amount": str(i["igst_amount"]) if i["igst_amount"] else None,
+            "tax_amount": str(i["tax_amount"]) if i["tax_amount"] else None,
+            "item_tax_total": str(i["item_tax_total"]) if i["item_tax_total"] else None,
+            "item_total_with_tax": str(i["item_total_with_tax"]) if i["item_total_with_tax"] else None,
         })
 
     return {
-        "sales_id": str(sale.sales_id),
-        "business_id": str(sale.business_id),
-        "customer_id": str(sale.customer_id) if sale.customer_id else None,
-        "customer_name": sale.customer_name,
-        "invoice_no": sale.invoice_no,
-        "sales_total_amount": str(sale.sales_total_amount),
-        "sales_discount": str(sale.sales_discount),
-        "cgst_total": str(sale.cgst_total) if sale.cgst_total else None,
-        "sgst_total": str(sale.sgst_total) if sale.sgst_total else None,
-        "igst_total": str(sale.igst_total) if sale.igst_total else None,
-        "tax_total": str(sale.tax_total) if sale.tax_total else None,
-        "sales_final_amount": str(sale.sales_final_amount) if sale.sales_final_amount else None,
-        "sales_payment_method": sale.sales_payment_method,
-        "sales_payment_status": sale.sales_payment_status,
-        "sales_created_at": fmt_ts(sale.sales_created_at),
+        "sales_id": str(sale["sales_id"]),
+        "business_id": str(sale["business_id"]),
+        "customer_id": str(sale["customer_id"]) if sale["customer_id"] else None,
+        "customer_name": sale["customer_name"],
+        "invoice_no": sale["invoice_no"],
+        "sales_total_amount": str(sale["sales_total_amount"]),
+        "sales_discount": str(sale["sales_discount"]),
+        "cgst_total": str(sale["cgst_total"]) if sale["cgst_total"] else None,
+        "sgst_total": str(sale["sgst_total"]) if sale["sgst_total"] else None,
+        "igst_total": str(sale["igst_total"]) if sale["igst_total"] else None,
+        "tax_total": str(sale["tax_total"]) if sale["tax_total"] else None,
+        "sales_final_amount": str(sale["sales_final_amount"]) if sale["sales_final_amount"] else None,
+        "sales_payment_method": sale["sales_payment_method"],
+        "sales_payment_status": sale["sales_payment_status"],
+        "sales_created_at": sale["sales_created_at"],
         "items": items_data,
         "total_paid": str(total_paid),
         "remaining_balance": str(remaining) if remaining > 0 else "0",

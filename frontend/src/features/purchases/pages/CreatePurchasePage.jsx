@@ -28,6 +28,7 @@ import { useNavigate }          from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast }                from 'react-hot-toast'
 import { createPurchase, fetchSuppliersLean } from '../api/purchasesApi'
+import { createSupplier }                from '../../suppliers/api/suppliersApi'
 import { searchProductsLean }   from '../../sales/api/salesApi'
 import { Button, PageHeader, FormField, ConfirmDialog } from '../../../shared/components'
 import { selectStyle }          from '../../../shared/components/FormField'
@@ -38,6 +39,7 @@ import { useDebounce }          from '../../../shared/hooks/useDebounce'
 import PurchaseLineItemRow      from '../components/PurchaseLineItemRow'
 import PurchaseOrderSummaryRow  from '../components/PurchaseOrderSummaryRow'
 import PurchaseSectionCard      from '../components/PurchaseSectionCard'
+import AddSupplierModal         from '../components/AddSupplierModal'
 import { NUM_INPUT_STYLE } from '../../../shared/constants/styles'
 
 // Stable empty array — passed to closed dropdown rows so React.memo skips re-render
@@ -183,7 +185,7 @@ export default function CreatePurchasePage() {
       }
       return
     }
-    const itemCount = filteredSuppliers.length + 1
+    const itemCount = filteredSuppliers.length + 2
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       setSuppHighlightedIndex(prev => (prev + 1) % itemCount)
@@ -194,8 +196,10 @@ export default function CreatePurchasePage() {
       e.preventDefault()
       if (suppHighlightedIndex === 0) {
         handleWalkInSelect()
-      } else if (suppHighlightedIndex - 1 < filteredSuppliers.length) {
-        handleSuppSelect(filteredSuppliers[suppHighlightedIndex - 1])
+      } else if (suppHighlightedIndex === 1) {
+        handleOpenAddSuppModal(suppSearch.trim())
+      } else if (suppHighlightedIndex >= 2 && suppHighlightedIndex - 2 < filteredSuppliers.length) {
+        handleSuppSelect(filteredSuppliers[suppHighlightedIndex - 2])
       }
     } else if (e.key === 'Escape') {
       setSuppDropOpen(false)
@@ -211,6 +215,67 @@ export default function CreatePurchasePage() {
   // isSellingAtLoss warning — non-blocking, user explicitly confirms and proceeds.
   const [costWarningOpen, setCostWarningOpen] = useState(false)
   const [pendingBody, setPendingBody] = useState(null)
+
+  // ── Add Supplier modal state ────────────────────────────────────────────
+  const [showAddSuppModal, setShowAddSuppModal] = useState(false)
+  const [newSuppName,      setNewSuppName]      = useState('')
+  const [newSuppPhone,     setNewSuppPhone]     = useState('')
+  const [newSuppEmail,     setNewSuppEmail]     = useState('')
+  const [newSuppCountry,   setNewSuppCountry]   = useState('')
+  const [newSuppState,     setNewSuppState]     = useState('')
+  const [addSuppLoading,   setAddSuppLoading]   = useState(false)
+
+  const handleOpenAddSuppModal = (prefillName) => {
+    setNewSuppName(prefillName || '')
+    setNewSuppPhone('')
+    setNewSuppEmail('')
+    setNewSuppCountry('')
+    setNewSuppState('')
+    setShowAddSuppModal(true)
+  }
+
+  const handleCloseAddSuppModal = () => {
+    setShowAddSuppModal(false)
+    setNewSuppName('')
+    setNewSuppPhone('')
+    setNewSuppEmail('')
+    setNewSuppCountry('')
+    setNewSuppState('')
+  }
+
+  const handleAddNewSupplierSubmit = async () => {
+    if (!newSuppName.trim()) return
+    setAddSuppLoading(true)
+    try {
+      const body = {
+        supp_name: newSuppName.trim(),
+        supp_phone: newSuppPhone.trim() || null,
+        supp_email: newSuppEmail.trim() || null,
+        supp_country_code: newSuppCountry || null,
+        supp_state: newSuppState || null,
+      }
+      const res = await createSupplier(body)
+      const supp = res?.supplier
+      const newId   = supp?.supp_id
+      const newName = supp?.supp_name || newSuppName.trim()
+
+      queryClient.invalidateQueries({ queryKey: ['suppliers-lean'] })
+
+      if (newId) {
+        setSuppId(newId)
+        setSelectedSuppName(newName + (body.supp_phone ? ` — ${body.supp_phone}` : ''))
+      }
+      setSuppSearch('')
+      setSuppDropOpen(false)
+      handleCloseAddSuppModal()
+      toast.success('Supplier created successfully!')
+    } catch (err) {
+      const msg = err?.response?.data?.message || 'Failed to create supplier'
+      toast.error(msg)
+    } finally {
+      setAddSuppLoading(false)
+    }
+  }
 
   // ── Line item handlers — stable useCallback ([]) ─────────────────────────
   const handleItemSearchChange = useCallback((itemId, text) => {
@@ -471,19 +536,35 @@ export default function CreatePurchasePage() {
                           No Supplier (cash purchase)
                         </span>
                       </div>
+                      <div
+                        onMouseDown={() => handleOpenAddSuppModal(suppSearch.trim())}
+                        onMouseEnter={() => setSuppHighlightedIndex(1)}
+                        style={{
+                          ...dropItemStyle,
+                          background: suppHighlightedIndex === 1 ? 'var(--bg-subtle)' : 'transparent',
+                          color: 'var(--accent-600)',
+                          fontWeight: 600,
+                          fontSize: 13,
+                        }}
+                      >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
+                          {suppSearch.trim() ? `Add "${suppSearch.trim()}" as new supplier` : 'Add New Supplier'}
+                        </span>
+                      </div>
                       {filteredSuppliers.length === 0 ? (
                         <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--text-muted)' }}>
-                          No suppliers match "{suppSearch}"
+                          No suppliers match &quot;{suppSearch}&quot;
                         </div>
                       ) : (
                         filteredSuppliers.map((s, idx) => (
                           <div
                             key={s.supp_id}
                             onMouseDown={() => handleSuppSelect(s)}
-                            onMouseEnter={() => setSuppHighlightedIndex(idx + 1)}
+                            onMouseEnter={() => setSuppHighlightedIndex(idx + 2)}
                             style={{
                               ...dropItemStyle,
-                              background: suppHighlightedIndex === idx + 1 ? 'var(--bg-subtle)' : 'transparent',
+                              background: suppHighlightedIndex === idx + 2 ? 'var(--bg-subtle)' : 'transparent',
                             }}
                           >
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -673,6 +754,23 @@ export default function CreatePurchasePage() {
           confirmText="Yes, Continue"
           cancelText="Review Items"
           loading={mutation.isPending}
+        />
+
+        <AddSupplierModal
+          open={showAddSuppModal}
+          onClose={handleCloseAddSuppModal}
+          name={newSuppName}
+          phone={newSuppPhone}
+          email={newSuppEmail}
+          country={newSuppCountry}
+          state={newSuppState}
+          loading={addSuppLoading}
+          onNameChange={setNewSuppName}
+          onPhoneChange={setNewSuppPhone}
+          onEmailChange={setNewSuppEmail}
+          onCountryChange={(val) => { setNewSuppCountry(val); setNewSuppState(''); }}
+          onStateChange={setNewSuppState}
+          onSubmit={handleAddNewSupplierSubmit}
         />
     </>
   )

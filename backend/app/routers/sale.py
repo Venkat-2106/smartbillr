@@ -75,6 +75,9 @@ from app.utils.currency import get_currency_symbol
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 from app.utils.subscription_features import check_feature_access
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/sales", tags=["Sales"])
 
@@ -173,6 +176,7 @@ async def create_sale(
 
     except Exception as e:
         await db.rollback()
+        logger.exception("create_sale failed for business_id=%s", business_id)
         return error_response(parse_sale_error(str(e)), 500)
 
 

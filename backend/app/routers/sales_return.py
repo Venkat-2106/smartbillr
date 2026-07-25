@@ -603,6 +603,16 @@ async def update_sales_return(
         return_amount = Decimal(str(sales_return.return_amount or 0))
 
         if return_amount > 0:
+            # Lock the sale row to serialize concurrent return approvals.
+            # Without this, two pending returns on the same sale approved
+            # simultaneously could both read stale total_paid/other_refunded
+            # and double-credit the sale. Same pattern as create_payment's
+            # FOR UPDATE lock on the sale row.
+            await db.execute(
+                text("SELECT 1 FROM sales WHERE sales_id = CAST(:sid AS uuid) AND business_id = CAST(:bid AS uuid) FOR UPDATE"),
+                {"sid": str(sales_return.sale_id), "bid": str(business_id)}
+            )
+
             # Fetch sale final amount
             sale_row = (await db.execute(
                 text("""

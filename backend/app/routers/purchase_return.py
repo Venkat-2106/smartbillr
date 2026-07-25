@@ -608,6 +608,16 @@ async def update_purchase_return(
             return_amount = Decimal(str(purchase_return.return_amount or 0))
 
             if return_amount > 0:
+                # Lock the purchase row to serialize concurrent return approvals.
+                # Without this, two pending returns on the same purchase approved
+                # simultaneously could both read stale total_paid/other_refunded
+                # and double-credit the purchase. Same pattern as
+                # create_purchase_payment's FOR UPDATE lock on the purchase row.
+                await db.execute(
+                    text("SELECT 1 FROM purchases WHERE pur_id = CAST(:pid AS uuid) AND business_id = CAST(:bid AS uuid) FOR UPDATE"),
+                    {"pid": str(purchase_return.pur_id), "bid": str(business_id)}
+                )
+
                 # Fetch purchase final amount
                 pur_row = (await db.execute(
                     text("""

@@ -470,7 +470,7 @@ export default function ExpensesPage() {
           <FormField label="Category" error={errors.expense_category?.message} required style={{ marginBottom: 16 }}>
             <select {...register('expense_category')} className="sb-select" style={selectStyle} aria-label="Expense category">
               <option value="">— Select category —</option>
-              {ALLOWED_CATEGORIES.map((c) => (
+              {ALLOWED_CATEGORIES.filter(c => c.value !== 'purchase_refund').map((c) => (
                 <option key={c.value} value={c.value}>{c.label}</option>
               ))}
             </select>

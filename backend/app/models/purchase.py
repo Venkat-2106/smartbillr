@@ -18,7 +18,7 @@ class Purchase(Base):
     pur_sgst_total     = Column(Numeric(10, 2), default=0)
     pur_igst_total     = Column(Numeric(10, 2), default=0)
     pur_tax_total      = Column(Numeric(10, 2), default=0)
-    # pur_final_amount → GENERATED ALWAYS AS in PostgreSQL — never insert manually
+    pur_final_amount   = Column(Numeric(10, 2), nullable=True)  # DB GENERATED — never insert
     pur_payment_status = Column(String(10), default="pending")
     is_deleted         = Column(Boolean, default=False)
     pur_created_at     = Column(DateTime, nullable=True)   # ← FIXED (DateTime now imported)

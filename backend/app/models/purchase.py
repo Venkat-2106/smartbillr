@@ -24,6 +24,7 @@ class Purchase(Base):
     pur_created_at     = Column(DateTime, nullable=True)   # ← FIXED (DateTime now imported)
     updated_at         = Column(DateTime, nullable=True)   # ← FIXED (same)
     created_by         = Column(UUID(as_uuid=True), nullable=True)
+    updated_by         = Column(UUID(as_uuid=True), nullable=True)
 
 # PurchaseItem uses raw SQL only
 # because purchase_items has multiple generated columns

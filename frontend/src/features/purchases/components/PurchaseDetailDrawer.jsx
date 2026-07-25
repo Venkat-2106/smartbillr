@@ -74,10 +74,11 @@ function SummaryRow({ label, value, bold, danger }) {
   )
 }
 
-export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, isUpdatingStatus, canEdit, onDelete }) {
+export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, isUpdatingStatus, canEdit, onDelete, onRecordPayment, isRecordingPayment }) {
   const { data, isLoading } = usePurchaseDetail(purId)
   const [editingStatus, setEditingStatus] = useState(false)
   const [newStatus,     setNewStatus]     = useState('')
+  const [paymentAmount, setPaymentAmount] = useState('')
   const [showReturnDrawer, setShowReturnDrawer] = useState(false)
   const business  = useAuthStore(s => s.business)
   const country   = business?.business_country_code || 'IN'
@@ -87,9 +88,49 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
 
   function handleStatusSave() {
     if (!newStatus) return
-    onUpdateStatus(purId, newStatus, {
-      onSuccess: () => setEditingStatus(false),
-    })
+    if (newStatus === 'partial' && paymentAmount) {
+      // Record a partial payment directly
+      onRecordPayment(purId, {
+        payment_amount: parseFloat(paymentAmount),
+        payment_method: 'cash',
+      }, {
+        onSuccess: () => {
+          setEditingStatus(false)
+          setPaymentAmount('')
+        },
+      })
+    } else if (newStatus === 'paid') {
+      // Record full payment — compute remaining from current data
+      const finalAmount = data.pur_final_amount || 0
+      const alreadyPaid = data.total_paid || 0
+      const remaining = Math.max(0, finalAmount - alreadyPaid)
+      if (remaining > 0) {
+        onRecordPayment(purId, {
+          payment_amount: remaining,
+          payment_method: 'cash',
+        }, {
+          onSuccess: () => {
+            setEditingStatus(false)
+            setPaymentAmount('')
+          },
+        })
+      } else {
+        // Already fully paid, just update the status
+        onUpdateStatus(purId, newStatus, {
+          onSuccess: () => {
+            setEditingStatus(false)
+            setPaymentAmount('')
+          },
+        })
+      }
+    } else {
+      onUpdateStatus(purId, newStatus, {
+        onSuccess: () => {
+          setEditingStatus(false)
+          setPaymentAmount('')
+        },
+      })
+    }
   }
 
   const hasTax = data && (
@@ -233,34 +274,69 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
                 border: '1px solid var(--accent-ring, var(--border))',
                 borderRadius: 'var(--r-md)', padding: '12px 14px',
                 marginTop: 10,
-                display: 'flex', alignItems: 'center', gap: 10,
               }}>
-                <select
-                  value={newStatus}
-                  onChange={e => setNewStatus(e.target.value)}
-                  className="sb-select"
-                  style={{ ...selectStyle, flex: 1 }}
-                >
-                  <option value="pending">Unpaid (Pending)</option>
-                  <option value="partial">Partial</option>
-                  <option value="paid">Paid</option>
-                </select>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  loading={isUpdatingStatus}
-                  onClick={handleStatusSave}
-                >
-                  Save
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setEditingStatus(false)}
-                  disabled={isUpdatingStatus}
-                >
-                  Cancel
-                </Button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <select
+                    value={newStatus}
+                    onChange={e => setNewStatus(e.target.value)}
+                    className="sb-select"
+                    style={{ ...selectStyle, flex: 1 }}
+                  >
+                    <option value="pending">Unpaid (Pending)</option>
+                    <option value="partial">Partial</option>
+                    <option value="paid">Paid</option>
+                  </select>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    loading={isUpdatingStatus || isRecordingPayment}
+                    onClick={handleStatusSave}
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setEditingStatus(false); setPaymentAmount('') }}
+                    disabled={isUpdatingStatus || isRecordingPayment}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+
+                {/* Partial payment amount input */}
+                {newStatus === 'partial' && (
+                  <div style={{ marginTop: 10 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                      Payment Amount
+                    </label>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      placeholder="Enter amount being paid now"
+                      value={paymentAmount}
+                      onChange={e => setPaymentAmount(e.target.value)}
+                      style={{
+                        width: '100%', padding: '8px 10px',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--r-sm, 6px)',
+                        fontSize: 13, fontFamily: 'inherit',
+                        background: 'var(--bg-card)',
+                        color: 'var(--text-primary)',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                    {paymentAmount && parseFloat(paymentAmount) > 0 && (
+                      <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 4 }}>
+                        Remaining after payment: {formatCurrency(
+                          Math.max(0, (data.pur_final_amount || 0) - (data.total_paid || 0) - parseFloat(paymentAmount)),
+                          country
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

@@ -55,6 +55,8 @@ from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.tax_engine import calculate_item_tax
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
+from app.utils.payment_helpers import calculate_payment_status, record_purchase_payment_and_sync_async
+from app.schemas.purchase import PurchasePaymentCreate
 from datetime import datetime, timezone
 import logging
 from decimal import Decimal
@@ -224,6 +226,7 @@ async def create_purchase(
         # Step 2 → Get supplier country + state (needed for GST inter/intra detection)
         supp_country = ""
         supp_state   = ""
+        supplier = None
         if data.supp_id:
             supplier = (await db.execute(select(Supplier).where(
                 Supplier.supp_id     == data.supp_id,
@@ -380,7 +383,10 @@ async def create_purchase(
         # ── Update prod_cost_price for each purchased product ─────────────────
         # Last-purchase-cost accounting: set cost price to the unit price from
         # this purchase.  prod_profit is a generated column — DB recomputes it.
+        # Set audit_source GUC so fn_audit_log captures "purchase" as the source
+        # of this cost-price change (transaction-scoped, auto-clears on commit).
         if calculated_items:
+            await db.execute(text("SELECT set_config('app.audit_source', 'purchase', true)"))
             await db.execute(
                 text("""
                     UPDATE products p
@@ -433,7 +439,7 @@ async def create_purchase(
                     "business_id":      business_id,
                     "expense_category": "purchase",
                     "expense_amount":   str(final_amount),
-                    "expense_notes":    f"Auto-recorded from purchase {new_pur_id}",
+                    "expense_notes":    f"Purchase from {supplier.supp_name if supplier else 'Walk-in'} — {datetime.now(timezone.utc).strftime('%d %b %Y')}",
                     "created_by":       user_id,
                     "source_type":      "purchase",
                     "source_id":        new_pur_id
@@ -752,14 +758,12 @@ async def update_purchase_status(
 
     old_status = purchase.pur_payment_status
     purchase.pur_payment_status = status
+    purchase.updated_by = user_id
 
     expense_created = False
 
     if status == "paid" and old_status != "paid":
-        pur_row = (await db.execute(
-            text("SELECT pur_final_amount FROM purchases WHERE pur_id = CAST(:pid AS uuid)"),
-            {"pid": pur_id}
-        )).fetchone()
+        pur_row = await fetch_full_purchase(db, pur_id, business_id)
         final_amount = Decimal(str(pur_row.pur_final_amount)) if pur_row and pur_row.pur_final_amount else Decimal("0")
 
         # Race-safe insert: the WHERE NOT EXISTS check runs inside the same
@@ -793,7 +797,7 @@ async def update_purchase_status(
                 "business_id":      business_id,
                 "expense_category": "purchase",
                 "expense_amount":   str(final_amount),
-                "expense_notes":    f"Auto-recorded from purchase {pur_id}",
+                "expense_notes":    f"Purchase from {pur_row.supp_name if pur_row and pur_row.supp_name else 'Walk-in'} — {datetime.now(timezone.utc).strftime('%d %b %Y')}",
                 "created_by":       user_id,
                 "source_type":      "purchase",
                 "source_id":        pur_id
@@ -943,3 +947,147 @@ async def delete_purchase(
         "message": "Purchase deleted successfully",
         "warnings": stock_warnings,
     })
+
+
+# ─────────────────────────────────────────
+# POST /purchases/{pur_id}/payments → Record a purchase payment
+# ─────────────────────────────────────────
+@router.post("/{pur_id}/payments")
+async def create_purchase_payment(
+    pur_id: str,
+    data: PurchasePaymentCreate,
+    current_user: dict = Depends(require_permission("purchases.edit")),
+    db: AsyncSession = Depends(get_async_db)
+):
+    business_id = current_user["business_id"]
+    user_id = current_user["user_id"]
+
+    # Validate purchase exists and belongs to this business
+    purchase = (await db.execute(select(Purchase).where(
+        Purchase.pur_id      == pur_id,
+        Purchase.business_id == business_id,
+        Purchase.is_deleted  == False
+    ))).scalar_one_or_none()
+
+    if not purchase:
+        return error_response("Purchase not found", 404)
+
+    # Get pur_final_amount (generated column)
+    pur_final = Decimal(str(purchase.pur_final_amount)) if purchase.pur_final_amount else Decimal("0")
+
+    # Lock the purchase row to serialize concurrent payments
+    await db.execute(
+        text("SELECT 1 FROM purchases WHERE pur_id = CAST(:pid AS uuid) AND business_id = CAST(:bid AS uuid) FOR UPDATE"),
+        {"pid": pur_id, "bid": business_id}
+    )
+
+    # Get total already paid from the active purchase_payment row
+    active_row = (await db.execute(
+        text("""
+            SELECT COALESCE(cumulative_paid, 0) AS already_paid
+            FROM purchase_payments
+            WHERE pur_id      = CAST(:pid AS uuid)
+              AND business_id = CAST(:bid AS uuid)
+              AND is_active   = true
+            FOR UPDATE
+        """),
+        {"pid": pur_id, "bid": business_id}
+    )).fetchone()
+
+    already_paid = Decimal(str(active_row.already_paid)) if active_row else Decimal("0")
+    new_payment  = data.payment_amount
+    total_after  = already_paid + new_payment
+
+    # Block if already fully paid
+    if already_paid >= pur_final:
+        return error_response(
+            "This purchase is already fully paid. No further payments needed.",
+            status_code=400
+        )
+
+    # Block overpayment
+    remaining_balance = (pur_final - already_paid).quantize(Decimal("0.01"))
+    if new_payment > remaining_balance:
+        return error_response(
+            f"Payment of {new_payment} exceeds the remaining balance of "
+            f"{remaining_balance}. Please enter {remaining_balance} or less.",
+            status_code=400
+        )
+
+    # Calculate new payment status
+    new_status = calculate_payment_status(total_after, pur_final)
+
+    try:
+        # Deactivate old row, insert new active row, sync purchase table
+        new_payment_id = await record_purchase_payment_and_sync_async(
+            db              = db,
+            business_id     = business_id,
+            pur_id          = pur_id,
+            payment_amount  = new_payment,
+            payment_method  = data.payment_method or "cash",
+            new_status      = new_status,
+            cumulative_paid = total_after.quantize(Decimal("0.01"))
+        )
+
+        # Create an expense for the amount paid in THIS transaction
+        supplier_label = "Walk-in"
+        pur_row = await fetch_full_purchase(db, pur_id, business_id)
+        if pur_row and pur_row.supp_name:
+            supplier_label = pur_row.supp_name
+
+        (await db.execute(
+            text("""
+                INSERT INTO expenses (
+                    expense_id, business_id, expense_category,
+                    expense_amount, expense_notes, created_by,
+                    source_type, source_id
+                ) VALUES (
+                    CAST(:expense_id AS uuid),
+                    CAST(:business_id AS uuid),
+                    :expense_category,
+                    :expense_amount,
+                    :expense_notes,
+                    CAST(:created_by AS uuid),
+                    :source_type,
+                    CAST(:source_id AS uuid)
+                )
+            """),
+            {
+                "expense_id":       str(uuid.uuid4()),
+                "business_id":      business_id,
+                "expense_category": "purchase",
+                "expense_amount":   str(new_payment.quantize(Decimal("0.01"))),
+                "expense_notes":    f"Purchase from {supplier_label} — {datetime.now(timezone.utc).strftime('%d %b %Y')}",
+                "created_by":       user_id,
+                "source_type":      "purchase_payment",
+                "source_id":        new_payment_id
+            }
+        ))
+
+        await db.commit()
+        await async_set_rls_gucs_after_commit(db, current_user)
+    except Exception:
+        await db.rollback()
+        logging.exception("create_purchase_payment failed")
+        return error_response("Failed to record payment. Please try again.", status_code=500)
+
+    new_remaining = (pur_final - total_after).quantize(Decimal("0.01"))
+
+    return success_response({
+        "message":           "Payment recorded successfully",
+        "payment_status":    new_status,
+        "this_payment":      float(new_payment.quantize(Decimal("0.01"))),
+        "total_paid":        float(total_after.quantize(Decimal("0.01"))),
+        "remaining_balance": float(new_remaining) if new_remaining > 0 else 0,
+        "payment": {
+            "payment_id":      new_payment_id,
+            "business_id":     business_id,
+            "pur_id":          pur_id,
+            "payment_amount":  float(new_payment.quantize(Decimal("0.01"))),
+            "cumulative_paid": float(total_after.quantize(Decimal("0.01"))),
+            "payment_method":  data.payment_method or "cash",
+            "payment_status":  new_status,
+            "is_active":       True,
+            "payment_paid_at": fmt_ts(datetime.now(timezone.utc))
+        }
+    }, status_code=201)

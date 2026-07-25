@@ -15,6 +15,7 @@ import {
   updatePurchaseStatus,
   deletePurchase as deletePurchaseApi,
   fetchSuppliersLean,
+  recordPurchasePayment,
 } from '../api/purchasesApi'
 
 const PAGE_SIZE = 20
@@ -158,6 +159,19 @@ export function usePurchases() {
     },
   })
 
+  // ── Record purchase payment mutation ──────────────────────────────────────
+  const paymentMutation = useMutation({
+    mutationFn: ({ purId, payload }) => recordPurchasePayment(purId, payload),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['purchases'] })
+      queryClient.invalidateQueries({ queryKey: ['purchase', variables.purId] })
+      toast.success('Payment recorded successfully')
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Failed to record payment')
+    },
+  })
+
   return {
     purchases,
     isLoading,
@@ -179,6 +193,9 @@ export function usePurchases() {
 
     deletePurchase:  (purId, reduceStock, callbacks) => deleteMutation.mutate({ purId, reduceStock, callbacks }),
     isDeleting:      deleteMutation.isPending,
+
+    recordPayment:   (purId, payload, callbacks) => paymentMutation.mutate({ purId, payload }, callbacks),
+    isRecordingPayment: paymentMutation.isPending,
 
     createPurchase:  (body, callbacks) => createMutation.mutate(body, callbacks),
     isCreating:      createMutation.isPending,

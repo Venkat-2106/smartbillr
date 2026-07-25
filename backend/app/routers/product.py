@@ -1109,6 +1109,7 @@ async def get_product(
                     al.old_data,
                     al.new_data,
                     al.created_at,
+                    al.source,
                     COALESCE(p.full_name, 'System') AS changed_by
                 FROM audit_logs al
                 LEFT JOIN profiles p ON p.id = al.user_id
@@ -1168,7 +1169,8 @@ async def get_product(
                 "audit_id":   str(a.audit_id),
                 "changes":    changes,
                 "changed_by": a.changed_by,
-                "changed_at": fmt_ts(a.created_at)
+                "changed_at": fmt_ts(a.created_at),
+                "source":     a.source or "manual"
             })
 
     total_sold     = sum(abs(s["qty_changed"]) for s in stock_history if s["move_type"] == "sale")

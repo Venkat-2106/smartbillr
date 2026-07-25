@@ -98,3 +98,73 @@ async def record_payment_and_sync_async(
     )
 
     return new_payment_id
+
+
+# ─────────────────────────────────────────────────────────────────
+# HELPER — Record purchase payment and sync parent purchase status
+#
+# Structural mirror of record_payment_and_sync_async() above, but
+# targeting purchase_payments/purchases instead of payments/sales.
+# Reuses calculate_payment_status() — it's already generic.
+# ─────────────────────────────────────────────────────────────────
+async def record_purchase_payment_and_sync_async(
+    db:              AsyncSession,
+    business_id:     str,
+    pur_id:          str,
+    payment_amount:  Decimal,
+    payment_method:  str,
+    new_status:      str,
+    cumulative_paid: Decimal
+) -> str:
+    await db.execute(
+        text("""
+            UPDATE purchase_payments
+            SET is_active = false
+            WHERE pur_id      = CAST(:pur_id AS uuid)
+              AND business_id = CAST(:bid AS uuid)
+              AND is_active   = true
+        """),
+        {"pur_id": pur_id, "bid": business_id}
+    )
+
+    new_payment_id = str(uuid.uuid4())
+    await db.execute(
+        text("""
+            INSERT INTO purchase_payments (
+                payment_id,   business_id,  pur_id,
+                payment_amount, payment_method,
+                payment_status, is_active,
+                cumulative_paid
+            ) VALUES (
+                CAST(:payment_id  AS uuid),
+                CAST(:business_id AS uuid),
+                CAST(:pur_id      AS uuid),
+                :payment_amount,
+                :payment_method,
+                :payment_status,
+                true,
+                :cumulative_paid
+            )
+        """),
+        {
+            "payment_id":      new_payment_id,
+            "business_id":     business_id,
+            "pur_id":          pur_id,
+            "payment_amount":  payment_amount,
+            "payment_method":  payment_method,
+            "payment_status":  new_status,
+            "cumulative_paid": cumulative_paid
+        }
+    )
+
+    await db.execute(
+        text("""
+            UPDATE purchases
+            SET pur_payment_status = :status
+            WHERE pur_id      = CAST(:pid AS uuid)
+              AND business_id = CAST(:bid AS uuid)
+        """),
+        {"status": new_status, "pid": pur_id, "bid": business_id}
+    )
+
+    return new_payment_id

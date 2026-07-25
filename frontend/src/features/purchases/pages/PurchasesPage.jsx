@@ -153,6 +153,8 @@ export default function PurchasesPage() {
     isUpdatingStatus,
     deletePurchase,
     isDeleting,
+    recordPayment,
+    isRecordingPayment,
   } = usePurchases()
 
   const [bannerDismissed, setBannerDismissed] = useState(false)
@@ -434,6 +436,8 @@ export default function PurchasesPage() {
             isUpdatingStatus={isUpdatingStatus}
             canEdit={canEdit}
             onDelete={handleDeleteClick}
+            onRecordPayment={recordPayment}
+            isRecordingPayment={isRecordingPayment}
           />
         </>
       )}

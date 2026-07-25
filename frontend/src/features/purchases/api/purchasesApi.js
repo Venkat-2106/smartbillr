@@ -82,3 +82,9 @@ export async function fetchSuppliersLean() {
   const res = await api.get('/suppliers/lean')
   return res.data  // array of { supp_id, supp_name, supp_phone, supp_state }
 }
+
+// ── POST payment against a purchase ───────────────────────────────────────────
+export async function recordPurchasePayment(purId, payload) {
+  const res = await api.post(`/purchases/${purId}/payments`, payload)
+  return res.data
+}

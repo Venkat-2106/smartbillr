@@ -593,6 +593,15 @@ export default function ProductDetailDrawer({ product, onClose }) {
                     }}>
                       <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 6 }}>
                         {entry.changed_by} · {formatDate(entry.changed_at)}
+                        {entry.source === 'purchase' && (
+                          <span style={{
+                            marginLeft: 6, fontSize: 10, fontWeight: 600,
+                            padding: '1px 5px', borderRadius: 4,
+                            background: '#DBEAFE', color: '#1D4ED8',
+                          }}>
+                            By Purchase
+                          </span>
+                        )}
                       </div>
                       {entry.changes.map(ch => (
                         <div key={ch.field} style={{

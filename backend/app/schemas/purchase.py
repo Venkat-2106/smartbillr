@@ -46,6 +46,30 @@ class PurchaseItemOut(BaseModel):
 
 
 # ─────────────────────────────────────────
+# Purchase Payment schema
+# ─────────────────────────────────────────
+
+class PurchasePaymentCreate(BaseModel):
+    payment_amount: Decimal
+    payment_method: Optional[str] = None
+
+    @field_validator("payment_amount")
+    @classmethod
+    def amount_must_be_positive(cls, v):
+        if v <= 0:
+            raise ValueError("Payment amount must be greater than zero")
+        return v
+
+    @field_validator("payment_method")
+    @classmethod
+    def valid_payment_method(cls, v):
+        allowed = ["cash", "upi", "card", "bank", "split", "adjustment"]
+        if v is not None and v not in allowed:
+            raise ValueError(f"Payment method must be one of: {allowed}")
+        return v
+
+
+# ─────────────────────────────────────────
 # Purchase schemas
 # ─────────────────────────────────────────
 

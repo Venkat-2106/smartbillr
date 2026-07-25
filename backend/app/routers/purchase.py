@@ -404,17 +404,29 @@ async def create_purchase(
                 }
             )
 
-        # Step 6 → Auto-create expense record when purchase is paid immediately
+        # Step 6 → Auto-create expense + payment record when purchase is paid immediately
         # WHY: Cash purchase = money leaves the business immediately.
         # Without this, the accountant must manually add an expense for every
         # cash purchase — that is error-prone.
-        # Race-safety: INSERT ... WHERE NOT EXISTS prevents duplicate expenses
-        # when PATCH /status is called concurrently with "paid".
+        # Routes through record_purchase_payment_and_sync_async so the
+        # purchase_payments ledger is written at creation time (consistent
+        # with payments recorded via POST /purchases/{id}/payments).
         if data.pur_payment_status == "paid":
             pur_row      = await fetch_full_purchase(db, new_pur_id, business_id)
             final_amount = Decimal(str(pur_row.pur_final_amount)) if pur_row and pur_row.pur_final_amount else Decimal("0")
+            supplier_label = supplier.supp_name if supplier else "Walk-in"
 
-            await db.execute(
+            new_payment_id = await record_purchase_payment_and_sync_async(
+                db              = db,
+                business_id     = business_id,
+                pur_id          = new_pur_id,
+                payment_amount  = final_amount,
+                payment_method  = "cash",
+                new_status      = "paid",
+                cumulative_paid = final_amount
+            )
+
+            (await db.execute(
                 text("""
                     INSERT INTO expenses (
                         expense_id, business_id, expense_category,
@@ -430,21 +442,18 @@ async def create_purchase(
                         :source_type,
                         CAST(:source_id AS uuid)
                     )
-                    ON CONFLICT (business_id, source_type, source_id)
-                    WHERE is_deleted = false AND source_type IS NOT NULL
-                    DO NOTHING
                 """),
                 {
                     "expense_id":       str(uuid.uuid4()),
                     "business_id":      business_id,
                     "expense_category": "purchase",
                     "expense_amount":   str(final_amount),
-                    "expense_notes":    f"Purchase from {supplier.supp_name if supplier else 'Walk-in'} — {datetime.now(timezone.utc).strftime('%d %b %Y')}",
+                    "expense_notes":    f"Purchase from {supplier_label} — {datetime.now(timezone.utc).strftime('%d %b %Y')}",
                     "created_by":       user_id,
-                    "source_type":      "purchase",
-                    "source_id":        new_pur_id
+                    "source_type":      "purchase_payment",
+                    "source_id":        new_payment_id
                 }
-            )
+            ))
 
         # ── Revalidate low-stock alerts ──────────────────────────────────────
         # Purchase increases stock. Remove stale alerts for products now above
@@ -635,6 +644,21 @@ async def get_purchase(
 
     items = await fetch_purchase_items(db, pur_id, business_id)
 
+    # Fetch payment total from purchase_payments ledger
+    pay_row = (await db.execute(
+        text("""
+            SELECT COALESCE(cumulative_paid, 0) AS total_paid
+            FROM purchase_payments
+            WHERE pur_id      = CAST(:pid AS uuid)
+              AND business_id = CAST(:bid AS uuid)
+              AND is_active   = true
+        """),
+        {"pid": pur_id, "bid": business_id}
+    )).fetchone()
+    total_paid = Decimal(str(pay_row.total_paid)) if pay_row and pay_row.total_paid else Decimal("0")
+    pur_final  = Decimal(str(row.pur_final_amount)) if row.pur_final_amount else Decimal("0")
+    remaining_balance = max(Decimal("0"), pur_final - total_paid)
+
     # Fetch all purchase returns for this purchase
     return_rows = (await db.execute(text("""
         SELECT
@@ -722,6 +746,8 @@ async def get_purchase(
     purchase_data["returns"]             = returns
     purchase_data["total_returns"]       = len(returns)
     purchase_data["total_refund_amount"] = float(sum(r["return_amount"] for r in returns))
+    purchase_data["total_paid"]          = float(total_paid)
+    purchase_data["remaining_balance"]   = float(remaining_balance)
 
     return success_response(purchase_data)
 
@@ -740,9 +766,16 @@ async def update_purchase_status(
     db: AsyncSession = Depends(get_async_db)
 ):
     status  = body.status
-    allowed = ["pending", "paid", "partial"]
+    allowed = ["pending", "paid"]
     if status not in allowed:
         return error_response(f"Status must be one of: {allowed}", 400)
+
+    # "partial" transitions must go through POST /purchases/{id}/payments
+    if status == "partial":
+        return error_response(
+            "Use the record-payment endpoint to mark a purchase as partially paid.",
+            400
+        )
 
     business_id = current_user["business_id"]
     user_id     = current_user["user_id"]
@@ -765,45 +798,62 @@ async def update_purchase_status(
     if status == "paid" and old_status != "paid":
         pur_row = await fetch_full_purchase(db, pur_id, business_id)
         final_amount = Decimal(str(pur_row.pur_final_amount)) if pur_row and pur_row.pur_final_amount else Decimal("0")
+        supplier_label = pur_row.supp_name if pur_row and pur_row.supp_name else "Walk-in"
 
-        # Race-safe insert: the WHERE NOT EXISTS check runs inside the same
-        # statement as the INSERT, so it sees the latest committed (or even
-        # uncommitted within this transaction) state.  Combined with the
-        # unique partial index (business_id, source_type, source_id) this
-        # guarantees at most one expense per purchase.
-        result = (await db.execute(
+        # Read current cumulative_paid from the payment ledger
+        active_row = (await db.execute(
             text("""
-                INSERT INTO expenses (
-                    expense_id, business_id, expense_category,
-                    expense_amount, expense_notes, created_by,
-                    source_type, source_id
-                ) VALUES (
-                    CAST(:expense_id AS uuid),
-                    CAST(:business_id AS uuid),
-                    :expense_category,
-                    :expense_amount,
-                    :expense_notes,
-                    CAST(:created_by AS uuid),
-                    :source_type,
-                    CAST(:source_id AS uuid)
-                )
-                ON CONFLICT (business_id, source_type, source_id)
-                WHERE is_deleted = false AND source_type IS NOT NULL
-                DO NOTHING
-                RETURNING expense_id
+                SELECT COALESCE(cumulative_paid, 0) AS already_paid
+                FROM purchase_payments
+                WHERE pur_id      = CAST(:pid AS uuid)
+                  AND business_id = CAST(:bid AS uuid)
+                  AND is_active   = true
             """),
-            {
-                "expense_id":       str(uuid.uuid4()),
-                "business_id":      business_id,
-                "expense_category": "purchase",
-                "expense_amount":   str(final_amount),
-                "expense_notes":    f"Purchase from {pur_row.supp_name if pur_row and pur_row.supp_name else 'Walk-in'} — {datetime.now(timezone.utc).strftime('%d %b %Y')}",
-                "created_by":       user_id,
-                "source_type":      "purchase",
-                "source_id":        pur_id
-            }
+            {"pid": pur_id, "bid": business_id}
         )).fetchone()
-        expense_created = result is not None
+        already_paid = Decimal(str(active_row.already_paid)) if active_row else Decimal("0")
+        remaining = max(Decimal("0"), final_amount - already_paid)
+
+        if remaining > 0:
+            new_payment_id = await record_purchase_payment_and_sync_async(
+                db              = db,
+                business_id     = business_id,
+                pur_id          = pur_id,
+                payment_amount  = remaining,
+                payment_method  = "cash",
+                new_status      = "paid",
+                cumulative_paid = final_amount
+            )
+
+            (await db.execute(
+                text("""
+                    INSERT INTO expenses (
+                        expense_id, business_id, expense_category,
+                        expense_amount, expense_notes, created_by,
+                        source_type, source_id
+                    ) VALUES (
+                        CAST(:expense_id AS uuid),
+                        CAST(:business_id AS uuid),
+                        :expense_category,
+                        :expense_amount,
+                        :expense_notes,
+                        CAST(:created_by AS uuid),
+                        :source_type,
+                        CAST(:source_id AS uuid)
+                    )
+                """),
+                {
+                    "expense_id":       str(uuid.uuid4()),
+                    "business_id":      business_id,
+                    "expense_category": "purchase",
+                    "expense_amount":   str(remaining),
+                    "expense_notes":    f"Purchase from {supplier_label} — {datetime.now(timezone.utc).strftime('%d %b %Y')}",
+                    "created_by":       user_id,
+                    "source_type":      "purchase_payment",
+                    "source_id":        new_payment_id
+                }
+            ))
+            expense_created = True
 
     await db.commit()
     # RLS: SET LOCAL/set_config GUCs are transaction-scoped and are cleared

@@ -290,6 +290,7 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
                     variant="primary"
                     size="sm"
                     loading={isUpdatingStatus || isRecordingPayment}
+                    disabled={newStatus === 'partial' && (!paymentAmount || parseFloat(paymentAmount) <= 0)}
                     onClick={handleStatusSave}
                   >
                     Save
@@ -368,6 +369,12 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
                 return <SummaryRow label={getTaxLabel(country, isGstRegistered)} value={formatCurrency(data.pur_tax_total || 0, country)} />
               })()}
               <SummaryRow label="Total"            value={formatCurrency(data.pur_final_amount || 0, country)} bold />
+              {data.total_paid > 0 && (
+                <SummaryRow label="Paid Amount"     value={formatCurrency(data.total_paid, country)} />
+              )}
+              {data.remaining_balance > 0 && (
+                <SummaryRow label="Due Amount"      value={formatCurrency(data.remaining_balance, country)} danger />
+              )}
             </div>
 
             {/* Line Items */}

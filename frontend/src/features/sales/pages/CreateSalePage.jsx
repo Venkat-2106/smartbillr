@@ -119,13 +119,26 @@ export default function CreateSalePage() {
     handleSubmit();
   }, [handleAutoPrintChange, handleSubmit]);
 
+  // FIX (2026-07-25): Only sum items that have a product selected.
+  // The trailing empty placeholder row (from newItem()) has quantity: 1 but
+  // no product_id — it must not contribute to the displayed total. Without
+  // this guard the "Total Quantity" badge initialised at 1 on page load.
   const totalQuantity = useMemo(
-    () => items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0),
+    () => items.reduce((sum, item) => sum + (item.product_id ? (Number(item.quantity) || 0) : 0), 0),
     [items]
   );
 
   return (
-    <>
+    // FIX (2026-07-25): Flex-column wrapper fills the scrollable <main> area
+    // so the line-items scroll region can flex to fill remaining viewport
+    // height instead of relying on a hardcoded maxHeight calculation.
+    // minHeight: 0 allows flex children to shrink below their content size.
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      minHeight: 0,
+    }}>
       {/* ── Modals ─────────────────────────────────────────────────── */}
       <AddCustomerModal
         open={showAddCustModal}
@@ -220,9 +233,11 @@ export default function CreateSalePage() {
       </Modal>
 
       {/* ── Top action bar ─────────────────────────────────────────── */}
+      {/* flexShrink: 0 — never compress the header within the flex layout */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         marginBottom: 24, gap: 16, flexWrap: 'wrap',
+        flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
@@ -269,9 +284,12 @@ export default function CreateSalePage() {
       </div>
 
       {/* ── Customer + Payment Info cards ───────────────────────────── */}
-      <div style={{
+      {/* className targets responsive CSS: stacks to single column at ≤900px.
+          flexShrink: 0 — fixed section that must not compress. */}
+      <div className="create-sale-info-grid" style={{
         display: 'grid', gridTemplateColumns: '1fr 1fr',
         gap: 16, marginBottom: 16, alignItems: 'start',
+        flexShrink: 0,
       }}>
         <div style={CARD_STYLE}>
           <h3 style={CARD_TITLE_STYLE}>Customer Information</h3>
@@ -353,14 +371,21 @@ export default function CreateSalePage() {
       </div>
 
       {/* ── Main body: line items (left) + summary sidebar (right) ── */}
+      {/* flex: 1 + minHeight: 0 — this grid fills all remaining vertical
+          space in the page flex column. Responsive CSS narrows the sidebar
+          at ≤1200px (300px) and stacks to single column at ≤900px. */}
       <div className="create-sale-grid" style={{
         display: 'grid',
         gridTemplateColumns: '1fr 360px',
         gap: 16,
         alignItems: 'start',
+        flex: 1,
+        minHeight: 0,
       }}>
         {/* Left column — barcode + line items */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* flex: 1 + minHeight: 0 — propagate available height down to the
+            line-items card so its scroll region can fill remaining space. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, minHeight: 0 }}>
           {/* Barcode Scanner */}
           <div style={CARD_STYLE}>
             <BarcodeScanner
@@ -374,12 +399,16 @@ export default function CreateSalePage() {
           </div>
 
           {/* Line items table */}
-          <div style={CARD_STYLE}>
+          {/* flex column so the header stays fixed and the scroll region
+              fills the remaining height (flex: 1 + minHeight: 0). */}
+          <div style={{ ...CARD_STYLE, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            {/* Table header — flexShrink: 0 keeps it pinned above the scroll area */}
             <div style={{
               display: 'grid',
               gridTemplateColumns: '1fr 90px 100px 72px 110px 72px 100px 28px',
               gap: 8, paddingBottom: 8,
               borderBottom: '1px solid var(--border)', marginBottom: 4,
+              flexShrink: 0,
             }}>
               {['Product', 'Barcode', 'Qty', 'Unit Price', `${taxLabel} %`, 'Stock', 'Total', ''].map((h, i) => (
                 <span key={i} style={{
@@ -391,9 +420,13 @@ export default function CreateSalePage() {
               ))}
             </div>
 
+            {/* Scrollable row area — flex: 1 + minHeight: 0 makes this
+                fill the remaining height inside the flex-column card,
+                replacing the old hardcoded maxHeight: calc(100dvh - 460px)
+                which did not account for topbar + page padding. */}
             <div style={{
-              maxHeight: 'calc(100dvh - 460px)',
-              minHeight: 120,
+              flex: 1,
+              minHeight: 0,
               overflowY: 'auto',
               overflowX: 'visible',
               marginRight: -8,
@@ -444,6 +477,7 @@ export default function CreateSalePage() {
                 cursor: 'pointer', color: addItemHovered ? 'var(--accent-600)' : 'var(--text-muted)',
                 fontSize: 13, fontFamily: 'inherit',
                 transition: 'border-color 0.15s, color 0.15s',
+                flexShrink: 0,
               }}
             >
               + Add another line item
@@ -526,9 +560,12 @@ export default function CreateSalePage() {
       </div>
 
       {/* ── Bottom action bar ──────────────────────────────────────── */}
+      {/* flexShrink: 0 — fixed footer within the flex layout.
+          CSS class makes it sticky at ≤900px for easy access on scroll. */}
       <div className="create-sale-bottom-bar" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8,
         paddingTop: 16, paddingBottom: 8, flexWrap: 'wrap',
+        flexShrink: 0,
       }}>
         <Button variant="ghost" onClick={() => { if (confirmLeave()) navigate('/sales') }} disabled={isPending}>
           Cancel
@@ -546,6 +583,6 @@ export default function CreateSalePage() {
           Preview
         </Button>
       </div>
-    </>
+    </div>
   );
 }

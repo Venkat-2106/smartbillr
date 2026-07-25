@@ -780,9 +780,33 @@ kbd kbd { border: none; padding: 0; background: none; box-shadow: none; }
   .pagination-jump { display: none !important; }
 }
 
-/* ─── Create Sale Page Responsive ───────────────────────────── */
+/* ─── Create Sale Page Responsive ─────────────────────────────
+   FIX (2026-07-25): Added responsive breakpoints so the invoice creation
+   page fits on common laptop resolutions (1366×768, 1440×900, 1920×1080)
+   without awkward scrolling or horizontal overflow.
+
+   Layout strategy (CreateSalePage.jsx):
+     • Page wrapper is a flex column filling the scrollable <main> area.
+     • Top action bar, info cards, and bottom bar are flexShrink: 0 (fixed).
+     • Main body grid is flex: 1 + minHeight: 0 (fills remaining space).
+     • Line-items scroll region is flex: 1 inside a flex-column card,
+       replacing the old hardcoded maxHeight: calc(100dvh - 460px).
+   ──────────────────────────────────────────────────────────────── */
+
+/* ≤1200px — Narrow the sidebar from 360px to 300px so the line-items
+   column gets more horizontal room on smaller laptops. */
+@media (max-width: 1200px) {
+  .create-sale-grid {
+    grid-template-columns: 1fr 300px !important;
+  }
+}
+/* ≤900px — Stack everything to single column. The bottom bar becomes
+   sticky so Save/Cancel buttons remain reachable while scrolling. */
 @media (max-width: 900px) {
   .create-sale-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .create-sale-info-grid {
     grid-template-columns: 1fr !important;
   }
   .create-sale-bottom-bar {
@@ -794,8 +818,12 @@ kbd kbd { border: none; padding: 0; background: none; box-shadow: none; }
     z-index: 10;
   }
 }
+/* ≤640px — Tighter gaps to reclaim vertical space on small screens. */
 @media (max-width: 640px) {
   .create-sale-grid {
+    gap: 12px !important;
+  }
+  .create-sale-info-grid {
     gap: 12px !important;
   }
 }

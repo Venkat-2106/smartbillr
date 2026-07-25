@@ -221,7 +221,7 @@ export default function PurchaseReturnsPage() {
             value={search}
             onChange={setSearch}
             onSearch={setSearch}
-            placeholder="Search by reason or supplier\u2026"
+            placeholder="Search by reason or supplier"
             width="280px"
           />
           <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>

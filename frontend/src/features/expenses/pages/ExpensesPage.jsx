@@ -330,7 +330,7 @@ export default function ExpensesPage() {
             value={search}
             onChange={setSearch}
             onSearch={setSearch}
-            placeholder="Search notes or category\u2026"
+            placeholder="Search notes or category"
             width="280px"
           />
           <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>

@@ -224,7 +224,7 @@ export default function SalesReturnsPage() {
             value={search}
             onChange={setSearch}
             onSearch={setSearch}
-            placeholder="Search by reason or invoice\u2026"
+            placeholder="Search by reason or invoice"
             width="280px"
           />
           <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>

@@ -305,7 +305,7 @@ export default function PurchasesPage() {
             value={search}
             onChange={setSearch}
             onSearch={setSearch}
-            placeholder="Search by supplier name\u2026"
+            placeholder="Search by supplier name"
             width="260px"
           />
           <select

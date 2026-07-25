@@ -46,6 +46,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from app.database import get_async_db
 from app.middleware.rbac import require_permission, async_set_rls_gucs_after_commit
+from app.models.purchase import Purchase
 from app.schemas.purchase import PurchaseCreate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response

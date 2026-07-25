@@ -1,7 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from decimal import Decimal
-from app.models.purchase import Purchase
 from app.models.product import Product
 from app.models.supplier import Supplier
 from app.utils.payment_helpers import calculate_payment_status

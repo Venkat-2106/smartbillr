@@ -68,6 +68,17 @@ class PurchaseStatusUpdate(BaseModel):
     status: str
 
 
+async def generate_purchase_number(db: AsyncSession, business_id: str) -> str:
+    result = await db.execute(
+        text("SELECT get_next_purchase_number(:bid) AS pur_invoice_no"),
+        {"bid": business_id},
+    )
+    row = result.fetchone()
+    if not row or not row.pur_invoice_no:
+        raise Exception("Failed to generate purchase number — business counter not found")
+    return row.pur_invoice_no
+
+
 router = APIRouter(prefix="/v1/purchases", tags=["Purchases"])
 
 
@@ -84,6 +95,7 @@ async def fetch_full_purchase(db: AsyncSession, pur_id: str, business_id: str):
                    p.pur_tax_total, p.pur_final_amount,
                    p.pur_payment_status, p.is_deleted,
                    p.pur_created_at, p.updated_at, p.created_by,
+                   p.pur_invoice_no,
                    pr.full_name AS last_updated_by
             FROM purchases p
             LEFT JOIN suppliers s  ON s.supp_id   = p.supp_id
@@ -128,6 +140,7 @@ def purchase_row_to_dict(row, items):
         "business_id":        str(row.business_id),
         "supp_id":            str(row.supp_id) if row.supp_id else None,
         "supp_name":          row.supp_name if hasattr(row, "supp_name") else None,
+        "pur_invoice_no":     row.pur_invoice_no if hasattr(row, "pur_invoice_no") else None,
         "pur_total_amount":   str(Decimal(str(row.pur_total_amount))),
         "pur_discount":       str(Decimal(str(row.pur_discount))) if row.pur_discount else "0",
         "pur_cgst_total":     str(Decimal(str(row.pur_cgst_total))) if row.pur_cgst_total else "0",
@@ -152,6 +165,7 @@ def purchase_row_to_dict_list(row):
         "business_id":        str(row.business_id),
         "supp_id":            str(row.supp_id) if row.supp_id else None,
         "supp_name":          row.supp_name,
+        "pur_invoice_no":     row.pur_invoice_no if hasattr(row, "pur_invoice_no") else None,
         "pur_total_amount":   str(Decimal(str(row.pur_total_amount))),
         "pur_discount":       str(Decimal(str(row.pur_discount))) if row.pur_discount else "0",
         "pur_cgst_total":     str(Decimal(str(row.pur_cgst_total))) if row.pur_cgst_total else "0",
@@ -207,6 +221,8 @@ async def create_purchase(
     )
     if not allowed:
         return error_response(msg, status_code=403)
+
+    pur_invoice_no = await generate_purchase_number(db, business_id)
 
     try:
         # Step 1 → Get business country, state, and GST registration for tax engine
@@ -321,7 +337,7 @@ async def create_purchase(
                     pur_total_amount, pur_discount,
                     pur_cgst_total, pur_sgst_total,
                     pur_igst_total, pur_tax_total,
-                    pur_payment_status, created_by
+                    pur_payment_status, pur_invoice_no, created_by
                 ) VALUES (
                     CAST(:pur_id AS uuid),
                     CAST(:business_id AS uuid),
@@ -329,7 +345,7 @@ async def create_purchase(
                     :pur_total_amount, :pur_discount,
                     :pur_cgst_total, :pur_sgst_total,
                     :pur_igst_total, :pur_tax_total,
-                    :pur_payment_status,
+                    :pur_payment_status, :pur_invoice_no,
                     CAST(:created_by AS uuid)
                 )
             """),
@@ -344,6 +360,7 @@ async def create_purchase(
                 "pur_igst_total":    str(igst_total),
                 "pur_tax_total":     str(tax_total),
                 "pur_payment_status": data.pur_payment_status,
+                "pur_invoice_no":    pur_invoice_no,
                 "created_by":        user_id
             }
         )
@@ -543,6 +560,7 @@ async def get_all_purchases(
         "pur_final_amount":   "p.pur_final_amount",
         "pur_payment_status": "p.pur_payment_status",
         "supp_name":          "s.supp_name",
+        "pur_invoice_no":     "p.pur_invoice_no",
         "updated_at":         "p.updated_at",
     }
     order_col = SORTABLE.get(sort_by, "p.pur_created_at")
@@ -552,7 +570,7 @@ async def get_all_purchases(
     params      = {"bid": business_id}
 
     if search and search.strip():
-        extra_where += " AND s.supp_name ILIKE :search"
+        extra_where += " AND (s.supp_name ILIKE :search OR p.pur_invoice_no ILIKE :search)"
         params["search"] = f"%{search.strip()}%"
 
     if status and status.strip():
@@ -576,7 +594,7 @@ async def get_all_purchases(
                p.pur_total_amount, p.pur_discount,
                p.pur_cgst_total, p.pur_sgst_total, p.pur_igst_total,
                p.pur_tax_total, p.pur_final_amount,
-               p.pur_payment_status,
+               p.pur_payment_status, p.pur_invoice_no,
                p.pur_created_at,
                p.updated_at,
                pr.full_name AS last_updated_by,

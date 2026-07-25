@@ -10,7 +10,7 @@
 // Status update calls updateStatus from parent hook.
 
 import { useState }               from 'react'
-import { XMarkIcon }               from '@heroicons/react/24/outline'
+import { XMarkIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
 import { usePurchaseDetail }       from '../hooks/usePurchases'
 import { Badge, Button, Spinner }  from '../../../shared/components'
 import { selectStyle }             from '../../../shared/components/FormField'
@@ -168,20 +168,28 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
 
       {/* Header */}
       <div style={{
-        padding: '20px 24px',
+        padding: '22px 24px',
         borderBottom: '1px solid var(--border)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        display: 'flex', alignItems: 'flex-start',
+        justifyContent: 'space-between', gap: 16,
         flexShrink: 0,
       }}>
-        <div>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
-            Purchase Detail
-          </h3>
-          {data?.supp_name && (
-            <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
-              {data.supp_name} · {data.pur_created_at ? formatDate(data.pur_created_at) : '—'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: 14, flexShrink: 0,
+            background: 'linear-gradient(135deg, var(--accent-600), var(--accent-500))',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <DocumentTextIcon style={{ width: 24, height: 24, color: '#fff' }} />
+          </div>
+          <div>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0, lineHeight: 1.3 }}>
+              {data?.pur_invoice_no || 'Purchase'}
+            </h2>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0' }}>
+              Purchase Invoice
             </p>
-          )}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {onDelete && data && (

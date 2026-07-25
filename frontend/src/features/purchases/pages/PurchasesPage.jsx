@@ -34,6 +34,17 @@ const STATUS_LABEL = { paid: 'Paid', partial: 'Partial', pending: 'Unpaid' }
 function buildColumns(country) {
   return [
     {
+      key: 'pur_invoice_no',
+      label: 'Invoice No',
+      sortable: true,
+      width: 130,
+      render: (row) => (
+        <span style={{ fontWeight: 700, color: 'var(--accent-600)', fontFamily: "'JetBrains Mono', monospace", fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>
+          {row.pur_invoice_no || '-'}
+        </span>
+      ),
+    },
+    {
       key: 'supp_name',
       label: 'Supplier',
       sortable: true,
@@ -307,7 +318,7 @@ export default function PurchasesPage() {
             value={search}
             onChange={setSearch}
             onSearch={setSearch}
-            placeholder="Search by supplier name"
+            placeholder="Search by invoice or supplier"
             width="260px"
           />
           <select
@@ -447,7 +458,7 @@ export default function PurchasesPage() {
         open={showDelete}
         onClose={handleCloseDelete}
         onConfirm={onConfirmDelete}
-        title={'Delete Purchase?'}
+        title={`Delete "${deletingPur?.pur_invoice_no || 'Purchase'}"?`}
         message={'This action cannot be undone. The purchase record will be soft-deleted and will no longer appear in reports.'}
         confirmText={isDeleting ? 'Deleting...' : 'Yes, Delete Purchase'}
         loading={isDeleting}

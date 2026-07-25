@@ -34,6 +34,7 @@ import {
 import { usePermissions } from '../../../shared/hooks/usePermissions';
 import { detectTaxType, getTaxLabel } from '../../../shared/utils/formatTax';
 import CreateSalesReturnDrawer from '../../salesReturns/components/CreateSalesReturnDrawer';
+import { useSalesReturnsBySale } from '../../salesReturns/hooks/useSalesReturns';
 import { fetchPaymentsBySale } from '../../payments/api/paymentsApi';
 import useAuthStore from '../../../store/authStore';
 
@@ -235,7 +236,6 @@ function buildInvoiceHTML(
 }
 
 export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
-  const [displayStatus, setDisplayStatus] = useState(sale?.sales_payment_status || 'pending');
   const [editingStatus, setEditingStatus] = useState(false);
   const [newStatus,     setNewStatus]     = useState(sale?.sales_payment_status || 'paid');
   const [partialAmount, setPartialAmount] = useState('');
@@ -245,7 +245,6 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
   const business  = useAuthStore(s => s.business);
   const country   = business?.business_country_code || 'IN';
   const isGstRegistered = business?.is_gst_registered || false;
-
   const { can } = usePermissions();
 
   const { data: detail, isLoading, isError } = useQuery({
@@ -262,6 +261,8 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
     staleTime: 2 * 60 * 1000,
   });
 
+  const { data: returnsData } = useSalesReturnsBySale(sale?.sales_id);
+
   const paymentHistory = paymentsData?.payment_history ?? [];
 
   // Auto-print after create
@@ -273,15 +274,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, isError, detail, sale?._autoPrint]);
 
-  // Sync displayStatus once the real sale detail loads — the initial
-  // `sale` prop may be a placeholder (e.g. right after creating a sale)
-  // with no sales_payment_status, which would otherwise leave the
-  // badge stuck on the useState default.
-  useEffect(() => {
-    if (detail?.sales_payment_status) {
-      setDisplayStatus(detail.sales_payment_status);
-    }
-  }, [detail?.sales_payment_status]);
+  const displayStatus = detail?.sales_payment_status ?? sale?.sales_payment_status ?? 'pending';
 
   if (!sale) return null;
 
@@ -337,7 +330,6 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
       { id: sale.sales_id, status: newStatus, paid_amount: paidAmount },
       {
         onSuccess: () => {
-          setDisplayStatus(newStatus);
           setEditingStatus(false);
           setPartialAmount('');
           setPartialError('');
@@ -900,6 +892,45 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
                       </div>
                     </div>
                   ))}
+                </DrawerSection>
+              )}
+
+              {(returnsData?.length ?? 0) > 0 && (
+                <DrawerSection title={`Returns (${returnsData.length})`}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px' }}>
+                    {returnsData.map(ret => (
+                      <div
+                        key={ret.return_id}
+                        style={{
+                          background: 'var(--bg-subtle)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--r-md)', padding: '12px 14px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                            Return — {formatCurrency(ret.return_amount, country)}
+                          </span>
+                          <Badge
+                            variant={
+                              ret.return_status === 'approved' ? 'success'
+                              : ret.return_status === 'rejected' ? 'danger'
+                              : 'warning'
+                            }
+                            label={ret.return_status?.charAt(0).toUpperCase() + ret.return_status?.slice(1) || '—'}
+                          />
+                        </div>
+                        {ret.return_reason && (
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                            Reason: {ret.return_reason}
+                          </div>
+                        )}
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                          {ret.return_created_at ? formatDate(ret.return_created_at) : '—'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </DrawerSection>
               )}
 

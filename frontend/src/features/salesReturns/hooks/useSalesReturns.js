@@ -5,6 +5,7 @@ import {
   fetchSalesReturns,
   fetchAllSalesReturnsForExport,
   fetchSalesReturn,
+  fetchSalesReturnsBySale,
   createSalesReturn,
   updateSalesReturnStatus,
   deleteSalesReturn,
@@ -19,6 +20,15 @@ export function useSalesReturn(returnId) {
     queryFn:  () => fetchSalesReturn(returnId),
     enabled:  !!returnId,
     staleTime: 60 * 1000,
+  })
+}
+
+export function useSalesReturnsBySale(saleId) {
+  return useQuery({
+    queryKey: ['salesReturns', 'by-sale', saleId],
+    queryFn:  () => fetchSalesReturnsBySale(saleId),
+    enabled:  !!saleId,
+    staleTime: 30_000,
   })
 }
 

@@ -61,3 +61,8 @@ export async function deleteSalesReturn(returnId) {
   const res = await api.delete(`/sales-returns/${returnId}/`)
   return res.data
 }
+
+export async function fetchSalesReturnsBySale(saleId) {
+  const res = await api.get(`/sales-returns/by-sale/${saleId}`)
+  return res.data
+}

@@ -462,6 +462,41 @@ async def get_all_sales_returns(
 
 
 # ─────────────────────────────────────────
+# GET /sales-returns/by-sale/{sale_id} → All returns for a sale (drawer)
+# ─────────────────────────────────────────
+@router.get("/by-sale/{sale_id}")
+async def get_sales_returns_by_sale(
+    sale_id: str,
+    current_user: dict = Depends(require_permission("sales.view")),
+    db: AsyncSession = Depends(get_async_db),
+):
+    business_id = current_user["business_id"]
+
+    return_rows = (await db.execute(text("""
+        SELECT sr.return_id, sr.sale_id, sr.return_amount,
+               sr.return_reason, sr.return_status,
+               sr.return_created_at
+        FROM sales_returns sr
+        WHERE sr.sale_id      = CAST(:sid AS uuid)
+          AND sr.business_id  = CAST(:bid AS uuid)
+        ORDER BY sr.return_created_at DESC
+    """), {"sid": sale_id, "bid": business_id})).fetchall()
+
+    result = [
+        {
+            "return_id":         str(r.return_id),
+            "return_amount":     float(r.return_amount),
+            "return_reason":     r.return_reason,
+            "return_status":     r.return_status,
+            "return_created_at": fmt_ts(r.return_created_at),
+        }
+        for r in return_rows
+    ]
+
+    return success_response(result)
+
+
+# ─────────────────────────────────────────
 # GET /sales-returns/{return_id} → Get one
 # ─────────────────────────────────────────
 @router.get("/{return_id}")

@@ -33,6 +33,7 @@ from app.schemas.sales_return import SalesReturnCreate, SalesReturnUpdate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
+from app.utils.payment_helpers import record_payment_and_sync_async, calculate_payment_status
 from datetime import datetime, timezone
 import logging
 from decimal import Decimal
@@ -576,39 +577,137 @@ async def update_sales_return(
             }
         )
 
-        # Auto-create expense when a return is approved with a positive refund
-        if data.return_status == "approved" and sales_return.return_amount and sales_return.return_amount > 0:
-            await db.execute(
+        # ── Process refund: reduce what customer owes or create expense for excess ──
+        #
+        # APPROVAL REFUND LOGIC (2026-07):
+        # When a sales return is approved, the refund amount either:
+        #   (a) Reduces the remaining amount the customer owes
+        #       (covered_by_reducing = min(return_amount, remaining))
+        #   (b) Exceeds what's still owed — the excess is refunded to the
+        #       customer as an expense (source_type = "sales_return",
+        #       category = "other").
+        #
+        # The covered portion is recorded as an adjustment payment via
+        # record_payment_and_sync_async(), which updates cumulative_paid
+        # (read by dashboard, reports, and mv_dashboard_summary for
+        # outstanding_receivables) and derives sales_payment_status from
+        # calculate_payment_status() — the single source of truth.
+        #
+        # Formula:
+        #   remaining_before  = sale_final - total_paid - other_refunded
+        #   covered_by_reducing = min(return_amount, remaining_before)
+        #   excess_refund     = return_amount - covered_by_reducing
+        #
+        # other_refunded excludes THIS return (it hasn't been committed
+        # yet at this point in the flow).
+        return_amount = Decimal(str(sales_return.return_amount or 0))
+
+        if return_amount > 0:
+            # Fetch sale final amount
+            sale_row = (await db.execute(
                 text("""
-                    INSERT INTO expenses (
-                        expense_id, business_id, expense_category,
-                        expense_amount, expense_notes, created_by,
-                        source_type, source_id
-                    ) VALUES (
-                        CAST(:expense_id AS uuid),
-                        CAST(:business_id AS uuid),
-                        :expense_category,
-                        :expense_amount,
-                        :expense_notes,
-                        CAST(:created_by AS uuid),
-                        :source_type,
-                        CAST(:source_id AS uuid)
-                    )
-                    ON CONFLICT (business_id, source_type, source_id)
-                    WHERE is_deleted = false AND source_type IS NOT NULL
-                    DO NOTHING
+                    SELECT sales_final_amount
+                    FROM sales
+                    WHERE sales_id    = CAST(:sid AS uuid)
+                      AND business_id = CAST(:bid AS uuid)
                 """),
-                {
-                    "expense_id":       str(uuid.uuid4()),
-                    "business_id":      business_id,
-                    "expense_category": "other",
-                    "expense_amount":   str(sales_return.return_amount),
-                    "expense_notes":    f"Refund issued for sales return {return_id}",
-                    "created_by":       user_id,
-                    "source_type":      "sales_return",
-                    "source_id":        return_id
-                }
-            )
+                {"sid": str(sales_return.sale_id), "bid": str(business_id)}
+            )).fetchone()
+            sale_final = Decimal(str(sale_row.sales_final_amount)) if sale_row and sale_row.sales_final_amount else Decimal("0")
+
+            # Fetch cumulative paid
+            pay_row = (await db.execute(
+                text("""
+                    SELECT COALESCE(cumulative_paid, 0) AS total_paid
+                    FROM payments
+                    WHERE sale_id     = CAST(:sid AS uuid)
+                      AND business_id = CAST(:bid AS uuid)
+                      AND is_active   = true
+                """),
+                {"sid": str(sales_return.sale_id), "bid": str(business_id)}
+            )).fetchone()
+            total_paid = Decimal(str(pay_row.total_paid)) if pay_row and pay_row.total_paid else Decimal("0")
+
+            # Fetch total refunded from OTHER already-approved returns (excluding this one)
+            other_ref_row = (await db.execute(
+                text("""
+                    SELECT COALESCE(SUM(return_amount), 0) AS other_refunded
+                    FROM sales_returns
+                    WHERE sale_id       = CAST(:sid AS uuid)
+                      AND business_id   = CAST(:bid AS uuid)
+                      AND return_status = 'approved'
+                      AND return_id    != CAST(:rid AS uuid)
+                """),
+                {"sid": str(sales_return.sale_id), "bid": str(business_id), "rid": return_id}
+            )).fetchone()
+            other_refunded = Decimal(str(other_ref_row.other_refunded)) if other_ref_row and other_ref_row.other_refunded else Decimal("0")
+
+            remaining_before    = max(Decimal("0"), sale_final - total_paid - other_refunded)
+            covered_by_reducing = min(return_amount, remaining_before)
+            excess_refund       = (return_amount - covered_by_reducing).quantize(Decimal("0.01"))
+
+            # Record adjustment payment for the portion that reduces outstanding balance
+            if covered_by_reducing > 0:
+                new_cumulative = (total_paid + covered_by_reducing).quantize(Decimal("0.01"))
+                new_status     = calculate_payment_status(new_cumulative, sale_final)
+
+                await record_payment_and_sync_async(
+                    db=db,
+                    business_id=business_id,
+                    sale_id=str(sales_return.sale_id),
+                    payment_amount=covered_by_reducing,
+                    payment_method="adjustment",
+                    new_status=new_status,
+                    cumulative_paid=new_cumulative,
+                )
+
+            # Expense only for the excess (actual money back to customer)
+            if excess_refund > 0:
+                cust_row = (await db.execute(
+                    text("""
+                        SELECT c.cust_name
+                        FROM sales s
+                        LEFT JOIN customers c ON c.cust_id = s.customer_id
+                        WHERE s.sales_id    = CAST(:sid AS uuid)
+                          AND s.business_id = CAST(:bid AS uuid)
+                    """),
+                    {"sid": str(sales_return.sale_id), "bid": str(business_id)}
+                )).fetchone()
+                customer_label = "Walk-in"
+                if cust_row and cust_row.cust_name:
+                    customer_label = cust_row.cust_name
+
+                await db.execute(
+                    text("""
+                        INSERT INTO expenses (
+                            expense_id, business_id, expense_category,
+                            expense_amount, expense_notes, created_by,
+                            source_type, source_id
+                        ) VALUES (
+                            CAST(:expense_id AS uuid),
+                            CAST(:business_id AS uuid),
+                            :expense_category,
+                            :expense_amount,
+                            :expense_notes,
+                            CAST(:created_by AS uuid),
+                            :source_type,
+                            CAST(:source_id AS uuid)
+                        )
+                        ON CONFLICT (business_id, source_type, source_id)
+                        WHERE is_deleted = false AND source_type IS NOT NULL
+                        DO NOTHING
+                    """),
+                    {
+                        "expense_id":       str(uuid.uuid4()),
+                        "business_id":      business_id,
+                        "expense_category": "other",
+                        "expense_amount":   str(excess_refund),
+                        "expense_notes":    f"Refund issued to {customer_label} — sales return {return_id}",
+                        "created_by":       user_id,
+                        "source_type":      "sales_return",
+                        "source_id":        return_id
+                    }
+                )
 
         await db.commit()
         # Re-set GUCs after commit (SET LOCAL is transaction-scoped)

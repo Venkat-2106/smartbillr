@@ -716,7 +716,7 @@ export default function DashboardLayout() {
     } catch {
       // ignore
     }
-    const { queryClient } = await import('../../app/providers')
+    const { queryClient } = await import('../../app/queryClient')
     queryClient.clear()
     useAuthStore.getState().clearAuth()
     toast.success('Signed out successfully')

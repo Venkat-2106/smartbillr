@@ -711,9 +711,9 @@ async def get_purchase(
             FROM purchase_return_items pri
             JOIN products p ON p.prod_id = pri.product_id
             WHERE pri.return_id = ANY(CAST(:ids AS uuid[]))
-        # BUG FIX: asyncpg expects a Python list for array params, not a
-        # manually-formatted "{uuid1,uuid2}" string (causes DataError).
         """), {"ids": ret_ids})).fetchall()
+        # NOTE: asyncpg expects a Python list for array params, not a
+        # manually-formatted "{uuid1,uuid2}" string (causes DataError).
 
     ret_items_by_return = {}
     for ri in all_ret_items:

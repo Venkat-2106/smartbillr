@@ -455,7 +455,7 @@ function SupplierForm({ form, onSubmit, onCancel, loading, submitLabel }) {
       >
         <input
           {...register('supp_name')}
-          placeholder="e.g. ABC Wholesale Pvt Ltd"
+          placeholder="e.g. Venkat Rajan / ABC Wholesale Pvt Ltd"
           autoFocus
           style={fieldInput(!!errors.supp_name)}
         />

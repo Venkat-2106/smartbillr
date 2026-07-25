@@ -481,7 +481,7 @@ async def import_products(
             if cat_name and cat_name.lower() not in category_map:
                 unmatched_cat_errors.append({
                     "row": r["_row_number"],
-                    "message": f'Category "{cat_name}" does not exist. Leave this column blank to import without a category, or add the category first.'
+                    "message": f'Category "{cat_name}" does not exist. add the category first.'
                 })
             else:
                 filtered_rows.append(r)

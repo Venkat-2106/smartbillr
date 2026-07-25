@@ -123,7 +123,7 @@ export default function SignupPage() {
           <input
             {...register('business_name')}
             className={`input ${errors.business_name ? 'error' : ''}`}
-            placeholder="Sri MahaLakshmi Stores"
+            placeholder="Sri MahaLakshmi Pvt. Ltd."
           />
         </FormField>
 
@@ -131,7 +131,7 @@ export default function SignupPage() {
           <input
             {...register('owner_name')}
             className={`input ${errors.owner_name ? 'error' : ''}`}
-            placeholder="John Doe"
+            placeholder="Ravi Kumar"
           />
         </FormField>
 

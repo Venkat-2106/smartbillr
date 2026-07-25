@@ -574,7 +574,7 @@ export default function CustomersPage() {
           <FormField label="Customer Name" error={errors.cust_name?.message} required style={{ marginBottom: 16 }}>
             <Input
               {...register('cust_name')}
-              placeholder="e.g. Rajesh Kumar / ABC Enterprises"
+              placeholder="e.g. Aswin selvan Rajan / ABC Enterprises"
               autoFocus
               autoComplete="name"
             />

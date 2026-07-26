@@ -832,14 +832,16 @@ async def get_purchase_summary(
     """), {"bid": bid, **dp})
     row = row.fetchone()
 
+    ret = await _get_purchase_returned_tax(db, bid, date_from, date_to)
+
     return success_response({
         "total_purchases": int(row.total_purchases) if row else 0,
         "total_amount": float(row.total_amount) if can_financial else None,
         "total_discount": float(row.total_discount) if can_financial else None,
-        "total_tax": float(row.total_tax) if can_financial else None,
-        "total_cgst": float(row.total_cgst) if can_financial else None,
-        "total_sgst": float(row.total_sgst) if can_financial else None,
-        "total_igst": float(row.total_igst) if can_financial else None,
+        "total_tax": (float(row.total_tax) - ret["returned_tax"]) if can_financial else None,
+        "total_cgst": (float(row.total_cgst) - ret["returned_cgst"]) if can_financial else None,
+        "total_sgst": (float(row.total_sgst) - ret["returned_sgst"]) if can_financial else None,
+        "total_igst": (float(row.total_igst) - ret["returned_igst"]) if can_financial else None,
         "paid_count": int(row.paid_count) if row else 0,
         "pending_count": int(row.pending_count) if row else 0,
     })
@@ -1046,11 +1048,13 @@ async def get_purchase_tax_summary(
     """), {"bid": bid, **dp})
     row = row.fetchone()
 
+    ret = await _get_purchase_returned_tax(db, bid, date_from, date_to)
+
     return success_response({
-        "total_tax": float(row.total_tax) if can_financial else None,
-        "total_cgst": float(row.total_cgst) if can_financial else None,
-        "total_sgst": float(row.total_sgst) if can_financial else None,
-        "total_igst": float(row.total_igst) if can_financial else None,
+        "total_tax": (float(row.total_tax) - ret["returned_tax"]) if can_financial else None,
+        "total_cgst": (float(row.total_cgst) - ret["returned_cgst"]) if can_financial else None,
+        "total_sgst": (float(row.total_sgst) - ret["returned_sgst"]) if can_financial else None,
+        "total_igst": (float(row.total_igst) - ret["returned_igst"]) if can_financial else None,
     })
 
 

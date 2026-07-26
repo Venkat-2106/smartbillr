@@ -48,6 +48,9 @@ export default function TaxSection({ dateFrom, dateTo }) {
         <StatCard label={`${taxLabel} Collected`} value={formatCurrency(totalCollected, country)} sub={collectedSub} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>} loading={collected.isLoading} />
         <StatCard label={`${taxLabel} Paid`} value={formatCurrency(totalPaid, country)} sub={`On purchases`} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>} loading={paid.isLoading} />
         {netLiability != null && <StatCard label="Net Liability" value={formatCurrency(Math.abs(netLiability), country)} sub={netLiability >= 0 ? 'Payable' : 'Refundable'} icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>} loading={liability.isLoading} />}
+        {country === 'IN' && liability.data?.net_cgst_payable != null && <StatCard label="Net CGST Payable" value={formatCurrency(Math.abs(liability.data.net_cgst_payable), country)} sub={liability.data.net_cgst_payable >= 0 ? 'Payable' : 'Refundable'} loading={liability.isLoading} />}
+        {country === 'IN' && liability.data?.net_sgst_payable != null && <StatCard label="Net SGST Payable" value={formatCurrency(Math.abs(liability.data.net_sgst_payable), country)} sub={liability.data.net_sgst_payable >= 0 ? 'Payable' : 'Refundable'} loading={liability.isLoading} />}
+        {country === 'IN' && liability.data?.net_igst_payable != null && <StatCard label="Net IGST Payable" value={formatCurrency(Math.abs(liability.data.net_igst_payable), country)} sub={liability.data.net_igst_payable >= 0 ? 'Payable' : 'Refundable'} loading={liability.isLoading} />}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
@@ -59,7 +62,7 @@ export default function TaxSection({ dateFrom, dateTo }) {
         </ChartCard>
       </div>
 
-      <InfoCard title={`${taxLabel} by Rate (Sales)`} subtitle="Breakdown by tax slab on sales">
+      <InfoCard title={`${taxLabel} by Rate (Sales)`} subtitle="Breakdown by tax slab on sales — before returns">
         <DataTable columns={[
           { key: 'gst_rate', label: `${taxLabel} Rate`, bold: true, format: v => `${v}%` },
           { key: 'item_count', label: 'Items', align: 'center' },
@@ -68,7 +71,7 @@ export default function TaxSection({ dateFrom, dateTo }) {
         ]} data={Array.isArray(byRate.data) ? byRate.data : []} loading={byRate.isLoading} />
       </InfoCard>
 
-      <InfoCard title={`${taxLabel} by Rate (Purchases)`} subtitle="Breakdown by tax slab on purchases">
+      <InfoCard title={`${taxLabel} by Rate (Purchases)`} subtitle="Breakdown by tax slab on purchases — before returns">
         <DataTable columns={[
           { key: 'gst_rate', label: `${taxLabel} Rate`, bold: true, format: v => `${v}%` },
           { key: 'item_count', label: 'Items', align: 'center' },

@@ -2315,6 +2315,9 @@ async def get_tax_liability(
             "net_tax_liability": None,
             "tax_collected": None,
             "tax_paid": None,
+            "net_cgst_payable": None,
+            "net_sgst_payable": None,
+            "net_igst_payable": None,
         })
 
     ds, ps = _date_col("s", "sales_created_at", date_from, date_to)
@@ -2324,24 +2327,48 @@ async def get_tax_liability(
         SELECT
             COALESCE((SELECT SUM(tax_total) FROM sales s
                        WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {ds}), 0) AS collected,
+            COALESCE((SELECT SUM(cgst_total) FROM sales s
+                       WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {ds}), 0) AS collected_cgst,
+            COALESCE((SELECT SUM(sgst_total) FROM sales s
+                       WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {ds}), 0) AS collected_sgst,
+            COALESCE((SELECT SUM(igst_total) FROM sales s
+                       WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {ds}), 0) AS collected_igst,
             COALESCE((SELECT SUM(pur_tax_total) FROM purchases pr
-                       WHERE pr.business_id = CAST(:bid AS uuid) AND pr.is_deleted = false {dp}), 0) AS paid
+                       WHERE pr.business_id = CAST(:bid AS uuid) AND pr.is_deleted = false {dp}), 0) AS paid,
+            COALESCE((SELECT SUM(pur_cgst_total) FROM purchases pr
+                       WHERE pr.business_id = CAST(:bid AS uuid) AND pr.is_deleted = false {dp}), 0) AS paid_cgst,
+            COALESCE((SELECT SUM(pur_sgst_total) FROM purchases pr
+                       WHERE pr.business_id = CAST(:bid AS uuid) AND pr.is_deleted = false {dp}), 0) AS paid_sgst,
+            COALESCE((SELECT SUM(pur_igst_total) FROM purchases pr
+                       WHERE pr.business_id = CAST(:bid AS uuid) AND pr.is_deleted = false {dp}), 0) AS paid_igst
     """), {"bid": bid, **ps, **pp})
     row = row.fetchone()
 
-    gross_collected = float(row.collected) if row else 0
-    gross_paid = float(row.paid) if row else 0
+    gross_collected      = float(row.collected) if row else 0
+    gross_collected_cgst = float(row.collected_cgst) if row else 0
+    gross_collected_sgst = float(row.collected_sgst) if row else 0
+    gross_collected_igst = float(row.collected_igst) if row else 0
+    gross_paid           = float(row.paid) if row else 0
+    gross_paid_cgst      = float(row.paid_cgst) if row else 0
+    gross_paid_sgst      = float(row.paid_sgst) if row else 0
+    gross_paid_igst      = float(row.paid_igst) if row else 0
 
     sales_ret = await _get_sales_returned_tax(db, bid, date_from, date_to)
     purch_ret = await _get_purchase_returned_tax(db, bid, date_from, date_to)
 
-    collected = gross_collected - sales_ret["returned_tax"]
-    paid = gross_paid - purch_ret["returned_tax"]
+    collected      = gross_collected      - sales_ret["returned_tax"]
+    net_cgst       = (gross_collected_cgst - sales_ret["returned_cgst"]) - (gross_paid_cgst - purch_ret["returned_cgst"])
+    net_sgst       = (gross_collected_sgst - sales_ret["returned_sgst"]) - (gross_paid_sgst - purch_ret["returned_sgst"])
+    net_igst       = (gross_collected_igst - sales_ret["returned_igst"]) - (gross_paid_igst - purch_ret["returned_igst"])
+    paid           = gross_paid           - purch_ret["returned_tax"]
 
     return success_response({
         "tax_collected": collected,
         "tax_paid": paid,
         "net_tax_liability": collected - paid,
+        "net_cgst_payable": net_cgst,
+        "net_sgst_payable": net_sgst,
+        "net_igst_payable": net_igst,
     })
 
 

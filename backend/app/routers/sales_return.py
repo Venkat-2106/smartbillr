@@ -656,12 +656,14 @@ async def update_sales_return(
         # calculate_payment_status() — the single source of truth.
         #
         # Formula:
-        #   remaining_before  = sale_final - total_paid - other_refunded
+        #   remaining_before   = sale_final - total_paid
         #   covered_by_reducing = min(return_amount, remaining_before)
-        #   excess_refund     = return_amount - covered_by_reducing
+        #   excess_refund      = return_amount - covered_by_reducing
         #
-        # other_refunded excludes THIS return (it hasn't been committed
-        # yet at this point in the flow).
+        # NOTE: total_paid (cumulative_paid from the active payment row)
+        # already includes all previous return adjustments. We must NOT
+        # subtract other_refunded separately — doing so double-counts
+        # previous returns and under-calculates the outstanding balance.
         return_amount = Decimal(str(sales_return.return_amount or 0))
 
         if return_amount > 0:
@@ -688,6 +690,11 @@ async def update_sales_return(
             sale_final = Decimal(str(sale_row.sales_final_amount)) if sale_row and sale_row.sales_final_amount else Decimal("0")
 
             # Fetch cumulative paid
+            # FIX: cumulative_paid already includes all previous return
+            # adjustments (each approved return records an adjustment
+            # payment that increases cumulative_paid). No separate
+            # "other_refunded" subtraction is needed — doing so
+            # double-counts previous returns.
             pay_row = (await db.execute(
                 text("""
                     SELECT COALESCE(cumulative_paid, 0) AS total_paid
@@ -700,21 +707,7 @@ async def update_sales_return(
             )).fetchone()
             total_paid = Decimal(str(pay_row.total_paid)) if pay_row and pay_row.total_paid else Decimal("0")
 
-            # Fetch total refunded from OTHER already-approved returns (excluding this one)
-            other_ref_row = (await db.execute(
-                text("""
-                    SELECT COALESCE(SUM(return_amount), 0) AS other_refunded
-                    FROM sales_returns
-                    WHERE sale_id       = CAST(:sid AS uuid)
-                      AND business_id   = CAST(:bid AS uuid)
-                      AND return_status = 'approved'
-                      AND return_id    != CAST(:rid AS uuid)
-                """),
-                {"sid": str(sales_return.sale_id), "bid": str(business_id), "rid": return_id}
-            )).fetchone()
-            other_refunded = Decimal(str(other_ref_row.other_refunded)) if other_ref_row and other_ref_row.other_refunded else Decimal("0")
-
-            remaining_before    = max(Decimal("0"), sale_final - total_paid - other_refunded)
+            remaining_before    = max(Decimal("0"), sale_final - total_paid)
             covered_by_reducing = min(return_amount, remaining_before)
             excess_refund       = (return_amount - covered_by_reducing).quantize(Decimal("0.01"))
 

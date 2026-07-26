@@ -386,6 +386,7 @@ export default function CreatePurchasePage() {
       product_id:      i.product_id,
       pur_item_qty:    Number(i.quantity),
       item_unit_price: Number(i.unit_price),
+      gst_rate:        Number(i.tax_rate) || 0,
     })),
   }), [suppId, discount, paymentStatus, paidAmount, items])
 

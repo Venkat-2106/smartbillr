@@ -12,6 +12,7 @@ class PurchaseItemCreate(BaseModel):
     product_id: UUID
     pur_item_qty: int
     item_unit_price: Decimal
+    gst_rate: Optional[Decimal] = None
 
     @field_validator("pur_item_qty")
     @classmethod

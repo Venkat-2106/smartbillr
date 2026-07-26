@@ -177,7 +177,13 @@ def validate_purchase_products(
         if not product:
             return None, f"Product '{item.product_id}' not found"
 
-        tax_rate = product.tax_rate or Decimal("0")
+        # Prefer frontend-provided gst_rate override when explicitly > 0,
+        # matching fn_sale_stock_movement's actual behavior (zero falls
+        # through to the product master rate, not the stale comment).
+        if item.gst_rate is not None and item.gst_rate > 0:
+            tax_rate = item.gst_rate
+        else:
+            tax_rate = product.tax_rate or Decimal("0")
 
         tax_calc = calculate_item_tax(
             unit_price                = item.item_unit_price,

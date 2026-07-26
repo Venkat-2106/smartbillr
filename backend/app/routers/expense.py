@@ -275,9 +275,9 @@ async def get_expense_summary_kpi(
     row = (await db.execute(text("""
         SELECT
             COUNT(*)                                                              AS total_count,
-            COUNT(*) FILTER (WHERE expense_category != 'purchase_refund')          AS expense_count,
-            COUNT(*) FILTER (WHERE expense_category  = 'purchase_refund')          AS refund_count,
-            COALESCE(SUM(expense_amount) FILTER (WHERE expense_category != 'purchase_refund'
+            COUNT(*) FILTER (WHERE (expense_category IS NULL OR expense_category != 'purchase_refund')) AS expense_count,
+            COUNT(*) FILTER (WHERE expense_category  = 'purchase_refund')                           AS refund_count,
+            COALESCE(SUM(expense_amount) FILTER (WHERE (expense_category IS NULL OR expense_category != 'purchase_refund')
                                                    AND date_trunc('month', expense_date) = date_trunc('month', CURRENT_DATE)), 0) AS monthly_total
         FROM expenses
         WHERE business_id = CAST(:bid AS uuid)

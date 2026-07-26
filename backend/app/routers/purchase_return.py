@@ -595,6 +595,27 @@ async def update_purchase_return(
             if error:
                 return error_response(error, status_code=400)
 
+            # RACE GUARD: Atomically flip return_status from pending → approved.
+            # Two concurrent approve requests will serialize here — only one
+            # will match WHERE return_status = 'pending'. The second gets 0
+            # rows and short-circuits before stock reduction or refund logic.
+            guard_result = await db.execute(text("""
+                UPDATE purchase_returns
+                SET return_status = 'approved',
+                    approved_by   = CAST(:approved_by AS uuid),
+                    approved_at   = NOW()
+                WHERE return_id   = CAST(:return_id AS uuid)
+                  AND business_id = CAST(:business_id AS uuid)
+                  AND return_status = 'pending'
+                RETURNING return_id
+            """), {
+                "approved_by":  str(user_id),
+                "return_id":    return_id,
+                "business_id":  str(business_id)
+            })
+            if guard_result.fetchone() is None:
+                return error_response("This return has already been processed.", status_code=409)
+
             # Reduce stock only if restock=true
             if data.restock:
                 stock_err = await bulk_check_and_reduce_stock(
@@ -749,27 +770,28 @@ async def update_purchase_return(
                         }
                     )
 
-        # Update the return header
+        # Update the return header (status already flipped for 'approved' path
+        # by the atomic guard UPDATE above — only restock/stock_updated/rejected_reason here).
         await db.execute(text("""
             UPDATE purchase_returns
-            SET return_status   = CAST(:status AS text),
-                restock         = :restock,
+            SET restock         = :restock,
                 stock_updated   = :stock_updated,
                 rejected_reason = :rejected_reason,
-                approved_by     = CASE WHEN CAST(:status AS text) = 'approved'
-                                       THEN CAST(:approved_by AS uuid)
-                                       ELSE NULL END,
-                approved_at     = CASE WHEN CAST(:status AS text) = 'approved'
-                                       THEN NOW()
-                                       ELSE NULL END
+                -- For rejected path: flip return_status + clear approval fields
+                return_status   = CASE WHEN CAST(:status AS text) = 'rejected'
+                                       THEN 'rejected' ELSE return_status END,
+                approved_by     = CASE WHEN CAST(:status AS text) = 'rejected'
+                                       THEN NULL ELSE approved_by END,
+                approved_at     = CASE WHEN CAST(:status AS text) = 'rejected'
+                                       THEN NULL ELSE approved_at END
             WHERE return_id    = CAST(:return_id AS uuid)
               AND business_id  = CAST(:business_id AS uuid)
+              AND return_status IS DISTINCT FROM CAST(:status AS text)
         """), {
             "status":          data.return_status,
             "restock":         data.restock,
             "stock_updated":   data.restock and data.return_status == "approved",
             "rejected_reason": data.rejected_reason,
-            "approved_by":     str(user_id),
             "return_id":       return_id,
             "business_id":     str(business_id)
         })

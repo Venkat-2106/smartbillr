@@ -242,7 +242,7 @@ async def update_sale_tax_totals(db: AsyncSession, new_sale_id: str) -> Decimal:
                     COALESCE(SUM(cgst_amount), 0) AS c,
                     COALESCE(SUM(sgst_amount), 0) AS s,
                     COALESCE(SUM(igst_amount), 0) AS i,
-                    COALESCE(SUM(tax_amount),  0) AS t
+                    COALESCE(SUM(item_tax_total), 0) AS t
                 FROM sale_items
                 WHERE sale_id = CAST(:sid AS uuid)
             ) x

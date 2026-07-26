@@ -244,6 +244,23 @@ async def create_purchase_return(
         if error:
             return error_response(error, status_code=400)
 
+        # Step 2.5 → Resolve purchase_item_id per product for precise
+        # return-tax proration (FK added in migration b8c9d0e1f2a3).
+        # Kept as a standalone lookup rather than threading it through
+        # validate_return_items, so that function's signature — used by
+        # both create_purchase_return and update_purchase_return — is
+        # untouched.
+        item_id_rows = (await db.execute(text("""
+            SELECT product_id, item_id
+            FROM purchase_items
+            WHERE pur_id = CAST(:pur_id AS uuid)
+              AND product_id = ANY(CAST(:pids AS uuid[]))
+        """), {
+            "pur_id": str(data.pur_id),
+            "pids": [str(item.product_id) for item in data.items]
+        })).fetchall()
+        purchase_item_id_map = {str(row.product_id): str(row.item_id) for row in item_id_rows}
+
         # Step 3 → Calculate total return amount
         total_return_amount = sum(
             (item.refund_amount * item.return_qty for item in data.items),
@@ -293,13 +310,15 @@ async def create_purchase_return(
             text("""
                 INSERT INTO purchase_return_items
                     (return_item_id, return_id, product_id,
-                     return_qty, refund_amount, business_id)
+                     return_qty, refund_amount, business_id,
+                     purchase_item_id)
                 VALUES (
                     CAST(:return_item_id AS uuid),
                     CAST(:return_id AS uuid),
                     CAST(:product_id AS uuid),
                     :return_qty, :refund_amount,
-                    CAST(:business_id AS uuid)
+                    CAST(:business_id AS uuid),
+                    CAST(:purchase_item_id AS uuid)
                 )
             """),
             [
@@ -309,7 +328,8 @@ async def create_purchase_return(
                     "product_id":     str(item.product_id),
                     "return_qty":     item.return_qty,
                     "refund_amount":  str(item.refund_amount),
-                    "business_id":    str(business_id)
+                    "business_id":    str(business_id),
+                    "purchase_item_id": purchase_item_id_map.get(str(item.product_id))
                 }
                 for item in data.items
             ]

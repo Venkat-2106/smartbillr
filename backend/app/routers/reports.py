@@ -129,28 +129,55 @@ async def _get_purchase_returned_tax(
 ) -> Dict[str, float]:
     """Sum prorated tax on approved purchase returns within date range.
 
-    Purchase-level proration: pur_tax_total * (return_amount / pur_final_amount).
-    This is an approximation because purchase_return_items lacks a purchase_item_id FK
-    and stores no tax amount — line-level precision would require a schema change.
+    Line-level proration (preferred): for rows with purchase_item_id set
+    (migration b8c9d0e1f2a3), return_qty * (that line's tax / that line's
+    purchased qty) — precise even when a purchase mixes multiple GST rates.
+
+    Falls back to per-item invoice-level proration (this item's refund
+    subtotal / the purchase's final amount) only for rows where
+    purchase_item_id is NULL — legacy rows the backfill couldn't
+    deterministically resolve. This fallback is itself more accurate than
+    the old whole-return proration: it now prorates by this specific
+    item's share, so multiple unmatched items in the same return don't
+    each wrongly claim the full return's tax share.
+
     Returns {returned_tax, returned_cgst, returned_sgst, returned_igst}.
     """
     dw, dp = _date_col("prr", "return_created_at", date_from, date_to)
     row = (await db.execute(text(f"""
         SELECT
             COALESCE(SUM(
-                pr2.pur_tax_total * (prr.return_amount / NULLIF(pr2.pur_final_amount, 0))
+                CASE WHEN pri.purchase_item_id IS NOT NULL THEN
+                    pri.return_qty * (pi.pur_tax_total / NULLIF(pi.pur_item_qty, 0))
+                ELSE
+                    pr2.pur_tax_total * (pri.return_item_subtotal / NULLIF(pr2.pur_final_amount, 0))
+                END
             ), 0) AS returned_tax,
             COALESCE(SUM(
-                pr2.pur_cgst_total * (prr.return_amount / NULLIF(pr2.pur_final_amount, 0))
+                CASE WHEN pri.purchase_item_id IS NOT NULL THEN
+                    pri.return_qty * (pi.cgst_amount / NULLIF(pi.pur_item_qty, 0))
+                ELSE
+                    pr2.pur_cgst_total * (pri.return_item_subtotal / NULLIF(pr2.pur_final_amount, 0))
+                END
             ), 0) AS returned_cgst,
             COALESCE(SUM(
-                pr2.pur_sgst_total * (prr.return_amount / NULLIF(pr2.pur_final_amount, 0))
+                CASE WHEN pri.purchase_item_id IS NOT NULL THEN
+                    pri.return_qty * (pi.sgst_amount / NULLIF(pi.pur_item_qty, 0))
+                ELSE
+                    pr2.pur_sgst_total * (pri.return_item_subtotal / NULLIF(pr2.pur_final_amount, 0))
+                END
             ), 0) AS returned_sgst,
             COALESCE(SUM(
-                pr2.pur_igst_total * (prr.return_amount / NULLIF(pr2.pur_final_amount, 0))
+                CASE WHEN pri.purchase_item_id IS NOT NULL THEN
+                    pri.return_qty * (pi.igst_amount / NULLIF(pi.pur_item_qty, 0))
+                ELSE
+                    pr2.pur_igst_total * (pri.return_item_subtotal / NULLIF(pr2.pur_final_amount, 0))
+                END
             ), 0) AS returned_igst
-        FROM purchase_returns prr
+        FROM purchase_return_items pri
+        JOIN purchase_returns prr ON prr.return_id = pri.return_id
         JOIN purchases pr2 ON pr2.pur_id = prr.pur_id
+        LEFT JOIN purchase_items pi ON pi.item_id = pri.purchase_item_id
         WHERE prr.business_id = CAST(:bid AS uuid)
           AND prr.return_status = 'approved'
           {dw}
@@ -2553,10 +2580,16 @@ async def get_tax_trend(
         purchase_ret_agg AS (
             SELECT {group_expr_prr} AS bucket,
                    COALESCE(SUM(
-                       pr2.pur_tax_total * (prr.return_amount / NULLIF(pr2.pur_final_amount, 0))
+                       CASE WHEN pri.purchase_item_id IS NOT NULL THEN
+                           pri.return_qty * (pi.pur_tax_total / NULLIF(pi.pur_item_qty, 0))
+                       ELSE
+                           pr2.pur_tax_total * (pri.return_item_subtotal / NULLIF(pr2.pur_final_amount, 0))
+                       END
                    ), 0) AS returned_tax
-            FROM purchase_returns prr
+            FROM purchase_return_items pri
+            JOIN purchase_returns prr ON prr.return_id = pri.return_id
             JOIN purchases pr2 ON pr2.pur_id = prr.pur_id
+            LEFT JOIN purchase_items pi ON pi.item_id = pri.purchase_item_id
             WHERE prr.business_id = CAST(:bid AS uuid)
               AND prr.return_status = 'approved'
               {date_where_prr}

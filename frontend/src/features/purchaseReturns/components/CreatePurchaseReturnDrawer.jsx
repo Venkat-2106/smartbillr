@@ -66,7 +66,7 @@ export default function CreatePurchaseReturnDrawer({ purchaseId, onClose }) {
       queryClient.invalidateQueries({ queryKey: ['purchase-returns'] })
       queryClient.invalidateQueries({ queryKey: ['purchase', purchaseId] })
       queryClient.invalidateQueries({ queryKey: ['purchases'] })
-      toast.success('Return processed successfully')
+      toast.success('Return submitted successfully')
       onClose()
     },
     onError: (err) => {

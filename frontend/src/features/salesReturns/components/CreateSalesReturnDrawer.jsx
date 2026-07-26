@@ -4,7 +4,7 @@ import { XMarkIcon } from '@heroicons/react/24/outline'
 import { toast } from 'react-hot-toast'
 import { fetchSale } from '../../sales/api/salesApi'
 import { z } from 'zod'
-import { createSalesReturn } from '../api/salesReturnsApi'
+import { createSalesReturn, fetchSalesReturnsBySale } from '../api/salesReturnsApi'
 import { Button, Spinner } from '../../../shared/components'
 import { textareaStyle } from '../../../shared/components/FormField'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
@@ -27,23 +27,50 @@ export default function CreateSalesReturnDrawer({ saleId, onClose }) {
     staleTime: 0,
   })
 
+  const { data: existingReturns } = useQuery({
+    queryKey: ['salesReturns', 'by-sale', saleId],
+    queryFn: () => fetchSalesReturnsBySale(saleId),
+    enabled: !!saleId,
+    staleTime: 0,
+  })
+
   const sale = saleData?.data ?? saleData
+
+  const returnedQtyByProduct = useMemo(() => {
+    const map = {}
+    if (Array.isArray(existingReturns)) {
+      for (const ret of existingReturns) {
+        if (ret.return_status === 'rejected') continue
+        for (const item of ret.items || []) {
+          const pid = item.product_id
+          map[pid] = (map[pid] || 0) + item.return_qty
+        }
+      }
+    }
+    return map
+  }, [existingReturns])
 
   useEffect(() => {
     if (sale?.items) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setItems(
-        sale.items.map((item) => ({
-          product_id: item.product_id,
-          product_name: item.product_name,
-          sale_item_unit_price: item.sale_item_unit_price,
-          max_qty: item.sale_item_quantity,
-          return_qty: '',
-          refund_amount: '',
-        }))
+        sale.items.map((item) => {
+          const returned = returnedQtyByProduct[item.product_id] || 0
+          const available = Math.max(0, item.sale_item_quantity - returned)
+          return {
+            product_id: item.product_id,
+            product_name: item.product_name,
+            sale_item_unit_price: item.sale_item_unit_price,
+            original_qty: item.sale_item_quantity,
+            returned_qty: returned,
+            max_qty: available,
+            return_qty: '',
+            refund_amount: '',
+          }
+        })
       )
     }
-  }, [sale?.items])
+  }, [sale?.items, returnedQtyByProduct])
 
   const returnSchema = useMemo(() =>
     z.object({
@@ -66,7 +93,7 @@ export default function CreateSalesReturnDrawer({ saleId, onClose }) {
       queryClient.invalidateQueries({ queryKey: ['sales-returns'] })
       queryClient.invalidateQueries({ queryKey: ['sale', saleId] })
       queryClient.invalidateQueries({ queryKey: ['sales'] })
-      toast.success('Return processed successfully')
+      toast.success('Return submitted successfully')
       onClose()
     },
     onError: (err) => {
@@ -87,6 +114,15 @@ export default function CreateSalesReturnDrawer({ saleId, onClose }) {
       return next
     })
   }, [])
+
+  const allItemsReturned = useMemo(() => {
+    const items = sale?.items
+    if (!items) return false
+    return items.every((item) => {
+      const returned = returnedQtyByProduct[item.product_id] || 0
+      return returned >= item.sale_item_quantity
+    })
+  }, [sale, returnedQtyByProduct])
 
   const totals = useMemo(() => {
     let refundTotal = 0
@@ -269,7 +305,16 @@ export default function CreateSalesReturnDrawer({ saleId, onClose }) {
                       {item.product_name}
                     </div>
                     <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
-                      Max: {formatCurrency(maxPrice, country)} × {maxQty}
+                      {item.returned_qty > 0 ? (
+                        <span>
+                          Available: {item.max_qty} of {item.original_qty}{' '}
+                          <span style={{ color: 'var(--text-muted)', fontSize: 10.5 }}>
+                            ({item.returned_qty} previously returned)
+                          </span>
+                        </span>
+                      ) : (
+                        <span>Qty: {item.original_qty} × {formatCurrency(maxPrice, country)}</span>
+                      )}
                     </div>
                     {lineTotal > 0 && (
                       <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-600)', marginTop: 2 }}>
@@ -332,6 +377,17 @@ export default function CreateSalesReturnDrawer({ saleId, onClose }) {
               <span>{formatCurrency(totals.refundTotal, country)}</span>
             </div>
           )}
+
+          {allItemsReturned && (
+            <div style={{
+              marginTop: 16, padding: '12px 16px',
+              background: 'var(--bg-subtle)',
+              border: '1px solid var(--border)', borderRadius: 12,
+              fontSize: 13, color: 'var(--text-muted)', fontWeight: 500,
+            }}>
+              All items in this invoice have been fully returned. No further returns can be processed.
+            </div>
+          )}
         </div>
       )}
 
@@ -348,7 +404,7 @@ export default function CreateSalesReturnDrawer({ saleId, onClose }) {
           variant="primary"
           onClick={handleSubmit}
           loading={mutation.isPending}
-          disabled={isLoading || !sale}
+          disabled={isLoading || !sale || allItemsReturned}
         >
           Submit Return
         </Button>

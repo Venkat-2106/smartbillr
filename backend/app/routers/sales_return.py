@@ -151,17 +151,20 @@ async def validate_return_items(db: AsyncSession, sale_id: str, business_id: str
         sale_item_map = {str(r.product_id): r for r in rows}
 
         # Batch Step 2 → Fetch ALL already-returned quantities in one GROUP BY query
+        # CRITICAL FIX: Filter by sale_id so returns from OTHER invoices for the
+        # same product don't inflate the already_returned count.
         q = """
             SELECT sri.product_id, COALESCE(SUM(sri.return_qty), 0) AS total_returned
             FROM sales_return_items sri
             JOIN sales_returns sr ON sr.return_id = sri.return_id
             WHERE sri.product_id = ANY(CAST(:pids AS uuid[]))
+              AND sr.sale_id = CAST(:sale_id AS uuid)
               AND sr.business_id = CAST(:bid AS uuid)
               AND sr.return_status != 'rejected'
         """
         # BUG FIX: asyncpg expects a Python list for array params, not a
         # manually-formatted "{uuid1,uuid2}" string (causes DataError).
-        params = {"pids": prod_ids, "bid": business_id}
+        params = {"pids": prod_ids, "sale_id": sale_id, "bid": business_id}
         if exclude_return_id:
             q += " AND sr.return_id != CAST(:return_id AS uuid)"
             params["return_id"] = exclude_return_id
@@ -482,16 +485,40 @@ async def get_sales_returns_by_sale(
         ORDER BY sr.return_created_at DESC
     """), {"sid": sale_id, "bid": business_id})).fetchall()
 
-    result = [
-        {
-            "return_id":         str(r.return_id),
+    ret_ids = [str(r.return_id) for r in return_rows]
+    all_items = []
+    if ret_ids:
+        all_items = (await db.execute(
+            text("""
+                SELECT sri.return_id, sri.product_id, sri.return_qty
+                FROM sales_return_items sri
+                WHERE sri.return_id = ANY(CAST(:ids AS uuid[]))
+            """),
+            {"ids": ret_ids}
+        )).fetchall()
+
+    items_by_ret = {}
+    for it in all_items:
+        items_by_ret.setdefault(str(it.return_id), []).append(it)
+
+    result = []
+    for r in return_rows:
+        rid = str(r.return_id)
+        items = items_by_ret.get(rid, [])
+        result.append({
+            "return_id":         rid,
             "return_amount":     float(r.return_amount),
             "return_reason":     r.return_reason,
             "return_status":     r.return_status,
             "return_created_at": fmt_ts(r.return_created_at),
-        }
-        for r in return_rows
-    ]
+            "items": [
+                {
+                    "product_id": str(it.product_id),
+                    "return_qty": float(it.return_qty),
+                }
+                for it in items
+            ],
+        })
 
     return success_response(result)
 

@@ -11,6 +11,11 @@
 //   onConfirm      — () => void  (handleStockOverrideConfirm)
 //   canOverride    — boolean  (true for admin/manager, false for staff)
 //
+// RBAC: Staff users see a lock icon + "ask a manager" message with no
+// override button.  Admin/manager see the yellow warning + "Override & Save".
+// Backend also guards this (sale.py create_sale RBAC check) so staff cannot
+// bypass via direct API calls.
+//
 // Extracted from CreateSalePage.jsx (Step 5.16 refactor) — zero behaviour change.
 
 import { Modal, Button } from '../../../shared/components';

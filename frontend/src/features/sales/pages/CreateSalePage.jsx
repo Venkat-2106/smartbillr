@@ -45,6 +45,9 @@ export default function CreateSalePage() {
   const isGstRegistered = business?.is_gst_registered || false;
   const taxLabel = getTaxLabel(country, isGstRegistered);
   const { isAdmin, isManager } = usePermissions();
+  // Stock override RBAC: only admin/manager can approve selling below available
+  // stock.  Staff see the StockOverrideModal but with a "ask a manager" message
+  // and no override button.  Backend also enforces this (sale.py create_sale).
   const canOverrideStock = isAdmin || isManager;
   const {
     customers, loadingCust,

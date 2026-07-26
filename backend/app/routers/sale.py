@@ -114,6 +114,10 @@ async def create_sale(
         return error_response(msg, status_code=403)
 
     # ── Stock override RBAC: staff cannot override stock ──────────────────────
+    # Staff users see a "please ask a manager" message in the frontend modal
+    # (StockOverrideModal), but this server-side guard prevents direct API
+    # calls from bypassing that restriction.  Only admin/manager roles may
+    # approve a stock override.
     if data.allow_stock_override and user_role == "staff":
         return error_response(
             "Only managers and administrators can override stock. "
@@ -428,12 +432,13 @@ async def delete_sale(
             # manually-formatted "{uuid1,uuid2}" string (causes DataError).
             pids_param = prod_ids
 
-            # Exclude quantities already restocked via approved sales returns —
-            # the fn_sales_return_stock trigger already added these back to
-            # prod_stock_qty when the return was approved with restock=true.
-            # Restoring the full original sale_item_quantity here would
-            # double-count that portion. Rejected returns never restocked
-            # anything, so they're excluded from this sum.
+            # ── Already-returned quantity exclusion (DEL-SALE-1) ───────────────
+            # When a sales return is approved with restock=true, the
+            # fn_sales_return_stock trigger already adds return_qty back to
+            # prod_stock_qty.  If we restored the full original
+            # sale_item_quantity here, those returned units would be
+            # double-counted.  Rejected returns never restocked, so they are
+            # excluded from this sum.
             already_returned_rows = (await db.execute(
                 text("""
                     SELECT sri.product_id, COALESCE(SUM(sri.return_qty), 0) AS total_returned
@@ -463,9 +468,10 @@ async def delete_sale(
 
             prod_stock_map = {str(row.prod_id): row.prod_stock_qty for row in product_rows}
 
-            # Only process items whose products still exist, and only for the
-            # portion of quantity that was NOT already restocked by an
-            # approved sales return.
+            # Only process items whose products still exist, and cap each
+            # item's restorable qty at (sale_item_quantity − already_returned)
+            # to prevent double-counting (see above).  Items fully consumed
+            # by approved returns (restore_qty ≤ 0) are skipped entirely.
             restore_qty_map = {}
             valid_items = []
             for item in sale_items:
@@ -481,6 +487,11 @@ async def delete_sale(
 
             if valid_items:
                 # 2. Bulk UPDATE products
+                # asyncpg quirk: cast params inside VALUES, not in SET.
+                # A downstream cast (v.restore_qty::int) does NOT pin the
+                # bind param type — asyncpg still sends it as text, causing
+                # "integer + text" or "expected str, got int" errors.
+                # See DEL-SALE-STOCK-1.
                 values_clause = ", ".join(
                     f"(CAST(:pid_{i} AS uuid), CAST(:qty_{i} AS int))"
                     for i in range(len(valid_items))
@@ -512,7 +523,7 @@ async def delete_sale(
                     pid = str(item.product_id)
                     insert_params[f"mid_{i}"] = str(uuid.uuid4())
                     insert_params[f"pid_{i}"] = pid
-                    insert_params[f"mtype_{i}"] = "return"
+                    insert_params[f"mtype_{i}"] = "sale_delete"  # DEL-SALE-MOVETYPE-1: was "return" which violated the CHECK constraint
                     insert_params[f"mqty_{i}"] = restore_qty_map[pid]
                     insert_params[f"mprev_{i}"] = prod_stock_map[pid]
                     already_returned = already_returned_map.get(pid, 0)

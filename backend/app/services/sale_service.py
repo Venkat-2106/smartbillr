@@ -114,6 +114,22 @@ async def create_sale_header(
 
 
 async def handle_stock_overrides(db: AsyncSession, business_id: str, user_id: str, new_sale_id: str, override_items: list):
+    """Increase product stock by the shortfall before sale_items are inserted.
+
+    The fn_sale_stock_movement DB trigger fires on INSERT INTO sale_items and
+    RAISEs if prod_stock_qty < sale_item_quantity.  By bumping stock here
+    (within the same transaction), the trigger deducts successfully — net
+    effect is that prod_stock_qty can go negative if the business explicitly
+    approved the override.
+
+    Products are already locked via FOR UPDATE from validate_and_cache_products,
+    so concurrent reads see a consistent state until commit.
+
+    asyncpg quirk: all text() bind params are sent as text.  The VALUES clause
+    must include an explicit CAST(:param AS int) so Postgres knows the column
+    type — a downstream cast like v.col::int does NOT pin the param type and
+    causes "integer + text" errors.  (See STOCK-OVR-1 / DEL-SALE-STOCK-1.)
+    """
     if not override_items:
         return
 

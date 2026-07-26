@@ -9,6 +9,7 @@
 //   isPending      — boolean (mutation.isPending)
 //   onCancel       — () => void  (handleStockOverrideCancel)
 //   onConfirm      — () => void  (handleStockOverrideConfirm)
+//   canOverride    — boolean  (true for admin/manager, false for staff)
 //
 // Extracted from CreateSalePage.jsx (Step 5.16 refactor) — zero behaviour change.
 
@@ -19,6 +20,7 @@ export default function StockOverrideModal({
   isPending,
   onCancel,
   onConfirm,
+  canOverride = true,
 }) {
   return (
     <Modal
@@ -29,8 +31,8 @@ export default function StockOverrideModal({
       size="md"
     >
       <div style={{
-        background: '#FEF9EC',
-        border: '1.5px solid #F59E0B',
+        background: canOverride ? '#FEF9EC' : '#FEF2F2',
+        border: canOverride ? '1.5px solid #F59E0B' : '1.5px solid #DC2626',
         borderRadius: 'var(--r-md)',
         padding: '12px 16px',
         marginBottom: 20,
@@ -38,15 +40,37 @@ export default function StockOverrideModal({
         alignItems: 'flex-start',
         gap: 10,
       }}>
-        <span style={{ fontSize: 20, flexShrink: 0, lineHeight: 1.2 }}>⚠️</span>
+        <span style={{ fontSize: 20, flexShrink: 0, lineHeight: 1.2 }}>
+          {canOverride ? '⚠️' : '🔒'}
+        </span>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#92400E', marginBottom: 3 }}>
-            Requested quantity exceeds available stock
+          <div style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color: canOverride ? '#92400E' : '#991B1B',
+            marginBottom: 3,
+          }}>
+            {canOverride
+              ? 'Requested quantity exceeds available stock'
+              : 'Insufficient stock — manager approval required'}
           </div>
-          <div style={{ fontSize: 13, color: '#B45309', lineHeight: 1.5 }}>
-            You can override and proceed — a <strong>stock override</strong> record
-            will be created automatically in stock movements to temporarily
-            increase stock for this sale.
+          <div style={{ fontSize: 13, color: canOverride ? '#B45309' : '#B91C1C', lineHeight: 1.5 }}>
+            {canOverride
+              ? (
+                <>
+                  You can override and proceed — a <strong>stock override</strong> record
+                  will be created automatically in stock movements to temporarily
+                  increase stock for this sale.
+                </>
+              )
+              : (
+                <>
+                  You do not have permission to override stock. Please ask a
+                  <strong> manager</strong> or <strong>administrator</strong> to adjust
+                  the stock before proceeding.
+                </>
+              )
+            }
           </div>
         </div>
       </div>
@@ -109,9 +133,11 @@ export default function StockOverrideModal({
         <Button variant="ghost" onClick={onCancel} disabled={isPending}>
           Edit Quantities
         </Button>
-        <Button variant="danger" onClick={onConfirm} loading={isPending}>
-          Override &amp; Save
-        </Button>
+        {canOverride && (
+          <Button variant="danger" onClick={onConfirm} loading={isPending}>
+            Override &amp; Save
+          </Button>
+        )}
       </Modal.Footer>
     </Modal>
   );

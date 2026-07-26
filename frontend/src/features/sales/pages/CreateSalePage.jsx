@@ -20,6 +20,7 @@ import BarcodeScanner from '../components/BarcodeScanner';
 import useCreateSale from '../hooks/useCreateSale';
 import { useShortcut } from '../../../shared/hooks/useShortcut';
 import useAuthStore from '../../../store/authStore';
+import { usePermissions } from '../../../shared/hooks/usePermissions';
 
 const EMPTY_ARRAY = [];
 
@@ -43,6 +44,8 @@ export default function CreateSalePage() {
   const country   = business?.business_country_code || 'IN';
   const isGstRegistered = business?.is_gst_registered || false;
   const taxLabel = getTaxLabel(country, isGstRegistered);
+  const { isAdmin, isManager } = usePermissions();
+  const canOverrideStock = isAdmin || isManager;
   const {
     customers, loadingCust,
     customerId, handleCustomerChange,
@@ -162,6 +165,7 @@ export default function CreateSalePage() {
         isPending={isPending}
         onCancel={handleStockOverrideCancel}
         onConfirm={handleStockOverrideConfirm}
+        canOverride={canOverrideStock}
       />
 
       {/* ── Preview Modal ──────────────────────────────────────────── */}

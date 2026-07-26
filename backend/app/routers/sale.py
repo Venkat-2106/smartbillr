@@ -102,6 +102,7 @@ async def create_sale(
 ):
     business_id = current_user["business_id"]
     user_id = current_user["user_id"]
+    user_role = current_user.get("role", "staff")
 
     # ── Subscription tier limit check ─────────────────────────────────────────
     sub_type = current_user.get("subscription_type") or await fetch_subscription_type_async(db, business_id)
@@ -111,6 +112,14 @@ async def create_sale(
     )
     if not allowed:
         return error_response(msg, status_code=403)
+
+    # ── Stock override RBAC: staff cannot override stock ──────────────────────
+    if data.allow_stock_override and user_role == "staff":
+        return error_response(
+            "Only managers and administrators can override stock. "
+            "Please ask a manager to adjust the stock before proceeding.",
+            403
+        )
 
     try:
         product_cache, override_items, stock_errors = await validate_and_cache_products(

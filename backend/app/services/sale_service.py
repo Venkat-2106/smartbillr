@@ -117,12 +117,30 @@ async def handle_stock_overrides(db: AsyncSession, business_id: str, user_id: st
     if not override_items:
         return
 
-    # The fn_sale_stock_movement trigger will deduct stock naturally;
-    # no compensating stock increase here — the override only bypasses
-    # the insufficient-stock validation error. The stock_movements row
-    # below records the override for audit purposes.
+    # Increase product stock by the shortfall so the fn_sale_stock_movement
+    # trigger (which fires on INSERT INTO sale_items) can deduct successfully.
+    # Products are already locked via FOR UPDATE from validate_and_cache_products.
+    bulk_update_params = {}
+    for i, ov in enumerate(override_items):
+        shortfall = ov["requested_qty"] - ov["available_qty"]
+        bulk_update_params[f"pid_{i}"] = str(ov["product"].prod_id)
+        bulk_update_params[f"add_{i}"] = str(int(shortfall))
 
-    # Multi-row INSERT into stock_movements — single round trip for all overrides
+    bulk_update_values = ", ".join(
+        f"(CAST(:pid_{i} AS uuid), CAST(:add_{i} AS int))" for i in range(len(override_items))
+    )
+    await db.execute(
+        text(f"""
+            UPDATE products
+            SET    prod_stock_qty = prod_stock_qty + v.add_qty
+            FROM   (VALUES {bulk_update_values}) AS v(prod_id, add_qty)
+            WHERE  products.prod_id = v.prod_id
+              AND  products.business_id = CAST(:bid AS uuid)
+        """),
+        {**bulk_update_params, "bid": business_id}
+    )
+
+    # Audit trail: one INSERT for all override adjustments
     insert_values = ", ".join(
         f"(CAST(:mid_{i} AS uuid), CAST(:bid AS uuid), CAST(:pid_{i} AS uuid), "
         f":mtype_{i}, :mqty_{i}, :mprev_{i}, CAST(:sref AS uuid), :mnotes_{i}, CAST(:cby AS uuid))"
@@ -134,12 +152,12 @@ async def handle_stock_overrides(db: AsyncSession, business_id: str, user_id: st
         avail = ov["available_qty"]
         insert_params[f"mid_{i}"] = str(uuid.uuid4())
         insert_params[f"pid_{i}"] = str(ov["product"].prod_id)
-        insert_params[f"mtype_{i}"] = "stock_override"
+        insert_params[f"mtype_{i}"] = "adjustment"
         insert_params[f"mqty_{i}"] = shortfall
         insert_params[f"mprev_{i}"] = avail
         insert_params[f"mnotes_{i}"] = (
-            f"System-generated stock increase to allow a sale exceeding available inventory — "
-            f"{shortfall} unit(s) added (stock was {avail}, needed {ov['requested_qty']})"
+            f"Stock override: {shortfall} unit(s) added to allow sale — "
+            f"stock was {avail}, needed {ov['requested_qty']}"
         )
 
     await db.execute(

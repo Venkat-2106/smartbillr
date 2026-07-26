@@ -89,12 +89,16 @@ def resolve_expense_notes(notes, source_type, source_id, **source_names):
     if not notes or not source_id:
         return notes
     uuid_re = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', re.IGNORECASE)
-    if source_type == "purchase":
+    if source_type == "purchase_payment":
         label = source_names.get("source_supplier")
         if label:
             return uuid_re.sub(label, notes)
     if source_type == "sales_return":
         label = source_names.get("source_invoice") or source_names.get("source_customer")
+        if label:
+            return uuid_re.sub(label, notes)
+    if source_type == "purchase_return":
+        label = source_names.get("source_purchase_invoice")
         if label:
             return uuid_re.sub(label, notes)
     return notes
@@ -113,6 +117,7 @@ def expense_to_dict_list(row):
             source_supplier=getattr(row, "source_supplier", None),
             source_invoice=getattr(row, "source_invoice", None),
             source_customer=getattr(row, "source_customer", None),
+            source_purchase_invoice=getattr(row, "source_purchase_invoice", None),
         ),
         "created_at":      fmt_ts(row.created_at),
         "updated_at":      fmt_ts(row.updated_at),
@@ -216,11 +221,12 @@ async def get_all_expenses(
                s.supp_name   AS source_supplier,
                sl.invoice_no AS source_invoice,
                sc.cust_name  AS source_customer,
+               pr.pur_invoice_no AS source_purchase_invoice,
                e.expense_notes,
                COUNT(*) OVER() AS total_count
         FROM expenses e
         LEFT JOIN profiles prof ON prof.id = e.updated_by
-        LEFT JOIN purchases pur ON e.source_type = 'purchase'
+        LEFT JOIN purchases pur ON e.source_type = 'purchase_payment'
            AND e.source_id = pur.pur_id
            AND pur.business_id = CAST(:bid AS uuid)
         LEFT JOIN suppliers s ON pur.supp_id = s.supp_id
@@ -229,6 +235,11 @@ async def get_all_expenses(
            AND sr.business_id = CAST(:bid AS uuid)
         LEFT JOIN sales sl ON sr.sale_id = sl.sales_id
         LEFT JOIN customers sc ON sl.customer_id = sc.cust_id
+        LEFT JOIN purchase_returns prr ON e.source_type = 'purchase_return'
+           AND e.source_id = prr.return_id
+           AND prr.business_id = CAST(:bid AS uuid)
+        LEFT JOIN purchases pr ON prr.pur_id = pr.pur_id
+           AND pr.business_id = CAST(:bid AS uuid)
         WHERE e.business_id = CAST(:bid AS uuid)
           AND e.is_deleted = false
         {extra_where}
@@ -316,8 +327,8 @@ async def get_expense(
         updated_by_name = None
 
     # Resolve source names for auto-generated expenses
-    source_supplier = source_invoice = source_customer = None
-    if expense.source_type == "purchase" and expense.source_id:
+    source_supplier = source_invoice = source_customer = source_purchase_invoice = None
+    if expense.source_type == "purchase_payment" and expense.source_id:
         src_row = (await db.execute(text("""
             SELECT s.supp_name
             FROM purchases pur
@@ -336,6 +347,14 @@ async def get_expense(
         if src_row:
             source_invoice = src_row.invoice_no
             source_customer = src_row.cust_name
+    elif expense.source_type == "purchase_return" and expense.source_id:
+        src_row = (await db.execute(text("""
+            SELECT pr.pur_invoice_no
+            FROM purchase_returns prr
+            LEFT JOIN purchases pr ON prr.pur_id = pr.pur_id
+            WHERE prr.return_id = :sid AND prr.business_id = CAST(:bid AS uuid)
+        """), {"sid": str(expense.source_id), "bid": business_id})).fetchone()
+        source_purchase_invoice = src_row.pur_invoice_no if src_row else None
 
     expense_dict = expense_to_dict(expense, last_updated_by=updated_by_name)
     expense_dict["expense_notes"] = resolve_expense_notes(
@@ -343,6 +362,7 @@ async def get_expense(
         source_supplier=source_supplier,
         source_invoice=source_invoice,
         source_customer=source_customer,
+        source_purchase_invoice=source_purchase_invoice,
     )
 
     return success_response(expense_dict)

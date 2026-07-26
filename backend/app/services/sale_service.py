@@ -124,7 +124,7 @@ async def handle_stock_overrides(db: AsyncSession, business_id: str, user_id: st
     for i, ov in enumerate(override_items):
         shortfall = ov["requested_qty"] - ov["available_qty"]
         bulk_update_params[f"pid_{i}"] = str(ov["product"].prod_id)
-        bulk_update_params[f"add_{i}"] = str(int(shortfall))
+        bulk_update_params[f"add_{i}"] = int(shortfall)
 
     bulk_update_values = ", ".join(
         f"(CAST(:pid_{i} AS uuid), CAST(:add_{i} AS int))" for i in range(len(override_items))

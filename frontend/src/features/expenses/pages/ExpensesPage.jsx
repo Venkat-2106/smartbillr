@@ -120,17 +120,6 @@ function buildColumns(canManage, onDelete, country) {
       ),
     },
     {
-      key: 'created_at',
-      label: 'Created',
-      sortable: true,
-      width: 110,
-      render: (row) => (
-        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          {row.created_at ? formatDate(row.created_at) : '\u2014'}
-        </span>
-      ),
-    },
-    {
       key:      'updated_at',
       label:    'Last Updated',
       sortable: true,

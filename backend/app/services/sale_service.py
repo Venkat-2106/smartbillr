@@ -229,25 +229,16 @@ async def insert_sale_items(db: AsyncSession, business_id: str, new_sale_id: str
 
 
 async def update_sale_tax_totals(db: AsyncSession, new_sale_id: str) -> Decimal:
+    # NOTE: sales.cgst_total/sgst_total/igst_total/tax_total are now written
+    # by fn_sale_stock_movement (trigger on sale_items, migration
+    # c2d3e4f5a6b7) at INSERT time — this is a read-only lookup of the
+    # already-correct, trigger-computed final amount. Kept as a function
+    # (rather than inlining) to avoid touching the call site in sale.py.
     result = await db.execute(
         text("""
-            UPDATE sales
-            SET
-                cgst_total = x.c,
-                sgst_total = x.s,
-                igst_total = x.i,
-                tax_total  = x.t
-            FROM (
-                SELECT
-                    COALESCE(SUM(cgst_amount), 0) AS c,
-                    COALESCE(SUM(sgst_amount), 0) AS s,
-                    COALESCE(SUM(igst_amount), 0) AS i,
-                    COALESCE(SUM(item_tax_total), 0) AS t
-                FROM sale_items
-                WHERE sale_id = CAST(:sid AS uuid)
-            ) x
+            SELECT sales_final_amount
+            FROM sales
             WHERE sales_id = CAST(:sid AS uuid)
-            RETURNING sales_final_amount
         """),
         {"sid": new_sale_id}
     )

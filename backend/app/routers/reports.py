@@ -2237,7 +2237,7 @@ async def get_tax_collected(
 
     row = await db.execute(text(f"""
         SELECT
-            COALESCE(SUM(s.cgst_total + s.sgst_total + s.igst_total), 0) AS total_tax,
+            COALESCE(SUM(s.tax_total), 0) AS total_tax,
             COALESCE(SUM(s.cgst_total), 0) AS total_cgst,
             COALESCE(SUM(s.sgst_total), 0) AS total_sgst,
             COALESCE(SUM(s.igst_total), 0) AS total_igst
@@ -2325,7 +2325,7 @@ async def get_tax_liability(
 
     row = await db.execute(text(f"""
         SELECT
-            COALESCE((SELECT SUM(cgst_total + sgst_total + igst_total) FROM sales s
+            COALESCE((SELECT SUM(tax_total) FROM sales s
                        WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {ds}), 0) AS collected,
             COALESCE((SELECT SUM(cgst_total) FROM sales s
                        WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {ds}), 0) AS collected_cgst,
@@ -2521,7 +2521,7 @@ async def get_tax_trend(
     rows = await db.execute(text(f"""
         WITH sales_agg AS (
             SELECT {group_expr_s} AS bucket,
-                   COALESCE(SUM(s.cgst_total + s.sgst_total + s.igst_total), 0) AS gst_collected
+                   COALESCE(SUM(s.tax_total), 0) AS gst_collected
             FROM sales s
             WHERE s.business_id = CAST(:bid AS uuid)
               AND s.is_deleted = false

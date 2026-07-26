@@ -428,6 +428,28 @@ async def delete_sale(
             # manually-formatted "{uuid1,uuid2}" string (causes DataError).
             pids_param = prod_ids
 
+            # Exclude quantities already restocked via approved sales returns —
+            # the fn_sales_return_stock trigger already added these back to
+            # prod_stock_qty when the return was approved with restock=true.
+            # Restoring the full original sale_item_quantity here would
+            # double-count that portion. Rejected returns never restocked
+            # anything, so they're excluded from this sum.
+            already_returned_rows = (await db.execute(
+                text("""
+                    SELECT sri.product_id, COALESCE(SUM(sri.return_qty), 0) AS total_returned
+                    FROM sales_return_items sri
+                    JOIN sales_returns sr ON sr.return_id = sri.return_id
+                    WHERE sr.sale_id = CAST(:sale_id AS uuid)
+                      AND sr.business_id = CAST(:bid AS uuid)
+                      AND sr.return_status != 'rejected'
+                    GROUP BY sri.product_id
+                """),
+                {"sale_id": sales_id, "bid": business_id}
+            )).all()
+            already_returned_map = {
+                str(row.product_id): row.total_returned for row in already_returned_rows
+            }
+
             # 1. Bulk SELECT: fetch current stock for all products at once
             product_rows = (await db.execute(
                 text("""
@@ -441,22 +463,32 @@ async def delete_sale(
 
             prod_stock_map = {str(row.prod_id): row.prod_stock_qty for row in product_rows}
 
-            # Only process items whose products still exist
-            valid_items = [
-                item for item in sale_items
-                if str(item.product_id) in prod_stock_map
-            ]
+            # Only process items whose products still exist, and only for the
+            # portion of quantity that was NOT already restocked by an
+            # approved sales return.
+            restore_qty_map = {}
+            valid_items = []
+            for item in sale_items:
+                pid = str(item.product_id)
+                if pid not in prod_stock_map:
+                    continue
+                already_returned = already_returned_map.get(pid, 0)
+                restore_qty = item.sale_item_quantity - already_returned
+                if restore_qty <= 0:
+                    continue
+                restore_qty_map[pid] = restore_qty
+                valid_items.append(item)
 
             if valid_items:
                 # 2. Bulk UPDATE products
                 values_clause = ", ".join(
-                    f"(CAST(:pid_{i} AS uuid), :qty_{i})"
+                    f"(CAST(:pid_{i} AS uuid), CAST(:qty_{i} AS int))"
                     for i in range(len(valid_items))
                 )
                 update_params = {"user_id": user_id, "business_id": business_id}
                 for i, item in enumerate(valid_items):
                     update_params[f"pid_{i}"] = str(item.product_id)
-                    update_params[f"qty_{i}"] = item.sale_item_quantity
+                    update_params[f"qty_{i}"] = restore_qty_map[str(item.product_id)]
 
                 await db.execute(
                     text(f"""
@@ -481,9 +513,16 @@ async def delete_sale(
                     insert_params[f"mid_{i}"] = str(uuid.uuid4())
                     insert_params[f"pid_{i}"] = pid
                     insert_params[f"mtype_{i}"] = "return"
-                    insert_params[f"mqty_{i}"] = item.sale_item_quantity
+                    insert_params[f"mqty_{i}"] = restore_qty_map[pid]
                     insert_params[f"mprev_{i}"] = prod_stock_map[pid]
-                    insert_params[f"mnotes_{i}"] = f"Stock restored from deleted sale {sale.invoice_no}"
+                    already_returned = already_returned_map.get(pid, 0)
+                    if already_returned:
+                        insert_params[f"mnotes_{i}"] = (
+                            f"Stock restored from deleted sale {sale.invoice_no} "
+                            f"({int(already_returned)} unit(s) excluded — already restocked via approved return)"
+                        )
+                    else:
+                        insert_params[f"mnotes_{i}"] = f"Stock restored from deleted sale {sale.invoice_no}"
 
                 await db.execute(
                     text(f"""

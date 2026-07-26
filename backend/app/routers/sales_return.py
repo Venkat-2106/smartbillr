@@ -615,8 +615,11 @@ async def update_sales_return(
                 return error_response(error, status_code=400)
 
         # Update status, restock, and approval fields — DB triggers fire automatically
+        # RACE GUARD: `return_status IS DISTINCT FROM :status` prevents a second
+        # concurrent approve from matching the same row — the first UPDATE sets
+        # return_status='approved', so the second's WHERE clause finds 0 rows.
         restock_provided = data.restock is not None
-        await db.execute(
+        result = await db.execute(
             text("""
                 UPDATE sales_returns
                 SET return_status = CAST(:status AS text),
@@ -628,6 +631,7 @@ async def update_sales_return(
                     stock_updated = CASE WHEN CAST(:status AS text) = 'approved' AND :restock_provided AND :restock = true THEN true ELSE stock_updated END
                 WHERE return_id = CAST(:return_id AS uuid)
                   AND business_id = CAST(:bid AS uuid)
+                  AND return_status IS DISTINCT FROM CAST(:status AS text)
             """),
             {
                 "status":             data.return_status,
@@ -638,6 +642,8 @@ async def update_sales_return(
                 "bid":                business_id
             }
         )
+        if result.rowcount == 0:
+            return error_response("This return has already been processed.", status_code=409)
 
         # ── Process refund: reduce what customer owes or create expense for excess ──
         #

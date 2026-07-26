@@ -772,10 +772,10 @@ async def update_purchase_return(
 
         # Update the return header (status already flipped for 'approved' path
         # by the atomic guard UPDATE above — only restock/stock_updated/rejected_reason here).
-        # WHERE return_status = 'pending' prevents the approve-vs-reject race:
-        # if an approve already committed (status='approved'), this UPDATE is a
-        # no-op rather than blindly overwriting to 'rejected' after stock+refund
-        # already executed under the approved path.
+        # Branch-aware WHERE: matches 'approved' for approve path (guard already
+        # flipped it within this transaction) or 'pending' for reject path (untouched
+        # until now). Prevents approve-vs-reject race (reject sees 'approved' → no-op)
+        # while ensuring restock/stock_updated still persist on approval.
         await db.execute(text("""
             UPDATE purchase_returns
             SET restock         = :restock,
@@ -790,7 +790,10 @@ async def update_purchase_return(
                                        THEN NULL ELSE approved_at END
             WHERE return_id    = CAST(:return_id AS uuid)
               AND business_id  = CAST(:business_id AS uuid)
-              AND return_status = 'pending'
+              AND return_status = CASE
+                    WHEN CAST(:status AS text) = 'approved' THEN 'approved'
+                    ELSE 'pending'
+                  END
         """), {
             "status":          data.return_status,
             "restock":         data.restock,

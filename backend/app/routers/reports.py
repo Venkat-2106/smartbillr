@@ -823,6 +823,7 @@ async def get_purchase_summary(
             COUNT(*) AS total_purchases,
             COALESCE(SUM(pur_final_amount), 0) AS total_amount,
             COALESCE(SUM(pur_discount), 0) AS total_discount,
+            -- total_tax sums all buckets (see note in get_tax_paid)
             COALESCE(SUM(pur_cgst_total + pur_sgst_total + pur_igst_total + pur_tax_total), 0) AS total_tax,
             COALESCE(SUM(pur_cgst_total), 0) AS total_cgst,
             COALESCE(SUM(pur_sgst_total), 0) AS total_sgst,
@@ -1041,6 +1042,7 @@ async def get_purchase_tax_summary(
 
     row = await db.execute(text(f"""
         SELECT
+            -- total_tax sums all buckets (see note in get_tax_paid)
             COALESCE(SUM(pur_cgst_total + pur_sgst_total + pur_igst_total + pur_tax_total), 0) AS total_tax,
             COALESCE(SUM(pur_cgst_total), 0) AS total_cgst,
             COALESCE(SUM(pur_sgst_total), 0) AS total_sgst,
@@ -2311,6 +2313,10 @@ async def get_tax_paid(
 
     row = await db.execute(text(f"""
         SELECT
+            -- total_tax = combined tax (generic + CGST + SGST + IGST).
+            -- pur_tax_total only holds the generic bucket; for GST-registered
+            -- Indian businesses tax_engine routes everything to CGST/SGST/IGST,
+            -- so pur_tax_total alone would be 0.
             COALESCE(SUM(pr.pur_cgst_total + pr.pur_sgst_total + pr.pur_igst_total + pr.pur_tax_total), 0) AS total_tax,
             COALESCE(SUM(pr.pur_cgst_total), 0) AS total_cgst,
             COALESCE(SUM(pr.pur_sgst_total), 0) AS total_sgst,
@@ -2368,6 +2374,7 @@ async def get_tax_liability(
                        WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {ds}), 0) AS collected_sgst,
             COALESCE((SELECT SUM(igst_total) FROM sales s
                        WHERE s.business_id = CAST(:bid AS uuid) AND s.is_deleted = false {ds}), 0) AS collected_igst,
+            -- paid sums all tax buckets (see note in get_tax_paid)
             COALESCE((SELECT SUM(pur_cgst_total + pur_sgst_total + pur_igst_total + pur_tax_total) FROM purchases pr
                        WHERE pr.business_id = CAST(:bid AS uuid) AND pr.is_deleted = false {dp}), 0) AS paid,
             COALESCE((SELECT SUM(pur_cgst_total) FROM purchases pr
@@ -2578,6 +2585,7 @@ async def get_tax_trend(
         ),
         purchase_agg AS (
             SELECT {group_expr_p} AS bucket,
+                   -- gst_paid sums all tax buckets (see note in get_tax_paid)
                    COALESCE(SUM(pr.pur_cgst_total + pr.pur_sgst_total + pr.pur_igst_total + pr.pur_tax_total), 0) AS gst_paid
             FROM purchases pr
             WHERE pr.business_id = CAST(:bid AS uuid)
@@ -2588,6 +2596,7 @@ async def get_tax_trend(
         purchase_ret_agg AS (
             SELECT {group_expr_prr} AS bucket,
                    COALESCE(SUM(
+                       -- returned_tax uses combined sum, same as _get_purchase_returned_tax
                        CASE WHEN pri.purchase_item_id IS NOT NULL THEN
                            pri.return_qty * ((pi.cgst_amount + pi.sgst_amount + pi.igst_amount + pi.pur_tax_total) / NULLIF(pi.pur_item_qty, 0))
                        ELSE

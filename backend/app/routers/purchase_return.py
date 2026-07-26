@@ -29,6 +29,11 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.bulk_stock_adjust import bulk_check_and_reduce_stock
+# PUR-RETURN-FIX: record_purchase_payment_and_sync_async writes a real
+# adjustment payment row for the covered_by_reducing_due portion, updating
+# cumulative_paid and pur_payment_status.  calculate_payment_status derives
+# "pending"/"partial"/"paid" from cumulative_paid vs pur_final.
+from app.utils.payment_helpers import record_purchase_payment_and_sync_async, calculate_payment_status
 from decimal import Decimal
 from datetime import datetime, timezone
 import uuid
@@ -643,38 +648,38 @@ async def update_purchase_return(
                 )).fetchone()
                 total_paid = Decimal(str(pay_row.total_paid)) if pay_row and pay_row.total_paid else Decimal("0")
 
-                # Fetch total refunded from OTHER already-approved returns (excluding this one)
-                other_ref_row = (await db.execute(
-                    text("""
-                        SELECT COALESCE(SUM(return_amount), 0) AS other_refunded
-                        FROM purchase_returns
-                        WHERE pur_id        = CAST(:pid AS uuid)
-                          AND business_id   = CAST(:bid AS uuid)
-                          AND return_status = 'approved'
-                          AND return_id    != CAST(:rid AS uuid)
-                    """),
-                    {"pid": str(purchase_return.pur_id), "bid": str(business_id), "rid": return_id}
-                )).fetchone()
-                other_refunded = Decimal(str(other_ref_row.other_refunded)) if other_ref_row and other_ref_row.other_refunded else Decimal("0")
-
-                remaining_before = max(Decimal("0"), pur_final - total_paid - other_refunded)
+                # ── Outstanding balance ─────────────────────────────────────────
+                # remaining_before = how much was still owed on this purchase
+                # BEFORE this return was approved.  cumulative_paid (from the
+                # active purchase_payments row) already reflects every prior
+                # return's adjustment payment — so we do NOT subtract
+                # other_refunded here (that was a double-count on the sales
+                # side, and on purchases it's now unnecessary because Part 1
+                # wires up a real adjustment payment for each return's covered
+                # portion).
+                remaining_before = max(Decimal("0"), pur_final - total_paid)
                 covered_by_reducing_due = min(return_amount, remaining_before)
                 excess_refund = (return_amount - covered_by_reducing_due).quantize(Decimal("0.01"))
 
-                # If the refund fully covers the remaining due, mark purchase as paid
-                new_remaining = remaining_before - covered_by_reducing_due
-                if new_remaining <= 0:
-                    await db.execute(text("""
-                        UPDATE purchases
-                        SET    pur_payment_status = 'paid',
-                               updated_by         = CAST(:uid AS uuid)
-                        WHERE  pur_id             = CAST(:pid AS uuid)
-                          AND  business_id        = CAST(:bid AS uuid)
-                    """), {
-                        "uid": str(user_id),
-                        "pid": str(purchase_return.pur_id),
-                        "bid": str(business_id),
-                    })
+                # Record the covered portion as a real adjustment payment,
+                # mirroring sales' update_sales_return.  This updates
+                # cumulative_paid on the active purchase_payments row and
+                # syncs pur_payment_status on the parent purchase — so future
+                # returns see the correct total_paid without needing
+                # other_refunded.
+                if covered_by_reducing_due > 0:
+                    new_cumulative = (total_paid + covered_by_reducing_due).quantize(Decimal("0.01"))
+                    new_status = calculate_payment_status(new_cumulative, pur_final)
+
+                    await record_purchase_payment_and_sync_async(
+                        db=db,
+                        business_id=str(business_id),
+                        pur_id=str(purchase_return.pur_id),
+                        payment_amount=covered_by_reducing_due,
+                        payment_method="adjustment",
+                        new_status=new_status,
+                        cumulative_paid=new_cumulative,
+                    )
 
                 if excess_refund > 0:
                     # Fetch supplier name for expense note

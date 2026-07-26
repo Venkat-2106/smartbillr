@@ -308,7 +308,7 @@ async def insert_purchase_items(
                 "product_id":        calc["product_id"],
                 "quantity":          calc["quantity"],
                 "unit_price":        calc["unit_price"],
-                "tax_rate":          calc["tax_rate"],
+                "gst_rate":          calc["tax_rate"],
                 "cgst_amount":       calc["cgst_amount"],
                 "sgst_amount":       calc["sgst_amount"],
                 "igst_amount":       calc["igst_amount"],

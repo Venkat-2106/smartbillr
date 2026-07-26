@@ -60,6 +60,10 @@ function buildColumns(canManage, onDelete, country) {
     return acc
   }, {})
 
+  // COLUMN CONVENTION (2026-07): No "Created" column — matches every other list
+  // page (Customers, Suppliers, Products, Categories, Sales).  Only "Date"
+  // (user-editable transaction date) and "Last Updated" / "Last Updated By" are
+  // shown.  CSV export (EXPENSE_CSV_COLUMNS) also excludes created_at.
   return [
     {
       key: 'expense_category',
@@ -100,6 +104,9 @@ function buildColumns(canManage, onDelete, country) {
       label: 'Date',
       sortable: true,
       width: 120,
+      // expense_date is the user-specified transaction date (the "real" date
+      // the expense occurred).  updated_at is the DB-level audit timestamp of
+      // the last mutation — these are intentionally separate columns.
       render: (row) => (
         <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
           {row.expense_date ? formatDateOnly(row.expense_date) : '\u2014'}
@@ -135,6 +142,7 @@ function buildColumns(canManage, onDelete, country) {
       label:    'Last Updated By',
       sortable: false,
       width:    140,
+      // Resolved server-side via profiles JOIN on updated_by UUID.
       render: (row) => (
         row.last_updated_by
           ? (

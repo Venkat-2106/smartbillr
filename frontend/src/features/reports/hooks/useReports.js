@@ -352,6 +352,22 @@ export function useTaxByRate(dateFrom, dateTo) {
   })
 }
 
+export function usePurchaseTaxByRate(dateFrom, dateTo) {
+  return useQuery({
+    queryKey: ['purchase-tax-by-rate', dateFrom, dateTo],
+    queryFn: () => api.fetchPurchaseTaxByRate(dateParams(dateFrom, dateTo)),
+    staleTime: DEFAULT_STALE,
+  })
+}
+
+export function useTaxTrend(period = 'monthly', dateFrom, dateTo) {
+  return useQuery({
+    queryKey: ['tax-trend', period, dateFrom, dateTo],
+    queryFn: () => api.fetchTaxTrend({ period, ...dateParams(dateFrom, dateTo) }),
+    staleTime: DEFAULT_STALE,
+  })
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // 10. Return Reports
 // ═══════════════════════════════════════════════════════════════════════════════

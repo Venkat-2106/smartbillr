@@ -83,6 +83,86 @@ def _date_col(table_alias: str, col: str, date_from: Optional[str], date_to: Opt
     return clause, params
 
 
+async def _get_sales_returned_tax(
+    db: AsyncSession, bid: str,
+    date_from: Optional[str], date_to: Optional[str],
+) -> Dict[str, float]:
+    """Sum tax on approved sales returns within date range.
+
+    Derives per-item tax by joining sales_return_items → sale_items via
+    the sale_item_id FK, then prorating by return_qty / original qty.
+    Returns {returned_tax, returned_cgst, returned_sgst, returned_igst}.
+    """
+    dw, dp = _date_col("sr", "return_created_at", date_from, date_to)
+    row = (await db.execute(text(f"""
+        SELECT
+            COALESCE(SUM(
+                sri.return_qty * (si.tax_amount / NULLIF(si.sale_item_quantity, 0))
+            ), 0) AS returned_tax,
+            COALESCE(SUM(
+                sri.return_qty * (si.cgst_amount / NULLIF(si.sale_item_quantity, 0))
+            ), 0) AS returned_cgst,
+            COALESCE(SUM(
+                sri.return_qty * (si.sgst_amount / NULLIF(si.sale_item_quantity, 0))
+            ), 0) AS returned_sgst,
+            COALESCE(SUM(
+                sri.return_qty * (si.igst_amount / NULLIF(si.sale_item_quantity, 0))
+            ), 0) AS returned_igst
+        FROM sales_return_items sri
+        JOIN sales_returns sr ON sr.return_id = sri.return_id
+        JOIN sale_items si ON si.sale_item_id = sri.sale_item_id
+        WHERE sr.business_id = CAST(:bid AS uuid)
+          AND sr.return_status = 'approved'
+          {dw}
+    """), {"bid": bid, **dp})).fetchone()
+    return {
+        "returned_tax":  float(row.returned_tax),
+        "returned_cgst": float(row.returned_cgst),
+        "returned_sgst": float(row.returned_sgst),
+        "returned_igst": float(row.returned_igst),
+    }
+
+
+async def _get_purchase_returned_tax(
+    db: AsyncSession, bid: str,
+    date_from: Optional[str], date_to: Optional[str],
+) -> Dict[str, float]:
+    """Sum prorated tax on approved purchase returns within date range.
+
+    Purchase-level proration: pur_tax_total * (return_amount / pur_final_amount).
+    This is an approximation because purchase_return_items lacks a purchase_item_id FK
+    and stores no tax amount — line-level precision would require a schema change.
+    Returns {returned_tax, returned_cgst, returned_sgst, returned_igst}.
+    """
+    dw, dp = _date_col("prr", "return_created_at", date_from, date_to)
+    row = (await db.execute(text(f"""
+        SELECT
+            COALESCE(SUM(
+                pr2.pur_tax_total * (prr.return_amount / NULLIF(pr2.pur_final_amount, 0))
+            ), 0) AS returned_tax,
+            COALESCE(SUM(
+                pr2.pur_cgst_total * (prr.return_amount / NULLIF(pr2.pur_final_amount, 0))
+            ), 0) AS returned_cgst,
+            COALESCE(SUM(
+                pr2.pur_sgst_total * (prr.return_amount / NULLIF(pr2.pur_final_amount, 0))
+            ), 0) AS returned_sgst,
+            COALESCE(SUM(
+                pr2.pur_igst_total * (prr.return_amount / NULLIF(pr2.pur_final_amount, 0))
+            ), 0) AS returned_igst
+        FROM purchase_returns prr
+        JOIN purchases pr2 ON pr2.pur_id = prr.pur_id
+        WHERE prr.business_id = CAST(:bid AS uuid)
+          AND prr.return_status = 'approved'
+          {dw}
+    """), {"bid": bid, **dp})).fetchone()
+    return {
+        "returned_tax":  float(row.returned_tax),
+        "returned_cgst": float(row.returned_cgst),
+        "returned_sgst": float(row.returned_sgst),
+        "returned_igst": float(row.returned_igst),
+    }
+
+
 # ── Audit log FK name resolution ─────────────────────────────────────────────
 # Maps FK column names to (referenced_table, referenced_pk, name_column).
 # Used by _resolve_audit_names to replace raw UUIDs in old_data/new_data
@@ -2168,11 +2248,18 @@ async def get_tax_collected(
     """), {"bid": bid, **dp})
     row = row.fetchone()
 
+    gross_tax  = float(row.total_tax) if row else 0
+    gross_cgst = float(row.total_cgst) if row else 0
+    gross_sgst = float(row.total_sgst) if row else 0
+    gross_igst = float(row.total_igst) if row else 0
+
+    ret = await _get_sales_returned_tax(db, bid, date_from, date_to)
+
     return success_response({
-        "total_tax": float(row.total_tax) if can_financial else None,
-        "total_cgst": float(row.total_cgst) if can_financial else None,
-        "total_sgst": float(row.total_sgst) if can_financial else None,
-        "total_igst": float(row.total_igst) if can_financial else None,
+        "total_tax":  gross_tax  - ret["returned_tax"]  if can_financial else None,
+        "total_cgst": gross_cgst - ret["returned_cgst"] if can_financial else None,
+        "total_sgst": gross_sgst - ret["returned_sgst"] if can_financial else None,
+        "total_igst": gross_igst - ret["returned_igst"] if can_financial else None,
     })
 
 
@@ -2200,11 +2287,18 @@ async def get_tax_paid(
     """), {"bid": bid, **dp})
     row = row.fetchone()
 
+    gross_tax  = float(row.total_tax) if row else 0
+    gross_cgst = float(row.total_cgst) if row else 0
+    gross_sgst = float(row.total_sgst) if row else 0
+    gross_igst = float(row.total_igst) if row else 0
+
+    ret = await _get_purchase_returned_tax(db, bid, date_from, date_to)
+
     return success_response({
-        "total_tax": float(row.total_tax) if can_financial else None,
-        "total_cgst": float(row.total_cgst) if can_financial else None,
-        "total_sgst": float(row.total_sgst) if can_financial else None,
-        "total_igst": float(row.total_igst) if can_financial else None,
+        "total_tax":  gross_tax  - ret["returned_tax"]  if can_financial else None,
+        "total_cgst": gross_cgst - ret["returned_cgst"] if can_financial else None,
+        "total_sgst": gross_sgst - ret["returned_sgst"] if can_financial else None,
+        "total_igst": gross_igst - ret["returned_igst"] if can_financial else None,
     })
 
 
@@ -2235,8 +2329,14 @@ async def get_tax_liability(
     """), {"bid": bid, **ps, **pp})
     row = row.fetchone()
 
-    collected = float(row.collected) if row else 0
-    paid = float(row.paid) if row else 0
+    gross_collected = float(row.collected) if row else 0
+    gross_paid = float(row.paid) if row else 0
+
+    sales_ret = await _get_sales_returned_tax(db, bid, date_from, date_to)
+    purch_ret = await _get_purchase_returned_tax(db, bid, date_from, date_to)
+
+    collected = gross_collected - sales_ret["returned_tax"]
+    paid = gross_paid - purch_ret["returned_tax"]
 
     return success_response({
         "tax_collected": collected,
@@ -2282,6 +2382,189 @@ async def get_tax_by_rate(
         }
         for r in rows
     ])
+
+
+@router.get("/tax/purchases/by-rate")
+async def get_purchase_tax_by_rate(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
+):
+    bid = current_user["business_id"]
+    can_financial = check_feature_access(current_user, "financial_reports")["allowed"]
+    date_where, dp = _date_col("pr", "pur_created_at", date_from, date_to)
+
+    rows = await db.execute(text(f"""
+        SELECT
+            pi.gst_rate,
+            COUNT(DISTINCT pi.item_id) AS item_count,
+            COALESCE(SUM(pi.item_tax_total), 0) AS tax_amount,
+            COALESCE(SUM(pi.item_subtotal), 0) AS taxable_amount
+        FROM purchase_items pi
+        JOIN purchases pr ON pr.pur_id = pi.pur_id
+        WHERE pr.business_id = CAST(:bid AS uuid)
+          AND pr.is_deleted = false
+          {date_where}
+        GROUP BY pi.gst_rate
+        ORDER BY pi.gst_rate
+    """), {"bid": bid, **dp})
+    rows = rows.fetchall()
+
+    return success_response([
+        {
+            "gst_rate": float(r.gst_rate) if r.gst_rate else 0,
+            "item_count": int(r.item_count),
+            "tax_amount": float(r.tax_amount) if can_financial else None,
+            "taxable_amount": float(r.taxable_amount) if can_financial else None,
+        }
+        for r in rows
+    ])
+
+
+@router.get("/tax/trend")
+async def get_tax_trend(
+    period: str = "monthly",
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    current_user: dict = Depends(require_permission("reports.view")),
+    db: AsyncSession = Depends(get_async_db)
+):
+    bid = current_user["business_id"]
+    can_financial = check_feature_access(current_user, "financial_reports")["allowed"]
+    if period not in ("weekly", "monthly", "yearly"):
+        period = "monthly"
+
+    utc_now = datetime.now(timezone.utc)
+    user_today = utc_now.date()
+
+    date_where_s, dp_s = _date_col("s", "sales_created_at", date_from, date_to)
+    date_where_sr, dp_sr = _date_col("sr", "return_created_at", date_from, date_to)
+    date_where_p, dp_p = _date_col("pr", "pur_created_at", date_from, date_to)
+    date_where_prr, dp_prr = _date_col("prr", "return_created_at", date_from, date_to)
+    params: Dict[str, Any] = {"bid": bid, **dp_s, **dp_sr, **dp_p, **dp_prr}
+
+    if period == "weekly":
+        user_start = user_today - timedelta(days=6)
+        if not date_from:
+            params["user_start"] = user_start
+            params["user_today"] = user_today
+            fill_series = "generate_series(:user_start, :user_today, INTERVAL '1 day') AS gs"
+        else:
+            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 day') AS gs"
+        group_expr_s = "(s.sales_created_at)::date"
+        group_expr_sr = "(sr.return_created_at)::date"
+        group_expr_p = "(pr.pur_created_at)::date"
+        group_expr_prr = "(prr.return_created_at)::date"
+    elif period == "monthly":
+        user_start_month = user_today.replace(day=1)
+        if user_start_month.month > 5:
+            user_start_month = user_start_month.replace(month=user_start_month.month - 5)
+        else:
+            user_start_month = user_start_month.replace(year=user_start_month.year - 1, month=user_start_month.month + 7)
+        user_end_month = user_today.replace(day=1)
+        if user_end_month.month == 12:
+            user_end_month = user_end_month.replace(year=user_end_month.year + 1, month=1)
+        else:
+            user_end_month = user_end_month.replace(month=user_end_month.month + 1)
+        if not date_from:
+            params["user_start"] = user_start_month
+            params["user_end"] = user_end_month
+            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 month') AS gs"
+        else:
+            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 month') AS gs"
+        group_expr_s = "date_trunc('month', s.sales_created_at)"
+        group_expr_sr = "date_trunc('month', sr.return_created_at)"
+        group_expr_p = "date_trunc('month', pr.pur_created_at)"
+        group_expr_prr = "date_trunc('month', prr.return_created_at)"
+    else:
+        user_start_year = user_today.replace(year=user_today.year - 4, month=1, day=1)
+        user_end_year = user_today.replace(year=user_today.year + 1, month=1, day=1)
+        if not date_from:
+            params["user_start"] = user_start_year
+            params["user_end"] = user_end_year
+            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 year') AS gs"
+        else:
+            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 year') AS gs"
+        group_expr_s = "date_trunc('year', s.sales_created_at)"
+        group_expr_sr = "date_trunc('year', sr.return_created_at)"
+        group_expr_p = "date_trunc('year', pr.pur_created_at)"
+        group_expr_prr = "date_trunc('year', prr.return_created_at)"
+
+    rows = await db.execute(text(f"""
+        WITH sales_agg AS (
+            SELECT {group_expr_s} AS bucket,
+                   COALESCE(SUM(s.tax_total), 0) AS gst_collected
+            FROM sales s
+            WHERE s.business_id = CAST(:bid AS uuid)
+              AND s.is_deleted = false
+              {date_where_s}
+            GROUP BY bucket
+        ),
+        sales_ret_agg AS (
+            SELECT {group_expr_sr} AS bucket,
+                   COALESCE(SUM(
+                       sri.return_qty * (si.tax_amount / NULLIF(si.sale_item_quantity, 0))
+                   ), 0) AS returned_tax
+            FROM sales_return_items sri
+            JOIN sales_returns sr ON sr.return_id = sri.return_id
+            JOIN sale_items si ON si.sale_item_id = sri.sale_item_id
+            WHERE sr.business_id = CAST(:bid AS uuid)
+              AND sr.return_status = 'approved'
+              {date_where_sr}
+            GROUP BY bucket
+        ),
+        purchase_agg AS (
+            SELECT {group_expr_p} AS bucket,
+                   COALESCE(SUM(pr.pur_tax_total), 0) AS gst_paid
+            FROM purchases pr
+            WHERE pr.business_id = CAST(:bid AS uuid)
+              AND pr.is_deleted = false
+              {date_where_p}
+            GROUP BY bucket
+        ),
+        purchase_ret_agg AS (
+            SELECT {group_expr_prr} AS bucket,
+                   COALESCE(SUM(
+                       pr2.pur_tax_total * (prr.return_amount / NULLIF(pr2.pur_final_amount, 0))
+                   ), 0) AS returned_tax
+            FROM purchase_returns prr
+            JOIN purchases pr2 ON pr2.pur_id = prr.pur_id
+            WHERE prr.business_id = CAST(:bid AS uuid)
+              AND prr.return_status = 'approved'
+              {date_where_prr}
+            GROUP BY bucket
+        )
+        SELECT
+            gs AS bucket,
+            COALESCE(sa.gst_collected, 0) - COALESCE(sra.returned_tax, 0) AS gst_collected,
+            COALESCE(pa.gst_paid, 0) - COALESCE(pra.returned_tax, 0) AS gst_paid
+        FROM {fill_series}
+        LEFT JOIN sales_agg sa ON sa.bucket = gs
+        LEFT JOIN sales_ret_agg sra ON sra.bucket = gs
+        LEFT JOIN purchase_agg pa ON pa.bucket = gs
+        LEFT JOIN purchase_ret_agg pra ON pra.bucket = gs
+        ORDER BY gs
+    """), params)
+    rows = rows.fetchall()
+
+    result = []
+    for r in rows:
+        if period == "weekly":
+            days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+            label = days[r.bucket.weekday()] if hasattr(r.bucket, 'weekday') else str(r.bucket)
+        elif period == "monthly":
+            month_short = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+            label = month_short[r.bucket.month - 1] if hasattr(r.bucket, 'month') else str(r.bucket)
+        else:
+            label = str(int(r.bucket)) if hasattr(r.bucket, 'year') else str(r.bucket)
+        result.append({
+            "label": label,
+            "gst_collected": float(r.gst_collected) if can_financial else None,
+            "gst_paid": float(r.gst_paid) if can_financial else None,
+        })
+
+    return success_response(result)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

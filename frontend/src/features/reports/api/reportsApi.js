@@ -122,6 +122,12 @@ export const fetchTaxLiability = (params) =>
 export const fetchTaxByRate = (params) =>
   api.get('/reports/tax/by-rate', { params: p(params) }).then(r => r.data)
 
+export const fetchPurchaseTaxByRate = (params) =>
+  api.get('/reports/tax/purchases/by-rate', { params: p(params) }).then(r => r.data)
+
+export const fetchTaxTrend = (params) =>
+  api.get('/reports/tax/trend', { params: p(params) }).then(r => r.data)
+
 // 10. Return Reports
 export const fetchSalesReturns = (params) =>
   api.get('/reports/returns/sales', { params: p(params) }).then(r => r.data)

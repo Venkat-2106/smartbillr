@@ -97,16 +97,16 @@ async def _get_sales_returned_tax(
     row = (await db.execute(text(f"""
         SELECT
             COALESCE(SUM(
-                sri.return_qty * (si.item_tax_total / NULLIF(si.sale_item_quantity, 0))
+                sri.return_qty * sri.unit_price * (si.item_tax_total / NULLIF(si.sale_item_quantity * si.sale_item_unit_price, 0))
             ), 0) AS returned_tax,
             COALESCE(SUM(
-                sri.return_qty * (si.cgst_amount / NULLIF(si.sale_item_quantity, 0))
+                sri.return_qty * sri.unit_price * (si.cgst_amount / NULLIF(si.sale_item_quantity * si.sale_item_unit_price, 0))
             ), 0) AS returned_cgst,
             COALESCE(SUM(
-                sri.return_qty * (si.sgst_amount / NULLIF(si.sale_item_quantity, 0))
+                sri.return_qty * sri.unit_price * (si.sgst_amount / NULLIF(si.sale_item_quantity * si.sale_item_unit_price, 0))
             ), 0) AS returned_sgst,
             COALESCE(SUM(
-                sri.return_qty * (si.igst_amount / NULLIF(si.sale_item_quantity, 0))
+                sri.return_qty * sri.unit_price * (si.igst_amount / NULLIF(si.sale_item_quantity * si.sale_item_unit_price, 0))
             ), 0) AS returned_igst
         FROM sales_return_items sri
         JOIN sales_returns sr ON sr.return_id = sri.return_id
@@ -152,28 +152,28 @@ async def _get_purchase_returned_tax(
             -- so pur_tax_total alone would be 0.
             COALESCE(SUM(
                 CASE WHEN pri.purchase_item_id IS NOT NULL THEN
-                    pri.return_qty * ((pi.cgst_amount + pi.sgst_amount + pi.igst_amount + pi.pur_tax_total) / NULLIF(pi.pur_item_qty, 0))
+                    pri.return_qty * pri.refund_amount * ((pi.cgst_amount + pi.sgst_amount + pi.igst_amount + pi.pur_tax_total) / NULLIF(pi.pur_item_qty * pi.item_unit_price, 0))
                 ELSE
                     (pr2.pur_cgst_total + pr2.pur_sgst_total + pr2.pur_igst_total + pr2.pur_tax_total) * (pri.return_item_subtotal / NULLIF(pr2.pur_final_amount, 0))
                 END
             ), 0) AS returned_tax,
             COALESCE(SUM(
                 CASE WHEN pri.purchase_item_id IS NOT NULL THEN
-                    pri.return_qty * (pi.cgst_amount / NULLIF(pi.pur_item_qty, 0))
+                    pri.return_qty * pri.refund_amount * (pi.cgst_amount / NULLIF(pi.pur_item_qty * pi.item_unit_price, 0))
                 ELSE
                     pr2.pur_cgst_total * (pri.return_item_subtotal / NULLIF(pr2.pur_final_amount, 0))
                 END
             ), 0) AS returned_cgst,
             COALESCE(SUM(
                 CASE WHEN pri.purchase_item_id IS NOT NULL THEN
-                    pri.return_qty * (pi.sgst_amount / NULLIF(pi.pur_item_qty, 0))
+                    pri.return_qty * pri.refund_amount * (pi.sgst_amount / NULLIF(pi.pur_item_qty * pi.item_unit_price, 0))
                 ELSE
                     pr2.pur_sgst_total * (pri.return_item_subtotal / NULLIF(pr2.pur_final_amount, 0))
                 END
             ), 0) AS returned_sgst,
             COALESCE(SUM(
                 CASE WHEN pri.purchase_item_id IS NOT NULL THEN
-                    pri.return_qty * (pi.igst_amount / NULLIF(pi.pur_item_qty, 0))
+                    pri.return_qty * pri.refund_amount * (pi.igst_amount / NULLIF(pi.pur_item_qty * pi.item_unit_price, 0))
                 ELSE
                     pr2.pur_igst_total * (pri.return_item_subtotal / NULLIF(pr2.pur_final_amount, 0))
                 END
@@ -2573,7 +2573,7 @@ async def get_tax_trend(
         sales_ret_agg AS (
             SELECT {group_expr_sr} AS bucket,
                    COALESCE(SUM(
-                       sri.return_qty * (si.item_tax_total / NULLIF(si.sale_item_quantity, 0))
+                       sri.return_qty * sri.unit_price * (si.item_tax_total / NULLIF(si.sale_item_quantity * si.sale_item_unit_price, 0))
                    ), 0) AS returned_tax
             FROM sales_return_items sri
             JOIN sales_returns sr ON sr.return_id = sri.return_id
@@ -2598,7 +2598,7 @@ async def get_tax_trend(
                    COALESCE(SUM(
                        -- returned_tax uses combined sum, same as _get_purchase_returned_tax
                        CASE WHEN pri.purchase_item_id IS NOT NULL THEN
-                           pri.return_qty * ((pi.cgst_amount + pi.sgst_amount + pi.igst_amount + pi.pur_tax_total) / NULLIF(pi.pur_item_qty, 0))
+                           pri.return_qty * pri.refund_amount * ((pi.cgst_amount + pi.sgst_amount + pi.igst_amount + pi.pur_tax_total) / NULLIF(pi.pur_item_qty * pi.item_unit_price, 0))
                        ELSE
                            (pr2.pur_cgst_total + pr2.pur_sgst_total + pr2.pur_igst_total + pr2.pur_tax_total) * (pri.return_item_subtotal / NULLIF(pr2.pur_final_amount, 0))
                        END

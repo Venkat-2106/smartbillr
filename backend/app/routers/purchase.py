@@ -301,6 +301,31 @@ async def delete_purchase(
     purchase.is_deleted = True
     purchase.updated_by = user_id
 
+    await db.execute(
+        text("""
+            UPDATE purchase_payments
+            SET is_active = false
+            WHERE pur_id      = CAST(:pur_id AS uuid)
+              AND business_id = CAST(:business_id AS uuid)
+        """),
+        {"pur_id": pur_id, "business_id": business_id}
+    )
+
+    await db.execute(
+        text("""
+            UPDATE expenses
+            SET is_deleted = true
+            WHERE business_id = CAST(:business_id AS uuid)
+              AND source_type  = 'purchase_payment'
+              AND source_id IN (
+                  SELECT payment_id FROM purchase_payments
+                  WHERE pur_id      = CAST(:pur_id AS uuid)
+                    AND business_id = CAST(:business_id AS uuid)
+              )
+        """),
+        {"pur_id": pur_id, "business_id": business_id}
+    )
+
     await db.commit()
     await async_set_rls_gucs_after_commit(db, current_user)
 

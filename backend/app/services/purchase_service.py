@@ -842,6 +842,17 @@ async def delete_purchase_items_and_stock(
     if items:
         prod_ids = [str(item.product_id) for item in items]
 
+        returned_rows = (await db.execute(text("""
+            SELECT pri.product_id, COALESCE(SUM(pri.return_qty), 0) AS total_returned
+            FROM purchase_return_items pri
+            JOIN purchase_returns pr ON pr.return_id = pri.return_id
+            WHERE pr.pur_id = CAST(:pur_id AS uuid)
+              AND pr.business_id = CAST(:business_id AS uuid)
+              AND pr.return_status = 'approved'
+            GROUP BY pri.product_id
+        """), {"pur_id": pur_id, "business_id": business_id})).fetchall()
+        already_returned_map = {str(row.product_id): int(row.total_returned) for row in returned_rows}
+
         product_rows = (await db.execute(
             text("""
                 SELECT prod_id, prod_stock_qty
@@ -860,87 +871,94 @@ async def delete_purchase_items_and_stock(
         ]
 
         if valid_items:
+            stock_adjust_items = []
             for item in valid_items:
                 pid = str(item.product_id)
+                already_returned = already_returned_map.get(pid, 0)
+                effective_qty = max(0, int(item.pur_item_qty) - already_returned)
+                if effective_qty == 0:
+                    continue
                 current_stock = prod_stock_map.get(pid, 0)
-                if current_stock < item.pur_item_qty:
+                if current_stock < effective_qty:
                     stock_warnings.append({
                         "product_id": pid,
                         "current_stock": current_stock,
-                        "requested_reduction": item.pur_item_qty,
+                        "requested_reduction": effective_qty,
                         "note": "Stock already partially sold; reduced to 0 instead",
                     })
+                stock_adjust_items.append((item, effective_qty))
 
-            values_clause = ", ".join(
-                f"(CAST(:pid_{i} AS uuid), CAST(:qty_{i} AS integer))"
-                for i in range(len(valid_items))
-            )
-            update_params = {"user_id": user_id, "business_id": business_id}
-            for i, item in enumerate(valid_items):
-                update_params[f"pid_{i}"] = str(item.product_id)
-                update_params[f"qty_{i}"] = item.pur_item_qty
-
-            await db.execute(
-                text(f"""
-                    UPDATE products
-                    SET prod_stock_qty = GREATEST(0, products.prod_stock_qty - v.reduce_qty),
-                        updated_by = CAST(:user_id AS uuid)
-                    FROM (VALUES {values_clause}) AS v(prod_id, reduce_qty)
-                    WHERE products.prod_id = v.prod_id
-                      AND products.business_id = CAST(:business_id AS uuid)
-                """),
-                update_params
-            )
-
-            cost_items = [
-                item for item in valid_items
-                if getattr(item, "prod_cost_price_before_purchase", None) is not None
-            ]
-            if cost_items:
-                cost_values = ", ".join(
-                    f"(CAST(:cpid_{i} AS uuid), :cprice_{i})"
-                    for i in range(len(cost_items))
+            if stock_adjust_items:
+                values_clause = ", ".join(
+                    f"(CAST(:pid_{i} AS uuid), CAST(:qty_{i} AS integer))"
+                    for i in range(len(stock_adjust_items))
                 )
-                cost_params = {"user_id": user_id, "business_id": business_id}
-                for i, item in enumerate(cost_items):
-                    cost_params[f"cpid_{i}"] = str(item.product_id)
-                    cost_params[f"cprice_{i}"] = str(item.prod_cost_price_before_purchase)
+                update_params = {"user_id": user_id, "business_id": business_id}
+                for i, (item, effective_qty) in enumerate(stock_adjust_items):
+                    update_params[f"pid_{i}"] = str(item.product_id)
+                    update_params[f"qty_{i}"] = effective_qty
 
                 await db.execute(
                     text(f"""
                         UPDATE products
-                        SET prod_cost_price = v.cost_price::numeric,
+                        SET prod_stock_qty = GREATEST(0, products.prod_stock_qty - v.reduce_qty),
                             updated_by = CAST(:user_id AS uuid)
-                        FROM (VALUES {cost_values}) AS v(prod_id, cost_price)
-                        WHERE products.prod_id = v.prod_id::uuid
+                        FROM (VALUES {values_clause}) AS v(prod_id, reduce_qty)
+                        WHERE products.prod_id = v.prod_id
                           AND products.business_id = CAST(:business_id AS uuid)
                     """),
-                    cost_params
+                    update_params
                 )
 
-            insert_values = ", ".join(
-                f"(CAST(:mid_{i} AS uuid), CAST(:bid AS uuid), CAST(:pid_{i} AS uuid), :mtype_{i}, :mqty_{i}, :mprev_{i}, CAST(:pref AS uuid), :mnotes_{i}, CAST(:cby AS uuid))"
-                for i in range(len(valid_items))
-            )
-            insert_params = {"bid": business_id, "pref": pur_id, "cby": user_id}
-            for i, item in enumerate(valid_items):
-                pid = str(item.product_id)
-                insert_params[f"mid_{i}"] = str(uuid.uuid4())
-                insert_params[f"pid_{i}"] = pid
-                insert_params[f"mtype_{i}"] = "purchase_delete"
-                insert_params[f"mqty_{i}"] = -item.pur_item_qty
-                insert_params[f"mprev_{i}"] = prod_stock_map[pid]
-                insert_params[f"mnotes_{i}"] = f"Stock reduced from deleted purchase {purchase.pur_id}"
+                cost_items = [
+                    item for item in valid_items
+                    if getattr(item, "prod_cost_price_before_purchase", None) is not None
+                ]
+                if cost_items:
+                    cost_values = ", ".join(
+                        f"(CAST(:cpid_{i} AS uuid), :cprice_{i})"
+                        for i in range(len(cost_items))
+                    )
+                    cost_params = {"user_id": user_id, "business_id": business_id}
+                    for i, item in enumerate(cost_items):
+                        cost_params[f"cpid_{i}"] = str(item.product_id)
+                        cost_params[f"cprice_{i}"] = str(item.prod_cost_price_before_purchase)
 
-            await db.execute(
-                text(f"""
-                    INSERT INTO stock_movements (
-                        move_id, business_id, product_id,
-                        move_type, move_qty, move_prev_stock,
-                        purchase_reference_id, move_notes, move_created_by
-                    ) VALUES {insert_values}
-                """),
-                insert_params
-            )
+                    await db.execute(
+                        text(f"""
+                            UPDATE products
+                            SET prod_cost_price = v.cost_price::numeric,
+                                updated_by = CAST(:user_id AS uuid)
+                            FROM (VALUES {cost_values}) AS v(prod_id, cost_price)
+                            WHERE products.prod_id = v.prod_id::uuid
+                              AND products.business_id = CAST(:business_id AS uuid)
+                        """),
+                        cost_params
+                    )
+
+                insert_values = ", ".join(
+                    f"(CAST(:mid_{i} AS uuid), CAST(:bid AS uuid), CAST(:pid_{i} AS uuid), :mtype_{i}, :mqty_{i}, :mprev_{i}, CAST(:pref AS uuid), :mnotes_{i}, CAST(:cby AS uuid))"
+                    for i in range(len(stock_adjust_items))
+                )
+                insert_params = {"bid": business_id, "pref": pur_id, "cby": user_id}
+                for i, (item, effective_qty) in enumerate(stock_adjust_items):
+                    pid = str(item.product_id)
+                    insert_params[f"mid_{i}"] = str(uuid.uuid4())
+                    insert_params[f"pid_{i}"] = pid
+                    insert_params[f"mtype_{i}"] = "purchase_delete"
+                    insert_params[f"mqty_{i}"] = -effective_qty
+                    insert_params[f"mprev_{i}"] = prod_stock_map[pid]
+                    insert_params[f"mnotes_{i}"] = f"Stock reduced from deleted purchase {purchase.pur_id}"
+
+                await db.execute(
+                    text(f"""
+                        INSERT INTO stock_movements (
+                            move_id, business_id, product_id,
+                            move_type, move_qty, move_prev_stock,
+                            purchase_reference_id, move_notes, move_created_by
+                        ) VALUES {insert_values}
+                    """),
+                    insert_params
+                )
 
     return purchase, stock_warnings

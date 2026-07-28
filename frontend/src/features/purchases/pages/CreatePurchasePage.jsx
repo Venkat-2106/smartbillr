@@ -34,6 +34,7 @@ import { Button, PageHeader, FormField, ConfirmDialog } from '../../../shared/co
 import { selectStyle }          from '../../../shared/components/FormField'
 import { formatCurrency }       from '../../../shared/utils/formatCurrency'
 import { getTaxLabel }          from '../../../shared/utils/formatTax'
+import { getAutoPrintInvoice, setAutoPrintInvoice } from '../../../shared/utils/preferences'
 import useAuthStore             from '../../../store/authStore'
 import { useDebounce }          from '../../../shared/hooks/useDebounce'
 import PurchaseLineItemRow      from '../components/PurchaseLineItemRow'
@@ -78,7 +79,13 @@ export default function CreatePurchasePage() {
   const [paymentStatus, setPaymentStatus] = useState('pending')
   const [paidAmount,    setPaidAmount]    = useState('')
   const [discount,      setDiscount]      = useState('')
+  const [autoPrint,     setAutoPrint]     = useState(() => getAutoPrintInvoice())
   const [items,         setItems]         = useState([newItem()])
+
+  const handleAutoPrintChange = useCallback((checked) => {
+    setAutoPrint(checked)
+    setAutoPrintInvoice(checked)
+  }, [])
 
   // ── Dirty-form protection ────────────────────────────────────────────────
   const [initialState] = useState(() => ({
@@ -393,11 +400,18 @@ export default function CreatePurchasePage() {
   // ── Create purchase mutation ─────────────────────────────────────────────
   const mutation = useMutation({
     mutationFn: createPurchase,
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['purchases'] })
       queryClient.invalidateQueries({ queryKey: ['products-search-lean'] })
-      toast.success('Purchase created successfully!')
-      navigate('/purchases')
+      const inv = data?.purchase?.pur_invoice_no || ''
+      toast.success(`Purchase${inv ? ` ${inv}` : ''} created successfully!`)
+      navigate('/purchases', {
+        state: {
+          openPurchase: data?.purchase?.pur_id,
+          autoPrint:    autoPrint,
+          invoiceNo:    inv,
+        },
+      })
     },
     onError: (err) => {
       // BUG FIX: FastAPI's automatic Pydantic validation errors come back as
@@ -440,6 +454,11 @@ export default function CreatePurchasePage() {
     setPendingBody(null)
   }
 
+  const handleSaveAndPrint = useCallback(() => {
+    handleAutoPrintChange(true)
+    handleSubmit()
+  }, [handleAutoPrintChange, handleSubmit])
+
   return (
     <>
       <PageHeader
@@ -451,6 +470,14 @@ export default function CreatePurchasePage() {
           <div style={{ display: 'flex', gap: 10 }}>
             <Button variant="ghost" onClick={() => { if (confirmLeave()) navigate('/purchases') }} disabled={mutation.isPending}>
               Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleSaveAndPrint}
+              loading={mutation.isPending}
+              disabled={!isValid}
+            >
+              Save & Print
             </Button>
             <Button
               variant="primary"
@@ -722,6 +749,20 @@ export default function CreatePurchasePage() {
                 </FormField>
               )}
             </PurchaseSectionCard>
+
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer',
+              userSelect: 'none', padding: '2px 0',
+            }}>
+              <input
+                type="checkbox"
+                checked={autoPrint}
+                onChange={e => handleAutoPrintChange(e.target.checked)}
+                style={{ width: 15, height: 15, cursor: 'pointer', accentColor: 'var(--accent-600)' }}
+              />
+              Open print preview after creating purchase
+            </label>
 
             <Button
               variant="primary"

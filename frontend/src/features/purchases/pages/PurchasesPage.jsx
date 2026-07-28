@@ -10,7 +10,7 @@ import { useState, useMemo, useEffect } from 'react'
 //   See UI_UX_AUDIT_REPORT.md
 //
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { usePurchases } from '../hooks/usePurchases'
 import { fetchPurchaseSummary } from '../api/purchasesApi'
 import useAuthStore from '../../../store/authStore'
@@ -168,6 +168,7 @@ function buildColumns(country, onDelete) {
 
 export default function PurchasesPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const hasPermission = useAuthStore(s => s.hasPermission)
   const canEdit = hasPermission('purchases.edit')
   const canCreate = hasPermission('purchases.create')
@@ -203,6 +204,18 @@ export default function PurchasesPage() {
   const [showDelete,    setShowDelete]    = useState(false)
   const [deletingPur,   setDeletingPur]   = useState(null)
   const [reduceStock,   setReduceStock]   = useState(false)
+  const [autoPrint,     setAutoPrint]     = useState(false)
+  const [autoPrintPurId, setAutoPrintPurId] = useState(null)
+
+  useEffect(() => {
+    if (location.state?.openPurchase) {
+      setSelectedPurId(location.state.openPurchase)
+      setAutoPrint(location.state.autoPrint === true)
+      setAutoPrintPurId(location.state.openPurchase)
+      window.history.replaceState({}, '')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function handleDeleteClick(pur) {
     setDeletingPur(pur)
@@ -468,13 +481,14 @@ export default function PurchasesPage() {
           />
           <PurchaseDetailDrawer
             purId={selectedPurId}
-            onClose={() => setSelectedPurId(null)}
+            onClose={() => { setSelectedPurId(null); setAutoPrint(false) }}
             onUpdateStatus={updateStatus}
             isUpdatingStatus={isUpdatingStatus}
             canEdit={canEdit}
             onDelete={handleDeleteClick}
             onRecordPayment={recordPayment}
             isRecordingPayment={isRecordingPayment}
+            autoPrint={autoPrint && selectedPurId === autoPrintPurId}
           />
         </>
       )}

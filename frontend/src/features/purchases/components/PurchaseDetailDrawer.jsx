@@ -9,15 +9,22 @@
 // Data via usePurchaseDetail(purId) → GET /purchases/{id}
 // Status update calls updateStatus from parent hook.
 
-import { useState }               from 'react'
-import { XMarkIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
+import { useState, useEffect }     from 'react'
+import { XMarkIcon, DocumentTextIcon, PrinterIcon } from '@heroicons/react/24/outline'
 import { usePurchaseDetail }       from '../hooks/usePurchases'
 import { Badge, Button, Spinner }  from '../../../shared/components'
 import { selectStyle }             from '../../../shared/components/FormField'
 import { formatCurrency }          from '../../../shared/utils/formatCurrency'
 import { formatDate }              from '../../../shared/utils/formatDate'
 import { usePermissions }          from '../../../shared/hooks/usePermissions'
-import { getTaxLabel, detectTaxType } from '../../../shared/utils/formatTax'  // FIX: added detectTaxType to prevent double-counted tax rows
+import { getTaxLabel, detectTaxType } from '../../../shared/utils/formatTax'
+import {
+  buildPrintHeader,
+  buildPrintWatermark,
+  buildPrintFooter,
+  escapeHTML,
+  triggerPrint,
+} from '../../../shared/utils/printUtils'
 import useAuthStore                from '../../../store/authStore'
 import CreatePurchaseReturnDrawer  from '../../purchaseReturns/components/CreatePurchaseReturnDrawer'
 
@@ -74,8 +81,8 @@ function SummaryRow({ label, value, bold, danger }) {
   )
 }
 
-export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, isUpdatingStatus, canEdit, onDelete, onRecordPayment, isRecordingPayment }) {
-  const { data, isLoading } = usePurchaseDetail(purId)
+export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, isUpdatingStatus, canEdit, onDelete, onRecordPayment, isRecordingPayment, autoPrint }) {
+  const { data, isLoading, isError } = usePurchaseDetail(purId)
   const [editingStatus, setEditingStatus] = useState(false)
   const [newStatus,     setNewStatus]     = useState('')
   const [paymentAmount, setPaymentAmount] = useState('')
@@ -85,6 +92,137 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
   const isGstRegistered = business?.is_gst_registered || false
 
   const { can } = usePermissions()
+  const [printHovered, setPrintHovered] = useState(false)
+
+  function paymentStatusBadge(status) {
+    const map = {
+      paid:    { color: '#10B981', bg: '#D1FAE5', label: 'Paid' },
+      partial: { color: '#F59E0B', bg: '#FEF3C7', label: 'Partially Paid' },
+      pending: { color: '#EF4444', bg: '#FEE2E2', label: 'Unpaid' },
+    }
+    const s = map[status] || { color: '#6b7280', bg: '#f3f4f6', label: status || '—' }
+    return `<span style="font-size:11px;font-weight:700;color:${s.color};background:${s.bg};padding:3px 10px;border-radius:20px;letter-spacing:0.03em;">${s.label}</span>`
+  }
+
+  function buildPurchaseHTML(business, data) {
+    const country   = business?.business_country_code || 'IN'
+    const isGstRegistered = business?.is_gst_registered || false
+    const payStatus = data.pur_payment_status || 'pending'
+    const invNo     = escapeHTML(data.pur_invoice_no || '')
+    const suppName  = escapeHTML(data.supp_name || 'Supplier')
+
+    const items     = data.items || []
+    const subtotal  = data.pur_total_amount || 0
+    const discount  = data.pur_discount || 0
+    const finalAmt  = data.pur_final_amount || 0
+    const totalPaid = data.total_paid || 0
+    const refunded  = data.total_refunded || 0
+    const remaining = data.remaining_balance || 0
+
+    const taxType = detectTaxType(data)
+    const gstBreakdown = (() => {
+      if (taxType === 'cgst_sgst' && ((data.pur_cgst_total || 0) > 0 || (data.pur_sgst_total || 0) > 0)) {
+        return `
+          <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">CGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(data.pur_cgst_total || 0, country)}</td></tr>
+          <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">SGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(data.pur_sgst_total || 0, country)}</td></tr>
+        `
+      }
+      if (taxType === 'igst' && (data.pur_igst_total || 0) > 0) {
+        return `
+          <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">IGST</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(data.pur_igst_total || 0, country)}</td></tr>
+        `
+      }
+      if (taxType === 'generic' && (data.pur_tax_total || 0) > 0) {
+        return `
+          <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">${getTaxLabel(country, isGstRegistered)}</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(data.pur_tax_total || 0, country)}</td></tr>
+        `
+      }
+      return ''
+    })()
+
+    const itemRows = items.map((item, i) => `
+      <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'};page-break-inside:avoid;">
+        <td style="padding:5px 5px;font-size:10.5px;color:#111827;word-break:break-word;">${escapeHTML(item.prod_name || 'Product')}</td>
+        <td style="padding:5px 5px;text-align:center;font-size:10px;color:#374151;white-space:nowrap;">${item.pur_item_qty}</td>
+        <td style="padding:5px 5px;text-align:right;font-size:10px;color:#374151;white-space:nowrap;">${formatCurrency(item.item_unit_price, country)}</td>
+        <td style="padding:5px 5px;text-align:right;font-size:10px;color:#374151;white-space:nowrap;">${Number(item.item_tax_total) > 0 ? formatCurrency(item.item_tax_total, country) : '—'}</td>
+        <td style="padding:5px 5px;text-align:right;font-size:10.5px;font-weight:700;color:#111827;white-space:nowrap;">${formatCurrency(item.item_total_with_tax || item.item_subtotal || 0, country)}</td>
+      </tr>
+    `).join('')
+
+    return `
+      ${buildPrintWatermark()}
+      ${buildPrintHeader(business)}
+
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:16px;">
+        <div>
+          <div style="font-size:24px;font-weight:900;color:#111827;letter-spacing:-1px;line-height:1;">PURCHASE</div>
+          <div style="font-size:14px;font-weight:700;color:#4F46E5;margin-top:4px;letter-spacing:0.02em;">${invNo}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:2px;">Purchase Date</div>
+          <div style="font-size:12px;font-weight:600;color:#111827;">${formatDate(data.pur_created_at)}</div>
+          <div style="margin-top:8px;font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:3px;">Payment Status</div>
+          ${paymentStatusBadge(payStatus)}
+        </div>
+      </div>
+
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:10px 14px;margin-bottom:16px;">
+        <div style="font-size:9px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Supplier</div>
+        <div style="font-size:14px;font-weight:700;color:#111827;">${suppName}</div>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+        <thead>
+          <tr style="border-bottom:2px solid #111827;background:#f9fafb;">
+            <th style="text-align:left;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Item</th>
+            <th style="text-align:center;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Qty</th>
+            <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Rate</th>
+            <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">${getTaxLabel(country, isGstRegistered)}</th>
+            <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Total</th>
+          </tr>
+        </thead>
+        <tbody>${itemRows}</tbody>
+      </table>
+
+      <div style="display:flex;justify-content:flex-end;margin-bottom:20px;">
+        <table style="width:auto;min-width:180px;max-width:100%;">
+          <tr><td style="padding:4px 0;color:#6b7280;font-size:10.5px;">Subtotal</td><td style="padding:4px 0;text-align:right;font-size:10.5px;">${formatCurrency(subtotal, country)}</td></tr>
+          ${discount > 0 ? `<tr><td style="padding:4px 0;color:#059669;font-size:10.5px;">Discount</td><td style="padding:4px 0;text-align:right;font-size:10.5px;color:#059669;">−${formatCurrency(discount, country)}</td></tr>` : ''}
+          ${gstBreakdown}
+          <tr style="border-top:2px solid #111827;">
+            <td style="padding:8px 0 4px;font-size:14px;font-weight:900;color:#111827;">Grand Total</td>
+            <td style="padding:8px 0 4px;text-align:right;font-size:14px;font-weight:900;color:#111827;">${formatCurrency(finalAmt, country)}</td>
+          </tr>
+          ${totalPaid > 0 ? `<tr><td style="padding:3px 0;color:#10B981;font-size:10.5px;font-weight:600;">Amount Paid</td><td style="padding:3px 0;text-align:right;font-size:10.5px;color:#10B981;font-weight:600;">${formatCurrency(totalPaid, country)}</td></tr>` : ''}
+          ${refunded > 0 ? `<tr><td style="padding:3px 0;color:#EF4444;font-size:10.5px;font-weight:600;">Refunded</td><td style="padding:3px 0;text-align:right;font-size:10.5px;color:#EF4444;font-weight:600;">−${formatCurrency(refunded, country)}</td></tr>` : ''}
+          ${remaining > 0 ? `<tr><td style="padding:3px 0;color:#EF4444;font-size:11px;font-weight:700;">Balance Due</td><td style="padding:3px 0;text-align:right;font-size:11px;color:#EF4444;font-weight:700;">${formatCurrency(remaining, country)}</td></tr>` : ''}
+        </table>
+      </div>
+
+      <div style="text-align:center;padding:10px;background:#f9fafb;border-radius:6px;font-size:11px;color:#6b7280;font-style:italic;margin-bottom:6px;">
+        Thank you for your business!
+      </div>
+
+      ${buildPrintFooter()}
+    `
+  }
+
+  function handlePrint() {
+    if (!data) return
+    const business = useAuthStore.getState().business
+    const html = buildPurchaseHTML(business, data)
+    triggerPrint(html)
+  }
+
+  // Auto-print after create
+  useEffect(() => {
+    if (!isLoading && !isError && data && autoPrint) {
+      const timer = setTimeout(() => handlePrint(), 350)
+      return () => clearTimeout(timer)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, isError, data, autoPrint])
 
   function handleStatusSave() {
     if (!newStatus) return
@@ -229,6 +367,28 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
               Process Return
             </button>
           )}
+          <button
+            onClick={handlePrint}
+            disabled={isLoading || !!isError}
+            title="Print Purchase"
+            onMouseEnter={() => !isLoading && !isError && setPrintHovered(true)}
+            onMouseLeave={() => setPrintHovered(false)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              background: printHovered ? 'var(--bg-hover)' : 'var(--bg-page)',
+              border: `1px solid ${printHovered ? 'var(--border-hover)' : 'var(--border)'}`,
+              cursor: isLoading || isError ? 'not-allowed' : 'pointer',
+              padding: '6px 12px', borderRadius: 8,
+              color: isLoading || isError ? 'var(--text-muted)' : 'var(--text-secondary)',
+              fontSize: 13, fontWeight: 600,
+              fontFamily: 'inherit',
+              opacity: isLoading || isError ? 0.5 : 1,
+              transition: 'all 0.13s',
+            }}
+          >
+            <PrinterIcon style={{ width: 15, height: 15 }} />
+            Print
+          </button>
           <button
             onClick={onClose}
             style={{

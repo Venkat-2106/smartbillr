@@ -867,7 +867,7 @@ async def search_products_lean(
     db:           AsyncSession  = Depends(get_async_db)
 ):
     """
-    Lean product search for the sales creation form.
+    Lean product search for sales / purchase creation forms.
     Returns only the fields needed to add a line item: no audit fields, no JOINs to profiles.
     Minimum 2 characters required to prevent accidental full-table scans.
     """
@@ -885,6 +885,7 @@ async def search_products_lean(
                 p.prod_id,
                 p.prod_name,
                 p.prod_sell_price,
+                p.prod_cost_price,
                 p.prod_mrp,
                 p.tax_rate,
                 p.barcode,
@@ -912,6 +913,7 @@ async def search_products_lean(
             "prod_id":         str(r.prod_id),
             "prod_name":       r.prod_name,
             "prod_sell_price": float(r.prod_sell_price),
+            "prod_cost_price": float(r.prod_cost_price) if r.prod_cost_price is not None else 0,
             "prod_mrp":        float(r.prod_mrp) if r.prod_mrp is not None else None,
             "tax_rate":        float(r.tax_rate) if r.tax_rate is not None else 0,
             "barcode":         r.barcode,
@@ -942,8 +944,8 @@ async def search_products_lean(
 #   In a retail environment with rapid barcode scanning, every
 #   millisecond of scan latency is felt by the cashier.
 #
-#   Fields returned: prod_id, prod_name, prod_sell_price, prod_mrp,
-#                    tax_rate, barcode, unit, prod_stock_qty
+#   Fields returned: prod_id, prod_name, prod_sell_price, prod_cost_price,
+#                    prod_mrp, tax_rate, barcode, unit, prod_stock_qty
 #   These are identical to the /products/search lean response.
 @router.get("/barcode/{code}")
 async def get_product_by_barcode(
@@ -962,6 +964,7 @@ async def get_product_by_barcode(
                 p.prod_id,
                 p.prod_name,
                 p.prod_sell_price,
+                p.prod_cost_price,
                 p.prod_mrp,
                 p.tax_rate,
                 p.barcode,
@@ -983,6 +986,7 @@ async def get_product_by_barcode(
         "prod_id":         str(row.prod_id),
         "prod_name":       row.prod_name,
         "prod_sell_price": float(row.prod_sell_price),
+        "prod_cost_price": float(row.prod_cost_price) if row.prod_cost_price is not None else 0,
         "prod_mrp":        float(row.prod_mrp) if row.prod_mrp is not None else None,
         "tax_rate":        float(row.tax_rate) if row.tax_rate is not None else 0,
         "barcode":         row.barcode,

@@ -566,7 +566,15 @@ async def get_purchase_detail(db: AsyncSession, business_id: str, pur_id: str):
                   AND pi.business_id = CAST(:bid AS uuid)
             ),
             payment_cte AS (
-                SELECT COALESCE(cumulative_paid, 0) AS total_paid
+                SELECT
+                    COALESCE(cumulative_paid, 0) AS total_paid,
+                    COALESCE((
+                        SELECT SUM(pp2.payment_amount)
+                        FROM purchase_payments pp2
+                        WHERE pp2.pur_id      = CAST(:pid AS uuid)
+                          AND pp2.business_id = CAST(:bid AS uuid)
+                          AND pp2.payment_method = 'adjustment'
+                    ), 0) AS total_adjustment
                 FROM purchase_payments
                 WHERE pur_id      = CAST(:pid AS uuid)
                   AND business_id = CAST(:bid AS uuid)
@@ -639,6 +647,7 @@ async def get_purchase_detail(db: AsyncSession, business_id: str, pur_id: str):
 
     pur_final = Decimal(str(purchase["pur_final_amount"])) if purchase["pur_final_amount"] else Decimal("0")
     total_paid = Decimal(str(payment["total_paid"])) if payment else Decimal("0")
+    total_adjustment = Decimal(str(payment["total_adjustment"])) if payment else Decimal("0")
 
     items_data = []
     for i in items:
@@ -689,10 +698,11 @@ async def get_purchase_detail(db: AsyncSession, business_id: str, pur_id: str):
             ]
         })
 
-    total_refunded = sum(
+    gross_return = sum(
         r["return_amount"] for r in returns_data if r["return_status"] == "approved"
     )
-    adjusted_remaining = max(Decimal("0"), pur_final - total_paid - Decimal(str(total_refunded)))
+    total_refunded = max(Decimal("0"), Decimal(str(gross_return)) - total_adjustment)
+    adjusted_remaining = max(Decimal("0"), pur_final - total_paid - total_refunded)
 
     return {
         "pur_id":             str(purchase["pur_id"]),
@@ -716,7 +726,7 @@ async def get_purchase_detail(db: AsyncSession, business_id: str, pur_id: str):
         "items":              items_data,
         "returns":            returns_data,
         "total_returns":      len(returns_data),
-        "total_refunded":     total_refunded,
+        "total_refunded":     float(total_refunded),
         "total_paid":         float(total_paid),
         "remaining_balance":  float(adjusted_remaining),
     }

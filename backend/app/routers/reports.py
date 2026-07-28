@@ -1715,13 +1715,14 @@ async def get_customer_purchase_history(
     totals = await db.execute(text("""
         SELECT
             COUNT(*) AS total_invoices,
-            COALESCE(SUM(sales_final_amount), 0) AS total_amount,
-            COALESCE(SUM(sales_final_amount) FILTER (WHERE sales_payment_status = 'paid'), 0) AS paid_amount,
-            MAX(sales_created_at) AS last_purchase_date
-        FROM sales
-        WHERE customer_id = CAST(:cust_id AS uuid)
-          AND business_id = CAST(:bid AS uuid)
-          AND is_deleted = false
+            COALESCE(SUM(s.sales_final_amount), 0) AS total_amount,
+            COALESCE(SUM(COALESCE(pay.cumulative_paid, 0)), 0) AS paid_amount,
+            MAX(s.sales_created_at) AS last_purchase_date
+        FROM sales s
+        LEFT JOIN payments pay ON pay.sale_id = s.sales_id AND pay.is_active = true
+        WHERE s.customer_id = CAST(:cust_id AS uuid)
+          AND s.business_id = CAST(:bid AS uuid)
+          AND s.is_deleted = false
     """), {"cust_id": cust_id, "bid": bid})
     totals = totals.fetchone()
 
@@ -1853,6 +1854,7 @@ async def get_customer_outstanding(
               AND c.is_deleted = false
               AND s.sales_payment_status IN ('pending', 'partial')
             GROUP BY c.cust_id
+            HAVING SUM(s.sales_final_amount - COALESCE(pay.cumulative_paid, 0)) > 0
         ) sub
     """), {"bid": bid})).fetchone().cnt
 
@@ -1862,7 +1864,7 @@ async def get_customer_outstanding(
             c.cust_name,
             c.cust_phone,
             COUNT(DISTINCT s.sales_id) AS unpaid_invoices,
-            COALESCE(SUM(s.sales_final_amount), 0) AS total_outstanding
+            COALESCE(SUM(s.sales_final_amount - COALESCE(pay.cumulative_paid, 0)), 0) AS total_outstanding
         FROM sales s
         JOIN customers c ON c.cust_id = s.customer_id
         LEFT JOIN payments pay ON pay.sale_id = s.sales_id AND pay.is_active = true
@@ -1871,6 +1873,7 @@ async def get_customer_outstanding(
           AND c.is_deleted = false
           AND s.sales_payment_status IN ('pending', 'partial')
         GROUP BY c.cust_id, c.cust_name, c.cust_phone
+        HAVING SUM(s.sales_final_amount - COALESCE(pay.cumulative_paid, 0)) > 0
         ORDER BY total_outstanding DESC
         LIMIT :limit OFFSET :offset
     """), {"bid": bid, "limit": pagination["limit"], "offset": pagination["offset"]})

@@ -648,14 +648,16 @@ async def get_customer(
     result = await db.execute(
         text("""
             WITH cust_cte AS (
-                SELECT cust_id, business_id, cust_name, cust_phone,
-                       cust_email, cust_address, cust_state,
-                       cust_country_code, cust_tax_number, is_deleted,
-                       cust_created_at, updated_at, updated_by
-                FROM customers
-                WHERE cust_id     = CAST(:cid AS uuid)
-                  AND business_id = CAST(:bid AS uuid)
-                  AND is_deleted  = false
+                SELECT c.cust_id, c.business_id, c.cust_name, c.cust_phone,
+                       c.cust_email, c.cust_address, c.cust_state,
+                       c.cust_country_code, c.cust_tax_number, c.is_deleted,
+                       c.cust_created_at, c.updated_at, c.updated_by,
+                       pr.full_name AS last_updated_by
+                FROM customers c
+                LEFT JOIN profiles pr ON pr.id = c.updated_by
+                WHERE c.cust_id     = CAST(:cid AS uuid)
+                  AND c.business_id = CAST(:bid AS uuid)
+                  AND c.is_deleted  = false
             ),
             agg_cte AS (
                 SELECT
@@ -841,7 +843,7 @@ async def get_customer(
         "cust_created_at":   fmt_ts(cust["cust_created_at"]),
         "updated_at":        fmt_ts(cust["updated_at"]),
         "updated_by":        str(cust["updated_by"]) if cust["updated_by"] else None,
-        "last_updated_by":   None,
+        "last_updated_by":   cust.get("last_updated_by"),
         "summary": {
             "total_sales":         total_sales if can_financial else None,
             "total_spent":         round(total_spent, 2) if can_financial else None,

@@ -90,24 +90,6 @@ SORTABLE = {
 }
 
 
-# ─────────────────────────────────────────
-# HELPER — Format a payment row as a dict
-# ─────────────────────────────────────────
-def payment_to_dict(p, last_updated_by=None) -> dict:
-    return {
-        "payment_id":      str(p.payment_id),
-        "business_id":     str(p.business_id),
-        "sale_id":         str(p.sale_id),
-        "payment_amount":  float(p.payment_amount),
-        "cumulative_paid": float(p.cumulative_paid) if p.cumulative_paid is not None else None,
-        "payment_method":  p.payment_method,
-        "payment_status":  p.payment_status,
-        "is_active":       p.is_active,
-        "payment_paid_at": fmt_ts(p.payment_paid_at),
-        "updated_at":      fmt_ts(p.updated_at) if p.updated_at else None,
-        "last_updated_by": last_updated_by,
-    }
-
 
 # ══════════════════════════════════════════════════════════════════
 # POST /payments → Record a new payment installment for a sale

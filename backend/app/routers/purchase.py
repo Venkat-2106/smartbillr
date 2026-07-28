@@ -71,7 +71,6 @@ from app.services.purchase_service import (
     get_purchases_list,
     get_purchase_summary,
     get_purchase_detail,
-    get_total_refunded,
     update_purchase_status_paid,
     delete_purchase_items_and_stock,
 )
@@ -377,12 +376,16 @@ async def create_purchase_payment(
     )).fetchone()
     already_paid = Decimal(str(active_row.already_paid)) if active_row else Decimal("0")
 
-    total_refunded = await get_total_refunded(db, pur_id, business_id)
-
+    # FIX-PR-1: total_refunded used to be subtracted here too, but since the
+    # PUR-RETURN-FIX, already_paid (purchase_payments.cumulative_paid) already
+    # includes every approved return's covered-by-reducing-due adjustment.
+    # Subtracting total_refunded again double-counted that portion, capping
+    # the payable balance below the true remaining amount and permanently
+    # understating the final settlement's expense record by the return amount.
     new_payment = data.payment_amount
     total_after = already_paid + new_payment
 
-    remaining_balance = (pur_final - already_paid - total_refunded).quantize(Decimal("0.01"))
+    remaining_balance = (pur_final - already_paid).quantize(Decimal("0.01"))
 
     if remaining_balance <= 0:
         return error_response(

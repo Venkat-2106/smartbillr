@@ -773,9 +773,11 @@ async def update_purchase_status_paid(
     supplier_label = pur_row.supp_name if pur_row and pur_row.supp_name else "Walk-in"
 
     already_paid = await get_active_payment(db, pur_id, business_id)
-    total_refunded = await get_total_refunded(db, pur_id, business_id)
 
-    remaining = max(Decimal("0"), final_amount - already_paid - total_refunded)
+    # FIX-PR-1: same double-count as create_purchase_payment — already_paid
+    # already reflects every approved return's covered-by-reducing-due
+    # adjustment, so total_refunded must not be subtracted again here.
+    remaining = max(Decimal("0"), final_amount - already_paid)
 
     if remaining > 0:
         new_cumulative = (already_paid + remaining).quantize(Decimal("0.01"))

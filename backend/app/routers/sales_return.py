@@ -38,6 +38,7 @@ from datetime import datetime, timezone
 import logging
 from decimal import Decimal
 import uuid
+import json
 
 router = APIRouter(prefix="/v1/sales-returns", tags=["Sales Returns"])
 
@@ -526,6 +527,8 @@ async def get_sales_returns_by_sale(
 # ─────────────────────────────────────────
 # GET /sales-returns/{return_id} → Get one
 # ─────────────────────────────────────────
+# CTE OPTIMIZATION (2026-07): Merged return header + items into a
+# single CTE query with json_agg for items. Was 2 sequential round-trips.
 @router.get("/{return_id}")
 async def get_sales_return(
     return_id: str,
@@ -534,26 +537,80 @@ async def get_sales_return(
 ):
     business_id = current_user["business_id"]
 
-    row = (await db.execute(
+    result = await db.execute(
         text("""
-            SELECT sr.*, s.invoice_no,
-                   prof.full_name AS last_updated_by,
-                   prof2.full_name AS approved_by_name
-            FROM sales_returns sr
-            LEFT JOIN sales s ON s.sales_id = sr.sale_id
-            LEFT JOIN profiles prof ON prof.id = sr.updated_by
-            LEFT JOIN profiles prof2 ON prof2.id = sr.approved_by
-            WHERE sr.return_id = CAST(:rid AS uuid)
-              AND sr.business_id = CAST(:bid AS uuid)
+            WITH ret_cte AS (
+                SELECT sr.return_id, sr.business_id, sr.sale_id,
+                       sr.return_amount, sr.return_reason,
+                       sr.return_status, sr.restock, sr.stock_updated,
+                       sr.refund_method, sr.approved_by, sr.approved_at,
+                       sr.rejected_reason, sr.return_created_at,
+                       sr.created_by, sr.updated_at, sr.updated_by,
+                       s.invoice_no,
+                       prof.full_name  AS last_updated_by,
+                       prof2.full_name AS approved_by_name
+                FROM sales_returns sr
+                LEFT JOIN sales s ON s.sales_id = sr.sale_id
+                LEFT JOIN profiles prof  ON prof.id  = sr.updated_by
+                LEFT JOIN profiles prof2 ON prof2.id = sr.approved_by
+                WHERE sr.return_id    = CAST(:rid AS uuid)
+                  AND sr.business_id = CAST(:bid AS uuid)
+            ),
+            items_cte AS (
+                SELECT sri.return_item_id, sri.product_id,
+                       p.prod_name AS product_name,
+                       sri.return_qty,
+                       sri.unit_price AS refund_amount,
+                       (sri.return_qty * sri.unit_price) AS return_item_subtotal
+                FROM sales_return_items sri
+                LEFT JOIN products p ON p.prod_id = sri.product_id
+                WHERE sri.return_id = CAST(:rid AS uuid)
+            )
+            SELECT
+                (SELECT row_to_json(ret_cte)::text FROM ret_cte) AS ret_json,
+                (SELECT COALESCE(json_agg(items_cte), '[]'::json)::text
+                                          FROM items_cte) AS items_json
         """),
         {"rid": return_id, "bid": business_id}
-    )).fetchone()
+    )
+    row = result.fetchone()
 
-    if not row:
+    if not row or not row.ret_json:
         return error_response("Sales return not found", status_code=404)
 
-    items = await fetch_return_items(db, return_id)
-    return success_response(return_to_dict(row, items))
+    r     = json.loads(row.ret_json)
+    items = json.loads(row.items_json) if row.items_json else []
+
+    return success_response({
+        "return_id":         r["return_id"],
+        "business_id":       r["business_id"],
+        "sale_id":           r["sale_id"],
+        "invoice_no":        r.get("invoice_no"),
+        "return_amount":     float(r["return_amount"]),
+        "return_reason":     r["return_reason"],
+        "return_status":     r["return_status"],
+        "restock":           r["restock"],
+        "stock_updated":     r["stock_updated"],
+        "refund_method":     r["refund_method"],
+        "approved_by":       r.get("approved_by_name") or (str(r["approved_by"]) if r["approved_by"] else None),
+        "approved_at":       fmt_ts(r["approved_at"]),
+        "rejected_reason":   r["rejected_reason"],
+        "return_created_at": fmt_ts(r["return_created_at"]),
+        "created_by":        str(r["created_by"]) if r["created_by"] else None,
+        "updated_at":        fmt_ts(r["updated_at"]) if r.get("updated_at") else None,
+        "last_updated_by":   r.get("last_updated_by"),
+        "items": [
+            {
+                "return_item_id":       i["return_item_id"],
+                "product_id":           i["product_id"],
+                "product_name":         i["product_name"],
+                "return_qty":           float(i["return_qty"]),
+                "refund_amount":        float(i["refund_amount"]),
+                "return_item_subtotal": float(i["return_item_subtotal"]) if i.get("return_item_subtotal") else None,
+            }
+            for i in items
+        ]
+    })
 
 
 # ─────────────────────────────────────────

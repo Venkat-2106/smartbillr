@@ -26,7 +26,7 @@ export function usePurchaseDetail(purId) {
     queryKey:  ['purchase', purId],
     queryFn:   () => fetchPurchase(purId),
     enabled:   !!purId,
-    staleTime: 30_000,
+    staleTime: 120_000,
   })
 }
 

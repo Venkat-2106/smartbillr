@@ -98,6 +98,7 @@ from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_v
 from sqlalchemy.exc import IntegrityError
 from typing import Optional
 import uuid
+import json
 
 router = APIRouter(prefix="/v1/products", tags=["Products"])
 
@@ -993,6 +994,10 @@ async def get_product_by_barcode(
 # ══════════════════════════════════════════════════════════════════
 # GET /products/{prod_id} → Single product WITH full history
 # ══════════════════════════════════════════════════════════════════
+# CTE OPTIMIZATION (2026-07): Fused product detail + stock history into
+# a single CTE query (was 2 sequential round-trips). Price history
+# remains a separate conditional query gated on show_profit permission.
+# Down from 2-3 sequential queries to 1-2.
 @router.get("/{prod_id}")
 async def get_product(
     prod_id: str,
@@ -1002,102 +1007,101 @@ async def get_product(
     business_id = current_user["business_id"]
     show_profit = check_feature_access(current_user, "product_profit_view")["allowed"]
 
-    row = (await db.execute(
+    result = await db.execute(
         text("""
+            WITH prod_cte AS (
+                SELECT
+                    p.prod_id, p.business_id, p.category_id, p.prod_name,
+                    p.prod_sell_price, p.prod_mrp,
+                    p.prod_cost_price,
+                    (p.prod_sell_price - p.prod_cost_price) AS prod_profit,
+                    CASE WHEN p.prod_sell_price > 0
+                      THEN ROUND(((p.prod_sell_price - p.prod_cost_price) / p.prod_sell_price) * 100, 2)
+                      ELSE 0
+                    END AS prod_profit_margin,
+                    p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
+                    p.tax_code, p.barcode, p.unit, p.is_deleted,
+                    p.prod_created_at, p.updated_at,
+                    p.created_by,  p.updated_by,
+                    c.category_name,
+                    pr1.full_name AS last_updated_by,
+                    pr2.full_name AS created_by_name
+                FROM products p
+                LEFT JOIN categories c   ON c.category_id  = p.category_id
+                LEFT JOIN profiles   pr1 ON pr1.id = p.updated_by
+                LEFT JOIN profiles   pr2 ON pr2.id = p.created_by
+                WHERE p.prod_id     = CAST(:prod_id AS uuid)
+                  AND p.business_id = CAST(:bid AS uuid)
+                  AND p.is_deleted  = false
+            ),
+            stock_cte AS (
+                SELECT
+                    sm.move_id, sm.move_type, sm.move_qty,
+                    sm.move_prev_stock, sm.move_new_stock,
+                    sm.reference_type, sm.reference_id,
+                    sm.sale_reference_id, sm.purchase_reference_id,
+                    sm.move_notes, sm.move_created_at,
+                    COALESCE(p.full_name, 'System') AS changed_by,
+                    s.invoice_no,
+                    pur.pur_invoice_no
+                FROM stock_movements sm
+                LEFT JOIN profiles  p   ON p.id     = sm.move_created_by
+                LEFT JOIN sales     s   ON s.sales_id = sm.sale_reference_id
+                LEFT JOIN purchases pur ON pur.pur_id = sm.purchase_reference_id
+                WHERE sm.product_id  = CAST(:prod_id AS uuid)
+                  AND sm.business_id = CAST(:bid AS uuid)
+                ORDER BY sm.move_created_at DESC
+                LIMIT 100
+            )
             SELECT
-                p.prod_id, p.business_id, p.category_id, p.prod_name,
-                p.prod_sell_price, p.prod_mrp,
-                p.prod_cost_price,
-                (p.prod_sell_price - p.prod_cost_price) AS prod_profit,
-                CASE WHEN p.prod_sell_price > 0
-                  THEN ROUND(((p.prod_sell_price - p.prod_cost_price) / p.prod_sell_price) * 100, 2)
-                  ELSE 0
-                END AS prod_profit_margin,
-                p.prod_stock_qty, p.prod_low_stock_alert, p.tax_rate,
-                p.tax_code, p.barcode, p.unit, p.is_deleted,
-                p.prod_created_at, p.updated_at,
-                p.created_by,  p.updated_by,
-                c.category_name,
-                pr1.full_name AS last_updated_by,
-                pr2.full_name AS created_by_name
-            FROM products p
-            LEFT JOIN categories c   ON c.category_id  = p.category_id
-            LEFT JOIN profiles   pr1 ON pr1.id = p.updated_by
-            LEFT JOIN profiles   pr2 ON pr2.id = p.created_by
-            WHERE p.prod_id     = CAST(:prod_id AS uuid)
-              AND p.business_id = CAST(:bid AS uuid)
-              AND p.is_deleted  = false
+                (SELECT row_to_json(prod_cte)::text FROM prod_cte) AS prod_json,
+                (SELECT COALESCE(json_agg(stock_cte), '[]'::json)::text
+                                               FROM stock_cte) AS stock_json
         """),
         {"prod_id": prod_id, "bid": business_id}
-    )).fetchone()
+    )
+    row = result.fetchone()
 
-    if not row:
+    if not row or not row.prod_json:
         return error_response("Product not found", status_code=404)
 
-    stock_rows = (await db.execute(
-        text("""
-            SELECT
-                sm.move_id,
-                sm.move_type,
-                sm.move_qty,
-                sm.move_prev_stock,
-                sm.move_new_stock,
-                sm.reference_type,
-                sm.reference_id,
-                sm.sale_reference_id,
-                sm.purchase_reference_id,
-                sm.move_notes,
-                sm.move_created_at,
-                COALESCE(p.full_name, 'System') AS changed_by,
-                s.invoice_no,
-                pur.pur_invoice_no
-            FROM stock_movements sm
-            LEFT JOIN profiles  p   ON p.id     = sm.move_created_by
-            LEFT JOIN sales     s   ON s.sales_id = sm.sale_reference_id
-            LEFT JOIN purchases pur ON pur.pur_id = sm.purchase_reference_id
-            WHERE sm.product_id  = CAST(:prod_id AS uuid)
-              AND sm.business_id = CAST(:bid AS uuid)
-            ORDER BY sm.move_created_at DESC
-            LIMIT 100
-        """),
-        {"prod_id": prod_id, "bid": business_id}
-    )).fetchall()
+    prod  = json.loads(row.prod_json)
+    stock = json.loads(row.stock_json)
 
     stock_history = []
-    for s in stock_rows:
-        if s.move_qty > 0:
+    type_label_map = {
+        "sale":             "Sold to customer",
+        "purchase":         "Received from supplier",
+        "adjustment":       "Manual stock adjustment",
+        "stock_override":   "System-generated stock increase to allow a sale exceeding available inventory",
+        "sales_return":     "Customer return — stock added back",
+        "purchase_return":  "Returned to supplier — stock removed",
+    }
+    for s in stock:
+        move_qty = s["move_qty"]
+        if move_qty > 0:
             direction = "in"
-        elif s.move_qty < 0:
+        elif move_qty < 0:
             direction = "out"
         else:
             direction = "none"
 
-        type_label_map = {
-            "sale":             "Sold to customer",
-            "purchase":         "Received from supplier",
-            "adjustment":       "Manual stock adjustment",
-            "stock_override":   "System-generated stock increase to allow a sale exceeding available inventory",
-            "sales_return":     "Customer return — stock added back",
-            "purchase_return":  "Returned to supplier — stock removed",
-        }
-        event_label = type_label_map.get(s.move_type, s.move_type)
-
         stock_history.append({
-            "move_id":               str(s.move_id),
-            "event":                 event_label,
-            "move_type":             s.move_type,
+            "move_id":               s["move_id"],
+            "event":                 type_label_map.get(s["move_type"], s["move_type"]),
+            "move_type":             s["move_type"],
             "direction":             direction,
-            "qty_changed":           abs(s.move_qty),
-            "stock_before":          s.move_prev_stock,
-            "stock_after":           s.move_new_stock,
-            "reference_type":        s.reference_type,
-            "reference_id":          str(s.reference_id) if s.reference_id else None,
-            "sale_reference_id":     str(s.sale_reference_id) if s.sale_reference_id else None,
-            "purchase_reference_id": str(s.purchase_reference_id) if s.purchase_reference_id else None,
-            "notes":                 s.move_notes,
-            "changed_by":            s.changed_by,
-            "changed_at":            fmt_ts(s.move_created_at),
-            "invoice_no":            getattr(s, 'invoice_no', None) or getattr(s, 'pur_invoice_no', None),
+            "qty_changed":           abs(move_qty),
+            "stock_before":          s["move_prev_stock"],
+            "stock_after":           s["move_new_stock"],
+            "reference_type":        s["reference_type"],
+            "reference_id":          s["reference_id"],
+            "sale_reference_id":     s["sale_reference_id"],
+            "purchase_reference_id": s["purchase_reference_id"],
+            "notes":                 s["move_notes"],
+            "changed_by":            s["changed_by"],
+            "changed_at":            fmt_ts(s["move_created_at"]),
+            "invoice_no":            s.get("invoice_no") or s.get("pur_invoice_no"),
         })
 
     price_history = []
@@ -1125,9 +1129,6 @@ async def get_product(
             {"prod_id": prod_id, "bid": business_id}
         )).fetchall()
 
-        # Safe float parser for audit old_data/new_data values.
-        # Defined once outside the loop to avoid re-creating the closure
-        # on every iteration.  Returns None for missing or unparseable values.
         def to_float(v):
             try:
                 return float(v) if v is not None else None
@@ -1180,8 +1181,28 @@ async def get_product(
     total_returned = sum(s["qty_changed"]      for s in stock_history if s["move_type"] == "sales_return")
 
     return success_response({
-        **row_to_dict(row, show_profit=show_profit),
-
+        "prod_id":              prod["prod_id"],
+        "business_id":          prod["business_id"],
+        "category_id":          prod["category_id"],
+        "category_name":        prod["category_name"],
+        "prod_name":            prod["prod_name"],
+        "prod_sell_price":      float(prod["prod_sell_price"]),
+        "prod_mrp":             float(prod["prod_mrp"]) if prod["prod_mrp"] is not None else None,
+        "prod_cost_price":      float(prod["prod_cost_price"]) if show_profit else None,
+        "prod_profit":          float(prod["prod_profit"]) if show_profit else None,
+        "prod_profit_margin":   float(prod["prod_profit_margin"]) if show_profit else None,
+        "prod_stock_qty":       prod["prod_stock_qty"],
+        "prod_low_stock_alert": prod["prod_low_stock_alert"],
+        "tax_rate":             float(prod["tax_rate"]) if prod["tax_rate"] is not None else 0,
+        "tax_code":             prod["tax_code"],
+        "barcode":              prod["barcode"],
+        "unit":                 prod["unit"],
+        "prod_created_at":      fmt_ts(prod["prod_created_at"]),
+        "updated_at":           fmt_ts(prod["updated_at"]),
+        "updated_by":           str(prod["updated_by"])  if prod["updated_by"]  else None,
+        "created_by":           str(prod["created_by"])  if prod["created_by"]  else None,
+        "last_updated_by":      prod["last_updated_by"],
+        "created_by_name":      prod["created_by_name"],
         "history_summary": {
             "total_units_sold":     total_sold,
             "total_units_received": total_received,
@@ -1189,7 +1210,6 @@ async def get_product(
             "price_change_count":   len(price_history),
             "stock_event_count":    len(stock_history)
         },
-
         "stock_history":      stock_history,
         "stock_history_has_more": len(stock_history) == 100,
         "price_history":  price_history,

@@ -31,7 +31,15 @@ import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' }
 const STATUS_LABEL = { paid: 'Paid', partial: 'Partial', pending: 'Unpaid' }
 
-function buildColumns(country) {
+function SvgIcon({ path, size = 18 }) {
+  return (
+    <svg width={size} height={size} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={path} />
+    </svg>
+  )
+}
+
+function buildColumns(country, onDelete) {
   return [
     {
       key: 'pur_invoice_no',
@@ -137,6 +145,24 @@ function buildColumns(country) {
           : <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>
       ),
     },
+    {
+      key: 'actions',
+      label: '',
+      sortable: false,
+      width: 60,
+      render: (row) => (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(row); }}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--danger)', padding: '4px 8px',
+          }}
+          title="Delete purchase"
+        >
+          <SvgIcon path="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" size={15} />
+        </button>
+      ),
+    },
   ]
 }
 
@@ -201,7 +227,7 @@ export default function PurchasesPage() {
     onDeleteRow: handleDeleteClick,
   })
 
-  const columns = useMemo(() => buildColumns(country), [country])
+  const columns = useMemo(() => buildColumns(country, handleDeleteClick), [country, handleDeleteClick])
 
   function handleDateChange(field, value) {
     if (field === 'from') setDateFrom(value)

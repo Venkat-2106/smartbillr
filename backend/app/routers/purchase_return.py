@@ -38,6 +38,7 @@ from decimal import Decimal
 from datetime import datetime, timezone
 import uuid
 import logging
+import json
 
 router = APIRouter(prefix="/v1/purchase-returns", tags=["Purchase Returns"])
 
@@ -487,6 +488,8 @@ async def get_all_purchase_returns(
 # ─────────────────────────────────────────────
 # GET /purchase-returns/{return_id} → Single return
 # ─────────────────────────────────────────────
+# CTE OPTIMIZATION (2026-07): Merged return header + items into a
+# single CTE query with json_agg for items. Was 2 sequential round-trips.
 @router.get("/{return_id}")
 async def get_purchase_return(
     return_id: str,
@@ -495,29 +498,77 @@ async def get_purchase_return(
 ):
     business_id = current_user["business_id"]
 
-    # ── RESOLVED NAMES (2026-07) ───────────────────────────────────────────
-    # JOINs suppliers (for supp_name) and profiles (for approved_by and
-    # last_updated_by) so the frontend shows human-readable names instead
-    # of raw UUIDs.  The old ORM select(PurchaseReturn) had no JOINs and
-    # return_to_dict's getattr(r, 'supp_name', None) always returned None.
-    result = (await db.execute(text("""
-        SELECT pr.*, s.supp_name,
-               prof.full_name AS last_updated_by,
-               ap.full_name AS approved_by_name
-        FROM purchase_returns pr
-        LEFT JOIN purchases p ON p.pur_id = pr.pur_id
-        LEFT JOIN suppliers s ON s.supp_id = p.supp_id
-        LEFT JOIN profiles prof ON prof.id = pr.updated_by
-        LEFT JOIN profiles ap ON ap.id = pr.approved_by
-        WHERE pr.return_id    = CAST(:rid AS uuid)
-          AND pr.business_id = CAST(:bid AS uuid)
-    """), {"rid": return_id, "bid": str(business_id)})).fetchone()
+    result = await db.execute(text("""
+        WITH ret_cte AS (
+            SELECT pr.return_id, pr.business_id, pr.pur_id,
+                   pr.return_reason, pr.return_status,
+                   pr.restock, pr.stock_updated,
+                   pr.refund_method, pr.approved_by, pr.approved_at,
+                   pr.rejected_reason, pr.return_amount,
+                   pr.return_created_at, pr.created_by,
+                   pr.updated_at, pr.updated_by,
+                   s.supp_name,
+                   prof.full_name  AS last_updated_by,
+                   ap.full_name    AS approved_by_name
+            FROM purchase_returns pr
+            LEFT JOIN purchases p ON p.pur_id = pr.pur_id
+            LEFT JOIN suppliers s ON s.supp_id = p.supp_id
+            LEFT JOIN profiles prof ON prof.id = pr.updated_by
+            LEFT JOIN profiles ap   ON ap.id   = pr.approved_by
+            WHERE pr.return_id    = CAST(:rid AS uuid)
+              AND pr.business_id = CAST(:bid AS uuid)
+        ),
+        items_cte AS (
+            SELECT pri.return_item_id, pri.return_id,
+                   pri.product_id, p.prod_name AS product_name,
+                   pri.return_qty, pri.refund_amount,
+                   pri.return_item_subtotal
+            FROM purchase_return_items pri
+            JOIN products p ON p.prod_id = pri.product_id
+            WHERE pri.return_id = CAST(:rid AS uuid)
+        )
+        SELECT
+            (SELECT row_to_json(ret_cte)::text FROM ret_cte) AS ret_json,
+            (SELECT COALESCE(json_agg(items_cte), '[]'::json)::text
+                                        FROM items_cte) AS items_json
+    """), {"rid": return_id, "bid": str(business_id)}).fetchone()
 
-    if not result:
+    if not result or not result.ret_json:
         return error_response("Purchase return not found", status_code=404)
 
-    items = await fetch_return_items(db, return_id)
-    return success_response(return_to_dict(result, items))
+    r     = json.loads(result.ret_json)
+    items = json.loads(result.items_json) if result.items_json else []
+
+    return success_response({
+        "return_id":         r["return_id"],
+        "business_id":       r["business_id"],
+        "pur_id":            r["pur_id"],
+        "supp_name":         r.get("supp_name"),
+        "return_reason":     r["return_reason"],
+        "return_status":     r["return_status"],
+        "restock":           r["restock"],
+        "stock_updated":     r["stock_updated"],
+        "refund_method":     r["refund_method"],
+        "approved_by":       r.get("approved_by_name") or (str(r["approved_by"]) if r["approved_by"] else None),
+        "approved_at":       fmt_ts(r["approved_at"]),
+        "rejected_reason":   r["rejected_reason"],
+        "return_amount":     float(r["return_amount"]) if r["return_amount"] else 0.0,
+        "return_created_at": fmt_ts(r["return_created_at"]),
+        "created_by":        str(r["created_by"]) if r["created_by"] else None,
+        "updated_at":        fmt_ts(r["updated_at"]) if r.get("updated_at") else None,
+        "last_updated_by":   r.get("last_updated_by"),
+        "items": [
+            {
+                "return_item_id":       i["return_item_id"],
+                "product_id":           i["product_id"],
+                "product_name":         i["product_name"],
+                "return_qty":           i["return_qty"],
+                "refund_amount":        float(i["refund_amount"]) if i["refund_amount"] else 0.0,
+                "return_item_subtotal": float(i["return_item_subtotal"]) if i.get("return_item_subtotal") else None,
+            }
+            for i in items
+        ]
+    })
 
 
 # ─────────────────────────────────────────────

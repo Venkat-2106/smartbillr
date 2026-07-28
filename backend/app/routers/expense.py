@@ -40,6 +40,7 @@
 #   - If an expense is wrong, delete it and create a new one.
 
 import re
+import json
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -295,6 +296,10 @@ async def get_expense_summary_kpi(
 # ─────────────────────────────────────────
 # GET /expenses/{expense_id} → Get one expense
 # ─────────────────────────────────────────
+# CTE OPTIMIZATION (2026-07): Consolidated expense + profile lookup +
+# conditional source name resolution (purchase_payment / sales_return /
+# purchase_return) into a single CTE query with CASE-based LEFT JOINs.
+# Down from 2-4 sequential queries to 1 round-trip.
 @router.get("/{expense_id}")
 async def get_expense(
     expense_id: str,
@@ -303,66 +308,86 @@ async def get_expense(
 ):
     business_id = current_user["business_id"]
 
-    expense = (await db.execute(select(Expense).where(
-        Expense.expense_id == expense_id,
-        Expense.business_id == business_id,
-        Expense.is_deleted == False
-    ))).scalar_one_or_none()
+    result = await db.execute(
+        text("""
+            WITH exp_cte AS (
+                SELECT e.expense_id, e.business_id, e.expense_category,
+                       e.expense_amount, e.expense_date, e.expense_notes,
+                       e.is_deleted, e.created_at, e.created_by,
+                       e.updated_at, e.updated_by,
+                       e.source_type, e.source_id,
+                       pr.full_name AS updated_by_name
+                FROM expenses e
+                LEFT JOIN profiles pr ON pr.id = e.updated_by
+                WHERE e.expense_id  = CAST(:eid AS uuid)
+                  AND e.business_id = CAST(:bid AS uuid)
+                  AND e.is_deleted  = false
+            ),
+            src_cte AS (
+                SELECT
+                    CASE WHEN e.source_type = 'purchase_payment'
+                         THEN s.supp_name END AS source_supplier,
+                    CASE WHEN e.source_type = 'sales_return'
+                         THEN sl.invoice_no END AS source_invoice,
+                    CASE WHEN e.source_type = 'sales_return'
+                         THEN sc.cust_name END AS source_customer,
+                    CASE WHEN e.source_type = 'purchase_return'
+                         THEN pr2.pur_invoice_no END AS source_purchase_invoice
+                FROM exp_cte e
+                LEFT JOIN purchases pur
+                    ON e.source_type = 'purchase_payment'
+                   AND e.source_id = pur.pur_id
+                   AND pur.business_id = CAST(:bid AS uuid)
+                LEFT JOIN suppliers s ON pur.supp_id = s.supp_id
+                LEFT JOIN sales_returns sr
+                    ON e.source_type = 'sales_return'
+                   AND e.source_id = sr.return_id
+                   AND sr.business_id = CAST(:bid AS uuid)
+                LEFT JOIN sales sl ON sr.sale_id = sl.sales_id
+                LEFT JOIN customers sc ON sl.customer_id = sc.cust_id
+                LEFT JOIN purchase_returns prr
+                    ON e.source_type = 'purchase_return'
+                   AND e.source_id = prr.return_id
+                   AND prr.business_id = CAST(:bid AS uuid)
+                LEFT JOIN purchases pr2 ON prr.pur_id = pr2.pur_id
+            )
+            SELECT
+                (SELECT row_to_json(exp_cte)::text FROM exp_cte) AS exp_json,
+                (SELECT row_to_json(src_cte)::text FROM src_cte) AS src_json
+        """),
+        {"eid": expense_id, "bid": business_id}
+    )
+    row = result.fetchone()
 
-    if not expense:
+    if not row or not row.exp_json:
         return error_response("Expense not found", status_code=404)
 
-    # BUG FIX: previously used current_user.get("full_name") here, which showed
-    # the REQUESTING user's name instead of the actual last editor. updated_by is
-    # a separate user's UUID (whoever last modified this row) — must be looked up
-    # independently, same as get_all_expenses already does via its profiles JOIN.
-    if expense.updated_by:
-        result = await db.execute(
-            text("SELECT full_name FROM profiles WHERE id = :uid"),
-            {"uid": str(expense.updated_by)}
-        )
-        row = result.fetchone()
-        updated_by_name = row.full_name if row else None
-    else:
-        updated_by_name = None
+    exp  = json.loads(row.exp_json)
+    src  = json.loads(row.src_json) if row.src_json else {}
 
-    # Resolve source names for auto-generated expenses
-    source_supplier = source_invoice = source_customer = source_purchase_invoice = None
-    if expense.source_type == "purchase_payment" and expense.source_id:
-        src_row = (await db.execute(text("""
-            SELECT s.supp_name
-            FROM purchases pur
-            LEFT JOIN suppliers s ON pur.supp_id = s.supp_id
-            WHERE pur.pur_id = :sid AND pur.business_id = CAST(:bid AS uuid)
-        """), {"sid": str(expense.source_id), "bid": business_id})).fetchone()
-        source_supplier = src_row.supp_name if src_row else None
-    elif expense.source_type == "sales_return" and expense.source_id:
-        src_row = (await db.execute(text("""
-            SELECT sl.invoice_no, sc.cust_name
-            FROM sales_returns sr
-            LEFT JOIN sales sl ON sr.sale_id = sl.sales_id
-            LEFT JOIN customers sc ON sl.customer_id = sc.cust_id
-            WHERE sr.return_id = :sid AND sr.business_id = CAST(:bid AS uuid)
-        """), {"sid": str(expense.source_id), "bid": business_id})).fetchone()
-        if src_row:
-            source_invoice = src_row.invoice_no
-            source_customer = src_row.cust_name
-    elif expense.source_type == "purchase_return" and expense.source_id:
-        src_row = (await db.execute(text("""
-            SELECT pr.pur_invoice_no
-            FROM purchase_returns prr
-            LEFT JOIN purchases pr ON prr.pur_id = pr.pur_id
-            WHERE prr.return_id = :sid AND prr.business_id = CAST(:bid AS uuid)
-        """), {"sid": str(expense.source_id), "bid": business_id})).fetchone()
-        source_purchase_invoice = src_row.pur_invoice_no if src_row else None
+    expense_dict = {
+        "expense_id":      exp["expense_id"],
+        "business_id":     exp["business_id"],
+        "expense_category": exp["expense_category"],
+        "expense_amount":  float(exp["expense_amount"]),
+        "expense_date":    fmt_date(exp["expense_date"]),
+        "expense_notes":   exp["expense_notes"],
+        "is_deleted":      exp["is_deleted"],
+        "created_at":      fmt_ts(exp["created_at"]),
+        "created_by":      str(exp["created_by"]) if exp["created_by"] else None,
+        "updated_at":      fmt_ts(exp["updated_at"]),
+        "updated_by":      str(exp["updated_by"]) if exp["updated_by"] else None,
+        "last_updated_by": exp.get("updated_by_name"),
+        "source_type":     exp["source_type"],
+        "source_id":       str(exp["source_id"]) if exp["source_id"] else None,
+    }
 
-    expense_dict = expense_to_dict(expense, last_updated_by=updated_by_name)
     expense_dict["expense_notes"] = resolve_expense_notes(
-        expense.expense_notes, expense.source_type, expense.source_id,
-        source_supplier=source_supplier,
-        source_invoice=source_invoice,
-        source_customer=source_customer,
-        source_purchase_invoice=source_purchase_invoice,
+        exp["expense_notes"], exp["source_type"], exp.get("source_id"),
+        source_supplier=src.get("source_supplier"),
+        source_invoice=src.get("source_invoice"),
+        source_customer=src.get("source_customer"),
+        source_purchase_invoice=src.get("source_purchase_invoice"),
     )
 
     return success_response(expense_dict)

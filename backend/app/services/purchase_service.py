@@ -7,6 +7,7 @@ from app.utils.payment_helpers import calculate_payment_status
 from app.utils.timestamp import fmt_ts
 from datetime import datetime, timezone
 import uuid
+import json
 
 
 async def generate_purchase_number(db: AsyncSession, business_id: str) -> str:
@@ -527,139 +528,198 @@ async def get_purchase_summary(db: AsyncSession, business_id: str):
     }
 
 
+# CTE OPTIMIZATION (2026-07): Consolidated purchase header + items +
+# payment snapshot + returns (with aggregated return items) into a
+# single CTE-based SQL statement. Was 5 sequential round-trips,
+# now 1. Uses purchase_cte, items_cte, payment_cte, returns_cte,
+# and return_items_agg CTEs with json_agg / row_to_json.
 async def get_purchase_detail(db: AsyncSession, business_id: str, pur_id: str):
-    row = (await db.execute(
+    result = await db.execute(
         text("""
-            SELECT p.pur_id, p.business_id, p.supp_id,
-                   s.supp_name,
-                   p.pur_total_amount, p.pur_discount,
-                   p.pur_cgst_total, p.pur_sgst_total, p.pur_igst_total,
-                   p.pur_tax_total, p.pur_final_amount,
-                   p.pur_payment_status, p.is_deleted,
-                   p.pur_created_at, p.updated_at, p.created_by,
-                   pr.full_name AS last_updated_by
-            FROM purchases p
-            LEFT JOIN suppliers s  ON s.supp_id = p.supp_id
-            LEFT JOIN profiles  pr ON pr.id      = p.updated_by
-            WHERE p.pur_id      = :pid
-              AND p.business_id = CAST(:bid AS uuid)
-              AND p.is_deleted  = false
+            WITH purchase_cte AS (
+                SELECT p.pur_id, p.business_id, p.supp_id,
+                       s.supp_name,
+                       p.pur_total_amount, p.pur_discount,
+                       p.pur_cgst_total, p.pur_sgst_total, p.pur_igst_total,
+                       p.pur_tax_total, p.pur_final_amount,
+                       p.pur_payment_status, p.pur_invoice_no, p.is_deleted,
+                       p.pur_created_at, p.updated_at, p.updated_by, p.created_by,
+                       pr.full_name AS last_updated_by
+                FROM purchases p
+                LEFT JOIN suppliers s  ON s.supp_id = p.supp_id
+                LEFT JOIN profiles  pr ON pr.id      = p.updated_by
+                WHERE p.pur_id      = CAST(:pid AS uuid)
+                  AND p.business_id = CAST(:bid AS uuid)
+                  AND p.is_deleted  = false
+            ),
+            items_cte AS (
+                SELECT pi.item_id, pi.product_id,
+                       p.prod_name AS product_name,
+                       pi.pur_item_qty, pi.item_unit_price,
+                       pi.item_subtotal, pi.gst_rate,
+                       pi.cgst_amount, pi.sgst_amount,
+                       pi.igst_amount, pi.pur_tax_total,
+                       pi.item_tax_total, pi.item_total_with_tax
+                FROM purchase_items pi
+                LEFT JOIN products p ON p.prod_id = pi.product_id
+                WHERE pi.pur_id      = CAST(:pid AS uuid)
+                  AND pi.business_id = CAST(:bid AS uuid)
+            ),
+            payment_cte AS (
+                SELECT COALESCE(cumulative_paid, 0) AS total_paid
+                FROM purchase_payments
+                WHERE pur_id      = CAST(:pid AS uuid)
+                  AND business_id = CAST(:bid AS uuid)
+                  AND is_active   = true
+                LIMIT 1
+            ),
+            returns_cte AS (
+                SELECT pr.return_id, pr.pur_id, pr.return_reason,
+                       pr.return_status, pr.restock, pr.stock_updated,
+                       pr.refund_method, pr.approved_by, pr.approved_at,
+                       pr.rejected_reason, pr.return_amount,
+                       pr.return_created_at, pr.created_by
+                FROM purchase_returns pr
+                WHERE pr.pur_id      = CAST(:pid AS uuid)
+                  AND pr.business_id = CAST(:bid AS uuid)
+            ),
+            return_items_agg AS (
+                SELECT ri.return_id,
+                       COALESCE(json_agg(json_build_object(
+                           'return_item_id', ri.return_item_id,
+                           'product_id',     ri.product_id,
+                           'product_name',   p.prod_name,
+                           'return_qty',     ri.return_qty,
+                           'refund_amount',  ri.refund_amount,
+                           'return_item_subtotal', ri.return_item_subtotal
+                       ) ORDER BY ri.return_item_id), '[]'::json) AS items,
+                       COALESCE(SUM(ri.return_item_subtotal), 0) AS total_refund_amount
+                FROM purchase_return_items ri
+                LEFT JOIN products p ON p.prod_id = ri.product_id
+                WHERE ri.return_id IN (SELECT return_id FROM returns_cte)
+                GROUP BY ri.return_id
+            )
+            SELECT
+                (SELECT row_to_json(purchase_cte)::text FROM purchase_cte) AS purchase_json,
+                (SELECT COALESCE(json_agg(items_cte), '[]'::json)::text
+                                                        FROM items_cte) AS items_json,
+                (SELECT row_to_json(payment_cte)::text FROM payment_cte) AS payment_json,
+                (SELECT COALESCE(json_agg(json_build_object(
+                    'return_id',           r.return_id,
+                    'pur_id',              r.pur_id,
+                    'return_reason',       r.return_reason,
+                    'return_status',       r.return_status,
+                    'restock',             r.restock,
+                    'stock_updated',       r.stock_updated,
+                    'refund_method',       r.refund_method,
+                    'approved_by',         r.approved_by,
+                    'approved_at',         r.approved_at,
+                    'rejected_reason',     r.rejected_reason,
+                    'return_amount',       r.return_amount,
+                    'return_created_at',   r.return_created_at,
+                    'created_by',          r.created_by,
+                    'total_refund_amount', COALESCE(ria.total_refund_amount, 0),
+                    'items',               COALESCE(ria.items, '[]'::json)
+                ) ORDER BY r.return_created_at DESC), '[]'::json)::text
+                FROM returns_cte r
+                LEFT JOIN return_items_agg ria ON ria.return_id = r.return_id
+                ) AS returns_json
         """),
         {"pid": pur_id, "bid": business_id}
-    )).fetchone()
+    )
+    row = result.fetchone()
 
-    if not row:
+    if not row or not row.purchase_json:
         return None
 
-    items = await fetch_purchase_items(db, pur_id, business_id)
+    purchase = json.loads(row.purchase_json)
+    items    = json.loads(row.items_json)
+    payment  = json.loads(row.payment_json) if row.payment_json else None
+    returns  = json.loads(row.returns_json) if row.returns_json else []
 
-    pay_row = (await db.execute(
-        text("""
-            SELECT COALESCE(cumulative_paid, 0) AS total_paid
-            FROM purchase_payments
-            WHERE pur_id      = CAST(:pid AS uuid)
-              AND business_id = CAST(:bid AS uuid)
-              AND is_active   = true
-        """),
-        {"pid": pur_id, "bid": business_id}
-    )).fetchone()
-    total_paid = Decimal(str(pay_row.total_paid)) if pay_row and pay_row.total_paid else Decimal("0")
-    pur_final  = Decimal(str(row.pur_final_amount)) if row.pur_final_amount else Decimal("0")
-    remaining_balance = max(Decimal("0"), pur_final - total_paid)
+    pur_final = Decimal(str(purchase["pur_final_amount"])) if purchase["pur_final_amount"] else Decimal("0")
+    total_paid = Decimal(str(payment["total_paid"])) if payment else Decimal("0")
 
-    return_rows = (await db.execute(text("""
-        SELECT
-            pr.return_id,
-            pr.pur_id,
-            pr.return_reason,
-            pr.return_status,
-            pr.restock,
-            pr.stock_updated,
-            pr.refund_method,
-            pr.approved_by,
-            pr.approved_at,
-            pr.rejected_reason,
-            pr.return_amount,
-            pr.return_created_at,
-            pr.created_by,
-            COALESCE(SUM(pri.return_item_subtotal), 0) AS total_refund_amount
-        FROM purchase_returns pr
-        LEFT JOIN purchase_return_items pri ON pri.return_id = pr.return_id
-        WHERE pr.pur_id      = :pid
-          AND pr.business_id = :bid
-        GROUP BY pr.return_id, pr.pur_id, pr.return_reason,
-                 pr.return_status, pr.restock, pr.stock_updated,
-                 pr.refund_method, pr.approved_by, pr.approved_at,
-                 pr.rejected_reason, pr.return_amount,
-                 pr.return_created_at, pr.created_by
-        ORDER BY pr.return_created_at DESC
-    """), {"pid": pur_id, "bid": business_id})).fetchall()
+    items_data = []
+    for i in items:
+        items_data.append({
+            "item_id":             str(i["item_id"]),
+            "product_id":          str(i["product_id"]),
+            "prod_name":           i.get("product_name"),
+            "pur_item_qty":        i["pur_item_qty"],
+            "item_unit_price":     str(Decimal(str(i["item_unit_price"]))),
+            "item_subtotal":       str(Decimal(str(i["item_subtotal"]))) if i["item_subtotal"] else None,
+            "gst_rate":            str(Decimal(str(i["gst_rate"]))) if i["gst_rate"] else "0",
+            "cgst_amount":         str(Decimal(str(i["cgst_amount"]))) if i["cgst_amount"] else "0",
+            "sgst_amount":         str(Decimal(str(i["sgst_amount"]))) if i["sgst_amount"] else "0",
+            "igst_amount":         str(Decimal(str(i["igst_amount"]))) if i["igst_amount"] else "0",
+            "pur_tax_total":       str(Decimal(str(i["pur_tax_total"]))) if i["pur_tax_total"] else "0",
+            "item_tax_total":      str(Decimal(str(i["item_tax_total"]))) if i["item_tax_total"] else "0",
+            "item_total_with_tax": str(Decimal(str(i["item_total_with_tax"]))) if i["item_total_with_tax"] else None,
+        })
 
-    ret_ids = [str(ret.return_id) for ret in return_rows]
-    all_ret_items = []
-    if ret_ids:
-        all_ret_items = (await db.execute(text("""
-            SELECT
-                pri.return_item_id, pri.return_id,
-                pri.product_id, p.prod_name AS product_name,
-                pri.return_qty, pri.refund_amount,
-                pri.return_item_subtotal
-            FROM purchase_return_items pri
-            JOIN products p ON p.prod_id = pri.product_id
-            WHERE pri.return_id = ANY(CAST(:ids AS uuid[]))
-        """), {"ids": ret_ids})).fetchall()
-
-    ret_items_by_return = {}
-    for ri in all_ret_items:
-        key = str(ri.return_id)
-        ret_items_by_return.setdefault(key, []).append(ri)
-
-    returns = []
-    for ret in return_rows:
-        return_items = ret_items_by_return.get(str(ret.return_id), [])
-        ret_dict = {
-            "return_id":           str(ret.return_id),
-            "pur_id":              str(ret.pur_id),
-            "return_reason":       ret.return_reason,
-            "return_status":       ret.return_status,
-            "restock":             ret.restock,
-            "stock_updated":       ret.stock_updated,
-            "refund_method":       ret.refund_method,
-            "approved_by":         str(ret.approved_by) if ret.approved_by else None,
-            "approved_at":         fmt_ts(ret.approved_at),
-            "rejected_reason":     ret.rejected_reason,
-            "return_amount":       float(ret.return_amount) if ret.return_amount else 0.0,
-            "return_created_at":   fmt_ts(ret.return_created_at),
-            "created_by":          str(ret.created_by) if ret.created_by else None,
-            "total_refund_amount": float(ret.total_refund_amount or 0),
+    returns_data = []
+    for r in returns:
+        ret_approved = Decimal(str(r["return_amount"])) if r["return_amount"] else Decimal("0")
+        returns_data.append({
+            "return_id":           str(r["return_id"]),
+            "pur_id":              str(r["pur_id"]),
+            "return_reason":       r["return_reason"],
+            "return_status":       r["return_status"],
+            "restock":             r["restock"],
+            "stock_updated":       r["stock_updated"],
+            "refund_method":       r["refund_method"],
+            "approved_by":         str(r["approved_by"]) if r["approved_by"] else None,
+            "approved_at":         fmt_ts(r["approved_at"]),
+            "rejected_reason":     r["rejected_reason"],
+            "return_amount":       float(ret_approved),
+            "return_created_at":   fmt_ts(r["return_created_at"]),
+            "created_by":          str(r["created_by"]) if r["created_by"] else None,
+            "total_refund_amount": float(Decimal(str(r["total_refund_amount"])) if r["total_refund_amount"] else Decimal("0")),
             "items": [
                 {
-                    "return_item_id":       str(i.return_item_id),
-                    "product_id":           str(i.product_id),
-                    "product_name":         i.product_name,
-                    "return_qty":           i.return_qty,
-                    "refund_amount":        float(i.refund_amount or 0),
-                    "return_item_subtotal": float(i.return_item_subtotal or 0) if i.return_item_subtotal else None
+                    "return_item_id":       str(ri["return_item_id"]),
+                    "product_id":           str(ri["product_id"]),
+                    "product_name":         ri.get("product_name"),
+                    "return_qty":           ri["return_qty"],
+                    "refund_amount":        float(Decimal(str(ri["refund_amount"])) if ri["refund_amount"] else Decimal("0")),
+                    "return_item_subtotal": float(Decimal(str(ri["return_item_subtotal"]))) if ri.get("return_item_subtotal") else None,
                 }
-                for i in return_items
+                for ri in r.get("items", [])
             ]
-        }
-        returns.append(ret_dict)
+        })
 
-    purchase_data = purchase_row_to_dict(row, items)
-    purchase_data["returns"]       = returns
-    purchase_data["total_returns"] = len(returns)
+    total_refunded = sum(
+        r["return_amount"] for r in returns_data if r["return_status"] == "approved"
+    )
+    adjusted_remaining = max(Decimal("0"), pur_final - total_paid - Decimal(str(total_refunded)))
 
-    total_refunded = Decimal(str(sum(
-        r["return_amount"] for r in returns if r["return_status"] == "approved"
-    )))
-    purchase_data["total_refunded"]    = float(total_refunded)
-
-    adjusted_remaining = max(Decimal("0"), pur_final - total_paid - total_refunded)
-    purchase_data["total_paid"]        = float(total_paid)
-    purchase_data["remaining_balance"] = float(adjusted_remaining)
-
-    return purchase_data
+    return {
+        "pur_id":             str(purchase["pur_id"]),
+        "business_id":        str(purchase["business_id"]),
+        "supp_id":            str(purchase["supp_id"]) if purchase["supp_id"] else None,
+        "supp_name":          purchase.get("supp_name"),
+        "pur_invoice_no":     purchase.get("pur_invoice_no"),
+        "pur_total_amount":   str(Decimal(str(purchase["pur_total_amount"]))),
+        "pur_discount":       str(Decimal(str(purchase["pur_discount"]))) if purchase["pur_discount"] else "0",
+        "pur_cgst_total":     str(Decimal(str(purchase["pur_cgst_total"]))) if purchase["pur_cgst_total"] else "0",
+        "pur_sgst_total":     str(Decimal(str(purchase["pur_sgst_total"]))) if purchase["pur_sgst_total"] else "0",
+        "pur_igst_total":     str(Decimal(str(purchase["pur_igst_total"]))) if purchase["pur_igst_total"] else "0",
+        "pur_tax_total":      str(Decimal(str(purchase["pur_tax_total"]))) if purchase["pur_tax_total"] else "0",
+        "pur_final_amount":   str(Decimal(str(purchase["pur_final_amount"]))) if purchase["pur_final_amount"] else None,
+        "pur_payment_status": purchase["pur_payment_status"],
+        "is_deleted":         purchase["is_deleted"],
+        "pur_created_at":     fmt_ts(purchase["pur_created_at"]),
+        "updated_at":         fmt_ts(purchase["updated_at"]) if purchase.get("updated_at") else None,
+        "last_updated_by":    purchase.get("last_updated_by"),
+        "created_by":         str(purchase["created_by"]) if purchase["created_by"] else None,
+        "items":              items_data,
+        "returns":            returns_data,
+        "total_returns":      len(returns_data),
+        "total_refunded":     total_refunded,
+        "total_paid":         float(total_paid),
+        "remaining_balance":  float(adjusted_remaining),
+    }
 
 
 async def get_active_payment(db: AsyncSession, pur_id: str, business_id: str):
@@ -812,7 +872,7 @@ async def delete_purchase_items_and_stock(
                     })
 
             values_clause = ", ".join(
-                f"(CAST(:pid_{i} AS uuid), :qty_{i})"
+                f"(CAST(:pid_{i} AS uuid), CAST(:qty_{i} AS integer))"
                 for i in range(len(valid_items))
             )
             update_params = {"user_id": user_id, "business_id": business_id}

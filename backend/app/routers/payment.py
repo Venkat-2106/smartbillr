@@ -466,6 +466,9 @@ async def get_payments_by_sale(
 # GET /payments/{payment_id} → One specific payment row
 # (Must be declared AFTER /sale/{sale_id})
 # ══════════════════════════════════════════════════════════════════
+# CTE OPTIMIZATION (2026-07): Replaced ORM select + conditional
+# profiles lookup with a single raw SQL query using LEFT JOIN.
+# Down from 1-2 sequential queries to 1.
 @router.get("/{payment_id}")
 async def get_payment(
     payment_id:   str,
@@ -474,20 +477,34 @@ async def get_payment(
 ):
     business_id = current_user["business_id"]
 
-    payment = (await db.execute(select(Payment).where(
-        Payment.payment_id  == payment_id,
-        Payment.business_id == business_id
-    ))).scalar_one_or_none()
+    row = (await db.execute(
+        text("""
+            SELECT p.payment_id, p.business_id, p.sale_id,
+                   p.payment_amount, p.cumulative_paid,
+                   p.payment_method, p.payment_status, p.is_active,
+                   p.payment_paid_at, p.updated_at, p.updated_by,
+                   pr.full_name AS last_updated_by
+            FROM payments p
+            LEFT JOIN profiles pr ON pr.id = p.updated_by
+            WHERE p.payment_id  = CAST(:pid AS uuid)
+              AND p.business_id = CAST(:bid AS uuid)
+        """),
+        {"pid": payment_id, "bid": business_id}
+    )).fetchone()
 
-    if not payment:
+    if not row:
         return error_response("Payment not found", status_code=404)
 
-    last_updated_by = None
-    if payment.updated_by:
-        row = (await db.execute(
-            text("SELECT full_name FROM profiles WHERE id = :uid"),
-            {"uid": str(payment.updated_by)}
-        )).scalar_one_or_none()
-        last_updated_by = row if row else None
-
-    return success_response(payment_to_dict(payment, last_updated_by=last_updated_by))
+    return success_response({
+        "payment_id":      str(row.payment_id),
+        "business_id":     str(row.business_id),
+        "sale_id":         str(row.sale_id),
+        "payment_amount":  float(row.payment_amount),
+        "cumulative_paid": float(row.cumulative_paid) if row.cumulative_paid is not None else None,
+        "payment_method":  row.payment_method,
+        "payment_status":  row.payment_status,
+        "is_active":       row.is_active,
+        "payment_paid_at": fmt_ts(row.payment_paid_at),
+        "updated_at":      fmt_ts(row.updated_at) if row.updated_at else None,
+        "last_updated_by": row.last_updated_by,
+    })

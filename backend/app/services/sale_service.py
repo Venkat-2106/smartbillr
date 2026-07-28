@@ -400,6 +400,9 @@ async def get_sales_list(db: AsyncSession, business_id: str, pagination: dict, s
     return result_list, total
 
 
+# CTE OPTIMIZATION (2026-07): Packs sale header + items + active payment
+# snapshot into a single CTE-based SQL statement (was 3 sequential
+# round-trips). Returns 3 JSON blobs via row_to_json / json_agg.
 async def get_sale_detail(db: AsyncSession, business_id: str, sales_id: str):
     result = await db.execute(
         text("""

@@ -498,7 +498,7 @@ async def get_purchase_return(
 ):
     business_id = current_user["business_id"]
 
-    result = await db.execute(text("""
+    result = (await db.execute(text("""
         WITH ret_cte AS (
             SELECT pr.return_id, pr.business_id, pr.pur_id,
                    pr.return_reason, pr.return_status,
@@ -531,7 +531,7 @@ async def get_purchase_return(
             (SELECT row_to_json(ret_cte)::text FROM ret_cte) AS ret_json,
             (SELECT COALESCE(json_agg(items_cte), '[]'::json)::text
                                         FROM items_cte) AS items_json
-    """), {"rid": return_id, "bid": str(business_id)}).fetchone()
+    """), {"rid": return_id, "bid": str(business_id)})).fetchone()
 
     if not result or not result.ret_json:
         return error_response("Purchase return not found", status_code=404)

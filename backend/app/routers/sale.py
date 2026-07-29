@@ -53,6 +53,7 @@ from app.models.product import Product
 from app.schemas.sale import SaleCreate
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
+from datetime import datetime, timezone, timedelta
 from app.services.sale_service import (
     generate_invoice_number,
     validate_and_cache_products,
@@ -216,6 +217,7 @@ async def get_sales(
 
 @router.get("/summary")
 async def get_sales_summary(
+    tz_offset_minutes: int = Query(0),
     current_user: dict = Depends(require_permission("sales.view")),
     db: AsyncSession = Depends(get_async_db)
 ):
@@ -223,11 +225,24 @@ async def get_sales_summary(
     fin_access = check_feature_access(current_user, "financial_reports")
     can_financial = fin_access["allowed"]
 
+    utc_now = datetime.now(timezone.utc)
+    user_now = utc_now - timedelta(minutes=tz_offset_minutes)
+    user_today = user_now.date()
+    loc_offset = -tz_offset_minutes
+    week_start_utc = datetime.combine(user_today - timedelta(days=6), datetime.min.time()) + timedelta(minutes=tz_offset_minutes)
+
     row = (await db.execute(text("""
         SELECT
-            COALESCE(SUM(s.sales_final_amount) FILTER (WHERE s.sales_created_at::date = CURRENT_DATE), 0) AS today_revenue,
-            COALESCE(SUM(s.sales_final_amount) FILTER (WHERE s.sales_created_at >= CURRENT_DATE - INTERVAL '7 days'), 0) AS weekly_revenue,
-            COALESCE(SUM(s.sales_final_amount) FILTER (WHERE date_trunc('month', s.sales_created_at) = date_trunc('month', CURRENT_DATE)), 0) AS monthly_revenue,
+            COALESCE(SUM(s.sales_final_amount) FILTER (
+                WHERE (s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date = :user_today
+            ), 0) AS today_revenue,
+            COALESCE(SUM(s.sales_final_amount) FILTER (
+                WHERE s.sales_created_at >= :week_start_utc
+            ), 0) AS weekly_revenue,
+            COALESCE(SUM(s.sales_final_amount) FILTER (
+                WHERE date_trunc('month', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))
+                    = date_trunc('month', CAST(:user_today AS date))
+            ), 0) AS monthly_revenue,
             COALESCE(SUM(s.sales_final_amount - COALESCE(p.cumulative_paid, 0)), 0) AS outstanding_receivables
         FROM sales s
         LEFT JOIN payments p
@@ -236,7 +251,12 @@ async def get_sales_summary(
            AND p.is_active = true
         WHERE s.business_id = CAST(:bid AS uuid)
           AND s.is_deleted = false
-    """), {"bid": business_id})).fetchone()
+    """), {
+        "bid": business_id,
+        "loc_offset": loc_offset,
+        "user_today": user_today,
+        "week_start_utc": week_start_utc,
+    })).fetchone()
 
     return success_response({
         "today_revenue": str(row.today_revenue) if can_financial else None,

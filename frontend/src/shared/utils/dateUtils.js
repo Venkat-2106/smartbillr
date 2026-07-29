@@ -60,3 +60,14 @@ export function localDayEndUTC(dateStr) {
   d.setHours(23, 59, 59, 999)
   return d.toISOString()
 }
+
+/**
+ * Returns the browser's timezone offset in minutes, in JS's own sign
+ * convention (Date.getTimezoneOffset()). This is what dashboardApi.js
+ * already sends as tz_offset_minutes; the backend converts it via
+ * loc_offset = -tz_offset_minutes before shifting UTC timestamps into
+ * the user's local calendar day for report bucketing.
+ */
+export function getTzOffsetMinutes() {
+  return new Date().getTimezoneOffset()
+}

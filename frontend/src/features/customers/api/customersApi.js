@@ -12,6 +12,7 @@
 //   records — not just what is visible on screen.
 
 import api from '../../../api/axios'
+import { getTzOffsetMinutes } from '../../../shared/utils/dateUtils'
 
 // ── GET PAGINATED LIST — server-side filter/sort/paginate ─────────────────────
 // Called by useCustomers() on every page load and whenever filters change.
@@ -84,6 +85,6 @@ export async function deleteCustomer(id) {
 }
 // ---- Customer summary (KPI cards) ----------------------------------------------------
 export async function fetchCustomerSummary() {
-  const res = await api.get('/customers/summary')
+  const res = await api.get('/customers/summary', { params: { tz_offset_minutes: getTzOffsetMinutes() } })
   return res.data
 }

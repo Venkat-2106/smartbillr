@@ -2499,6 +2499,7 @@ async def get_tax_trend(
     period: str = "monthly",
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    tz_offset_minutes: int = Query(0),
     current_user: dict = Depends(require_permission("reports.view")),
     db: AsyncSession = Depends(get_async_db)
 ):
@@ -2508,13 +2509,15 @@ async def get_tax_trend(
         period = "monthly"
 
     utc_now = datetime.now(timezone.utc)
-    user_today = utc_now.date()
+    user_now = utc_now - timedelta(minutes=tz_offset_minutes)
+    user_today = user_now.date()
+    loc_offset = -tz_offset_minutes
 
     date_where_s, dp_s = _date_col("s", "sales_created_at", date_from, date_to)
     date_where_sr, dp_sr = _date_col("sr", "return_created_at", date_from, date_to)
     date_where_p, dp_p = _date_col("pr", "pur_created_at", date_from, date_to)
     date_where_prr, dp_prr = _date_col("prr", "return_created_at", date_from, date_to)
-    params: Dict[str, Any] = {"bid": bid, **dp_s, **dp_sr, **dp_p, **dp_prr}
+    params: Dict[str, Any] = {"bid": bid, "loc_offset": loc_offset, **dp_s, **dp_sr, **dp_p, **dp_prr}
 
     if period == "weekly":
         user_start = user_today - timedelta(days=6)
@@ -2524,10 +2527,10 @@ async def get_tax_trend(
             fill_series = "generate_series(:user_start, :user_today, INTERVAL '1 day') AS gs"
         else:
             fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 day') AS gs"
-        group_expr_s = "(s.sales_created_at)::date"
-        group_expr_sr = "(sr.return_created_at)::date"
-        group_expr_p = "(pr.pur_created_at)::date"
-        group_expr_prr = "(prr.return_created_at)::date"
+        group_expr_s = "(s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
+        group_expr_sr = "(sr.return_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
+        group_expr_p = "(pr.pur_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
+        group_expr_prr = "(prr.return_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
     elif period == "monthly":
         user_start_month = user_today.replace(day=1)
         if user_start_month.month > 5:
@@ -2545,10 +2548,10 @@ async def get_tax_trend(
             fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 month') AS gs"
         else:
             fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 month') AS gs"
-        group_expr_s = "date_trunc('month', s.sales_created_at)"
-        group_expr_sr = "date_trunc('month', sr.return_created_at)"
-        group_expr_p = "date_trunc('month', pr.pur_created_at)"
-        group_expr_prr = "date_trunc('month', prr.return_created_at)"
+        group_expr_s = "date_trunc('month', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))"
+        group_expr_sr = "date_trunc('month', sr.return_created_at + (:loc_offset * INTERVAL '1 minute'))"
+        group_expr_p = "date_trunc('month', pr.pur_created_at + (:loc_offset * INTERVAL '1 minute'))"
+        group_expr_prr = "date_trunc('month', prr.return_created_at + (:loc_offset * INTERVAL '1 minute'))"
     else:
         user_start_year = user_today.replace(year=user_today.year - 4, month=1, day=1)
         user_end_year = user_today.replace(year=user_today.year + 1, month=1, day=1)
@@ -2558,10 +2561,10 @@ async def get_tax_trend(
             fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 year') AS gs"
         else:
             fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 year') AS gs"
-        group_expr_s = "date_trunc('year', s.sales_created_at)"
-        group_expr_sr = "date_trunc('year', sr.return_created_at)"
-        group_expr_p = "date_trunc('year', pr.pur_created_at)"
-        group_expr_prr = "date_trunc('year', prr.return_created_at)"
+        group_expr_s = "date_trunc('year', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))"
+        group_expr_sr = "date_trunc('year', sr.return_created_at + (:loc_offset * INTERVAL '1 minute'))"
+        group_expr_p = "date_trunc('year', pr.pur_created_at + (:loc_offset * INTERVAL '1 minute'))"
+        group_expr_prr = "date_trunc('year', prr.return_created_at + (:loc_offset * INTERVAL '1 minute'))"
 
     rows = await db.execute(text(f"""
         WITH sales_agg AS (
@@ -2738,6 +2741,7 @@ async def get_returns_trend(
     period: str = "monthly",
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    tz_offset_minutes: int = Query(0),
     current_user: dict = Depends(require_permission("reports.view")),
     db: AsyncSession = Depends(get_async_db)
 ):
@@ -2746,18 +2750,51 @@ async def get_returns_trend(
     if period not in ("weekly", "monthly", "yearly"):
         period = "monthly"
 
+    utc_now = datetime.now(timezone.utc)
+    user_now = utc_now - timedelta(minutes=tz_offset_minutes)
+    user_today = user_now.date()
+    loc_offset = -tz_offset_minutes
+
     date_where, dp = _date_col("r", "return_created_at", date_from, date_to)
-    params = {"bid": bid, **dp}
+    params = {"bid": bid, "loc_offset": loc_offset, **dp}
 
     if period == "weekly":
-        fill_series = "generate_series(CURRENT_DATE - 6, CURRENT_DATE, INTERVAL '1 day') AS gs"
-        group_expr = "r.return_created_at::date"
+        user_start = user_today - timedelta(days=6)
+        if not date_from:
+            params["user_start"] = user_start
+            params["user_today"] = user_today
+            fill_series = "generate_series(:user_start, :user_today, INTERVAL '1 day') AS gs"
+        else:
+            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 day') AS gs"
+        group_expr = "(r.return_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
     elif period == "monthly":
-        fill_series = "generate_series(date_trunc('month', CURRENT_DATE - INTERVAL '5 months'), date_trunc('month', CURRENT_DATE + INTERVAL '1 month'), INTERVAL '1 month') AS gs"
-        group_expr = "date_trunc('month', r.return_created_at)"
+        user_start_month = user_today.replace(day=1)
+        if user_start_month.month > 5:
+            user_start_month = user_start_month.replace(month=user_start_month.month - 5)
+        else:
+            user_start_month = user_start_month.replace(year=user_start_month.year - 1, month=user_start_month.month + 7)
+        user_end_month = user_today.replace(day=1)
+        if user_end_month.month == 12:
+            user_end_month = user_end_month.replace(year=user_end_month.year + 1, month=1)
+        else:
+            user_end_month = user_end_month.replace(month=user_end_month.month + 1)
+        if not date_from:
+            params["user_start"] = user_start_month
+            params["user_end"] = user_end_month
+            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 month') AS gs"
+        else:
+            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 month') AS gs"
+        group_expr = "date_trunc('month', r.return_created_at + (:loc_offset * INTERVAL '1 minute'))"
     else:
-        fill_series = "generate_series(date_trunc('year', CURRENT_DATE - INTERVAL '4 years'), date_trunc('year', CURRENT_DATE + INTERVAL '1 year'), INTERVAL '1 year') AS gs"
-        group_expr = "date_trunc('year', r.return_created_at)"
+        user_start_year = user_today.replace(year=user_today.year - 4, month=1, day=1)
+        user_end_year = user_today.replace(year=user_today.year + 1, month=1, day=1)
+        if not date_from:
+            params["user_start"] = user_start_year
+            params["user_end"] = user_end_year
+            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 year') AS gs"
+        else:
+            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 year') AS gs"
+        group_expr = "date_trunc('year', r.return_created_at + (:loc_offset * INTERVAL '1 minute'))"
 
     rows = await db.execute(text(f"""
         WITH sales_ret AS (
@@ -2863,6 +2900,7 @@ async def get_payment_collections(
     period: str = "monthly",
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    tz_offset_minutes: int = Query(0),
     current_user: dict = Depends(require_permission("reports.view")),
     db: AsyncSession = Depends(get_async_db)
 ):
@@ -2872,9 +2910,11 @@ async def get_payment_collections(
         period = "monthly"
 
     utc_now = datetime.now(timezone.utc)
-    user_today = utc_now.date()
+    user_now = utc_now - timedelta(minutes=tz_offset_minutes)
+    user_today = user_now.date()
+    loc_offset = -tz_offset_minutes
     date_where, dp = _date_col("pay", "payment_paid_at", date_from, date_to)
-    params = {"bid": bid, **dp}
+    params = {"bid": bid, "loc_offset": loc_offset, **dp}
 
     if period == "weekly":
         user_start = user_today - timedelta(days=6)
@@ -2884,7 +2924,7 @@ async def get_payment_collections(
             fill_series = "generate_series(:user_start, :user_today, INTERVAL '1 day') AS gs"
         else:
             fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 day') AS gs"
-        group_expr = "pay.payment_paid_at::date"
+        group_expr = "(pay.payment_paid_at + (:loc_offset * INTERVAL '1 minute'))::date"
     elif period == "monthly":
         user_start_month = user_today.replace(day=1)
         if user_start_month.month > 5:
@@ -2902,7 +2942,7 @@ async def get_payment_collections(
             fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 month') AS gs"
         else:
             fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 month') AS gs"
-        group_expr = "date_trunc('month', pay.payment_paid_at)"
+        group_expr = "date_trunc('month', pay.payment_paid_at + (:loc_offset * INTERVAL '1 minute'))"
     else:
         user_start_year = user_today.replace(year=user_today.year - 4, month=1, day=1)
         user_end_year = user_today.replace(year=user_today.year + 1, month=1, day=1)
@@ -2912,7 +2952,7 @@ async def get_payment_collections(
             fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 year') AS gs"
         else:
             fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 year') AS gs"
-        group_expr = "date_trunc('year', pay.payment_paid_at)"
+        group_expr = "date_trunc('year', pay.payment_paid_at + (:loc_offset * INTERVAL '1 minute'))"
 
     rows = await db.execute(text(f"""
         WITH aggregated AS (

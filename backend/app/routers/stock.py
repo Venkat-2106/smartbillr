@@ -29,6 +29,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 import asyncio
+import re
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query, File, UploadFile
 from typing import Optional
@@ -219,7 +220,7 @@ sort_dir:     Optional[str] = Query(default="desc"),
                     p.prod_name,
                     p2.full_name AS created_by_name,
                     s.invoice_no AS sale_invoice_no,
-                    pur.pur_id   AS pur_reference_id
+                    pur.pur_invoice_no AS purchase_reference_no
                 FROM stock_movements sm
                 LEFT JOIN products  p   ON p.prod_id = sm.product_id
                 LEFT JOIN profiles  p2  ON p2.id     = sm.move_created_by
@@ -252,8 +253,8 @@ sort_dir:     Optional[str] = Query(default="desc"),
             "reference_type":        "adjusted_by" if adjusted_by else r.reference_type,
             "reference_id":          adjusted_by or (str(r.reference_id) if r.reference_id else None),
             "sale_invoice_no":       r.sale_invoice_no,
-            "purchase_reference_no": str(r.pur_reference_id) if r.pur_reference_id else None,
-            "move_notes":            r.move_notes,
+            "purchase_reference_no": r.purchase_reference_no,
+            "move_notes":            re.sub(r'\s+[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*$', '', r.move_notes).strip() if r.move_notes else None,
             "move_created_at":       fmt_ts(r.move_created_at),
             "move_created_by":       str(r.move_created_by) if r.move_created_by else None,
         })
@@ -896,7 +897,6 @@ async def get_low_stock_alerts(
             JOIN products p ON p.prod_id = la.product_id
             WHERE la.business_id = CAST(:business_id AS uuid)
               AND p.is_deleted   = false
-              AND la.alert_status = 'unread'
               AND p.prod_stock_qty <= p.prod_low_stock_alert
             ORDER BY la.product_id, la.alert_created_at DESC
             OFFSET :offset LIMIT :limit
@@ -924,6 +924,34 @@ async def get_low_stock_alerts(
     return success_response(
         pagination_response(data, total, pagination["page"], pagination["limit"], capped=pagination["_capped"])
     )
+
+
+# ─────────────────────────────────────────
+# PUT /stock/alerts/read-all → Mark all unread alerts as read
+# ─────────────────────────────────────────
+@router.put("/alerts/read-all")
+async def mark_all_alerts_read(
+    current_user: dict = Depends(require_permission("stock.view")),
+    db: AsyncSession = Depends(get_async_db)
+):
+    business_id = current_user["business_id"]
+
+    result = await db.execute(
+        text("""
+            UPDATE low_stock_alerts
+            SET alert_status = 'read'
+            WHERE business_id = :business_id
+              AND alert_status = 'unread'
+        """),
+        {"business_id": business_id}
+    )
+    await db.commit()
+    await async_set_rls_gucs_after_commit(db, current_user)
+
+    return success_response({
+        "message":   "All alerts marked as read",
+        "updated":   result.rowcount
+    })
 
 
 # ─────────────────────────────────────────

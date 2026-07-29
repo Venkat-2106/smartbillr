@@ -32,6 +32,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import api from '../../../api/axios'
+import { getTzOffsetMinutes } from '../../../shared/utils/dateUtils'
 
 // ── Sales list — server-side paginated (table view) ───────────────────────────
 export const fetchSales = async ({ page = 1, limit = 20, search, status, date_from, date_to, sort_by, sort_dir } = {}) => {
@@ -142,7 +143,7 @@ export const searchProductsLean = async (q) => {
 
 // ── Sales summary (KPI cards) ───────────────────────────────────────
 export async function fetchSalesSummary() {
-  const res = await api.get('/sales/summary')
+  const res = await api.get('/sales/summary', { params: { tz_offset_minutes: getTzOffsetMinutes() } })
   return res.data
 }
 

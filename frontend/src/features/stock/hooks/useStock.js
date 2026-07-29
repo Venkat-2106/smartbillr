@@ -24,6 +24,7 @@ import {
   fetchAlerts,
   adjustStock,
   markAlertRead,
+  markAllAlertsRead,
 } from '../api/stockApi'
 
 const PAGE_SIZE = 20
@@ -175,6 +176,27 @@ export function useStockAlertRead() {
   return {
     markRead:    (alertId, callbacks) => mutation.mutate(alertId, callbacks),
     isMarkingRead: mutation.isPending,
+  }
+}
+
+// ── useStockAlertsReadAll — mark all alerts as read ──────────────────────────
+export function useStockAlertsReadAll() {
+  const queryClient = useQueryClient()
+
+  const mutation = useMutation({
+    mutationFn: markAllAlertsRead,
+    onSuccess:  () => {
+      queryClient.invalidateQueries({ queryKey: ['stock-alerts'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Failed to mark all alerts as read')
+    },
+  })
+
+  return {
+    markAllRead: () => mutation.mutate(),
+    isMarkingAll: mutation.isPending,
   }
 }
 

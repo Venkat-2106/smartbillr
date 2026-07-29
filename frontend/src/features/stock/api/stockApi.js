@@ -114,6 +114,13 @@ export async function markAlertRead(alertId) {
   return res.data
 }
 
+// ── Mark All Alerts as Read ──────────────────────────────────────────────────
+// Backend: PUT /stock/alerts/read-all
+export async function markAllAlertsRead() {
+  const res = await api.put('/stock/alerts/read-all')
+  return res.data
+}
+
 // ── Adjust Stock ──────────────────────────────────────────────────────────────
 // Backend: POST /stock/adjust
 //   Body: { product_id, adjustment_type: "add"|"remove"|"set", qty, move_notes? }

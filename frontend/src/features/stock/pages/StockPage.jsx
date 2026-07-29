@@ -55,7 +55,7 @@ import { fetchCategories } from '../../categories/api/categoriesApi'
 import { fetchStockSummary } from '../api/stockApi'
 import { useStock, useStockMovements, useStockAlerts } from '../hooks/useStock'
 import AdjustStockModal from '../components/AdjustStockModal'
-import { useStockAlertRead } from '../hooks/useStock'
+import { useStockAlertRead, useStockAlertsReadAll } from '../hooks/useStock'
 
 // ── Static SVG icons (hoisted to module scope) ──────────────────────────────────
 // Why: Inline JSX SVGs are re-created as new element trees on every render.
@@ -725,7 +725,8 @@ function StockMovementsTab({ active }) {
             <option value="purchase">Purchase</option>
             <option value="adjustment">Adjustment</option>
             <option value="stock_override">Stock Override</option>
-            <option value="return">Return</option>
+            <option value="sales_return">Sales Return</option>
+            <option value="purchase_return">Purchase Return</option>
           </select>
           <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>
             {totalItems} movement{totalItems !== 1 ? 's' : ''}
@@ -829,7 +830,8 @@ function LowStockAlertsTab({ active }) {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setBannerDismissed(false) }, [isError])
 
-  const { markRead } = useStockAlertRead()
+  const { markRead }              = useStockAlertRead()
+  const { markAllRead, isMarkingAll } = useStockAlertsReadAll()
 
   const handleAlertClick = useCallback((row) => {
     // Only mark as read if it is currently unread
@@ -949,15 +951,27 @@ function LowStockAlertsTab({ active }) {
         <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>
           {totalItems} alert{totalItems !== 1 ? 's' : ''} active
         </span>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => refetch()}
-          style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-        >
-          {RefreshIcon}
-          Refresh
-        </Button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => markAllRead()}
+            disabled={isMarkingAll}
+            style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            {CheckCircleIcon}
+            {isMarkingAll ? 'Marking…' : 'Mark All Read'}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => refetch()}
+            style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            {RefreshIcon}
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <div style={{

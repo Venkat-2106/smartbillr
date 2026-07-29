@@ -1,4 +1,5 @@
 import api from '../../../api/axios'
+import { getTzOffsetMinutes } from '../../../shared/utils/dateUtils'
 
 function p(params) {
   const clean = {}
@@ -14,7 +15,7 @@ export const fetchReportSummary = (params) =>
 
 // 2. Sales Reports
 export const fetchSalesTrend = (params) =>
-  api.get('/reports/sales/trend', { params: p(params) }).then(r => r.data)
+  api.get('/reports/sales/trend', { params: p({ ...params, tz_offset_minutes: getTzOffsetMinutes() }) }).then(r => r.data)
 
 export const fetchSalesByCustomer = (params) =>
   api.get('/reports/sales/by-customer', { params: p(params) }).then(r => r.data)
@@ -36,7 +37,7 @@ export const fetchPurchaseSummary = (params) =>
   api.get('/reports/purchases/summary', { params: p(params) }).then(r => r.data)
 
 export const fetchPurchaseTrend = (params) =>
-  api.get('/reports/purchases/trend', { params: p(params) }).then(r => r.data)
+  api.get('/reports/purchases/trend', { params: p({ ...params, tz_offset_minutes: getTzOffsetMinutes() }) }).then(r => r.data)
 
 export const fetchPurchasesBySupplier = (params) =>
   api.get('/reports/purchases/by-supplier', { params: p(params) }).then(r => r.data)
@@ -61,7 +62,7 @@ export const fetchProfitByCustomer = (params) =>
   api.get('/reports/profit/by-customer', { params: p(params) }).then(r => r.data)
 
 export const fetchProfitTrend = (params) =>
-  api.get('/reports/profit/trend', { params: p(params) }).then(r => r.data)
+  api.get('/reports/profit/trend', { params: p({ ...params, tz_offset_minutes: getTzOffsetMinutes() }) }).then(r => r.data)
 
 // 5. Inventory Reports
 export const fetchInventoryValuation = () =>
@@ -126,7 +127,7 @@ export const fetchPurchaseTaxByRate = (params) =>
   api.get('/reports/tax/purchases/by-rate', { params: p(params) }).then(r => r.data)
 
 export const fetchTaxTrend = (params) =>
-  api.get('/reports/tax/trend', { params: p(params) }).then(r => r.data)
+  api.get('/reports/tax/trend', { params: p({ ...params, tz_offset_minutes: getTzOffsetMinutes() }) }).then(r => r.data)
 
 // 10. Return Reports
 export const fetchSalesReturns = (params) =>
@@ -136,14 +137,14 @@ export const fetchPurchaseReturns = (params) =>
   api.get('/reports/returns/purchases', { params: p(params) }).then(r => r.data)
 
 export const fetchReturnsTrend = (params) =>
-  api.get('/reports/returns/trend', { params: p(params) }).then(r => r.data)
+  api.get('/reports/returns/trend', { params: p({ ...params, tz_offset_minutes: getTzOffsetMinutes() }) }).then(r => r.data)
 
 export const fetchReturnsImpact = (params) =>
   api.get('/reports/returns/impact', { params: p(params) }).then(r => r.data)
 
 // 11. Payment Reports
 export const fetchPaymentCollections = (params) =>
-  api.get('/reports/payments/collections', { params: p(params) }).then(r => r.data)
+  api.get('/reports/payments/collections', { params: p({ ...params, tz_offset_minutes: getTzOffsetMinutes() }) }).then(r => r.data)
 
 export const fetchOutstandingReceivables = (params) =>
   api.get('/reports/payments/outstanding', { params: p(params) }).then(r => r.data)

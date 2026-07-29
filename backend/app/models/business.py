@@ -23,6 +23,7 @@ class Business(Base):
     subscription_type = Column(String(20), nullable=False, default="trial")
     subscription_start_at = Column(DateTime, nullable=True)
     subscription_end_at = Column(DateTime, nullable=True)
+    last_renewed_at = Column(DateTime, nullable=True)
     trial_start_at = Column(DateTime, nullable=True)
     trial_end_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)

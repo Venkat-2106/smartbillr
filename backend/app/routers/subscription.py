@@ -255,7 +255,7 @@ async def get_my_subscription(
             SELECT
                 payment_status, subscription_type,
                 subscription_start_at, subscription_end_at,
-                trial_start_at, trial_end_at, is_active
+                trial_start_at, trial_end_at, is_active, last_renewed_at
             FROM businesses
             WHERE business_id = :bid
               AND (is_deleted = false OR is_deleted IS NULL)
@@ -300,6 +300,7 @@ async def get_my_subscription(
             is_active=bool(row.is_active),
             days_remaining=days_remaining,
             is_expired=is_expired,
+            last_renewed_at=_parse_dt(row.last_renewed_at),
         ).model_dump()
     )
 

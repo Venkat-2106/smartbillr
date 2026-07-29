@@ -151,6 +151,7 @@ class SubscriptionResponse(BaseModel):
     is_active: bool
     days_remaining: Optional[int] = None
     is_expired: bool
+    last_renewed_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

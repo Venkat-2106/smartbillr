@@ -115,6 +115,7 @@ async def activate_subscription(db: AsyncSession, provider_object: dict, provide
                 payment_provider = :provider,
                 subscription_start_at = :now,
                 subscription_end_at = :period_end,
+                last_renewed_at = :now,
                 grace_period_end_at = NULL
             WHERE business_id = :bid
         """),

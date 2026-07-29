@@ -19,7 +19,17 @@ TIER_FEATURES = {
         "financial_reports": False,
         "product_profit_view": False,
     },
-    "monthly": {
+    "basic": {
+        "max_products": 500,
+        "max_customers": 500,
+        "max_suppliers": None,
+        "max_sales_per_month": 2000,
+        "max_purchases_per_month": None,
+        "max_export_rows": 10_000,
+        "financial_reports": False,
+        "product_profit_view": False,
+    },
+    "pro": {
         "max_products": None,
         "max_customers": None,
         "max_suppliers": None,
@@ -29,17 +39,7 @@ TIER_FEATURES = {
         "financial_reports": True,
         "product_profit_view": True,
     },
-    "annual": {
-        "max_products": None,
-        "max_customers": None,
-        "max_suppliers": None,
-        "max_sales_per_month": None,
-        "max_purchases_per_month": None,
-        "max_export_rows": 10_000,
-        "financial_reports": True,
-        "product_profit_view": True,
-    },
-    "lifetime": {
+    "pro_yearly": {
         "max_products": None,
         "max_customers": None,
         "max_suppliers": None,

@@ -2,11 +2,11 @@ import useAuthStore from '../../store/authStore'
 import { usePermissions } from './usePermissions'
 
 const TIER_FEATURES = {
-  suspended: { financial_reports: false, product_profit_view: false },
-  trial:     { financial_reports: false, product_profit_view: false },
-  monthly:   { financial_reports: true,  product_profit_view: true  },
-  annual:    { financial_reports: true,  product_profit_view: true  },
-  lifetime:  { financial_reports: true,  product_profit_view: true  },
+  suspended:  { financial_reports: false, product_profit_view: false },
+  trial:      { financial_reports: false, product_profit_view: false },
+  basic:      { financial_reports: false, product_profit_view: false },
+  pro:        { financial_reports: true,  product_profit_view: true  },
+  pro_yearly: { financial_reports: true,  product_profit_view: true  },
 }
 
 export function useFeatureAccess(featureKey) {

@@ -51,6 +51,15 @@ async def activate_subscription(db: AsyncSession, provider_object: dict, provide
         logger.error("Plan not found for plan_id=%s", payment_row.plan_id)
         return
 
+    # Fetch the business's current subscription_end_at so we can anchor
+    # renewals/upgrades to extend from the existing expiry rather than from now.
+    result = await db.execute(
+        text("SELECT subscription_end_at FROM businesses WHERE business_id = :bid"),
+        {"bid": str(payment_row.business_id)},
+    )
+    business_row = result.fetchone()
+    current_end_at = business_row.subscription_end_at if business_row else None
+
     # Server-side amount check — defense against tampered client-side session data
     if provider == "razorpay":
         paid_amount = provider_object.get("amount", 0) / 100
@@ -75,13 +84,27 @@ async def activate_subscription(db: AsyncSession, provider_object: dict, provide
 
     now = datetime.now(timezone.utc)
     billing_cycle = plan.billing_cycle
+
+    # Anchor the new period on the LATER of (now, current subscription_end_at).
+    # This means:
+    #   - First-ever purchase, or renewing after expiry: anchor = now (unchanged behavior)
+    #   - Early renewal/upgrade while still active: anchor = current subscription_end_at,
+    #     so the customer doesn't lose their remaining paid days.
+    # current_end_at is stored naive (DB column is naive UTC per project convention);
+    # make it tz-aware for comparison, matching _parse_dt's pattern elsewhere in this codebase.
+    if current_end_at is not None:
+        current_end_at_aware = current_end_at.replace(tzinfo=timezone.utc)
+        anchor = current_end_at_aware if current_end_at_aware > now else now
+    else:
+        anchor = now
+
     if billing_cycle == "yearly":
         # FIXED leap-year-safe date calculation using relativedelta instead of timedelta(days=365)
-        period_end = now + relativedelta(years=1)
+        period_end = anchor + relativedelta(years=1)
     elif billing_cycle == "one_time":
-        period_end = now + timedelta(days=9999)
+        period_end = anchor + timedelta(days=9999)
     else:
-        period_end = now + timedelta(days=30)
+        period_end = anchor + timedelta(days=30)
 
     await db.execute(
         text("""

@@ -1739,7 +1739,7 @@ async def get_customer_purchase_history(
             "total_amount": float(totals.total_amount) if (totals and can_financial) else None,
             "paid_amount": float(totals.paid_amount) if (totals and can_financial) else None,
             "outstanding": float(totals.total_amount - totals.paid_amount) if (totals and can_financial) else None,
-            "last_purchase_date": str(totals.last_purchase_date) if (totals and totals.last_purchase_date) else None,
+            "last_purchase_date": fmt_ts(totals.last_purchase_date) if totals else None,
         },
         "sales_history": pagination_response(
             [{
@@ -1750,7 +1750,7 @@ async def get_customer_purchase_history(
                 "tax": float(r.tax_total),
                 "payment_status": r.sales_payment_status,
                 "payment_method": r.sales_payment_method,
-                "created_at": str(r.sales_created_at),
+                "created_at": fmt_ts(r.sales_created_at),
             } for r in sales],
             sales_total, pagination["page"], pagination["limit"],
             capped=pagination["_capped"],
@@ -1762,7 +1762,7 @@ async def get_customer_purchase_history(
                 "amount": float(r.payment_amount) if can_financial else None,
                 "method": r.payment_method,
                 "status": r.payment_status,
-                "paid_at": str(r.payment_paid_at),
+                "paid_at": fmt_ts(r.payment_paid_at),
             } for r in payments],
             payments_total, pagination["page"], pagination["limit"],
             capped=pagination["_capped"],
@@ -2012,7 +2012,7 @@ async def get_supplier_purchase_history(
                 "discount": float(r.pur_discount),
                 "tax": float(r.pur_tax_total),
                 "payment_status": r.pur_payment_status,
-                "created_at": str(r.pur_created_at),
+                "created_at": fmt_ts(r.pur_created_at),
             } for r in purchases],
             purchases_total, pagination["page"], pagination["limit"],
             capped=pagination["_capped"],
@@ -3097,7 +3097,7 @@ async def get_partial_payments(
             "remaining": float(r.remaining) if can_financial else None,
             "last_payment_amount": float(r.last_payment_amount) if can_financial else None,
             "last_payment_method": r.payment_method,
-            "last_payment_date": str(r.payment_paid_at) if r.payment_paid_at else None,
+            "last_payment_date": fmt_ts(r.payment_paid_at),
         }
         for r in rows
     ], total, pagination["page"], pagination["limit"], capped=pagination["_capped"]))
@@ -3155,7 +3155,7 @@ async def get_user_activities(
             "record_id": str(r.record_id) if r.record_id else None,
             "old_data": r.old_data,
             "new_data": r.new_data,
-            "created_at": str(r.created_at),
+            "created_at": fmt_ts(r.created_at),
         }
         for r in rows
     ]
@@ -3204,9 +3204,9 @@ async def get_login_activities(
             "user_id": str(r.id),
             "full_name": r.full_name,
             "email": r.email,
-            "created_at": str(r.created_at) if r.created_at else None,
-            "last_login_at": str(r.last_login_at) if r.last_login_at else None,
-            "last_logout_at": str(r.last_logout_at) if r.last_logout_at else None,
+            "created_at": fmt_ts(r.created_at),
+            "last_login_at": fmt_ts(r.last_login_at),
+            "last_logout_at": fmt_ts(r.last_logout_at),
         }
         for r in rows
     ])
@@ -3260,7 +3260,7 @@ async def get_data_changes(
             "record_id": str(r.record_id) if r.record_id else None,
             "old_data": r.old_data,
             "new_data": r.new_data,
-            "created_at": str(r.created_at),
+            "created_at": fmt_ts(r.created_at),
         }
         for r in rows
     ]
@@ -3324,7 +3324,7 @@ async def get_export_activities(
             "user_name": r.user_name,
             "table_name": r.table_name,
             "filters": r.old_data,
-            "exported_at": str(r.created_at),
+            "exported_at": fmt_ts(r.created_at),
         }
         for r in rows
     ])

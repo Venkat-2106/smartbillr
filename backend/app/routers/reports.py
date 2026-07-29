@@ -1823,8 +1823,8 @@ async def get_customer_lifetime_value(
             "invoice_count": count,
             "total_spent": total_spent,
             "avg_invoice_value": avg_value,
-            "first_purchase": str(r.first_purchase) if r.first_purchase else None,
-            "last_purchase": str(r.last_purchase) if r.last_purchase else None,
+            "first_purchase": fmt_ts(r.first_purchase),
+            "last_purchase": fmt_ts(r.last_purchase),
         })
 
     return success_response(pagination_response(
@@ -2002,8 +2002,8 @@ async def get_supplier_purchase_history(
         "summary": {
             "total_purchases": int(totals.total_purchases) if totals else 0,
             "total_amount": float(totals.total_amount) if (totals and can_financial) else None,
-            "first_purchase": str(totals.first_purchase) if (totals and totals.first_purchase) else None,
-            "last_purchase": str(totals.last_purchase) if (totals and totals.last_purchase) else None,
+            "first_purchase": fmt_ts(totals.first_purchase) if totals else None,
+            "last_purchase": fmt_ts(totals.last_purchase) if totals else None,
         },
         "purchases": pagination_response(
             [{
@@ -2066,8 +2066,8 @@ async def get_supplier_spend_analysis(
             "total_spend": float(r.total_spend) if can_financial else None,
             "avg_spend": float(r.avg_spend) if can_financial else None,
             "max_purchase": float(r.max_purchase) if can_financial and r.max_purchase else None,
-            "first_purchase": str(r.first_purchase) if r.first_purchase else None,
-            "last_purchase": str(r.last_purchase) if r.last_purchase else None,
+            "first_purchase": fmt_ts(r.first_purchase),
+            "last_purchase": fmt_ts(r.last_purchase),
         }
         for r in rows
     ], total, pagination["page"], pagination["limit"], capped=pagination["_capped"]))

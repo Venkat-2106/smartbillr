@@ -28,6 +28,7 @@ const SettingsPage = React.lazy(() => import('../features/settings/pages/Setting
 const SubscriptionPage = React.lazy(() => import('../features/subscription/pages/SubscriptionPage'))
 const StaffPage = React.lazy(() => import('../features/staff/pages/StaffPage'))
 const ReportsPage = React.lazy(() => import('../features/reports/pages/ReportsPage'))
+const UserGuidePage = React.lazy(() => import('../features/help/pages/UserGuidePage'))
 
 const PricingPage = React.lazy(() => import('../features/billing/pages/PricingPage'))
 const BillingSuccessPage = React.lazy(() => import('../features/billing/pages/BillingSuccessPage'))
@@ -218,6 +219,10 @@ export default function AppRouter() {
                 <StaffPage />
               </ProtectedRoute>
             }
+          />
+          <Route
+            path="/user-guide"
+            element={<UserGuidePage />}
           />
         </Route>
 

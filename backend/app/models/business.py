@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Text
+from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from app.database import Base
 import uuid
@@ -26,3 +26,16 @@ class Business(Base):
     trial_start_at = Column(DateTime, nullable=True)
     trial_end_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
+
+    # Added by migration a1b2c3d4e5f7_add_billing_tables — previously only
+    # accessed via raw text() SQL in activation.py/subscription.py, never
+    # declared on the ORM model until now.
+    current_plan_id = Column(UUID(as_uuid=True), ForeignKey("plans.plan_id"), nullable=True)
+    payment_provider = Column(String(20), nullable=True)
+    provider_customer_id = Column(String(120), nullable=True)
+    auto_renew = Column(Boolean, nullable=False, default=True)
+    # NOTE: this column is timestamptz in the DB (migration explicitly used
+    # DateTime(timezone=True)), unlike every other date column on this table
+    # which is naive. Declared here as timezone=True to match the DB truth,
+    # not "corrected" to naive — changing the DB column type is out of scope.
+    grace_period_end_at = Column(DateTime(timezone=True), nullable=True)

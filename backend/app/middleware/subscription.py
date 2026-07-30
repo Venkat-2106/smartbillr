@@ -1,10 +1,11 @@
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from cachetools import TTLCache
 from sqlalchemy import text
+from app.services.subscription_expiry import GRACE_PERIOD_DAYS
 
 # ── Redis client (lazy, same pattern as auth.py / ratelimit.py) ──────────────
 
@@ -266,8 +267,19 @@ async def _check_subscription_for_user_async(user_id: str, db) -> tuple[dict | N
         if result_error is None and row.payment_status in ("paid", "suspended"):
             expired = now > sub_end if sub_end else False
             if expired or row.payment_status == "suspended":
-                # Allow access during grace period
-                if expired and grace_end is not None and now <= grace_end:
+                # Compute effective grace boundary:
+                #   - If cron already stored grace_period_end_at, use it
+                #   - If cron hasn't run yet (NULL) but sub just expired,
+                #     compute inline so user isn't blocked before first cron
+                #   - Suspended w/ no stored grace_end → always block
+                if grace_end is not None:
+                    effective_grace_end = grace_end
+                elif expired and row.payment_status == "paid" and sub_end is not None:
+                    effective_grace_end = sub_end + timedelta(days=GRACE_PERIOD_DAYS)
+                else:
+                    effective_grace_end = None
+
+                if effective_grace_end is not None and now <= effective_grace_end:
                     pass
                 else:
                     result_error = {

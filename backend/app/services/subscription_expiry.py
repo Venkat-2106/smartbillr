@@ -22,6 +22,10 @@ from app.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
+# Shared grace period length — imported by middleware/subscription.py for inline
+# computation between expiry and the next cron run.  Both files must agree.
+GRACE_PERIOD_DAYS = 3
+
 
 def expire_subscriptions(db_session=None):
     """
@@ -76,7 +80,7 @@ def expire_subscriptions(db_session=None):
                   AND subscription_end_at < :now
                   AND grace_period_end_at IS NULL
             """),
-            {"now": now, "grace_end": now + timedelta(days=3)},
+            {"now": now, "grace_end": now + timedelta(days=GRACE_PERIOD_DAYS)},
         )
         grace_count = result_grace.rowcount
 

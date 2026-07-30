@@ -1,5 +1,6 @@
 import { useSubscription } from '../hooks/useSubscription'
 import { formatDate } from '../../../shared/utils/formatDate'
+import { isTrial } from '../../../shared/utils/subscriptionUtils'
 
 export default function SubscriptionBanner() {
   const { data: sub } = useSubscription()
@@ -38,7 +39,7 @@ export default function SubscriptionBanner() {
     )
   }
 
-  if (sub.subscription_type === 'monthly' || sub.subscription_type === 'annual') {
+  if (!isTrial(sub)) {
     return (
       <div style={{
         background: 'var(--info-bg, #EFF6FF)',

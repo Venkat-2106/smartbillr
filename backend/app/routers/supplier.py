@@ -46,7 +46,7 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
-from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, friendly_db_error, check_required_headers, validate_upload_file, MAX_IMPORT_FILE_BYTES, bulk_import_scaffold
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, friendly_db_error, check_required_headers, validate_upload_file, MAX_IMPORT_FILE_BYTES, bulk_import_scaffold, make_tier_limit_fn
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from typing import Optional
 from datetime import datetime, timezone
@@ -364,6 +364,7 @@ async def import_suppliers(
         required_columns_update=[{"names": ["supp_name", "name", "Supplier Name"]}],
         upsert_fn=upsert,
         is_update_mode=is_update_mode,
+        tier_limit_fn=make_tier_limit_fn(db, current_user["business_id"], "max_suppliers", "suppliers"),
     )
 
 

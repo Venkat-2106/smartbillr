@@ -93,7 +93,7 @@ from app.utils.queries import fetch_stock_kpi_counts_async
 from app.utils.timestamp import fmt_ts
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
 from app.utils.subscription_features import check_feature_access
-from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, friendly_db_error, check_required_headers, validate_upload_file, MAX_IMPORT_FILE_BYTES, bulk_import_scaffold
+from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, friendly_db_error, check_required_headers, validate_upload_file, MAX_IMPORT_FILE_BYTES, bulk_import_scaffold, make_tier_limit_fn
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from sqlalchemy.exc import IntegrityError
 from typing import Optional
@@ -699,6 +699,7 @@ async def import_products(
         required_columns_update=[{"names": ["prod_name", "name", "Product Name"]}],
         upsert_fn=upsert,
         is_update_mode=is_update_mode,
+        tier_limit_fn=make_tier_limit_fn(db, current_user["business_id"], "max_products", "products"),
     )
 
 

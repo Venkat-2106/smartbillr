@@ -45,7 +45,11 @@ export function useStaff() {
     enabled:         !!user,
   })
 
-  const { data: summary } = useQuery({
+  const {
+    data: summary,
+    isLoading: isSummaryLoading,
+    isError: isSummaryError,
+  } = useQuery({
     queryKey: ['staff-summary'],
     queryFn: fetchStaffSummary,
     staleTime: 60_000,
@@ -62,6 +66,7 @@ export function useStaff() {
     || (managerLimit > 0 && (summary?.manager_count ?? 0) < managerLimit)
 
   const canAddAnyRole = canAddStaff || canAddManager
+  const summaryLoaded = !isSummaryLoading && !isSummaryError && !!summary
 
   const items      = serverData?.items      ?? []
   const pagination = serverData?.pagination ?? {}
@@ -136,5 +141,8 @@ export function useStaff() {
     canAddStaff,
     canAddManager,
     canAddAnyRole,
+    isSummaryLoading,
+    isSummaryError,
+    summaryLoaded,
   }
 }

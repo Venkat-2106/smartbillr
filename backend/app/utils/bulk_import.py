@@ -207,6 +207,35 @@ async def check_bulk_create_allowed(
     return requested_count, None
 
 
+def make_tier_limit_fn(db, business_id, limit_key, table, date_column=None):
+    """
+    Returns a tier_limit_fn closure suitable for passing to bulk_import_scaffold.
+
+    Usage in any import endpoint:
+        tier_limit_fn=make_tier_limit_fn(db, current_user["business_id"], "max_products", "products"),
+
+    The returned async function:
+      - Fetches the business's subscription_type
+      - Calls check_bulk_create_allowed to see how many rows fit under the plan limit
+      - Returns (all_rows, None) if all fit
+      - Returns (partial_rows, warning_msg) if only some fit
+      - Returns ([], error_msg) if none fit
+    """
+    async def _tier_limit_fn(valid_rows):
+        from app.utils.usage_limits import fetch_subscription_type_async
+        sub_type = await fetch_subscription_type_async(db, business_id)
+        requested = len(valid_rows)
+        allowed, msg = await check_bulk_create_allowed(
+            db, business_id, sub_type, limit_key, table, requested, date_column,
+        )
+        if allowed >= requested:
+            return valid_rows, None
+        if allowed > 0:
+            return valid_rows[:allowed], msg
+        return [], msg
+    return _tier_limit_fn
+
+
 def chunk_list(items: list, size: int = CHUNK_SIZE):
     for i in range(0, len(items), size):
         yield items[i:i + size]

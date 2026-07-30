@@ -127,6 +127,9 @@ export default function StaffPage() {
     canAddStaff,
     canAddManager,
     canAddAnyRole,
+    isSummaryLoading,
+    isSummaryError,
+    summaryLoaded,
   } = useStaff()
 
   const [bannerDismissed, setBannerDismissed] = useState(false)
@@ -245,7 +248,7 @@ export default function StaffPage() {
             value={search}
             onChange={setSearch}
             onSearch={setSearch}
-            placeholder="Search by name or email\u2026"
+            placeholder="Search by name or email"
             width="260px"
           />
           <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>
@@ -274,11 +277,17 @@ export default function StaffPage() {
                 </svg>
               }
               onClick={handleOpenAdd}
-              disabled={!canAddAnyRole}
-              title={!canAddAnyRole ? 'Upgrade your plan to add team members' : 'Add Staff Member'}
+              disabled={summaryLoaded && !canAddAnyRole}
+              title={
+                isSummaryLoading
+                  ? 'Loading team limits\u2026'
+                  : !canAddAnyRole && summaryLoaded
+                    ? 'Upgrade your plan to add team members'
+                    : 'Add Staff Member'
+              }
               data-shortcut="new"
             >
-              Add Staff
+              {isSummaryLoading ? 'Loading\u2026' : 'Add Staff'}
             </Button>
           )}
         </div>
@@ -358,7 +367,7 @@ export default function StaffPage() {
             </FormField>
           </div>
 
-          {!canAddAnyRole && (
+          {summaryLoaded && !canAddAnyRole && (
             <UpgradePrompt
               variant="inline"
               feature="team members"
@@ -374,9 +383,9 @@ export default function StaffPage() {
                 const canAdd = r.value === 'staff' ? canAddStaff : canAddManager
                 const limit = r.value === 'staff' ? staffSummary?.limits?.staff : staffSummary?.limits?.manager
                 const used = r.value === 'staff' ? (staffSummary?.staff_count ?? 0) : (staffSummary?.manager_count ?? 0)
-                const suffix = limit !== null ? ` (${used}/${limit} used)` : ''
+                const suffix = limit != null ? ` (${used}/${limit} used)` : ''
                 return (
-                  <option key={r.value} value={r.value} disabled={!canAdd}>
+                  <option key={r.value} value={r.value} disabled={summaryLoaded && !canAdd}>
                     {r.label}{suffix}
                   </option>
                 )

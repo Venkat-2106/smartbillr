@@ -26,6 +26,8 @@ Any product-based business: retail shops, wholesale distributors, manufacturers,
 - **VAT / Sales Tax** — For non-Indian businesses
 - **No Tax** — Operate without tax calculation
 
+> The exact label shown (GST, VAT, Sales Tax, MwSt, TVA, etc.) is chosen automatically based on your business's country — you don't select it yourself.
+
 ### Core Features
 
 | Feature | Status |
@@ -47,7 +49,7 @@ Any product-based business: retail shops, wholesale distributors, manufacturers,
 | CSV Import / Export | ✓ |
 | Barcode Scanning | ✓ |
 | Subscription & Billing | ✓ |
-| Audit Logs | ✓ |
+| Audit Logs | ✓ (admin/manager only) |
 | Keyboard Shortcuts | ✓ |
 
 ---
@@ -57,11 +59,18 @@ Any product-based business: retail shops, wholesale distributors, manufacturers,
 ### Sign Up
 
 1. Go to the **Sign Up** page.
-2. Enter your **email address** and create a **password**.
+2. Fill in:
+   - **Business name**
+   - **Your name**
+   - **Email address**
+   - **Password** (minimum 8 characters)
+   - **Country** and **State** (required)
+   - **Phone number** and **Address** (optional)
 3. Click **Create Account**.
-4. You're logged in automatically and land on Login page.
 
-That's it. A business account is created for you and you're ready to go.
+Your business account is created. Check your email to sign in — you'll be redirected to the **Login** page.
+
+> A 30-day free trial is started automatically on signup. See **Plans & Pricing** for details.
 
 ### Log In
 
@@ -71,15 +80,17 @@ That's it. A business account is created for you and you're ready to go.
 
 ### Log Out
 
-1. Click your **name** at the bottom of the sidebar.
-2. Click **Sign Out**.
+1. Click the **Sign Out** icon at the bottom of the sidebar.
+2. Click **Yes, Sign Out** in the confirmation dialog.
+
+> You'll also be logged out automatically after 60 minutes of inactivity.
 
 ### Set Up Your Business (First Time)
 
-After signing up, set up your business details:
+Your business name, country, and state were already set during signup. To review or update them:
 
 1. Click **Settings** in the sidebar.
-2. On the **Business Info** tab, fill in:
+2. On the **Business Info** tab, update:
    - Business name
    - Phone number
    - Address
@@ -116,9 +127,9 @@ The Dashboard is the first page you see after logging in. It gives you a quick s
 
 - **KPI Cards** at the top: Total Revenue, Total Sales, Total Expenses, Net Profit
 - **Sales Trend Chart** showing revenue over time (switch between weekly, monthly, and yearly)
-- **Quick Action Cards** to jump to common tasks: Create Sale, Add Product, View Reports, Manage Stock
+- **Quick Action Cards** to jump to common tasks: New Sale, New Product, New Customer, New Purchase
 
-> If you're on a trial or **Basic** plan, financial KPIs (revenue, profit) are locked — you'll see an upgrade prompt instead.
+> If you're on a trial or **Basic** plan, financial KPIs (revenue, profit) are locked — you'll see an upgrade prompt instead. Staff-role users see this same locked view regardless of plan, since only Admin/Manager roles can view financial figures.
 
 ---
 
@@ -165,13 +176,14 @@ The Dashboard is the first page you see after logging in. It gives you a quick s
 3. In the panel, click **Delete**.
 4. Confirm by clicking **Delete** again.
 
+> Deleting a customer doesn't erase their history — their past invoices and payments stay intact. They just won't be selectable for new sales going forward.
+
 ### Import Customers from a File
 
 1. Go to **Customers**.
-2. Click **Import**.
-3. Upload a CSV file with your customer data.
-4. Review the results — any errors are shown so you can fix them.
-5. Click **Import**.
+2. Click **Import** — this opens a file picker.
+3. Select your CSV file. It uploads immediately.
+4. A confirmation appears showing how many rows were saved. If any rows had errors, a follow-up notification lists the first 10 (with row numbers) plus a count of any remaining errors.
 
 ### Export Customers
 
@@ -199,7 +211,11 @@ The Dashboard is the first page you see after logging in. It gives you a quick s
 
 ### Find, Edit, or Delete a Supplier
 
-Same as Customers — click a row in the list to open their details, then Edit or Delete from there.
+1. Go to **Suppliers**.
+2. Click a supplier's row in the list to open their details.
+3. Use the **Edit** or **Delete** buttons on the row to update or remove.
+
+> Deleting a supplier is a soft delete — their past purchases and history remain intact.
 
 ---
 
@@ -218,7 +234,7 @@ Same as Customers — click a row in the list to open their details, then Edit o
 2. Click the category row.
 3. Click **Edit** or **Delete**.
 
-> Deleting a category will also remove all products inside it. Make sure no active products are assigned to the category before deleting.
+> Deactivating a category will also deactivate all products linked to it. They remain in the database but are hidden from active use.
 
 ---
 
@@ -233,7 +249,7 @@ Same as Customers — click a row in the list to open their details, then Edit o
 | Field | Required | What to enter |
 |-------|----------|---------------|
 | Product Name | Yes | What you call this item |
-| Category | No | Pick from your categories |
+| Category | Yes | Pick from your categories |
 | Sell Price | Yes | What you sell it for |
 | Cost Price | Yes | What you paid for it |
 | MRP | No | Maximum retail price (if printed on the item) |
@@ -242,6 +258,7 @@ Same as Customers — click a row in the list to open their details, then Edit o
 | Low Stock Alert | No | Alert when stock falls below this number (default: 10) |
 | Tax Rate | No | Tax % to apply (e.g., 5, 12, 18) |
 | Unit | No | "pcs", "kg", "meter", etc. |
+| HSN/SAC Code | No | Tax classification code for GST reporting |
 
 4. Click **Save**.
 
@@ -269,9 +286,9 @@ Same as Customers — click a row in the list to open their details, then Edit o
 ### Import Products from a File
 
 1. Go to **Products**.
-2. Click **Import**.
-3. Upload a CSV file.
-4. Review and confirm.
+2. Click **Import** — this opens a file picker.
+3. Select your CSV file. It uploads immediately.
+4. A confirmation appears showing how many rows were saved, with errors shown for any invalid rows.
 
 ### Export Products
 
@@ -296,9 +313,10 @@ Use this when stock is wrong due to damage, theft, or a counting error.
 
 1. Go to **Stock** → **Current Stock**.
 2. Find the product and click **Adjust Stock**.
-3. Enter the **new quantity** (or the amount changed).
-4. Select the **reason** (damage, correction, etc.).
-5. Click **Save**.
+3. Choose the **adjustment type**: Add Stock, Remove Stock, or Set Exact Count.
+4. Enter the **quantity** (positive number).
+5. Optionally add **notes** (e.g., "Physical count correction").
+6. Click **Apply Adjustment**.
 
 ### View Stock Movements (History)
 
@@ -346,7 +364,7 @@ This is how you bill a customer.
 
 ### What Happens Next
 
-- The invoice gets a number: INV-001, INV-002, etc.
+- The invoice gets a number: INV-0001, INV-0002, etc.
 - Stock decreases automatically.
 - The sale appears in your **Sales** list.
 - If you recorded a payment, it shows in **Payments**.
@@ -539,7 +557,7 @@ Same flow as sales returns — go to **Purchase Returns** in the sidebar, click 
 | Payments | Collections, outstanding balances *(paid plans)* |
 | Audit | User activity log, login history, data changes |
 
-> Reports marked *(paid plans)* need an active **Pro**, **Pro Yearly**, or **Lifetime** subscription. You'll see an upgrade prompt if you're on the trial or **Basic** plan.
+> Profitability, Tax, Returns, and Payments tabs are only available on **Pro**, **Pro Yearly**, or **Lifetime** plans. On trial or **Basic** plans these tabs are hidden. If you navigate to them directly, you'll see an upgrade prompt.
 
 ---
 
@@ -580,9 +598,10 @@ After this, all invoices will calculate CGST, SGST, or IGST automatically based 
 3. Fill in:
    - **Name**
    - **Email**
-   - **Role**: Admin, Manager, or Staff
+   - **Password**
+   - **Role**: Manager or Staff
 4. Click **Save**.
-5. The staff member receives an email invitation to set up their account.
+5. The staff member can now log in with the credentials you set.
 
 ### What Each Role Can Do
 
@@ -595,12 +614,10 @@ After this, all invoices will calculate CGST, SGST, or IGST automatically based 
 ### Deactivate a Staff Member
 
 1. Go to **Staff**.
-2. Click the staff member's row.
-3. Click **Edit**.
-4. Set their status to **Inactive**.
-5. Click **Save**.
+2. Click **Deactivate** on the staff member's row.
+3. Confirm in the dialog.
 
-They won't be able to log in anymore.
+They won't be able to log in anymore. Their existing records are preserved.
 
 ---
 
@@ -632,7 +649,7 @@ Press `?` anywhere in the app to see the full shortcut list.
 
 ### Check Your Current Plan
 
-1. Click your name at the bottom of the sidebar, or go to **Settings** → **Pricing & Plans**.
+1. Go to **Settings** → **Pricing & Plans**.
 2. You'll see what plan you're on and when it expires.
 
 ### Upgrade Your Plan
@@ -708,15 +725,15 @@ Go to **Sales** → Click the invoice → Click **Process Return** → Choose it
 
 ### How do I fix incorrect stock levels?
 
-Go to **Stock** → **Current Stock** → Find the product → Click **Adjust Stock** → Enter the correct quantity → Choose a reason → Click **Save**.
+Go to **Stock** → **Current Stock** → Find the product → Click **Adjust Stock** → Choose adjustment type (Add/Remove/Set Exact Count) → Enter the quantity → Add optional notes → Click **Apply Adjustment**.
 
 ### How do I add a staff member?
 
-Go to **Staff** (only available if you're the admin) → Click **Add Staff** → Enter their name, email, and choose a role → Click **Save**. They'll get an email invitation.
+Go to **Staff** (only available if you're the admin) → Click **Add Staff** → Enter their name, email, password, and choose a role (Manager or Staff) → Click **Save**. They can log in immediately with the credentials you set.
 
 ### Why can't I see financial data?
 
-Financial reports and product profit information are only available on **Pro**, **Pro Yearly**, or **Lifetime** plans. The **Basic** plan does not include them. Upgrade from the **Pricing** page to unlock them.
+Financial reports and product profit information are only available on **Pro**, **Pro Yearly**, or **Lifetime** plans. The **Basic** plan does not include them. Staff-role users also cannot see financial data regardless of plan. Upgrade from the **Pricing** page to unlock them.
 
 ### Can I edit an expense after creating it?
 

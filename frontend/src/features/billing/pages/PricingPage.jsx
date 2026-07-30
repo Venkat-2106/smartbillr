@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useMemo } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { usePlans, useCheckout } from '../hooks/useCheckout'
 import useAuthStore from '../../../store/authStore'
@@ -80,6 +80,15 @@ export default function PricingPage() {
   const isLoggedIn = !!user
   const country = useAuthStore((s) => s.business)?.business_country_code || 'IN'
   const isIndia = country.toUpperCase() === 'IN'
+
+  const [searchParams] = useSearchParams()
+
+  useEffect(() => {
+    if (searchParams.get('cancelled') === '1') {
+      toast.error('Checkout cancelled. You can try again anytime.')
+      navigate('/pricing', { replace: true })
+    }
+  }, [])
 
   const { data: plansData, isLoading, isError, refetch } = usePlans()
   const { mutate: startCheckout, isPending } = useCheckout()

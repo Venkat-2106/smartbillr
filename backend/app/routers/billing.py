@@ -194,7 +194,7 @@ async def create_checkout(
             amount_usd=float(plan.price_usd),
             plan_name=plan.display_name,
             success_url=f"{FRONTEND_URL}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{FRONTEND_URL}/billing?cancelled=1",
+            cancel_url=f"{FRONTEND_URL}/pricing?cancelled=1",
             client_reference_id=bid,
             customer_email=business.business_email,
         )

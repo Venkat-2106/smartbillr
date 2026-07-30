@@ -214,7 +214,8 @@ async def _check_subscription_for_user_async(user_id: str, db) -> tuple[dict | N
                     subscription_type,
                     subscription_end_at,
                     trial_end_at,
-                    is_active
+                    is_active,
+                    grace_period_end_at
                 FROM businesses
                 WHERE business_id = CAST(:bid AS uuid)
                   AND (is_deleted = false OR is_deleted IS NULL)
@@ -261,18 +262,23 @@ async def _check_subscription_for_user_async(user_id: str, db) -> tuple[dict | N
                     "subscription_end_at": sub_end.isoformat() if sub_end else None,
                 }
 
+        grace_end = row.grace_period_end_at
         if result_error is None and row.payment_status in ("paid", "suspended"):
             expired = now > sub_end if sub_end else False
             if expired or row.payment_status == "suspended":
-                result_error = {
-                    "error_code": "SUBSCRIPTION_EXPIRED",
-                    "status": "subscription_expired",
-                    "message": "Subscription has expired. Please renew to continue.",
-                    "payment_status": row.payment_status,
-                    "subscription_type": subscription_type,
-                    "trial_end_at": trial_end.isoformat() if trial_end else None,
-                    "subscription_end_at": sub_end.isoformat() if sub_end else None,
-                }
+                # Allow access during grace period
+                if expired and grace_end is not None and now <= grace_end:
+                    pass
+                else:
+                    result_error = {
+                        "error_code": "SUBSCRIPTION_EXPIRED",
+                        "status": "subscription_expired",
+                        "message": "Subscription has expired. Please renew to continue.",
+                        "payment_status": row.payment_status,
+                        "subscription_type": subscription_type,
+                        "trial_end_at": trial_end.isoformat() if trial_end else None,
+                        "subscription_end_at": sub_end.isoformat() if sub_end else None,
+                    }
 
         if result_error is None and row.payment_status not in ("pending", "paid", "suspended"):
             logging.warning(

@@ -6,8 +6,9 @@ Design principles:
     modifies it. Super admins set is_active = false to suspend a business.
   - Expired trials: log a warning only — do NOT modify anything. The
     subscription middleware will block access by checking trial_end_at.
-  - Expired paid subscriptions: set payment_status = 'suspended' so the
-    middleware blocks access with status SUSPENDED.
+  - Expired paid subscriptions: grant a 3-day grace period via
+    grace_period_end_at before suspending access. During the grace period
+    the middleware still allows access with a warning flag.
   - Only super admin can re-activate (set is_active = true, update
     payment_status, etc.).
 
@@ -15,7 +16,7 @@ Run this via APScheduler, cron, or a scheduled task.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import text
 from app.database import SessionLocal
 
@@ -64,25 +65,41 @@ def expire_subscriptions(db_session=None):
                 row.business_id, row.business_name,
             )
 
-        # Suspend expired paid subscriptions
-        result_sub = db.execute(
+        # Phase 1 — First expiry: set grace_period_end_at, keep payment_status = 'paid'
+        result_grace = db.execute(
+            text("""
+                UPDATE businesses
+                SET grace_period_end_at = :grace_end
+                WHERE (is_deleted = false OR is_deleted IS NULL)
+                  AND payment_status = 'paid'
+                  AND subscription_end_at IS NOT NULL
+                  AND subscription_end_at < :now
+                  AND grace_period_end_at IS NULL
+            """),
+            {"now": now, "grace_end": now + timedelta(days=3)},
+        )
+        grace_count = result_grace.rowcount
+
+        # Phase 2 — Grace period expired: suspend access
+        result_suspend = db.execute(
             text("""
                 UPDATE businesses
                 SET payment_status = 'suspended'
                 WHERE (is_deleted = false OR is_deleted IS NULL)
                   AND payment_status = 'paid'
-                  AND subscription_end_at IS NOT NULL
-                  AND subscription_end_at < :now
+                  AND grace_period_end_at IS NOT NULL
+                  AND grace_period_end_at < :now
             """),
             {"now": now},
         )
-        sub_count = result_sub.rowcount
+        suspend_count = result_suspend.rowcount
 
         db.commit()
 
         logger.info(
-            "Subscription expiry complete: %d expired trials logged, %d subscriptions suspended",
-            trial_count, sub_count,
+            "Subscription expiry complete: %d expired trials logged, "
+            "%d grace periods started, %d subscriptions suspended",
+            trial_count, grace_count, suspend_count,
         )
 
     except Exception as e:

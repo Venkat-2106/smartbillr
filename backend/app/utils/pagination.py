@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db, get_async_db
 from app.middleware.auth import verify_token
 from app.utils.usage_limits import fetch_subscription_type, fetch_subscription_type_async
-from app.utils.subscription_features import get_feature_limits
+from app.utils.subscription_features import get_feature_limits, get_feature_limits_async
 
 
 def paginate(
@@ -26,7 +26,7 @@ def paginate(
     # Apply tier-based export row cap
     business_id = current_user["business_id"]
     sub_type = fetch_subscription_type(db, business_id)
-    tier_limits = get_feature_limits(sub_type)
+    tier_limits = get_feature_limits(sub_type, db=db)
     max_rows = tier_limits.get("max_export_rows")
     capped = False
     if max_rows is not None and limit > max_rows:
@@ -61,7 +61,7 @@ async def paginate_async(
     """
     business_id = current_user["business_id"]
     sub_type = await fetch_subscription_type_async(db, business_id)
-    tier_limits = get_feature_limits(sub_type)
+    tier_limits = await get_feature_limits_async(sub_type, db=db)
     max_rows = tier_limits.get("max_export_rows")
     capped = False
     if max_rows is not None and limit > max_rows:

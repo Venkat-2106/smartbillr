@@ -27,7 +27,7 @@ def upgrade() -> None:
                 'one_time',
                 14999,
                 299,
-                '{"max_products": -1, "max_customers": -1, "max_sales_monthly": -1, "max_staff": -1, "financial_reports": true, "product_profit_view": true}',
+                '{"max_products": null, "max_customers": null, "max_suppliers": null, "max_sales_per_month": null, "max_purchases_per_month": null, "max_export_rows": 10000, "max_staff": null, "financial_reports": true, "product_profit_view": true}',
                 4
             )
             ON CONFLICT (plan_code) DO NOTHING

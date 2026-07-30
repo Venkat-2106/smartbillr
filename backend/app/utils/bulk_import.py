@@ -24,7 +24,7 @@ import csv
 import io
 import logging
 from sqlalchemy.exc import IntegrityError, DataError, ProgrammingError
-from app.utils.subscription_features import get_feature_limits
+from app.utils.subscription_features import get_feature_limits, get_feature_limits_async
 from app.utils.usage_limits import count_entities_async, count_monthly_async
 
 logger = logging.getLogger(__name__)
@@ -175,7 +175,7 @@ async def check_bulk_create_allowed(
       - 0 < allowed_count < requested_count, message=<warning>  → partial import
       - allowed_count == 0, message=<error>                     → nothing fits
     """
-    limits = get_feature_limits(subscription_type)
+    limits = await get_feature_limits_async(subscription_type, db=db)
     max_val = limits.get(limit_key)
 
     if max_val is None:

@@ -26,7 +26,7 @@ function formatFeatures(featureLimits) {
       if (key === 'product_profit_view') return value ? 'Product profit view' : null
       const label = FEATURE_LABELS[key]
       if (!label) return null
-      if (value === -1) return `Unlimited ${label}`
+      if (value === -1 || value === null) return `Unlimited ${label}`
       return `${Number(value).toLocaleString()} ${label}`
     })
     .filter(Boolean)

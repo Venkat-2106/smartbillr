@@ -61,8 +61,39 @@ TIER_FEATURES = {
     },
 }
 
+from sqlalchemy import text
 
-def get_feature_limits(subscription_type: str) -> dict:
+
+def _normalize_limits(limits: dict) -> dict:
+    return {k: (None if v == -1 else v) for k, v in limits.items()}
+
+
+def get_feature_limits(subscription_type: str, db=None) -> dict:
+    if db is not None:
+        try:
+            result = db.execute(
+                text("SELECT feature_limits FROM plans WHERE plan_code = :code"),
+                {"code": subscription_type},
+            )
+            row = result.fetchone()
+            if row and row.feature_limits:
+                return _normalize_limits(dict(row.feature_limits))
+        except Exception:
+            pass
+    return TIER_FEATURES.get(subscription_type, TIER_FEATURES["trial"])
+
+
+async def get_feature_limits_async(subscription_type: str, db) -> dict:
+    try:
+        result = await db.execute(
+            text("SELECT feature_limits FROM plans WHERE plan_code = :code"),
+            {"code": subscription_type},
+        )
+        row = result.fetchone()
+        if row and row.feature_limits:
+            return _normalize_limits(dict(row.feature_limits))
+    except Exception:
+        pass
     return TIER_FEATURES.get(subscription_type, TIER_FEATURES["trial"])
 
 

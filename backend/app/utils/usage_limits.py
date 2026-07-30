@@ -2,7 +2,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
-from app.utils.subscription_features import get_feature_limits
+from app.utils.subscription_features import get_feature_limits, get_feature_limits_async
 
 ALLOWED_COUNT_TABLES = {"products", "purchases", "suppliers", "sales", "customers"}
 
@@ -46,7 +46,7 @@ def check_create_allowed(
     table: str,
     date_column: str = None,
 ) -> tuple:
-    limits = get_feature_limits(subscription_type)
+    limits = get_feature_limits(subscription_type, db=db)
     max_val = limits.get(limit_key)
 
     if max_val is None:
@@ -118,7 +118,7 @@ async def check_create_allowed_async(
     table: str,
     date_column: str = None,
 ) -> tuple:
-    limits = get_feature_limits(subscription_type)
+    limits = await get_feature_limits_async(subscription_type, db=db)
     max_val = limits.get(limit_key)
 
     if max_val is None:

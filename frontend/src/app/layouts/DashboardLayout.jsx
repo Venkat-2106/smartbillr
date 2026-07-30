@@ -15,6 +15,7 @@ import { useShortcutContext } from '../../shared/hooks/useShortcut'
 import CommandPalette from '../../shared/components/CommandPalette'
 import ShortcutHelp from '../../shared/components/ShortcutHelp'
 import SubscriptionBanner from '../../features/subscription/components/SubscriptionBanner'
+import { getSubscriptionDisplayName } from '../../shared/utils/subscriptionUtils'
 
 // ── Static SVG icons (hoisted to module scope) ──────────────────────────────────
 // Why: Inline JSX SVGs are re-created as new element trees on every render.
@@ -201,6 +202,7 @@ const userNameStyle = {
 }
 
 const userRoleStyle = { fontSize: '0.6rem', color: 'var(--sb-text-muted)', margin: 0 }
+const userPlanStyle = { fontSize: '0.55rem', color: 'var(--accent-600)', margin: '1px 0 0', fontWeight: 600 }
 
 const signOutBtnStyle = {
   background: 'rgba(239,68,68,0.08)',
@@ -634,7 +636,7 @@ export default function DashboardLayout() {
   useIdleLogout()
 
   const { theme, setTheme, accent, setAccent } = useTheme()
-  const { user, business, profile } = useAuthStore()
+  const { user, business, profile, subscription } = useAuthStore()
   // FIX (LOW-9 cleanup): permissions lives at profile.permissions, not a top-level
   // store field. The old s.permissions was always undefined → crashed .includes().
   // Computed inside visibleNav useMemo to avoid a new [] reference every render.
@@ -870,6 +872,11 @@ export default function DashboardLayout() {
                 <p style={userRoleStyle}>
                   {userRole}
                 </p>
+                {subscription?.subscription_type && (
+                  <p style={userPlanStyle}>
+                    {getSubscriptionDisplayName(subscription.subscription_type)}
+                  </p>
+                )}
               </div>
               <button
                 onClick={() => setShowLogout(true)}

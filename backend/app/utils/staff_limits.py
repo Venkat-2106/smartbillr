@@ -1,8 +1,9 @@
 STAFF_LIMITS = {
     "trial":     {"staff": 0,    "manager": 0},
     "basic":     {"staff": 2,    "manager": 1},
-    "pro":       {"staff": None, "manager": None},
-    "pro_yearly": {"staff": None, "manager": None},
+    "pro":       {"staff": 10,   "manager": 10},
+    "pro_yearly": {"staff": 10,  "manager": 10},
+    "lifetime":  {"staff": None, "manager": None},
 }
 
 

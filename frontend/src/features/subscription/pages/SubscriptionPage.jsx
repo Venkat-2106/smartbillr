@@ -6,9 +6,11 @@
 import { useNavigate } from 'react-router-dom'
 import { Spinner, Button } from '../../../shared/components'
 import { useSubscription } from '../hooks/useSubscription'
+import { useCheckout } from '../../billing/hooks/useCheckout'
 import useAuthStore from '../../../store/authStore'
 import { useMemo } from 'react'
 import { formatDate } from '../../../shared/utils/formatDate'
+import toast from 'react-hot-toast'
 import {
   SUBSCRIPTION_DISPLAY_NAMES as DISPLAY_NAMES,
   PLAN_ORDER, NEXT_TIER,
@@ -30,10 +32,11 @@ const FEATURES = [
 ]
 
 const STAFF_LIMITS_PLANS = {
-  trial:   { staff: 0,    manager: 0 },
-  monthly: { staff: 2,    manager: 1 },
-  annual:  { staff: null, manager: null },
-  lifetime: { staff: null, manager: null },
+  trial:     { staff: 0,    manager: 0 },
+  basic:     { staff: 2,    manager: 1 },
+  pro:       { staff: 10,   manager: 10 },
+  pro_yearly: { staff: 10,  manager: 10 },
+  lifetime:  { staff: null, manager: null },
 }
 
 const FEATURE_LIMITS_PLANS = {
@@ -44,14 +47,21 @@ const FEATURE_LIMITS_PLANS = {
     reports: false, profit: false,
     support: 'Email',
   },
-  monthly: {
+  basic: {
+    billing: 'Monthly',
+    products: 500, customers: 500, suppliers: null,
+    sales: 2000, purchases: null, exports: 10_000,
+    reports: false, profit: false,
+    support: 'Email + WhatsApp',
+  },
+  pro: {
     billing: 'Monthly',
     products: null, customers: null, suppliers: null,
     sales: null, purchases: null, exports: 10_000,
     reports: true, profit: true,
     support: 'Email + WhatsApp',
   },
-  annual: {
+  pro_yearly: {
     billing: 'Yearly',
     products: null, customers: null, suppliers: null,
     sales: null, purchases: null, exports: 10_000,
@@ -68,10 +78,11 @@ const FEATURE_LIMITS_PLANS = {
 }
 
 const PRICING = {
-  trial:   { inr: 'Free',               usd: 'Free' },
-  monthly: { inr: '₹499/month',         usd: '$9.99/month' },
-  annual:  { inr: '₹4,999/year',        usd: '$99/year',        inrSub: '≈₹416/month', usdSub: '≈$8.25/month' },
-  lifetime:{ inr: '₹14,999',            usd: '$299' },
+  trial:     { inr: 'Free',                usd: 'Free' },
+  basic:     { inr: '₹499/month',          usd: '$9.99/month' },
+  pro:       { inr: '₹999/month',          usd: '$19/month' },
+  pro_yearly: { inr: '₹4,999/year',        usd: '$99/year',        inrSub: '≈₹416/month', usdSub: '≈$8.25/month' },
+  lifetime:  { inr: '₹14,999',             usd: '$299' },
 }
 
 function getPlanData(tier) {
@@ -97,15 +108,53 @@ function FeatureValue({ val }) {
 export default function SubscriptionPage() {
   const navigate = useNavigate()
   const { data: sub, isLoading } = useSubscription()
-  const token = useAuthStore(s => s.token)
+  const user = useAuthStore(s => s.user)
   const business = useAuthStore(s => s.business)
   const country = business?.business_country_code || 'IN'
+  const isLoggedIn = !!user
 
-  const isLoggedIn = !!token
   const currentTier = sub?.subscription_type || 'trial'
   const nextTier = sub && NEXT_TIER[currentTier]
-
   const isNativeINR = country === 'IN'
+
+  const { mutate: startCheckout, isPending } = useCheckout()
+
+  function openRazorpayCheckout(data) {
+    const options = {
+      key: data.razorpay_key_id,
+      amount: data.amount,
+      currency: data.currency,
+      order_id: data.razorpay_order_id,
+      handler: function () {
+        navigate(`/billing/success?payment_id=${data.payment_id}`)
+      },
+      modal: {
+        ondismiss: () => {
+          toast.error('Checkout cancelled. You can try again anytime.')
+        },
+      },
+    }
+    const rzp = new window.Razorpay(options)
+    rzp.open()
+  }
+
+  function handleSubscribe(planCode) {
+    if (!isLoggedIn) {
+      navigate(`/signup?plan=${planCode}`)
+      return
+    }
+    if (planCode === 'trial') return
+    const billingCycle = planCode === 'pro_yearly' ? 'yearly' : planCode === 'lifetime' ? 'one_time' : 'monthly'
+    startCheckout({ planCode, billingCycle }, {
+      onSuccess: (data) => {
+        if (data.provider === 'razorpay') {
+          openRazorpayCheckout(data)
+        } else if (data.checkout_url) {
+          window.location.href = data.checkout_url
+        }
+      },
+    })
+  }
 
   const plans = useMemo(() => PLAN_ORDER.map((tier) => ({
     id: tier,
@@ -424,6 +473,43 @@ export default function SubscriptionPage() {
               ))}
             </div>
           ))}
+
+          {/* ── Action buttons row ── */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: `200px repeat(${plans.length}, 1fr)`,
+          }}>
+            <div style={{ padding: '16px 16px' }} />
+            {plans.map((p) => (
+              <div key={p.id} style={{
+                padding: '16px 12px 20px',
+                textAlign: 'center',
+                background: p.isCurrent ? 'var(--accent-50)' : 'transparent',
+              }}>
+                {p.isCurrent ? (
+                  <span style={{
+                    display: 'inline-block',
+                    fontSize: 12, fontWeight: 600, color: 'var(--accent-600)',
+                    background: 'var(--accent-50)',
+                    border: '1px solid var(--accent-200)',
+                    borderRadius: 6, padding: '6px 14px',
+                  }}>
+                    Current Plan
+                  </span>
+                ) : (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => handleSubscribe(p.id)}
+                    disabled={isPending}
+                    style={{ width: '100%', maxWidth: 160 }}
+                  >
+                    {isPending ? <Spinner size={14} /> : (!isLoggedIn ? 'Get Started' : 'Subscribe')}
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* ── Contact support ── */}

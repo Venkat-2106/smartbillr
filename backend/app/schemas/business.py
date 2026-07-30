@@ -157,12 +157,12 @@ class SubscriptionResponse(BaseModel):
 
 
 VALID_PAYMENT_STATUSES = ("pending", "paid", "suspended")
-VALID_SUBSCRIPTION_TYPES = ("trial", "monthly", "annual", "lifetime")
+VALID_SUBSCRIPTION_TYPES = ("trial", "basic", "pro", "pro_yearly", "lifetime")
 
 
 class SubscriptionUpdate(BaseModel):
     payment_status: Optional[Literal["pending", "paid", "suspended"]] = None
-    subscription_type: Optional[Literal["trial", "monthly", "annual", "lifetime"]] = None
+    subscription_type: Optional[Literal["trial", "basic", "pro", "pro_yearly", "lifetime"]] = None
     subscription_start_at: Optional[datetime] = None
     subscription_end_at: Optional[datetime] = None
     is_active: Optional[bool] = None

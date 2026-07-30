@@ -49,6 +49,16 @@ TIER_FEATURES = {
         "financial_reports": True,
         "product_profit_view": True,
     },
+    "lifetime": {
+        "max_products": None,
+        "max_customers": None,
+        "max_suppliers": None,
+        "max_sales_per_month": None,
+        "max_purchases_per_month": None,
+        "max_export_rows": 10_000,
+        "financial_reports": True,
+        "product_profit_view": True,
+    },
 }
 
 

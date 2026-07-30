@@ -201,7 +201,7 @@ async def create_staff(
             )).scalar() or 0
 
             if current_count >= role_limit:
-                upgrade_tier = "Pro" if subscription_type == "monthly" else "a higher plan"
+                upgrade_tier = "Pro" if subscription_type == "basic" else "a higher plan"
                 return error_response(
                     f"Your {subscription_type.capitalize()} plan allows a maximum of {role_limit} "
                     f"{'staff member' if role_limit == 1 else 'staff members'} "

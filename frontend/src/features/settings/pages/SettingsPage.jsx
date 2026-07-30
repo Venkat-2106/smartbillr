@@ -180,7 +180,7 @@ export default function SettingsPage() {
                     </div>
 
                     <h2 style={{ fontSize: 20, fontWeight: 600, margin: '0 0 4px', color: 'var(--text-primary)' }}>
-                      {sub ? (DISPLAY_NAMES[sub.subscription_type] || 'Trial') : 'Trial'}
+                      Your current plan is {sub ? (DISPLAY_NAMES[sub.subscription_type] || 'Trial') : 'Trial'}
                     </h2>
                     <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--text-secondary)' }}>
                       {sub?.is_expired

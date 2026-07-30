@@ -1,16 +1,20 @@
 export const SUBSCRIPTION_DISPLAY_NAMES = {
-  trial:    'Trial',
-  monthly:  'Premium',
-  annual:   'Pro',
-  lifetime: 'Lifetime',
+  trial:     'Trial',
+  basic:     'Basic',
+  monthly:   'Basic',
+  pro:       'Pro',
+  annual:    'Pro',
+  pro_yearly: 'Pro Yearly',
+  lifetime:  'Lifetime',
 }
 
-export const PLAN_ORDER = ['trial', 'monthly', 'annual', 'lifetime']
+export const PLAN_ORDER = ['trial', 'basic', 'pro', 'pro_yearly', 'lifetime']
 
 export const NEXT_TIER = {
-  trial:    'monthly',
-  monthly:  'annual',
-  annual:   'lifetime',
+  trial:    'basic',
+  basic:    'pro',
+  pro:      'pro_yearly',
+  pro_yearly: 'lifetime',
 }
 
 export function getSubscriptionDisplayName(type) {

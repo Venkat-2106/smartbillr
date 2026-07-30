@@ -1,3 +1,19 @@
+# ARCHITECTURE NOTE — Two sources of truth, by design:
+#
+#   Numeric usage caps (max_products, max_customers, max_sales_per_month,
+#   etc.) are driven by plans.feature_limits in the DB.  get_feature_limits()
+#   queries the DB when a session is available and falls back to this dict
+#   only when no DB session is in scope.
+#
+#   Boolean feature gates below — financial_reports and product_profit_view —
+#   are intentionally NOT DB-driven.  They are structural entitlement flags
+#   tied to permission codes, not usage limits an admin should be able to
+#   silently flip via a DB edit.  check_feature_access() uses this dict's
+#   values directly and does not accept a db argument.
+#
+#   If you add a new boolean gate here also add its permission_map entry in
+#   check_feature_access() below.
+#
 TIER_FEATURES = {
     "suspended": {
         "max_products": 0,
@@ -98,6 +114,7 @@ async def get_feature_limits_async(subscription_type: str, db) -> dict:
 
 
 def check_feature_access(current_user: dict, feature_key: str) -> dict:
+    """Intentionally uses TIER_FEATURES dict, not DB — see ARCHITECTURE NOTE above."""
     permission_map = {
         "financial_reports": "dashboard.financial",
         "product_profit_view": "view_product_profit",

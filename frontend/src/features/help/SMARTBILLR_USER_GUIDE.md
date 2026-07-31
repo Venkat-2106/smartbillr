@@ -164,17 +164,15 @@ The Dashboard is the first page you see after logging in. It gives you a quick s
 ### Edit a Customer
 
 1. Go to **Customers**.
-2. Click the customer's row.
-3. In the panel, click **Edit**.
-4. Update the fields you need.
-5. Click **Save**.
+2. Click **Edit** directly on the customer's row.
+3. Update the fields you need.
+4. Click **Save**.
 
 ### Delete a Customer
 
 1. Go to **Customers**.
-2. Click the customer's row.
-3. In the panel, click **Delete**.
-4. Confirm by clicking **Delete** again.
+2. Click **Delete** directly on the customer's row.
+3. Confirm by clicking **Delete** again.
 
 > Deleting a customer doesn't erase their history — their past invoices and payments stay intact. They just won't be selectable for new sales going forward.
 
@@ -217,6 +215,19 @@ The Dashboard is the first page you see after logging in. It gives you a quick s
 
 > Deleting a supplier is a soft delete — their past purchases and history remain intact.
 
+### Import Suppliers from a File
+
+1. Go to **Suppliers**.
+2. Click **Import** — this opens a file picker.
+3. Select your CSV file. It uploads immediately.
+4. A confirmation appears showing how many rows were saved. If any rows had errors, a follow-up notification lists the first 10 (with row numbers) plus a count of any remaining errors.
+
+### Export Suppliers
+
+1. Go to **Suppliers**.
+2. Click **Export**.
+3. A CSV file downloads to your computer.
+
 ---
 
 ## Categories
@@ -228,13 +239,20 @@ The Dashboard is the first page you see after logging in. It gives you a quick s
 3. Enter a name (e.g., "Beverages", "Electronics").
 4. Click **Save**.
 
+### View a Category
+
+Click a category's row to open a panel listing every product assigned to it. Use the **Print** button in the panel to print that product list.
+
 ### Edit or Delete a Category
 
 1. Go to **Categories**.
-2. Click the category row.
-3. Click **Edit** or **Delete**.
+2. Click **Edit** or **Delete** directly on the category's row.
 
 > Deactivating a category will also deactivate all products linked to it. They remain in the database but are hidden from active use.
+
+### Import / Export Categories
+
+Same pattern as Customers and Suppliers: click **Import** to upload a CSV (uploads immediately, errors reported afterward), or **Export** to download your current category list as CSV.
 
 ---
 
@@ -271,17 +289,15 @@ The Dashboard is the first page you see after logging in. It gives you a quick s
 ### Edit a Product
 
 1. Go to **Products**.
-2. Click the product row.
-3. Click **Edit**.
-4. Make your changes.
-5. Click **Save**.
+2. Click **Edit** directly on the product's row.
+3. Make your changes.
+4. Click **Save**.
 
 ### Delete a Product
 
 1. Go to **Products**.
-2. Click the product row.
-3. Click **Delete**.
-4. Confirm.
+2. Click **Delete** directly on the product's row.
+3. Confirm.
 
 ### Import Products from a File
 

@@ -271,6 +271,11 @@ async def update_business_subscription(
         logging.exception(e)
         return error_response("Failed to update subscription", 500)
 
+    # Invalidate caches after a manual upgrade — mirrors update_business_status() below.
+    # Without these, the middleware subscription cache (60s TTL) and the business-users
+    # cache would keep serving the old plan/limits to staff for up to a minute after a
+    # superadmin change, so a downgrade would keep granting old limits (and a paid
+    # upgrade would not take effect immediately).
     clear_business_users_cache(business_id)
     clear_subscription_business_cache(business_id)
 

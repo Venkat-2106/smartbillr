@@ -239,8 +239,9 @@ async def update_business_subscription(
     if not existing:
         return error_response("Business not found", 404)
 
+    # Note: current_plan_id / payment_provider / last_renewed_at are payment-flow-only fields — no manual-admin equivalent, intentionally not settable here.
     ALLOWED_COLUMNS = {"payment_status", "subscription_type", "subscription_start_at",
-                       "subscription_end_at", "is_active"}
+                       "subscription_end_at", "is_active", "grace_period_end_at"}
 
     update_data = payload.model_dump(exclude_unset=True)
     if not update_data:
@@ -249,6 +250,11 @@ async def update_business_subscription(
     invalid = set(update_data.keys()) - ALLOWED_COLUMNS
     if invalid:
         return error_response(f"Invalid fields: {invalid}", 400)
+
+    # Mirror activate_subscription(): a manual upgrade to paid must clear any stale grace period,
+    # otherwise middleware still treats the business as in-grace after the admin granted paid access.
+    if update_data.get("payment_status") == "paid":
+        update_data["grace_period_end_at"] = None
 
     set_clause = ", ".join(f"{k} = :{k}" for k in update_data)
     update_data["bid"] = business_id
@@ -264,6 +270,9 @@ async def update_business_subscription(
         import logging
         logging.exception(e)
         return error_response("Failed to update subscription", 500)
+
+    clear_business_users_cache(business_id)
+    clear_subscription_business_cache(business_id)
 
     return success_response({"message": "Subscription updated successfully"})
 

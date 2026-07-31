@@ -82,7 +82,7 @@ function buildProductPrintHTML(business, product, detail, summary, stockHistory,
   const stockCols = [
     { label: 'Event',      key: 'event',       align: 'left' },
     { label: 'Invoice #',  key: 'invoice_no',  align: 'left', format: v => v || '—' },
-    { label: 'Change',     key: 'qty_changed',  align: 'center', format: (v, row) => {
+    { label: 'Change',     key: 'qty_changed',  align: 'center', html: true, format: (v, row) => {
         const isIn  = row.direction === 'in'
         const color = isIn ? '#10B981' : '#EF4444'
         return `<span style="font-weight:700;color:${color};">${isIn ? '+' : '-'}${v}</span>`

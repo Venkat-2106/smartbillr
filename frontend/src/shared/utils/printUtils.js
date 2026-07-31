@@ -401,7 +401,7 @@ export function buildPrintSectionTitle(title) {
 /**
  * Builds a generic print table.
  *
- * @param {Array<{label: string, key: string, align?: string, format?: fn}>} columns
+ * @param {Array<{label: string, key: string, align?: string, format?: fn, html?: boolean}>} columns
  * @param {Array<object>} rows
  * @param {string} [emptyMessage]
  */
@@ -429,6 +429,9 @@ export function buildPrintTable(columns, rows, emptyMessage = 'No records found.
     const cells = columns.map(col => {
       const raw = row[col.key];
       const val = col.format ? col.format(raw, row) : (raw ?? '—');
+      // Columns marked `html: true` carry trusted markup (e.g. status badges)
+      // and must NOT go through escapeHTML — everything else stays escaped.
+      const content = col.html ? val : escapeHTML(val);
       return `
         <td style="
           text-align: ${col.align || 'left'};
@@ -436,7 +439,7 @@ export function buildPrintTable(columns, rows, emptyMessage = 'No records found.
           font-size: 10.5px;
           color: #111827;
           border-bottom: 1px solid #f3f4f6;
-        ">${escapeHTML(val)}</td>
+        ">${content}</td>
       `;
     }).join('');
 

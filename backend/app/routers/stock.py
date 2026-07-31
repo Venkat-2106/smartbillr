@@ -639,7 +639,18 @@ async def import_stock_adjustments(
             return None, "one of product_id, barcode, or product_name is required"
 
         # Adjustment type (default: set)
-        adj_type_raw = (row.get("adjustment_type") or row.get("type") or row.get("Type") or "set").strip().lower()
+        # The template header is "Type (add/remove/set)" — match it directly and
+        # also fall back to any header containing "type" so user-renamed columns
+        # like "Type", "type", "adjustment_type" all keep working.
+        adj_type_raw = (
+            row.get("adjustment_type")
+            or row.get("type")
+            or row.get("Type")
+            or row.get("Type (add/remove/set)")
+            or next((v for k, v in row.items() if k and "type" in k.lower() and v), "")
+            or "set"
+        )
+        adj_type_raw = str(adj_type_raw).strip().lower()
         if adj_type_raw not in ("add", "remove", "set"):
             adj_type_raw = "set"  # default to safe option
 

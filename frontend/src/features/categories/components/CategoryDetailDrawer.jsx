@@ -84,7 +84,7 @@ function buildCategoryPrintHTML(business, category, detail, summary, products, s
     ...(showProfit ? [{ label: 'Cost Price', key: 'prod_cost_price', align: 'right', format: v => formatCurrency(v, country) }] : []),
     { label: 'Stock',          key: 'prod_stock_qty',    align: 'center' },
     { label: 'Unit',           key: 'unit',              align: 'center' },
-    { label: 'Status',         key: '_status',           align: 'center', format: (_, row) => {
+    { label: 'Status',         key: '_status',           align: 'center', html: true, format: (_, row) => {
         const isOut  = row.prod_stock_qty === 0
         const isLow  = !isOut && row.prod_stock_qty <= row.prod_low_stock_alert
         const color  = isOut ? '#EF4444' : isLow ? '#F59E0B' : '#10B981'

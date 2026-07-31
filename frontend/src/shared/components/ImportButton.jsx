@@ -132,7 +132,7 @@ export default function ImportButton({
 
       const { summary, errors, message } = response.data;
 
-      const savedCount = (summary?.created || 0) + (summary?.updated || 0);
+      const savedCount = (summary?.created || 0) + (summary?.updated || 0) + (summary?.processed || 0);
 
       if (!summary || savedCount === 0) {
         // No rows were actually saved — this is a failure even if the server

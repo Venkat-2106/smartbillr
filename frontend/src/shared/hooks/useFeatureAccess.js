@@ -20,6 +20,6 @@ export function useFeatureAccess(featureKey) {
 
   return {
     allowed,
-    reason: permAllowed && !tierAllowed ? subType : null,
+    reason: !permAllowed ? 'permission_denied' : (!tierAllowed ? subType : null),
   }
 }

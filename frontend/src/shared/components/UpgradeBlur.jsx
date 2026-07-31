@@ -42,6 +42,28 @@ export default function UpgradeBlur({ children, reason, feature = 'financial rep
       {scrim}
 
       {compact ? (
+        reason === 'permission_denied' ? (
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              padding: '7px 14px',
+              fontSize: 12,
+              fontWeight: 600,
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--r-lg)',
+              whiteSpace: 'nowrap',
+              background: 'var(--bg-card)',
+              color: 'var(--text-primary)',
+              boxShadow: 'var(--shadow-elevated, 0 8px 24px rgba(0,0,0,0.18))',
+              zIndex: 2,
+            }}
+          >
+            Restricted
+          </div>
+        ) : (
         // Small pill button, centered — fits inside a KPI-tile-sized card
         // without spilling past its edges.
         <button
@@ -79,6 +101,7 @@ export default function UpgradeBlur({ children, reason, feature = 'financial rep
           </svg>
           {reason === 'suspended' ? 'Reactivate' : 'Upgrade'}
         </button>
+        )
       ) : (
         // Solid, bordered card — anchored to the page like every other
         // floating panel in the app (see ConfirmDialog.jsx), not a
@@ -109,15 +132,18 @@ export default function UpgradeBlur({ children, reason, feature = 'financial rep
 
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
-              Upgrade to see your {feature}
+              {reason === 'permission_denied' ? 'Restricted' : `Upgrade to see your ${feature}`}
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
               {reason === 'suspended'
                 ? 'Your subscription has been suspended. Reactivate to access this data.'
-                : 'This data is available on paid plans only.'}
+                : reason === 'permission_denied'
+                  ? `Contact your admin for ${feature} access.`
+                  : 'This data is available on paid plans only.'}
             </div>
           </div>
 
+          {reason !== 'permission_denied' && (
           <button
             type="button"
             onClick={() => navigate('/subscription')}
@@ -146,6 +172,7 @@ export default function UpgradeBlur({ children, reason, feature = 'financial rep
           >
             {reason === 'suspended' ? 'Reactivate →' : 'View plans →'}
           </button>
+          )}
         </div>
       )}
     </div>

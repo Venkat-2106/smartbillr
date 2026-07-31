@@ -344,7 +344,18 @@ Use this when stock is wrong due to damage, theft, or a counting error.
 
 1. Go to **Stock** → **Low Stock Alerts** tab.
 2. Products below their threshold are listed here.
-3. Click **Mark as Read** on individual items, or **Mark All as Read** to clear them.
+3. Clicking anywhere on an unread alert marks it as read automatically. Use **Mark All Read** in the tab header to clear all of them at once.
+
+### Import Stock Adjustments from a File
+
+1. Go to **Stock** → **Current Stock** tab.
+2. Click **Import** — this opens a file picker.
+3. Select your CSV file, with a `Type (add/remove/set)` column indicating how each row should adjust stock.
+4. A confirmation appears showing how many rows were processed, with errors listed for any invalid rows.
+
+### Export Stock Movements
+
+On the **Stock Movements** tab, click **Export** to download the current filtered list as a CSV file.
 
 ---
 
@@ -369,12 +380,14 @@ This is how you bill a customer.
 
 5. **Review the invoice:**
    - The subtotal, tax, and total are calculated automatically.
-   - If needed, add a **discount** amount at the bottom.
+   - There's no separate discount field — to give a discount, edit the **Unit Price** on any line item directly. If the product has an MRP set, you'll see a "You saved ₹X" note showing the gap between MRP and what you charged.
 
 6. **Record payment (optional):**
    - Select **Paid**, **Unpaid**, or **Partial**.
-   - If paid or partial, choose the **payment method**: Cash, UPI, Card, Bank, or Split.
+   - If paid or partial, choose the **payment method**: Cash, UPI, Card, Bank Transfer, Split Payment, or Adjustment (typically used for return-related credits, but selectable for any payment).
    - Enter the amount received.
+
+> Check **"Open print preview after creating invoice"** near the bottom of the form if you want the print dialog to open automatically right after saving.
 
 7. Click **Create Sale**.
 
@@ -385,6 +398,8 @@ This is how you bill a customer.
 - The sale appears in your **Sales** list.
 - If you recorded a payment, it shows in **Payments**.
 - You can **print** the invoice from the sale details — open any sale and click **Print Invoice**.
+
+> Your plan has a monthly limit on how many sales you can create. If you hit it, you'll see an upgrade prompt when trying to create a new sale.
 
 ### Invoice Sections at a Glance
 
@@ -410,6 +425,7 @@ This is how you record what you buy from suppliers.
    - Type their name in the search box.
    - Click the supplier to select them.
    - If new, click **+ Add Supplier**.
+   - Buying with cash and don't want to add a supplier? Pick **"No Supplier (cash purchase)"** from the same dropdown.
 
 4. **Add products:**
    - Search for products to add.
@@ -431,6 +447,9 @@ This is how you record what you buy from suppliers.
 - The product's cost price updates to what you paid.
 - The purchase appears in your **Purchases** list.
 
+> Your plan has a monthly limit on how many purchases you can create — you'll see an upgrade prompt if you hit it.
+> If you delete a purchase later, each product's cost price is restored to what it was before that purchase (not just left at whatever the last purchase set).
+
 ---
 
 ## Payments
@@ -447,7 +466,7 @@ This is how you record what you buy from suppliers.
 1. Click **Payments** in the sidebar.
 2. Click the invoice row to open the payment drawer.
 3. Click **+ Record Payment**.
-4. Enter the amount and choose the method: **Cash**, **UPI**, **Card**, **Bank**, or **Split**.
+4. Enter the amount and choose the method: **Cash**, **UPI**, **Card**, **Bank Transfer**, **Split Payment**, or **Adjustment** (typically used for return-related credits, but selectable for any payment).
 5. Click **Save Payment**.
 
 ### Record a Partial Payment
@@ -491,11 +510,13 @@ Only **Admin** and **Manager** roles can approve or reject returns. Staff can cr
 
 **If approved:**
 - Stock is restored (if restocking was chosen).
-- An expense entry is created for the refund amount.
+- The refund amount first reduces whatever the customer still owes on that invoice (recorded as an internal payment adjustment). Only the portion left over — if the customer had already paid in full or overpaid — is created as an actual **Expense** entry, since that's money physically going back out.
 
 **If rejected:**
 - Nothing changes.
 - The rejection reason is saved.
+
+> Once a return is approved, it can't be deleted or reversed — it becomes a permanent record. Only returns still in **Pending** status can be deleted.
 
 ---
 
@@ -521,6 +542,15 @@ Only **Admin** and **Manager** roles can approve or reject.
 
 Same flow as sales returns — go to **Purchase Returns** in the sidebar, click a pending return, and approve or reject it.
 
+**If approved:**
+- Stock **decreases** (opposite of a sales return) if restocking was chosen — the goods are leaving your inventory.
+- The return amount first reduces what you still owe that supplier (recorded as an internal payment adjustment). If you'd already paid the supplier more than you now owe, the leftover is recorded as a **negative expense** (category "Purchase Refund") — a credit that lowers your total recorded expenses, since it's money coming back to you.
+
+**If rejected:**
+- Nothing changes. The rejection reason is saved.
+
+> Once approved, a purchase return can't be deleted or reversed.
+
 ---
 
 ## Expenses
@@ -545,6 +575,14 @@ Same flow as sales returns — go to **Purchase Returns** in the sidebar, click 
 
 > Expenses cannot be edited after creation. If you made a mistake, delete it and create again.
 
+### Auto-Generated Expenses
+
+Some expenses appear in this list automatically, without you creating them:
+- Recording a payment on a **Purchase** automatically logs an expense in the "Purchase" category.
+- An approved **Sales Return** or **Purchase Return** refund that exceeds what was owed also creates a linked expense entry.
+
+These can't be deleted or edited directly — you'll need to adjust the original purchase or return instead. Trying to delete one shows an error explaining this.
+
 ---
 
 ## Reports
@@ -560,18 +598,18 @@ Same flow as sales returns — go to **Purchase Returns** in the sidebar, click 
 
 | Tab | What you'll see |
 |-----|-----------------|
-| Summary | Total sales, purchases, expenses, profit, tax — all in one view |
-| Sales | Trends, breakdowns by customer, product, category, payment method |
+| Summary | Total sales, purchases, expenses, profit, tax — all in one view. Financial figures (sales, purchases, expenses, profit) are hidden on trial/Basic plans, same as the Dashboard. |
+| Sales | Trends, breakdowns by customer, product, category, payment method, and invoice status |
 | Purchases | Trends, breakdowns by supplier, product, tax summary |
-| Profitability | Gross profit, profit by product/category/customer *(paid plans)* |
-| Inventory | Stock value, movement summary, fast/slow-moving items |
-| Customers | Top customers, transaction history, lifetime value |
+| Profitability | Gross profit and profit trend, by product/category/customer *(paid plans)* |
+| Inventory | Stock value, movement summary, stock flow, fast/slow-moving items |
+| Customers | Top customers, transaction history, lifetime value, outstanding balances |
 | Suppliers | Top suppliers, spend analysis |
-| Expenses | Breakdown by category, trends over time |
-| Tax | Tax collected vs paid, net liability *(paid plans)* |
-| Returns | Return summaries and financial impact *(paid plans)* |
-| Payments | Collections, outstanding balances *(paid plans)* |
-| Audit | User activity log, login history, data changes |
+| Expenses | Breakdown by category, distribution, and trends over time |
+| Tax | Tax collected vs paid, net liability, breakdown by tax rate, and trend over time *(paid plans)* |
+| Returns | Return summaries, trend, and financial impact *(paid plans)* |
+| Payments | Collections, outstanding balances, breakdown by method, and partial-payment tracking *(paid plans)* |
+| Audit | User activity log, login history, data changes, and export activity |
 
 > Profitability, Tax, Returns, and Payments tabs are only available on **Pro**, **Pro Yearly**, or **Lifetime** plans. On trial or **Basic** plans these tabs are hidden. If you navigate to them directly, you'll see an upgrade prompt.
 
@@ -589,6 +627,8 @@ Same flow as sales returns — go to **Purchase Returns** in the sidebar, click 
 3. Click **Save**.
 
 ### Turn On GST
+
+> This only applies to businesses registered in **India**. For other countries, your invoices already use the correct local tax label (VAT, Sales Tax, etc.) automatically — there's no toggle to turn on.
 
 1. Go to **Settings** → **Tax Settings**.
 2. Toggle **GST Registered** to On.
@@ -624,7 +664,7 @@ After this, all invoices will calculate CGST, SGST, or IGST automatically based 
 | Role | Can do | Cannot do |
 |------|--------|-----------|
 | **Admin** | Everything | Nothing |
-| **Manager** | Sales, purchases, customers, suppliers, products, stock, reports, returns (including approve), expenses | Manage staff, change settings |
+| **Manager** | Sales, purchases, customers, suppliers, products, stock, reports, returns (including approve), expenses, payments | Manage staff, change settings |
 | **Staff** | Create sales, view products, view stock, manage customers, create/list returns | Purchases, approve returns, payments, reports, expenses, staff, settings |
 
 ### Deactivate a Staff Member
@@ -732,7 +772,7 @@ Go to **Sales** → Click **New Sale** → Select a customer → Add products �
 2. Click the invoice row you want to record a payment for.
 3. In the drawer that opens, click **+ Record Payment**.
 4. Enter the amount.
-5. Choose the payment method: **Cash**, **UPI**, **Card**, **Bank**, or **Split**.
+5. Choose the payment method: **Cash**, **UPI**, **Card**, **Bank Transfer**, **Split Payment**, or **Adjustment** (typically used for return-related credits, but selectable for any payment).
 6. Click **Save Payment**.
 
 ### How do I handle a customer returning an item?

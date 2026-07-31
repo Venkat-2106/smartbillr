@@ -5,8 +5,23 @@ import { Button, Badge, ConfirmDialog } from '../../../shared/components'
 import api from '../../../api/axios'
 import { getTaxLabel } from '../../../shared/utils/formatTax'
 
-const PLAN_OPTIONS = ['trial', 'monthly', 'annual', 'lifetime']
+const PLAN_OPTIONS = [
+  { value: 'trial', label: 'Trial' },
+  { value: 'basic', label: 'Basic' },
+  { value: 'pro', label: 'Pro' },
+  { value: 'pro_yearly', label: 'Pro Yearly' },
+  { value: 'lifetime', label: 'Lifetime' },
+]
+
+// Legacy alias map — older businesses stored "monthly" / "annual" in
+// subscription_type; canonical codes are trial / basic / pro / pro_yearly / lifetime.
+const LEGACY_PLAN_MAP = { monthly: 'basic', annual: 'pro_yearly' }
+
 const PAYMENT_STATUS_OPTIONS = ['pending', 'paid', 'suspended']
+
+function normalizePlan(code) {
+  return LEGACY_PLAN_MAP[code] || code || 'trial'
+}
 
 export default function AdminBusinessDetailPage() {
   const { id } = useParams()
@@ -26,7 +41,7 @@ export default function AdminBusinessDetailPage() {
       const resp = await api.get(`/superadmin/businesses/${id}`)
       const d = resp.data
       setBiz(d)
-      setEditPlan(d.subscription_type || 'trial')
+      setEditPlan(normalizePlan(d.subscription_type))
       setEditPayment(d.payment_status || 'pending')
       setEditEndAt(d.subscription_end_at ? d.subscription_end_at.slice(0, 16) : '')
     } catch {
@@ -176,7 +191,7 @@ export default function AdminBusinessDetailPage() {
                   color: '#F8FAFC', fontSize: '0.8rem', fontFamily: 'inherit',
                 }}
               >
-                {PLAN_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                {PLAN_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
               </select>
             </div>
 

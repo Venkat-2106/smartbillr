@@ -10,8 +10,19 @@ const COLUMNS = [
   )},
   { key: 'business_email', label: 'Email' },
   { key: 'subscription_type', label: 'Plan', sortable: true, render: (r) => {
-    const colors = { trial: 'warning', monthly: 'info', annual: 'success', lifetime: 'purple' }
-    return <Badge variant={colors[r.subscription_type] || 'neutral'} label={r.subscription_type} />
+    const colors = {
+      trial: 'warning',
+      basic: 'info', monthly: 'info',
+      pro: 'success', pro_yearly: 'success', annual: 'success',
+      lifetime: 'purple',
+    }
+    const labels = {
+      trial: 'Trial',
+      basic: 'Basic', monthly: 'Basic',
+      pro: 'Pro', pro_yearly: 'Pro Yearly', annual: 'Pro',
+      lifetime: 'Lifetime',
+    }
+    return <Badge variant={colors[r.subscription_type] || 'neutral'} label={labels[r.subscription_type] || r.subscription_type} />
   }},
   { key: 'payment_status', label: 'Payment', sortable: true, render: (r) =>
     <Badge status={r.payment_status} />

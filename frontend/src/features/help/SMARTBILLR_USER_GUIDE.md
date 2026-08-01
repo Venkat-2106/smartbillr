@@ -105,11 +105,13 @@ The sidebar menu on the left is your main way to move around. Here's what you'll
 | Section | Menu items |
 |---------|------------|
 | **Overview** | Dashboard |
-| **Commerce** | Sales, Purchases, Payments, Sales Returns, Purchase Returns |
-| **People** | Customers, Suppliers, Staff (admin only) |
+| **Commerce** | Sales, Purchases, Payments |
+| **People** | Customers, Suppliers |
 | **Inventory** | Products, Categories, Stock |
-| **Finance** | Expenses, Reports |
-| **System** | Settings (admin only) |
+| **Finance** | Expenses, Sales Returns, Purchase Returns |
+| **System** | Reports, Settings (admin only), Staff (admin only), User Guide |
+
+The **User Guide** menu item is visible to every role.
 
 ### Sidebar Tips
 - The sidebar can be **collapsed** to icons-only — click the arrow at the top.
@@ -125,8 +127,9 @@ The Dashboard is the first page you see after logging in. It gives you a quick s
 
 ### What You'll See
 
-- **KPI Cards** at the top: Total Revenue, Total Sales, Total Expenses, Net Profit
+- **KPI Cards** at the top: Revenue, Invoices, Customers, Products, Expenses, Pending Payments, Stock Alerts
 - **Sales Trend Chart** showing revenue over time (switch between weekly, monthly, and yearly)
+- **Revenue vs Expenses** summary with a Net Profit figure
 - **Quick Action Cards** to jump to common tasks: New Sale, New Product, New Customer, New Purchase
 
 > If you're on a trial or **Basic** plan, financial KPIs (revenue, profit) are locked — you'll see an upgrade prompt instead. Staff-role users see this same locked view regardless of plan, since only Admin/Manager roles can view financial figures.
@@ -612,7 +615,7 @@ These can't be deleted or edited directly — you'll need to adjust the original
 | Payments | Collections, outstanding balances, breakdown by method, and partial-payment tracking *(paid plans)* |
 | Audit | User activity log, login history, data changes, and export activity |
 
-> Profitability, Tax, Returns, and Payments tabs are only available on **Pro**, **Pro Yearly**, or **Lifetime** plans. On trial or **Basic** plans these tabs are hidden. If you navigate to them directly, you'll see an upgrade prompt.
+> Profitability, Tax, Returns, and Payments tabs are visible to **Admin** and **Manager** roles only (they require financial-report access). If you have one of those roles on a trial or **Basic** plan, you'll see the tabs but the data inside is blurred behind an upgrade prompt — the reports unlock on **Pro**, **Pro Yearly**, or **Lifetime**. Staff-role users never see these tabs at all.
 
 ---
 
@@ -642,7 +645,7 @@ After this, all invoices will calculate CGST, SGST, or IGST automatically based 
 
 1. Go to **Settings** → **Pricing & Plans**.
 2. See your current plan, when it ends, and how many days are left.
-3. Click **View All Plans** to upgrade.
+3. Click **View all plans** to open the **plan comparison page** (see "Upgrade Your Plan" below — this is a separate page from the Pricing page).
 
 ---
 
@@ -667,6 +670,8 @@ After this, all invoices will calculate CGST, SGST, or IGST automatically based 
 | **Admin** | Everything | Nothing |
 | **Manager** | Sales, purchases, customers, suppliers, products, stock, reports, returns (including approve), expenses, payments | Manage staff, change settings |
 | **Staff** | Create sales, view products, view stock, manage customers, create/list sales returns | Purchases, approve returns, payments, reports, expenses, staff, settings |
+
+> At the API level, Staff also holds **purchase-return** permissions (create/list/delete), matching sales returns. There's no practical way to use them: a purchase return is created from a purchase's detail page, which Staff can't open — so in practice Staff can only process sales returns.
 
 ### Deactivate a Staff Member
 
@@ -740,9 +745,14 @@ Press `?` anywhere in the app to see the full shortcut list (shortcuts are disab
 
 ### Upgrade Your Plan
 
-1. Go to the **Pricing** page.
+Two pages are involved:
+
+- The **plan comparison page** — reached from **Settings → Pricing & Plans → View all plans**. It shows all plans side by side; click **Subscribe** (or **Get Started** if not logged in) on a plan.
+- The **Pricing page** — a separate public page used for checkout.
+
+1. Open the **plan comparison** or **Pricing** page.
 2. Choose **Basic** (₹499/mo), **Pro** (₹999/mo), **Pro Yearly** (₹4,999/yr), or **Lifetime** (₹14,999).
-3. Click **Get Started**.
+3. Click **Subscribe** (or **Get Started**).
 4. Complete the payment (Razorpay for INR, Stripe for USD).
 5. Access is upgraded immediately after payment.
 

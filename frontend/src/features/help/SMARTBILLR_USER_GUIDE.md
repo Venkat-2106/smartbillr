@@ -445,6 +445,7 @@ This is how you record what you buy from suppliers.
 
 - Stock increases automatically (items are in your inventory now).
 - The product's cost price updates to what you paid.
+- The purchase gets a number: PUR-0001, PUR-0002, etc.
 - The purchase appears in your **Purchases** list.
 
 > Your plan has a monthly limit on how many purchases you can create — you'll see an upgrade prompt if you hit it.
@@ -665,7 +666,7 @@ After this, all invoices will calculate CGST, SGST, or IGST automatically based 
 |------|--------|-----------|
 | **Admin** | Everything | Nothing |
 | **Manager** | Sales, purchases, customers, suppliers, products, stock, reports, returns (including approve), expenses, payments | Manage staff, change settings |
-| **Staff** | Create sales, view products, view stock, manage customers, create/list returns | Purchases, approve returns, payments, reports, expenses, staff, settings |
+| **Staff** | Create sales, view products, view stock, manage customers, create/list sales returns | Purchases, approve returns, payments, reports, expenses, staff, settings |
 
 ### Deactivate a Staff Member
 
@@ -679,25 +680,53 @@ They won't be able to log in anymore. Their existing records are preserved.
 
 ## Keyboard Shortcuts
 
+Press `?` anywhere in the app to see the full shortcut list (shortcuts are disabled while typing in input fields).
+
+### Navigation
+
 | Press this | To do this |
 |------------|------------|
-| `?` | Show all available shortcuts |
-| `Ctrl + K` | Open the command palette (search anything) |
-| `Alt + N` | Create a new record on the current page |
-| `Ctrl + F` | Jump to the search box |
-| `F5` | Refresh the current page's data |
 | `g then d` | Go to Dashboard |
 | `g then c` | Go to Customers |
 | `g then s` | Go to Sales |
+| `g then b` | Go to Purchases |
 | `g then p` | Go to Products |
 | `g then u` | Go to Suppliers |
 | `g then t` | Go to Stock |
 | `g then e` | Go to Expenses |
 | `g then r` | Go to Reports |
 | `g then h` | Go to Settings |
-| `g then b` | Go to Purchases |
 
-Press `?` anywhere in the app to see the full shortcut list.
+### Global Actions
+
+| Press this | To do this |
+|------------|------------|
+| `Ctrl + K` | Open the command palette (search anything) |
+| `?` | Show all available shortcuts |
+| `Alt + N` | Create a new record on the current page |
+| `Ctrl + F` | Jump to the search box |
+| `F5` | Refresh the current page's data |
+| `Esc` | Close a drawer or modal |
+
+### Data Tables (list pages)
+
+| Press this | To do this |
+|------------|------------|
+| `↑ / ↓` | Move between rows |
+| `Enter` | Open the selected row |
+| `E` | Edit the selected row |
+| `Delete` | Delete the selected row |
+| `Space` | Select / toggle a row |
+| `Shift + ↑ / Shift + ↓` | Select multiple rows |
+
+### Sales (New Sale screen)
+
+| Press this | To do this |
+|------------|------------|
+| `Alt + P` | Add a product line item |
+| `Ctrl + Shift + C` | Select the customer |
+| `Ctrl + M` | Mark the payment as Paid |
+| `F2` | Focus the barcode scanner |
 
 ---
 
@@ -707,6 +736,7 @@ Press `?` anywhere in the app to see the full shortcut list.
 
 1. Go to **Settings** → **Pricing & Plans**.
 2. You'll see what plan you're on and when it expires.
+3. If you're on a **paid plan**, you get a **3-day grace period** after it expires before access is suspended — renew during that window to avoid any interruption. Free trials end immediately with no grace period.
 
 ### Upgrade Your Plan
 
@@ -726,8 +756,10 @@ Press `?` anywhere in the app to see the full shortcut list.
 | Customers | Up to 50 | Up to 500 | Unlimited | Unlimited | Unlimited |
 | Suppliers | Up to 25 | Unlimited | Unlimited | Unlimited | Unlimited |
 | Sales per month | Up to 100 | Up to 2,000 | Unlimited | Unlimited | Unlimited |
+| Purchases per month | Up to 50 | Unlimited | Unlimited | Unlimited | Unlimited |
 | Staff accounts | 0 | Up to 2 | Up to 10 | Up to 10 | Unlimited |
 | Manager accounts | 0 | Up to 1 | Up to 10 | Up to 10 | Unlimited |
+| CSV export rows | Up to 500 | Up to 10,000 | Up to 10,000 | Up to 10,000 | Up to 10,000 |
 | Financial reports | — | — | ✓ | ✓ | ✓ |
 | Product profit view | — | — | ✓ | ✓ | ✓ |
 
@@ -748,6 +780,7 @@ Each product has a **tax rate** (e.g., 5%, 12%, 18%, 28%). When you create an in
 
 - **Same state** (customer in your state): Tax splits into **CGST** and **SGST** equally — e.g., 18% = 9% CGST + 9% SGST
 - **Different state** (customer outside your state): Full tax charged as **IGST** — e.g., 18% = 18% IGST
+- **No state on file** (customer in India but without a state saved, e.g. a walk-in customer): Treated as **same-state**, so tax splits into **CGST** and **SGST**. Make sure customers have their state selected if they're actually in another state.
 
 ### Tax Reports
 
@@ -801,7 +834,7 @@ You cannot change the products or quantities on an existing invoice. To change w
 
 ### I'm locked out because my subscription expired. What do I do?
 
-Go to **Pricing**, choose a plan, and complete the payment. Access is restored automatically.
+If you were on a **free trial**, access stops immediately the moment the trial ends. If you were on a **paid plan** (Basic, Pro, or Pro Yearly), you get a **3-day grace period** — the app keeps working normally during that time, and access is only suspended after it. Either way, go to **Pricing**, choose a plan, and complete the payment. Access is restored automatically.
 
 ### What reports can I run?
 
@@ -825,6 +858,8 @@ Go to **Pricing**, choose a plan, and complete the payment. Access is restored a
 - **Creating duplicate customers**: Use the search box first before adding.
 - **Deleting a sale without restoring stock**: Choose "restore stock" to keep inventory accurate.
 - **Not configuring GST**: If you're GST-registered, make sure products have correct tax rates and customers have state information.
+
+> Every record tracks who created and last updated it. You'll see **Created By / Last Updated By** in the detail views of Products, Categories, Sales, Purchases, Payments, Returns, Customers, and Expenses.
 
 ### Inventory Tips
 - Use **Stock Adjustments** to fix discrepancies.

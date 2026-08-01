@@ -6,15 +6,14 @@ Welcome to SmartBillr — your billing and business management app. This guide s
 
 ## What SmartBillr Is
 
-SmartBillr is a cloud-based billing, inventory, and accounting app for small and medium businesses. It helps you manage sales, purchases, inventory, customers, suppliers, payments, expenses, and taxes all in one place.
+SmartBillr is a cloud-based billing, inventory, and accounting app for small, medium and large scale businesses. It helps you manage sales, purchases, inventory, customers, suppliers, payments, expenses, and taxes all in one place.
 
 ### Who It's For
 
-- **Business Owners** — View reports, manage operations, configure settings
+- **Business Owners (Admin)** — View reports, manage operations, configure settings and Manage staff accounts, set roles
+- **Managers** — Track stock, adjust inventory, View tax summaries, payment history, reports
 - **Cashiers & Sales Staff** — Create invoices, process sales
-- **Inventory Managers** — Track stock, adjust inventory
-- **Accountants** — View tax summaries, payment history, reports
-- **Administrators** — Manage staff accounts, set roles
+
 
 ### Supported Business Types
 
@@ -388,7 +387,7 @@ This is how you bill a customer.
    - The subtotal, tax, and total are calculated automatically.
    - There's no separate discount field — to give a discount, edit the **Unit Price** on any line item directly. If the product has an MRP set, you'll see a "You saved ₹X" note showing the gap between MRP and what you charged.
 
-6. **Record payment (optional):**
+6. **Record payment (Preferable when you need finance statement):**
    - Select **Paid**, **Unpaid**, or **Partial**.
    - If paid or partial, choose the **payment method**: Cash, UPI, Card, Bank Transfer, Split Payment, or Adjustment (typically used for return-related credits, but selectable for any payment).
    - Enter the amount received.

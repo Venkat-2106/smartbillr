@@ -62,6 +62,7 @@ export default function AppRouter() {
         <Route path="/subscription"   element={<SubscriptionPage />} />
         <Route path="/pricing"        element={<PricingPage />} />
         <Route path="/billing/success" element={<BillingSuccessPage />} />
+        <Route path="/user-guide"     element={<UserGuidePage />} />
 
         {/* Super admin routes — separate from business tenant flow */}
         <Route path="/admin/login" element={<AdminLoginPage />} />
@@ -219,10 +220,6 @@ export default function AppRouter() {
                 <StaffPage />
               </ProtectedRoute>
             }
-          />
-          <Route
-            path="/user-guide"
-            element={<UserGuidePage />}
           />
         </Route>
 

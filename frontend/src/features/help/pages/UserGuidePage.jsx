@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import userGuideContent from '../SMARTBILLR_USER_GUIDE.md?raw'
@@ -24,6 +25,7 @@ function extractToc(markdown) {
 }
 
 export default function UserGuidePage() {
+  const navigate = useNavigate()
   const [activeId, setActiveId] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const headingsRef = useRef([])
@@ -165,8 +167,30 @@ export default function UserGuidePage() {
 
       {/* MAIN CONTENT */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ marginBottom: 28, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
+        <div style={{ marginBottom: 28 }}>
+          {/* ── Back button ── */}
+          <button
+            onClick={() => navigate(-1)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 14,
+              color: 'var(--text-secondary)',
+              padding: '4px 0',
+              marginBottom: 8,
+              fontFamily: 'inherit',
+            }}
+          >
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5m7-7l-7 7 7 7"/>
+            </svg>
+            Back
+          </button>
+          <div style={{ textAlign: 'center' }}>
             <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', margin: 0 }}>
               User Guide
             </h1>
@@ -185,6 +209,7 @@ export default function UserGuidePage() {
           fontSize: 14.5,
           color: 'var(--text-primary)',
           maxWidth: 900,
+          margin: '0 auto',
         }}>
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}

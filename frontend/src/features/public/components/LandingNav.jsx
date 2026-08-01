@@ -22,6 +22,7 @@ export default function LandingNav() {
   const navLinks = [
     { label: 'Features', target: 'features' },
     { label: 'Pricing', target: 'pricing' },
+    { label: 'Guide', target: 'user-guide' },
     { label: 'FAQ', target: 'faq' },
     { label: 'Contact', target: 'footer-contact' },
   ]
@@ -68,7 +69,7 @@ export default function LandingNav() {
           {navLinks.map((link) => (
             <button
               key={link.target}
-              onClick={() => link.target === 'pricing' ? navigate('/subscription') : scrollTo(link.target)}
+              onClick={() => link.target === 'user-guide' ? navigate('/user-guide') : link.target === 'pricing' ? navigate('/subscription') : scrollTo(link.target)}
               onMouseEnter={() => setHoveredLink(link.target)}
               onMouseLeave={() => setHoveredLink(null)}
               style={{
@@ -148,7 +149,7 @@ export default function LandingNav() {
           {navLinks.map((link) => (
             <button
               key={link.target}
-              onClick={() => link.target === 'pricing' ? navigate('/subscription') : scrollTo(link.target)}
+              onClick={() => link.target === 'user-guide' ? navigate('/user-guide') : link.target === 'pricing' ? navigate('/subscription') : scrollTo(link.target)}
               style={{
                 fontSize: '1rem', fontWeight: 600, color: '#CBD5E1',
                 cursor: 'pointer', background: 'none', border: 'none',

@@ -58,13 +58,13 @@ export default function LandingFooter() {
             Quick Links
           </h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {['Features', 'Pricing', 'FAQ', 'Contact'].map((label) => (
+            {['Features', 'Pricing', 'FAQ', 'Contact', 'User Guide'].map((label) => (
               <button key={label}
                 onClick={() => {
-                  const id = label.toLowerCase() === 'pricing' ? null : label.toLowerCase()
                   if (label === 'Pricing') navigate('/subscription')
+                  else if (label === 'User Guide') navigate('/user-guide')
                   else {
-                    const el = document.getElementById(id)
+                    const el = document.getElementById(label.toLowerCase())
                     if (el) el.scrollIntoView({ behavior: 'smooth' })
                   }
                 }}

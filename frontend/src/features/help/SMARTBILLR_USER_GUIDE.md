@@ -682,7 +682,7 @@ They won't be able to log in anymore. Their existing records are preserved.
 
 Press `?` anywhere in the app to see the full shortcut list (shortcuts are disabled while typing in input fields).
 
-### Navigation
+### Go-To Shortcuts
 
 | Press this | To do this |
 |------------|------------|
@@ -859,7 +859,7 @@ If you were on a **free trial**, access stops immediately the moment the trial e
 - **Deleting a sale without restoring stock**: Choose "restore stock" to keep inventory accurate.
 - **Not configuring GST**: If you're GST-registered, make sure products have correct tax rates and customers have state information.
 
-> Every record tracks who created and last updated it. You'll see **Created By / Last Updated By** in the detail views of Products, Categories, Sales, Purchases, Payments, Returns, Customers, and Expenses.
+> Every record tracks who created and last updated it. **Products** and **Categories** show both **Created By** and **Last Updated By** in their detail view; **Suppliers'** detail view shows **Last Updated By**. On Sales, Purchases, Payments, Sales Returns, Purchase Returns, Customers, and Expenses, look for the **Last Updated By** column on the list page.
 
 ### Inventory Tips
 - Use **Stock Adjustments** to fix discrepancies.

@@ -736,6 +736,8 @@ Press `?` anywhere in the app to see the full shortcut list (shortcuts are disab
 | `Ctrl + Shift + C` | Select the customer |
 | `Ctrl + M` | Mark the payment as Paid |
 | `F2` | Focus the barcode scanner |
+| `Ctrl + Enter` | Submit the sale |
+| `Ctrl + Shift + U` | Open the Add Customer modal |
 
 ---
 
@@ -758,7 +760,7 @@ Two pages are involved:
 2. Choose **Basic** (₹499/mo), **Pro** (₹999/mo), **Pro Yearly** (₹4,999/yr), or **Lifetime** (₹14,999).
 3. Click **Subscribe** (or **Get Started**).
 4. Complete the payment (Razorpay for INR, Stripe for USD).
-5. You'll land on a **confirmation page** and access is upgraded immediately.
+5. You'll land on an **activation page** that confirms your payment, then it takes you to the Dashboard.
 
 ### Plan Limits
 
@@ -777,7 +779,7 @@ Two pages are involved:
 | Financial reports | — | — | ✓ | ✓ | ✓ |
 | Product profit view | — | — | ✓ | ✓ | ✓ |
 
-> **USD pricing** is also available for Stripe checkout: Basic $9.99/mo, Pro $19/mo, Pro Yearly $99/yr, Lifetime $299. The INR prices above are used for Razorpay checkout.
+> Prices are shown automatically based on your business country — **INR** (Razorpay) for India, **USD** (Stripe) elsewhere: Basic ₹499 / $9.99 per month, Pro ₹999 / $19 per month, Pro Yearly ₹4,999 / $99 per year, Lifetime ₹14,999 / $299.
 
 ---
 

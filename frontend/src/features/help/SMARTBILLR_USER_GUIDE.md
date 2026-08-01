@@ -344,7 +344,7 @@ Use this when stock is wrong due to damage, theft, or a counting error.
 2. Every stock change is listed — sales, purchases, returns, adjustments, and stock overrides.
 3. You can search by product name, filter by movement type (Sale, Purchase, Adjustment, **Stock Override**, Sales Return, Purchase Return), or filter by date range.
 
-> **Stock Override** movements appear when a sale was force-created past an insufficient-stock warning (see "Creating sales with insufficient stock" in Best Practices). The system bumps stock by the shortfall so the sale can be recorded, then the sale's deduction applies — the net result can be negative inventory.
+> **Stock Override** movements appear when a sale was force-created past an insufficient-stock warning (see "Creating sales with insufficient stock" in Best Practices). The system bumps stock by the shortfall so the sale can be recorded, then the sale's deduction applies — the product's stock lands at exactly zero for the overridden quantity. There's no path to negative stock: the stock trigger refuses to deduct more than is available, so any line that would still exceed stock fails the sale instead.
 
 ### Check Low Stock Alerts
 
@@ -874,7 +874,7 @@ If you were on a **free trial**, access stops immediately the moment the trial e
 5. **Review stock** regularly to catch discrepancies early.
 
 ### Common Mistakes to Avoid
-- **Creating sales with insufficient stock**: You can override this, but it creates negative inventory.
+- **Creating sales with insufficient stock**: Only managers/admins can override this — the product's stock lands at exactly zero, so you're committing stock you don't have.
 - **Forgetting to record payments**: Unpaid invoices show as outstanding balances.
 - **Not setting tax rates on products**: Results in 0 tax on invoices.
 - **Creating duplicate customers**: Use the search box first before adding.

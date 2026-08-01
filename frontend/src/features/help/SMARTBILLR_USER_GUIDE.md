@@ -324,7 +324,8 @@ Same pattern as Customers and Suppliers: click **Import** to upload a CSV (uploa
 1. Click **Stock** in the sidebar.
 2. The **Current Stock** tab shows every product with its quantity.
 3. Use the search bar to find a specific product.
-4. Filter by **category** or **stock status** (All, In Stock, Low Stock, Out of Stock).
+4. Filter by **category**, **stock status** (All, In Stock, Low Stock, Out of Stock), or **Active/Inactive** status (Active & Inactive, Active Only, Inactive Only).
+5. Click **Export** to download the current stock list as a CSV file.
 
 ### Manually Adjust Stock
 
@@ -340,8 +341,10 @@ Use this when stock is wrong due to damage, theft, or a counting error.
 ### View Stock Movements (History)
 
 1. Go to **Stock** → **Stock Movements** tab.
-2. Every stock change is listed — sales, purchases, returns, adjustments.
-3. You can filter by movement type or date range.
+2. Every stock change is listed — sales, purchases, returns, adjustments, and stock overrides.
+3. You can search by product name, filter by movement type (Sale, Purchase, Adjustment, **Stock Override**, Sales Return, Purchase Return), or filter by date range.
+
+> **Stock Override** movements appear when a sale was force-created past an insufficient-stock warning (see "Creating sales with insufficient stock" in Best Practices). The system bumps stock by the shortfall so the sale can be recorded, then the sale's deduction applies — the net result can be negative inventory.
 
 ### Check Low Stock Alerts
 
@@ -358,7 +361,7 @@ Use this when stock is wrong due to damage, theft, or a counting error.
 
 ### Export Stock Movements
 
-On the **Stock Movements** tab, click **Export** to download the current filtered list as a CSV file.
+On the **Stock Movements** tab, click **Export** to download the current filtered list as a CSV file. The **Current Stock** tab has its own separate **Export** button for the stock list itself (see "View Current Stock" above).
 
 ---
 

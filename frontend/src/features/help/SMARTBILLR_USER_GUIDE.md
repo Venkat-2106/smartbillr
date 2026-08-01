@@ -324,7 +324,7 @@ Same pattern as Customers and Suppliers: click **Import** to upload a CSV (uploa
 1. Click **Stock** in the sidebar.
 2. The **Current Stock** tab shows every product with its quantity.
 3. Use the search bar to find a specific product.
-4. Filter by **category** or **stock status** (All, Low Stock, Out of Stock).
+4. Filter by **category** or **stock status** (All, In Stock, Low Stock, Out of Stock).
 
 ### Manually Adjust Stock
 
@@ -507,6 +507,8 @@ Only **Admin** and **Manager** roles can approve or reject returns. Staff can cr
 
 ### Approve or Reject a Return
 
+> You can't create a return here — returns are created from the sale drawer via **Process Return** (see above).
+
 1. Go to **Sales Returns** in the sidebar.
 2. Click the pending return in the list.
 3. Review the details.
@@ -543,6 +545,8 @@ Returns can only be created from the original purchase.
 Only **Admin** and **Manager** roles can approve or reject.
 
 ### Approve or Reject
+
+> You can't create a return here — returns are created from the purchase drawer via **Process Return** (see above).
 
 Same flow as sales returns — go to **Purchase Returns** in the sidebar, click a pending return, and approve or reject it.
 
@@ -671,7 +675,7 @@ After this, all invoices will calculate CGST, SGST, or IGST automatically based 
 | **Manager** | Sales, purchases, customers, suppliers, products, stock, reports, returns (including approve), expenses, payments | Manage staff, change settings |
 | **Staff** | Create sales, view products, view stock, manage customers, create/list sales returns | Purchases, approve returns, payments, reports, expenses, staff, settings |
 
-> At the API level, Staff also holds **purchase-return** permissions (create/list/delete), matching sales returns. There's no practical way to use them: a purchase return is created from a purchase's detail page, which Staff can't open — so in practice Staff can only process sales returns.
+> **Returns permissions.** Returns are split into a **manage** permission (create/list/delete — held by Staff, Manager, and Admin) and a separate **approve** permission (approve/reject — Manager and Admin only). That's why Staff can create returns but never approve or reject them. Staff also holds purchase-return permissions at the API level, but there's no practical way to use them: a purchase return is created from a purchase's detail page, which Staff can't open — so in practice Staff can only process sales returns.
 
 ### Deactivate a Staff Member
 
@@ -754,7 +758,7 @@ Two pages are involved:
 2. Choose **Basic** (₹499/mo), **Pro** (₹999/mo), **Pro Yearly** (₹4,999/yr), or **Lifetime** (₹14,999).
 3. Click **Subscribe** (or **Get Started**).
 4. Complete the payment (Razorpay for INR, Stripe for USD).
-5. Access is upgraded immediately after payment.
+5. You'll land on a **confirmation page** and access is upgraded immediately.
 
 ### Plan Limits
 
@@ -773,6 +777,8 @@ Two pages are involved:
 | Financial reports | — | — | ✓ | ✓ | ✓ |
 | Product profit view | — | — | ✓ | ✓ | ✓ |
 
+> **USD pricing** is also available for Stripe checkout: Basic $9.99/mo, Pro $19/mo, Pro Yearly $99/yr, Lifetime $299. The INR prices above are used for Razorpay checkout.
+
 ---
 
 ## Tax & GST
@@ -790,6 +796,7 @@ Each product has a **tax rate** (e.g., 5%, 12%, 18%, 28%). When you create an in
 
 - **Same state** (customer in your state): Tax splits into **CGST** and **SGST** equally — e.g., 18% = 9% CGST + 9% SGST
 - **Different state** (customer outside your state): Full tax charged as **IGST** — e.g., 18% = 18% IGST
+- **Outside India** (customer or supplier in another country): Full tax charged as **IGST** too, treated as a cross-border supply — e.g., 18% = 18% IGST
 - **No state on file** (customer in India but without a state saved, e.g. a walk-in customer): Treated as **same-state**, so tax splits into **CGST** and **SGST**. Make sure customers have their state selected if they're actually in another state.
 
 ### Tax Reports

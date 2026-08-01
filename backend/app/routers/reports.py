@@ -484,9 +484,9 @@ async def get_sales_trend(
             params["user_start"] = user_start
             params["user_today"] = user_today
             interval = "INTERVAL '1 day'"
-            fill_series = "generate_series(:user_start, :user_today, INTERVAL '1 day') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_today AS timestamp), INTERVAL '1 day') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 day') AS gs"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 day') AS gs"
             interval = "INTERVAL '1 day'"
 
         date_trunc = "(s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
@@ -508,11 +508,11 @@ async def get_sales_trend(
         if not date_from:
             params["user_start"] = user_start_month
             params["user_end"] = user_end_month
-            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 month') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 month') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 month') AS gs"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 month') AS gs"
         interval = "INTERVAL '1 month'"
-        date_trunc = "date_trunc('month', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))"
+        date_trunc = "date_trunc('month', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
         group_expr = date_trunc
         label_expr = "gs"
 
@@ -522,11 +522,11 @@ async def get_sales_trend(
         if not date_from:
             params["user_start"] = user_start_year
             params["user_end"] = user_end_year
-            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 year') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 year') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 year') AS gs"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 year') AS gs"
         interval = "INTERVAL '1 year'"
-        date_trunc = "date_trunc('year', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))"
+        date_trunc = "date_trunc('year', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
         group_expr = date_trunc
         label_expr = "EXTRACT(YEAR FROM gs)"
 
@@ -543,7 +543,7 @@ async def get_sales_trend(
                 gs AS bucket,
                 COALESCE(m.invoice_count, 0) AS invoice_count,
                 COALESCE(m.revenue, 0) AS revenue
-            FROM generate_series(:user_start, :user_end, INTERVAL '1 month') AS gs
+            FROM generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 month') AS gs
             LEFT JOIN mv_sales_trend_monthly m
               ON m.business_id = CAST(:bid AS uuid) AND m.year_month = gs
             ORDER BY gs
@@ -567,7 +567,7 @@ async def get_sales_trend(
                 COALESCE(a.invoice_count, 0) AS invoice_count,
                 COALESCE(a.revenue, 0) AS revenue
             FROM {fill_series}
-            LEFT JOIN aggregated a ON a.bucket = gs
+            LEFT JOIN aggregated a ON a.bucket = gs::date
             ORDER BY gs
         """), params)
         rows = rows.fetchall()
@@ -581,7 +581,7 @@ async def get_sales_trend(
             month_short = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
             label = month_short[r.bucket.month - 1] if hasattr(r.bucket, 'month') else str(r.bucket)
         else:
-            label = str(int(r.bucket)) if hasattr(r.bucket, 'year') else str(r.bucket)
+            label = str(r.bucket.year) if hasattr(r.bucket, 'year') else str(r.bucket)
 
         result.append({
             "label": label,
@@ -879,9 +879,9 @@ async def get_purchase_trend(
         if not date_from:
             params["user_start"] = user_start
             params["user_today"] = user_today
-            fill_series = "generate_series(:user_start, :user_today, INTERVAL '1 day') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_today AS timestamp), INTERVAL '1 day') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 day') AS gs"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 day') AS gs"
         group_expr = "(pr.pur_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
     elif period == "monthly":
         user_start_month = user_today.replace(day=1)
@@ -897,20 +897,20 @@ async def get_purchase_trend(
         if not date_from:
             params["user_start"] = user_start_month
             params["user_end"] = user_end_month
-            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 month') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 month') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 month') AS gs"
-        group_expr = "date_trunc('month', pr.pur_created_at + (:loc_offset * INTERVAL '1 minute'))"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 month') AS gs"
+        group_expr = "date_trunc('month', pr.pur_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
     else:
         user_start_year = user_today.replace(year=user_today.year - 4, month=1, day=1)
         user_end_year = user_today.replace(year=user_today.year + 1, month=1, day=1)
         if not date_from:
             params["user_start"] = user_start_year
             params["user_end"] = user_end_year
-            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 year') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 year') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 year') AS gs"
-        group_expr = "date_trunc('year', pr.pur_created_at + (:loc_offset * INTERVAL '1 minute'))"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 year') AS gs"
+        group_expr = "date_trunc('year', pr.pur_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
 
     rows = await db.execute(text(f"""
         WITH aggregated AS (
@@ -929,7 +929,7 @@ async def get_purchase_trend(
             COALESCE(a.purchase_count, 0) AS purchase_count,
             COALESCE(a.amount, 0) AS amount
         FROM {fill_series}
-        LEFT JOIN aggregated a ON a.bucket = gs
+        LEFT JOIN aggregated a ON a.bucket = gs::date
         ORDER BY gs
     """), params)
     rows = rows.fetchall()
@@ -943,7 +943,7 @@ async def get_purchase_trend(
             month_short = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
             label = month_short[r.bucket.month - 1] if hasattr(r.bucket, 'month') else str(r.bucket)
         else:
-            label = str(int(r.bucket)) if hasattr(r.bucket, 'year') else str(r.bucket)
+            label = str(r.bucket.year) if hasattr(r.bucket, 'year') else str(r.bucket)
         result.append({"label": label, "purchase_count": int(r.purchase_count), "amount": float(r.amount) if can_financial else None})
 
     return success_response(result)
@@ -1296,9 +1296,9 @@ async def get_profit_trend(
         if not date_from:
             params["user_start"] = user_start
             params["user_today"] = user_today
-            fill_series = "generate_series(:user_start, :user_today, INTERVAL '1 day') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_today AS timestamp), INTERVAL '1 day') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 day') AS gs"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 day') AS gs"
         group_expr = "(s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
     elif period == "monthly":
         user_start_month = user_today.replace(day=1)
@@ -1314,20 +1314,20 @@ async def get_profit_trend(
         if not date_from:
             params["user_start"] = user_start_month
             params["user_end"] = user_end_month
-            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 month') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 month') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 month') AS gs"
-        group_expr = "date_trunc('month', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 month') AS gs"
+        group_expr = "date_trunc('month', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
     else:
         user_start_year = user_today.replace(year=user_today.year - 4, month=1, day=1)
         user_end_year = user_today.replace(year=user_today.year + 1, month=1, day=1)
         if not date_from:
             params["user_start"] = user_start_year
             params["user_end"] = user_end_year
-            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 year') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 year') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 year') AS gs"
-        group_expr = "date_trunc('year', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 year') AS gs"
+        group_expr = "date_trunc('year', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
 
     # FIXED proportional discount formula instead of sale_item_subtotal
     rows = await db.execute(text(f"""
@@ -1349,7 +1349,7 @@ async def get_profit_trend(
             COALESCE(a.revenue, 0) AS revenue,
             COALESCE(a.cost, 0) AS cost
         FROM {fill_series}
-        LEFT JOIN aggregated a ON a.bucket = gs
+        LEFT JOIN aggregated a ON a.bucket = gs::date
         ORDER BY gs
     """), params)
     rows = rows.fetchall()
@@ -1366,7 +1366,7 @@ async def get_profit_trend(
             month_short = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
             label = month_short[r.bucket.month - 1] if hasattr(r.bucket, 'month') else str(r.bucket)
         else:
-            label = str(int(r.bucket)) if hasattr(r.bucket, 'year') else str(r.bucket)
+            label = str(r.bucket.year) if hasattr(r.bucket, 'year') else str(r.bucket)
         result.append({
             "label": label,
             "revenue": revenue,
@@ -2137,9 +2137,9 @@ async def get_expense_trend(
         if not date_from:
             params["user_start"] = user_start
             params["user_today"] = user_today
-            fill_series = "generate_series(:user_start, :user_today, INTERVAL '1 day') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_today AS timestamp), INTERVAL '1 day') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 day') AS gs"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 day') AS gs"
         group_expr = "e.expense_date"
     elif period == "monthly":
         user_start_month = user_today.replace(day=1)
@@ -2155,20 +2155,20 @@ async def get_expense_trend(
         if not date_from:
             params["user_start"] = user_start_month
             params["user_end"] = user_end_month
-            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 month') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 month') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 month') AS gs"
-        group_expr = "date_trunc('month', e.expense_date)"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 month') AS gs"
+        group_expr = "date_trunc('month', e.expense_date)::date"
     else:
         user_start_year = user_today.replace(year=user_today.year - 4, month=1, day=1)
         user_end_year = user_today.replace(year=user_today.year + 1, month=1, day=1)
         if not date_from:
             params["user_start"] = user_start_year
             params["user_end"] = user_end_year
-            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 year') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 year') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 year') AS gs"
-        group_expr = "date_trunc('year', e.expense_date)"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 year') AS gs"
+        group_expr = "date_trunc('year', e.expense_date)::date"
 
     rows = await db.execute(text(f"""
         WITH aggregated AS (
@@ -2187,7 +2187,7 @@ async def get_expense_trend(
             COALESCE(a.amount, 0) AS amount,
             COALESCE(a.expense_count, 0) AS expense_count
         FROM {fill_series}
-        LEFT JOIN aggregated a ON a.bucket = gs
+        LEFT JOIN aggregated a ON a.bucket = gs::date
         ORDER BY gs
     """), params)
     rows = rows.fetchall()
@@ -2201,7 +2201,7 @@ async def get_expense_trend(
             month_short = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
             label = month_short[r.bucket.month - 1] if hasattr(r.bucket, 'month') else str(r.bucket)
         else:
-            label = str(int(r.bucket)) if hasattr(r.bucket, 'year') else str(r.bucket)
+            label = str(r.bucket.year) if hasattr(r.bucket, 'year') else str(r.bucket)
         result.append({"label": label, "amount": float(r.amount) if can_financial else None, "expense_count": int(r.expense_count)})
 
     return success_response(result)
@@ -2524,9 +2524,9 @@ async def get_tax_trend(
         if not date_from:
             params["user_start"] = user_start
             params["user_today"] = user_today
-            fill_series = "generate_series(:user_start, :user_today, INTERVAL '1 day') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_today AS timestamp), INTERVAL '1 day') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 day') AS gs"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 day') AS gs"
         group_expr_s = "(s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
         group_expr_sr = "(sr.return_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
         group_expr_p = "(pr.pur_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
@@ -2545,26 +2545,26 @@ async def get_tax_trend(
         if not date_from:
             params["user_start"] = user_start_month
             params["user_end"] = user_end_month
-            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 month') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 month') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 month') AS gs"
-        group_expr_s = "date_trunc('month', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))"
-        group_expr_sr = "date_trunc('month', sr.return_created_at + (:loc_offset * INTERVAL '1 minute'))"
-        group_expr_p = "date_trunc('month', pr.pur_created_at + (:loc_offset * INTERVAL '1 minute'))"
-        group_expr_prr = "date_trunc('month', prr.return_created_at + (:loc_offset * INTERVAL '1 minute'))"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 month') AS gs"
+        group_expr_s = "date_trunc('month', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
+        group_expr_sr = "date_trunc('month', sr.return_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
+        group_expr_p = "date_trunc('month', pr.pur_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
+        group_expr_prr = "date_trunc('month', prr.return_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
     else:
         user_start_year = user_today.replace(year=user_today.year - 4, month=1, day=1)
         user_end_year = user_today.replace(year=user_today.year + 1, month=1, day=1)
         if not date_from:
             params["user_start"] = user_start_year
             params["user_end"] = user_end_year
-            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 year') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 year') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 year') AS gs"
-        group_expr_s = "date_trunc('year', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))"
-        group_expr_sr = "date_trunc('year', sr.return_created_at + (:loc_offset * INTERVAL '1 minute'))"
-        group_expr_p = "date_trunc('year', pr.pur_created_at + (:loc_offset * INTERVAL '1 minute'))"
-        group_expr_prr = "date_trunc('year', prr.return_created_at + (:loc_offset * INTERVAL '1 minute'))"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 year') AS gs"
+        group_expr_s = "date_trunc('year', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
+        group_expr_sr = "date_trunc('year', sr.return_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
+        group_expr_p = "date_trunc('year', pr.pur_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
+        group_expr_prr = "date_trunc('year', prr.return_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
 
     rows = await db.execute(text(f"""
         WITH sales_agg AS (
@@ -2623,10 +2623,10 @@ async def get_tax_trend(
             COALESCE(sa.gst_collected, 0) - COALESCE(sra.returned_tax, 0) AS gst_collected,
             COALESCE(pa.gst_paid, 0) - COALESCE(pra.returned_tax, 0) AS gst_paid
         FROM {fill_series}
-        LEFT JOIN sales_agg sa ON sa.bucket = gs
-        LEFT JOIN sales_ret_agg sra ON sra.bucket = gs
-        LEFT JOIN purchase_agg pa ON pa.bucket = gs
-        LEFT JOIN purchase_ret_agg pra ON pra.bucket = gs
+        LEFT JOIN sales_agg sa ON sa.bucket = gs::date
+        LEFT JOIN sales_ret_agg sra ON sra.bucket = gs::date
+        LEFT JOIN purchase_agg pa ON pa.bucket = gs::date
+        LEFT JOIN purchase_ret_agg pra ON pra.bucket = gs::date
         ORDER BY gs
     """), params)
     rows = rows.fetchall()
@@ -2640,7 +2640,7 @@ async def get_tax_trend(
             month_short = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
             label = month_short[r.bucket.month - 1] if hasattr(r.bucket, 'month') else str(r.bucket)
         else:
-            label = str(int(r.bucket)) if hasattr(r.bucket, 'year') else str(r.bucket)
+            label = str(r.bucket.year) if hasattr(r.bucket, 'year') else str(r.bucket)
         result.append({
             "label": label,
             "gst_collected": float(r.gst_collected) if can_financial else None,
@@ -2763,9 +2763,9 @@ async def get_returns_trend(
         if not date_from:
             params["user_start"] = user_start
             params["user_today"] = user_today
-            fill_series = "generate_series(:user_start, :user_today, INTERVAL '1 day') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_today AS timestamp), INTERVAL '1 day') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 day') AS gs"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 day') AS gs"
         group_expr = "(r.return_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
     elif period == "monthly":
         user_start_month = user_today.replace(day=1)
@@ -2781,20 +2781,20 @@ async def get_returns_trend(
         if not date_from:
             params["user_start"] = user_start_month
             params["user_end"] = user_end_month
-            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 month') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 month') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 month') AS gs"
-        group_expr = "date_trunc('month', r.return_created_at + (:loc_offset * INTERVAL '1 minute'))"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 month') AS gs"
+        group_expr = "date_trunc('month', r.return_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
     else:
         user_start_year = user_today.replace(year=user_today.year - 4, month=1, day=1)
         user_end_year = user_today.replace(year=user_today.year + 1, month=1, day=1)
         if not date_from:
             params["user_start"] = user_start_year
             params["user_end"] = user_end_year
-            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 year') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 year') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 year') AS gs"
-        group_expr = "date_trunc('year', r.return_created_at + (:loc_offset * INTERVAL '1 minute'))"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 year') AS gs"
+        group_expr = "date_trunc('year', r.return_created_at + (:loc_offset * INTERVAL '1 minute'))::date"
 
     rows = await db.execute(text(f"""
         WITH sales_ret AS (
@@ -2816,8 +2816,8 @@ async def get_returns_trend(
             COALESCE(prr.return_count, 0) AS purchase_return_count,
             COALESCE(prr.return_amount, 0) AS purchase_return_amount
         FROM {fill_series}
-        LEFT JOIN sales_ret sr ON sr.bucket = gs
-        LEFT JOIN purchase_ret prr ON prr.bucket = gs
+        LEFT JOIN sales_ret sr ON sr.bucket = gs::date
+        LEFT JOIN purchase_ret prr ON prr.bucket = gs::date
         ORDER BY gs
     """), params)
     rows = rows.fetchall()
@@ -2831,7 +2831,7 @@ async def get_returns_trend(
             month_short = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
             label = month_short[r.bucket.month - 1] if hasattr(r.bucket, 'month') else str(r.bucket)
         else:
-            label = str(int(r.bucket)) if hasattr(r.bucket, 'year') else str(r.bucket)
+            label = str(r.bucket.year) if hasattr(r.bucket, 'year') else str(r.bucket)
         result.append({
             "label": label,
             "sales_return_count": int(r.sales_return_count),
@@ -2921,9 +2921,9 @@ async def get_payment_collections(
         if not date_from:
             params["user_start"] = user_start
             params["user_today"] = user_today
-            fill_series = "generate_series(:user_start, :user_today, INTERVAL '1 day') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_today AS timestamp), INTERVAL '1 day') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 day') AS gs"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 day') AS gs"
         group_expr = "(pay.payment_paid_at + (:loc_offset * INTERVAL '1 minute'))::date"
     elif period == "monthly":
         user_start_month = user_today.replace(day=1)
@@ -2939,20 +2939,20 @@ async def get_payment_collections(
         if not date_from:
             params["user_start"] = user_start_month
             params["user_end"] = user_end_month
-            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 month') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 month') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 month') AS gs"
-        group_expr = "date_trunc('month', pay.payment_paid_at + (:loc_offset * INTERVAL '1 minute'))"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 month') AS gs"
+        group_expr = "date_trunc('month', pay.payment_paid_at + (:loc_offset * INTERVAL '1 minute'))::date"
     else:
         user_start_year = user_today.replace(year=user_today.year - 4, month=1, day=1)
         user_end_year = user_today.replace(year=user_today.year + 1, month=1, day=1)
         if not date_from:
             params["user_start"] = user_start_year
             params["user_end"] = user_end_year
-            fill_series = "generate_series(:user_start, :user_end, INTERVAL '1 year') AS gs"
+            fill_series = "generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 year') AS gs"
         else:
-            fill_series = "generate_series(CAST(:date_from AS date), CAST(:date_to AS date), INTERVAL '1 year') AS gs"
-        group_expr = "date_trunc('year', pay.payment_paid_at + (:loc_offset * INTERVAL '1 minute'))"
+            fill_series = "generate_series(CAST(:date_from AS timestamp), CAST(:date_to AS timestamp), INTERVAL '1 year') AS gs"
+        group_expr = "date_trunc('year', pay.payment_paid_at + (:loc_offset * INTERVAL '1 minute'))::date"
 
     rows = await db.execute(text(f"""
         WITH aggregated AS (
@@ -2971,7 +2971,7 @@ async def get_payment_collections(
             COALESCE(a.payment_count, 0) AS payment_count,
             COALESCE(a.amount, 0) AS amount
         FROM {fill_series}
-        LEFT JOIN aggregated a ON a.bucket = gs
+        LEFT JOIN aggregated a ON a.bucket = gs::date
         ORDER BY gs
     """), params)
     rows = rows.fetchall()
@@ -2985,7 +2985,7 @@ async def get_payment_collections(
             month_short = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
             label = month_short[r.bucket.month - 1] if hasattr(r.bucket, 'month') else str(r.bucket)
         else:
-            label = str(int(r.bucket)) if hasattr(r.bucket, 'year') else str(r.bucket)
+            label = str(r.bucket.year) if hasattr(r.bucket, 'year') else str(r.bucket)
         result.append({"label": label, "payment_count": int(r.payment_count), "amount": float(r.amount) if can_financial else None})
 
     return success_response(result)

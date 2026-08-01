@@ -207,8 +207,8 @@ async def get_dashboard_trend(
                 SELECT
                     gs                                  AS bucket,
                     COALESCE(d.invoice_count, 0)        AS invoice_count
-                FROM generate_series(:user_start, :user_today, INTERVAL '1 day') AS gs
-                LEFT JOIN daily d ON d.bucket = gs
+                FROM generate_series(CAST(:user_start AS timestamp), CAST(:user_today AS timestamp), INTERVAL '1 day') AS gs
+                LEFT JOIN daily d ON d.bucket = gs::date
                 ORDER BY gs
             """),
             {
@@ -247,20 +247,20 @@ async def get_dashboard_trend(
             text("""
                 WITH monthly AS (
                     SELECT
-                        date_trunc('month', s.sales_created_at + (:loc_offset * INTERVAL '1 minute')) AS bucket,
+                        date_trunc('month', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date AS bucket,
                         COUNT(s.sales_id) AS invoice_count
                     FROM sales s
                     WHERE s.business_id = CAST(:bid AS uuid)
                       AND s.is_deleted  = false
                       AND s.sales_created_at >= CAST(:date_from AS timestamp)
                       AND s.sales_created_at <  CAST(:date_to AS timestamp) + INTERVAL '1 day'
-                    GROUP BY date_trunc('month', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))
+                    GROUP BY date_trunc('month', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date
                 )
                 SELECT
                     gs                                  AS bucket,
                     COALESCE(m.invoice_count, 0)        AS invoice_count
-                FROM generate_series(:user_start, :user_end, INTERVAL '1 month') AS gs
-                LEFT JOIN monthly m ON m.bucket = gs
+                FROM generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 month') AS gs
+                LEFT JOIN monthly m ON m.bucket = gs::date
                 ORDER BY gs
             """),
             {
@@ -294,20 +294,20 @@ async def get_dashboard_trend(
             text("""
                 WITH yearly AS (
                     SELECT
-                        date_trunc('year', s.sales_created_at + (:loc_offset * INTERVAL '1 minute')) AS bucket,
+                        date_trunc('year', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date AS bucket,
                         COUNT(s.sales_id) AS invoice_count
                     FROM sales s
                     WHERE s.business_id = CAST(:bid AS uuid)
                       AND s.is_deleted  = false
                       AND s.sales_created_at >= CAST(:date_from AS timestamp)
                       AND s.sales_created_at <  CAST(:date_to AS timestamp) + INTERVAL '1 day'
-                    GROUP BY date_trunc('year', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))
+                    GROUP BY date_trunc('year', s.sales_created_at + (:loc_offset * INTERVAL '1 minute'))::date
                 )
                 SELECT
                     gs                                  AS bucket,
                     COALESCE(y.invoice_count, 0)        AS invoice_count
-                FROM generate_series(:user_start, :user_end, INTERVAL '1 year') AS gs
-                LEFT JOIN yearly y ON y.bucket = gs
+                FROM generate_series(CAST(:user_start AS timestamp), CAST(:user_end AS timestamp), INTERVAL '1 year') AS gs
+                LEFT JOIN yearly y ON y.bucket = gs::date
                 ORDER BY gs
             """),
             {

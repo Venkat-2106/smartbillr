@@ -1,0 +1,32 @@
+User-agent: *
+Allow: /
+Allow: /pricing
+Allow: /login
+Allow: /signup
+
+# Admin panel — never indexable, keep it out of search entirely
+Disallow: /admin
+
+# Authenticated tenant app — private per-business data, not public content
+Disallow: /dashboard
+Disallow: /sales
+Disallow: /purchases
+Disallow: /customers
+Disallow: /suppliers
+Disallow: /products
+Disallow: /categories
+Disallow: /stock
+Disallow: /payments
+Disallow: /expenses
+Disallow: /sales-returns
+Disallow: /purchase-returns
+Disallow: /reports
+Disallow: /settings
+Disallow: /staff
+Disallow: /subscription
+Disallow: /billing
+Disallow: /user-guide
+Disallow: /unauthorized
+Disallow: /reset-password
+
+Sitemap: https://smartbillr.online/sitemap.xml

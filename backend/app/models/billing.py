@@ -32,6 +32,8 @@ class SubscriptionPayment(Base):
     plan_id = Column(UUID(as_uuid=True), ForeignKey("plans.plan_id"), nullable=False)
     provider = Column(String(20), nullable=False)
     provider_order_id = Column(String(120), nullable=True)
+    razorpay_subscription_id = Column(String(120), nullable=True)
+    subscription_status = Column(String(20), nullable=True)
     provider_payment_id = Column(String(120), nullable=True)
     provider_signature = Column(Text, nullable=True)
     amount = Column(Numeric(10, 2), nullable=False)

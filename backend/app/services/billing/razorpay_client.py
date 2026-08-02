@@ -36,6 +36,18 @@ def create_order(amount_paise: int, currency: str, receipt: str, notes: dict) ->
     })
 
 
+def create_subscription(plan_id: str, total_count: int, notes: dict) -> dict:
+    client = _get_client()
+    if not client:
+        raise RuntimeError("Razorpay client not configured")
+    return client.subscription.create({
+        "plan_id": plan_id,
+        "total_count": total_count,
+        "customer_notify": 1,
+        "notes": notes,
+    })
+
+
 def verify_webhook_signature(body: str, signature: str, secret: str) -> bool:
     client = _get_client()
     if not client:

@@ -78,11 +78,31 @@ async def _record_pending_payment(db, bid, plan_id, provider, order_id, amount, 
     return str(row.payment_id)
 
 
+async def _record_pending_subscription(db, bid, plan_id, provider, sub_id, amount, currency):
+    result = await db.execute(
+        text("""
+            INSERT INTO subscription_payments (
+                business_id, plan_id, provider,
+                razorpay_subscription_id, subscription_status,
+                amount, currency, status
+            )
+            VALUES (:bid, :plan_id, :provider, :sub_id, 'created', :amount, :currency, 'created')
+            RETURNING payment_id
+        """),
+        {"bid": bid, "plan_id": plan_id, "provider": provider, "sub_id": sub_id,
+         "amount": amount, "currency": currency},
+    )
+    row = result.fetchone()
+    await db.commit()
+    return str(row.payment_id)
+
+
 async def _find_existing_checkout(db, bid, plan_id):
     """Return an existing 'created' checkout for this business+plan within the last 10 minutes, or None."""
     result = await db.execute(
         text("""
-            SELECT payment_id, provider, provider_order_id, amount, currency
+            SELECT payment_id, provider, provider_order_id, razorpay_subscription_id,
+                   subscription_status, amount, currency
             FROM subscription_payments
             WHERE business_id = CAST(:bid AS uuid)
               AND plan_id = :plan_id
@@ -100,6 +120,8 @@ async def _find_existing_checkout(db, bid, plan_id):
         "payment_id": str(row.payment_id),
         "provider": row.provider,
         "provider_order_id": row.provider_order_id,
+        "razorpay_subscription_id": row.razorpay_subscription_id,
+        "subscription_status": row.subscription_status,
         "amount": float(row.amount),
         "currency": row.currency,
     }
@@ -136,9 +158,18 @@ async def create_checkout(
         return error_response("Business not found", 404)
 
     is_india = (business.business_country_code or "").upper() == "IN"
+    is_recurring = plan.billing_cycle in ("monthly", "yearly")
 
     existing = await _find_existing_checkout(db, bid, str(plan.plan_id))
     if existing:
+        if existing["razorpay_subscription_id"]:
+            return success_response({
+                "provider": "razorpay",
+                "mode": "subscription",
+                "razorpay_subscription_id": existing["razorpay_subscription_id"],
+                "razorpay_key_id": os.getenv("RAZORPAY_KEY_ID"),
+                "payment_id": existing["payment_id"],
+            })
         return success_response({
             "provider": "razorpay",
             "razorpay_order_id": existing["provider_order_id"],
@@ -146,6 +177,38 @@ async def create_checkout(
             "amount": int(existing["amount"] * 100),
             "currency": existing["currency"],
             "payment_id": existing["payment_id"],
+        })
+
+    if is_recurring:
+        # Monthly/yearly plans go through Razorpay's recurring-billing
+        # Subscriptions product (one-time mandate authorization, then
+        # Razorpay auto-charges each cycle). Lifetime/one_time plans keep
+        # using the one-time Order flow below.
+        if not plan.razorpay_plan_id:
+            return error_response("Plan not configured for recurring billing", 500)
+
+        price = plan.price_inr if is_india else plan.price_usd
+        currency = "INR" if is_india else "USD"
+        if not price or float(price) <= 0:
+            return error_response(f"This plan is not available for {currency}", 400)
+
+        sub = razorpay_client.create_subscription(
+            plan_id=plan.razorpay_plan_id,
+            total_count=1200 if plan.billing_cycle == "monthly" else 100,
+            notes={"business_id": bid, "plan_code": plan.plan_code},
+        )
+
+        payment_id = await _record_pending_subscription(
+            db, bid, str(plan.plan_id), "razorpay", sub["id"],
+            float(price), currency,
+        )
+
+        return success_response({
+            "provider": "razorpay",
+            "mode": "subscription",
+            "razorpay_subscription_id": sub["id"],
+            "razorpay_key_id": os.getenv("RAZORPAY_KEY_ID"),
+            "payment_id": payment_id,
         })
 
     if is_india:

@@ -37,13 +37,13 @@ jobs:
         run: pip install -r backend/requirements.txt
       - name: Apply migrations
         env:
-          DATABASE_URL: postgresql://smartbillr@postgres:5432/smartbillr_test
+          DATABASE_URL: postgresql://smartbillr@localhost:5432/smartbillr_test
         run: |
           cd backend
           alembic upgrade head
       - name: Run tests
         env:
-          DATABASE_URL: postgresql://smartbillr@postgres:5432/smartbillr_test
+          DATABASE_URL: postgresql://smartbillr@localhost:5432/smartbillr_test
           RUN_RLS_TESTS: 1
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

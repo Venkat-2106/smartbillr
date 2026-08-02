@@ -29,11 +29,24 @@ def _is_postgresql(engine) -> bool:
 
 def _insert_test_data(session: Session, business_id: str, prefix: str):
     """Insert a product and a customer for the given business."""
+    # Seed the parent business row first (idempotent) so the product/customer
+    # foreign keys are satisfied. FK checks are not RLS-filtered, but seeding
+    # also keeps the schema consistent with a real tenant.
     session.execute(
         text(
             """
-            INSERT INTO products (prod_id, business_id, product_name, price, unit)
-            VALUES (:pid, :bid, :name, 10.00, 'pc')
+            INSERT INTO businesses (business_id, business_name)
+            VALUES (:bid, :name)
+            ON CONFLICT (business_id) DO NOTHING
+            """
+        ),
+        {"bid": business_id, "name": f"{prefix} Business"},
+    )
+    session.execute(
+        text(
+            """
+            INSERT INTO products (prod_id, business_id, prod_name, prod_sell_price, prod_cost_price, unit)
+            VALUES (:pid, :bid, :name, 10.00, 7.00, 'pc')
             """
         ),
         {
@@ -45,7 +58,7 @@ def _insert_test_data(session: Session, business_id: str, prefix: str):
     session.execute(
         text(
             """
-            INSERT INTO customers (customer_id, business_id, customer_name)
+            INSERT INTO customers (cust_id, business_id, cust_name)
             VALUES (:cid, :bid, :name)
             """
         ),
@@ -84,12 +97,25 @@ def pg_engine():
 
 @pytest.fixture
 def clean_db(pg_engine):
-    """Remove test data inserted during RLS tests."""
+    """Remove test data inserted during RLS tests.
+
+    Deletes run under the row-level security policy, so each tenant's rows
+    must be removed while the matching ``app.current_business_id`` is set.
+    """
     yield
     with pg_engine.connect() as conn:
         trans = conn.begin()
-        conn.execute(text("DELETE FROM products WHERE product_name LIKE 'RLS_%'"))
-        conn.execute(text("DELETE FROM customers WHERE customer_name LIKE 'RLS_%'"))
+        for tenant in (TestRLS.TENANT_A, TestRLS.TENANT_B):
+            conn.execute(
+                text("SET LOCAL app.current_business_id = :bid"),
+                {"bid": tenant},
+            )
+            conn.execute(
+                text("DELETE FROM products WHERE prod_name LIKE 'RLS_%'")
+            )
+            conn.execute(
+                text("DELETE FROM customers WHERE cust_name LIKE 'RLS_%'")
+            )
         trans.commit()
 
 

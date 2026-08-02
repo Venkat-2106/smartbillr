@@ -9,7 +9,7 @@ Tests the POST /v1/payments/ endpoint:
 Dependencies required by the endpoint are mocked:
   - verify_token   → mock_auth fixture (bypasses real JWT + profile lookup)
   - get_db         → conftest override (SQLite in-memory)
-  - record_payment_and_sync → SQLite-compatible patch
+  - record_payment_and_sync_async → SQLite-compatible async patch
 """
 
 from decimal import Decimal
@@ -21,20 +21,24 @@ from sqlalchemy import text as sa_text
 from sqlalchemy.orm import Session
 
 
-# ── SQLite-compatible version of record_payment_and_sync ─────────────────────
+# ── SQLite-compatible version of record_payment_and_sync_async ───────────────
 
-def _sqlite_record_payment_and_sync(
-    db, business_id, sale_id, sale_final,
-    payment_amount, payment_method, new_status, cumulative_paid,
+async def _sqlite_record_payment_and_sync(
+    db,
+    business_id,
+    sale_id,
+    payment_amount,
+    payment_method,
+    new_status,
+    cumulative_paid,
 ):
     # SQLite cannot bind Decimal natively; convert to float for the mock.
-    sale_final = float(sale_final)
     payment_amount = float(payment_amount)
     cumulative_paid = float(cumulative_paid)
     new_payment_id = str(uuid.uuid4())
 
     # Deactivate existing active rows for this sale
-    db.execute(
+    await db.execute(
         sa_text("""
             UPDATE payments
             SET is_active = 0
@@ -46,7 +50,7 @@ def _sqlite_record_payment_and_sync(
     )
 
     # Insert new payment row
-    db.execute(
+    await db.execute(
         sa_text("""
             INSERT INTO payments (
                 payment_id, business_id, sale_id,
@@ -72,7 +76,7 @@ def _sqlite_record_payment_and_sync(
     )
 
     # Mirror status to sales table
-    db.execute(
+    await db.execute(
         sa_text("""
             UPDATE sales
             SET sales_payment_status = :status
@@ -124,7 +128,7 @@ class TestCreatePayment:
 
     def _patch_record_payment(self):
         return patch(
-            "app.routers.payment.record_payment_and_sync",
+            "app.routers.payment.record_payment_and_sync_async",
             _sqlite_record_payment_and_sync,
         )
 
@@ -192,7 +196,7 @@ class TestCreatePayment:
 
         # Try paying 600 more (remaining balance is 500)
         with patch(
-            "app.routers.payment.record_payment_and_sync",
+            "app.routers.payment.record_payment_and_sync_async",
             _sqlite_record_payment_and_sync,
         ):
             resp = client.post(
@@ -231,7 +235,7 @@ class TestCreatePayment:
         self.db.commit()
 
         with patch(
-            "app.routers.payment.record_payment_and_sync",
+            "app.routers.payment.record_payment_and_sync_async",
             _sqlite_record_payment_and_sync,
         ):
             resp = client.post(

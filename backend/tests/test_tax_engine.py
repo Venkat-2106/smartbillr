@@ -15,6 +15,7 @@ def test_cgst_sgst_rounding_odd_tax():
         business_state="karnataka",
         counterparty_country_code="IN",
         counterparty_state="karnataka",
+        business_gst_registered=True,
     )
     assert result["cgst_amount"] + result["sgst_amount"] == Decimal("1.50")
 
@@ -30,6 +31,7 @@ def test_cgst_sgst_rounding_odd_tax():
         business_state="karnataka",
         counterparty_country_code="IN",
         counterparty_state="karnataka",
+        business_gst_registered=True,
     )
     total = (Decimal("9.99") * Decimal("5")) / Decimal("100")
     assert result["cgst_amount"] + result["sgst_amount"] == total.quantize(Decimal("0.01"))
@@ -46,6 +48,7 @@ def test_cgst_sgst_rounding_odd_tax():
         business_state="karnataka",
         counterparty_country_code="IN",
         counterparty_state="karnataka",
+        business_gst_registered=True,
     )
     total = (Decimal("0.99") * Decimal("18")) / Decimal("100")
     assert result["cgst_amount"] + result["sgst_amount"] == total.quantize(Decimal("0.01"))
@@ -61,6 +64,7 @@ def test_igst_rounding():
         business_state="karnataka",
         counterparty_country_code="US",
         counterparty_state="",
+        business_gst_registered=True,
     )
     total = (Decimal("9.99") * Decimal("5")) / Decimal("100")
     assert result["igst_amount"] == total.quantize(Decimal("0.01"))
@@ -98,6 +102,7 @@ def test_zero_percent_tax_rate():
         business_state="karnataka",
         counterparty_country_code="IN",
         counterparty_state="karnataka",
+        business_gst_registered=True,
     )
     assert result["subtotal"] == Decimal("200.00")
     assert result["cgst_amount"] == Decimal("0")
@@ -119,6 +124,7 @@ def test_one_hundred_percent_tax_rate():
         business_state="karnataka",
         counterparty_country_code="IN",
         counterparty_state="karnataka",
+        business_gst_registered=True,
     )
     assert result["subtotal"] == Decimal("100.00")
     assert result["cgst_amount"] + result["sgst_amount"] == Decimal("100.00")
@@ -139,6 +145,7 @@ def test_blank_counterparty_state_defaults_to_cgst_sgst():
         business_state="karnataka",
         counterparty_country_code="IN",
         counterparty_state="",
+        business_gst_registered=True,
     )
     assert result["tax_type"] == "cgst_sgst"
     assert result["cgst_amount"] > 0
@@ -156,6 +163,7 @@ def test_blank_counterparty_country_defaults_to_cgst_sgst():
         business_state="karnataka",
         counterparty_country_code="",
         counterparty_state="",
+        business_gst_registered=True,
     )
     assert result["tax_type"] == "cgst_sgst"
     assert result["cgst_amount"] > 0
@@ -172,6 +180,7 @@ def test_counterparty_none_state_defaults_to_cgst_sgst():
         business_state="karnataka",
         counterparty_country_code="IN",
         counterparty_state=None,
+        business_gst_registered=True,
     )
     assert result["tax_type"] == "cgst_sgst"
 
@@ -186,6 +195,7 @@ def test_same_state_returns_cgst_sgst():
         business_state="karnataka",
         counterparty_country_code="IN",
         counterparty_state="karnataka",
+        business_gst_registered=True,
     )
     assert result["tax_type"] == "cgst_sgst"
     assert result["cgst_amount"] > 0
@@ -203,6 +213,7 @@ def test_different_state_returns_igst():
         business_state="karnataka",
         counterparty_country_code="IN",
         counterparty_state="maharashtra",
+        business_gst_registered=True,
     )
     assert result["tax_type"] == "igst"
     assert result["igst_amount"] > 0
@@ -220,6 +231,7 @@ def test_cross_border_returns_igst():
         business_state="karnataka",
         counterparty_country_code="US",
         counterparty_state="",
+        business_gst_registered=True,
     )
     assert result["tax_type"] == "igst"
     assert result["igst_amount"] > 0

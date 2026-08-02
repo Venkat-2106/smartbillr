@@ -35,6 +35,29 @@ def _is_postgresql(engine) -> bool:
     return engine.dialect.name == "postgresql"
 
 
+def _set_tenant_context(conn):
+    """Set the RLS session variable and seed the FK-parent business row.
+
+    The CI database runs the suite as ``app_user`` with Row-Level Security
+    forced on every tenant table, so a tenant-scoped INSERT is rejected unless
+    ``app.current_business_id`` matches the row's business_id.
+    """
+    conn.execute(
+        text("SET LOCAL app.current_business_id = :bid"),
+        {"bid": BIZ_ID},
+    )
+    conn.execute(
+        text(
+            """
+            INSERT INTO businesses (business_id, business_name)
+            VALUES (:bid, 'Updated By Test Business')
+            ON CONFLICT (business_id) DO NOTHING
+            """
+        ),
+        {"bid": BIZ_ID},
+    )
+
+
 def _setup_test_row(conn, table: str, pk_column: str, pk_val: str):
     """Insert a minimal row into the given table if it doesn't exist."""
     pk_val_str = str(pk_val)
@@ -95,6 +118,8 @@ def test_trigger_fires_on_update(pg_engine):
             "fn_set_updated_by does not exist — did you forget to run the migration?"
         )
 
+        _set_tenant_context(conn)
+
         for table in TABLES:
             pk_col = "category_id" if table == "categories" else ("expense_id" if table == "expenses" else "supp_id")
             name_col = "category_name" if table == "categories" else ("expense_amount" if table == "expenses" else "supp_name")
@@ -145,6 +170,8 @@ def test_trigger_updates_to_new_user(pg_engine):
     with pg_engine.connect() as conn:
         trans = conn.begin()
 
+        _set_tenant_context(conn)
+
         for table in TABLES:
             pk_col = "category_id" if table == "categories" else ("expense_id" if table == "expenses" else "supp_id")
             name_col = "category_name" if table == "categories" else ("expense_amount" if table == "expenses" else "supp_name")
@@ -188,6 +215,8 @@ def test_trigger_sets_null_when_guc_unset(pg_engine):
 
     with pg_engine.connect() as conn:
         trans = conn.begin()
+
+        _set_tenant_context(conn)
 
         for table in TABLES:
             pk_col = "category_id" if table == "categories" else ("expense_id" if table == "expenses" else "supp_id")

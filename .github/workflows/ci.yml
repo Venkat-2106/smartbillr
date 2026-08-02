@@ -35,16 +35,15 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
-      - name: Apply migrations
+      - name: Bootstrap test database
         env:
           DATABASE_URL: postgresql://smartbillr@localhost:5432/smartbillr_test
-        run: |
-          cd backend
-          alembic upgrade head
+        run: python backend/scripts/bootstrap_ci_db.py
       - name: Run tests
         env:
-          DATABASE_URL: postgresql://smartbillr@localhost:5432/smartbillr_test
+          DATABASE_URL: postgresql://app_user@localhost:5432/smartbillr_test
           RUN_RLS_TESTS: 1
+          RUN_UPDATED_BY_TESTS: 1
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}

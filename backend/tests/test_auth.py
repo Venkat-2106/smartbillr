@@ -4,15 +4,20 @@ Tests the /test-auth endpoint (development only) which exercises
 the verify_token dependency chain (HTTPBearer → decode_token_payload
 → profile lookup → permissions cache → response).
 
-Token generation uses SUPABASE_JWT_SECRET (HS256) with a test secret
-set in conftest.py.  No mocks are used for token validation — the
-real decode_token_payload function runs end-to-end.
+Token generation uses an RS256 test key pair and the `mock_jwks` fixture
+stubs the JWKS endpoint so the real decode_token_payload function runs
+end-to-end without a network call.
 """
 
 import uuid
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+
+
+@pytest.fixture(autouse=True)
+def _mock_jwks(mock_jwks):
+    yield
 
 
 @pytest.mark.usefixtures("seed_data")
@@ -47,7 +52,7 @@ class TestExpiredToken:
 
         assert resp.status_code == 401
         body = resp.json()
-        assert "expired" in body.get("detail", "").lower()
+        assert "expired" in body.get("message", "").lower()
 
 
 class TestMalformedToken:
@@ -61,18 +66,18 @@ class TestMalformedToken:
 
         assert resp.status_code == 401
         body = resp.json()
-        assert "invalid" in body.get("detail", "").lower()
+        assert "invalid" in body.get("message", "").lower()
 
 
 class TestMissingToken:
     """No Authorization header → 401 (raised by HTTPBearer)."""
 
-    def test_missing_token_returns_401(self, client: TestClient):
+    def test_missing_token_rejected(self, client: TestClient):
         resp = client.get("/test-auth")
 
         assert resp.status_code == 401
         body = resp.json()
-        assert body.get("detail") is not None
+        assert body.get("message") is not None
 
 
 class TestInactiveUser:
@@ -87,7 +92,7 @@ class TestInactiveUser:
 
         assert resp.status_code == 403
         body = resp.json()
-        assert "inactive" in body.get("detail", "").lower()
+        assert "inactive" in body.get("message", "").lower()
 
 
 class TestPermissionDenied:

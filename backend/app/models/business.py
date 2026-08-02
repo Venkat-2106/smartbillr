@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey
+from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey, text
 from sqlalchemy.dialects.postgresql import UUID
 from app.database import Base
 import uuid
@@ -34,7 +34,7 @@ class Business(Base):
     current_plan_id = Column(UUID(as_uuid=True), ForeignKey("plans.plan_id"), nullable=True)
     payment_provider = Column(String(20), nullable=True)
     provider_customer_id = Column(String(120), nullable=True)
-    auto_renew = Column(Boolean, nullable=False, default=True)
+    auto_renew = Column(Boolean, nullable=False, default=True, server_default=text("true"))
     # NOTE: this column is timestamptz in the DB (migration explicitly used
     # DateTime(timezone=True)), unlike every other date column on this table
     # which is naive. Declared here as timezone=True to match the DB truth,

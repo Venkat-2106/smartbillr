@@ -4,10 +4,7 @@ Tests for self-service tenant onboarding and subscription management.
 
 import os
 import uuid
-import base64
-import time
 from datetime import datetime, timezone, timedelta
-from unittest.mock import patch, MagicMock
 
 os.environ.setdefault("SUPABASE_JWT_SECRET", "dGVzdC1zZWNyZXQ=")
 
@@ -16,28 +13,19 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text as sa_text, text
 
 from app.main import app
-from app.middleware.auth import verify_token
+from app.middleware.auth import verify_token, verify_super_admin
 from app.services.subscription_expiry import expire_subscriptions
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _generate_token(sub: str, email: str = "test@example.com") -> str:
-    import jwt as pyjwt
-    now = time.time()
-    payload = {
-        "sub": sub,
-        "email": email,
-        "iat": int(now - 60),
-        "exp": int(now + 3600),
-    }
-    secret = base64.b64decode(os.environ["SUPABASE_JWT_SECRET"])
-    return pyjwt.encode(payload, secret, algorithm="HS256")
+from tests.conftest import generate_token
 
 
 ADMIN_USER_ID = "00000000-0000-4000-a000-000000000001"
 ACTIVE_USER_ID = "cf3a5b2c-0a30-4c9e-81ff-4588acf89377"
-ACTIVE_TOKEN = _generate_token(ACTIVE_USER_ID, "active@example.com")
+ACTIVE_TOKEN = generate_token(ACTIVE_USER_ID, "active@example.com")
+
+
+@pytest.fixture(autouse=True)
+def _mock_jwks(mock_jwks):
+    yield
 
 
 def _override_verify_token_admin():
@@ -62,29 +50,44 @@ def _override_verify_token_user():
 
 @pytest.fixture
 def mock_supabase(monkeypatch):
-    """Mock Supabase Auth Admin API - must return sync responses for sync httpx."""
-    mock_resp = MagicMock()
-    mock_resp.status_code = 201
-    mock_resp.json.return_value = {"id": "new-auth-user-id-12345"}
-    mock_resp.text = ""
+    """Stub the Supabase Auth Admin API helpers (no network calls)."""
+    import app.routers.subscription as sub_mod
 
-    import httpx
-    monkeypatch.setattr(httpx, "post", lambda url, *a, **kw: mock_resp)
-    monkeypatch.setattr(httpx, "delete", lambda url, *a, **kw: mock_resp)
+    async def fake_create(email: str, password: str, full_name: str) -> dict:
+        return {"id": "new-auth-user-id-12345"}
+
+    async def fake_delete(auth_user_id: str, email: str | None = None):
+        return None
+
+    monkeypatch.setattr(sub_mod, "_create_supabase_auth_user", fake_create)
+    monkeypatch.setattr(sub_mod, "_delete_supabase_auth_user", fake_delete)
+
+
+def _override_super_admin():
+    return {"user_id": ADMIN_USER_ID, "is_super_admin": True}
+
+
+def _deny_super_admin():
+    from fastapi import HTTPException
+    raise HTTPException(status_code=403, detail="Access denied. Super admin privileges required.")
 
 
 @pytest.fixture
 def mock_auth_admin(seed_data):
     app.dependency_overrides[verify_token] = _override_verify_token_admin
+    app.dependency_overrides[verify_super_admin] = _override_super_admin
     yield
     app.dependency_overrides.pop(verify_token, None)
+    app.dependency_overrides.pop(verify_super_admin, None)
 
 
 @pytest.fixture
 def mock_auth_user(seed_data):
     app.dependency_overrides[verify_token] = _override_verify_token_user
+    app.dependency_overrides[verify_super_admin] = _deny_super_admin
     yield
     app.dependency_overrides.pop(verify_token, None)
+    app.dependency_overrides.pop(verify_super_admin, None)
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -205,11 +208,11 @@ class TestSubscriptionStatus:
             headers={"Authorization": f"Bearer {ACTIVE_TOKEN}"},
         )
         assert resp.status_code == 200, resp.json()
-        data = resp.json()["data"]
-        assert data["payment_status"] == "pending"
-        assert data["subscription_type"] == "trial"
-        assert data["is_expired"] is False
-        assert data["days_remaining"] is not None
+        body = resp.json()
+        assert body["payment_status"] == "pending"
+        assert body["subscription_type"] == "trial"
+        assert body["is_expired"] is False
+        assert body["days_remaining"] is not None
 
     def test_get_subscription_no_auth(self, client):
         resp = client.get("/v1/businesses/me/subscription")
@@ -226,7 +229,7 @@ class TestSuperAdminSubscription:
             f"/v1/admin/businesses/{bid}/subscription",
             json={
                 "payment_status": "paid",
-                "subscription_type": "monthly",
+                "subscription_type": "pro",
                 "subscription_start_at": now.isoformat(),
                 "subscription_end_at": end.isoformat(),
                 "is_active": True,
@@ -234,7 +237,7 @@ class TestSuperAdminSubscription:
             headers={"Authorization": f"Bearer {ACTIVE_TOKEN}"},
         )
         assert resp.status_code == 200, resp.json()
-        assert resp.json()["data"]["message"] == "Subscription updated successfully"
+        assert resp.json()["message"] == "Subscription updated successfully"
 
     def test_permission_denied(self, client, mock_auth_user, seed_data):
         bid = "550e8400-e29b-41d4-a716-446655440000"
@@ -307,12 +310,33 @@ class TestExpiryJob:
         )
         db.commit()
 
+        # Run 1: starts the 3-day grace period — status unchanged
+        expire_subscriptions(db_session=db)
+
+        row = db.execute(
+            sa_text("SELECT is_active, payment_status, grace_period_end_at FROM businesses WHERE business_id = :bid"),
+            {"bid": bid},
+        ).fetchone()
+        assert row.is_active
+        assert row.payment_status == "paid"
+        assert row.grace_period_end_at is not None
+
+        # Force the grace period to expire, then Run 2 suspends the subscription
+        db.execute(
+            sa_text("""
+                UPDATE businesses
+                SET grace_period_end_at = :past
+                WHERE business_id = :bid
+            """),
+            {"past": past, "bid": bid},
+        )
+        db.commit()
+
         expire_subscriptions(db_session=db)
 
         row = db.execute(
             sa_text("SELECT is_active, payment_status FROM businesses WHERE business_id = :bid"),
             {"bid": bid},
         ).fetchone()
-        # Expired paid subs get payment_status = 'suspended', is_active unchanged
         assert row.is_active
         assert row.payment_status == "suspended"

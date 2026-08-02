@@ -17,6 +17,7 @@ router = APIRouter(
 )
 
 # ─── GET MY BUSINESS ───────────────────────────────────────────
+@router.get("/me/")
 @router.get("/me")
 async def get_my_business(
     current_user: dict = Depends(require_permission("dashboard.view")),
@@ -37,6 +38,7 @@ async def get_my_business(
 
 
 # ─── UPDATE MY BUSINESS ────────────────────────────────────────
+@router.put("/me/")
 @router.put("/me")
 async def update_my_business(
     payload: BusinessUpdate,

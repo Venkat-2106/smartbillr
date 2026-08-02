@@ -128,7 +128,6 @@ export default function StaffPage() {
     canAddManager,
     canAddAnyRole,
     isSummaryLoading,
-    isSummaryError,
     summaryLoaded,
   } = useStaff()
 

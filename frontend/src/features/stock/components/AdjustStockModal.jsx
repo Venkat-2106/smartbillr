@@ -53,6 +53,9 @@ export default function AdjustStockModal({ open, onClose, product }) {
     }
   }, [open, product?.prod_id, reset])
 
+  // RHF watch() returns an unstable subscription fn — React Compiler can't
+  // memoize it (documented false positive; the pattern is safe).
+  // eslint-disable-next-line react-hooks/incompatible-library
   const selectedType = watch('adjustment_type')
   const typeInfo     = TYPE_INFO[selectedType] ?? TYPE_INFO.add
 

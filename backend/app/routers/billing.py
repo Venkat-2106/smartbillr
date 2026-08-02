@@ -273,7 +273,7 @@ async def checkout_status(
     # poll checkout status while completing payment.
     result = await db.execute(
         text("""
-            SELECT payment_id, status, provider, provider_order_id
+            SELECT payment_id, status, provider, provider_order_id, razorpay_subscription_id
             FROM subscription_payments
             WHERE (payment_id::text = :pid OR provider_order_id = :pid)
               AND business_id = CAST(:bid AS uuid)
@@ -284,6 +284,28 @@ async def checkout_status(
 
     if not row:
         return error_response("Payment not found", 404)
+
+    if row.status != "paid" and row.razorpay_subscription_id is not None:
+        # Subscription checkouts: activation (Phase 2) INSERTS a new row per
+        # charge, so the original checkout row stays at status='created'
+        # forever. Resolve the effective status from any paid row on the same
+        # subscription so the frontend polling loop can complete. One-time
+        # Order checkouts have a NULL razorpay_subscription_id, so this branch
+        # never triggers for them.
+        paid = await db.execute(
+            text("""
+                SELECT status FROM subscription_payments
+                WHERE razorpay_subscription_id = :sid AND status = 'paid'
+                ORDER BY paid_at DESC NULLS LAST
+                LIMIT 1
+            """),
+            {"sid": row.razorpay_subscription_id},
+        )
+        if paid.fetchone() is not None:
+            return success_response({
+                "payment_id": str(row.payment_id),
+                "status": "paid",
+            })
 
     return success_response({
         "payment_id": str(row.payment_id),

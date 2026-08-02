@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 
 // UI/UX Audit (2026-07-18):
 //   Finding #1  — PageHeader replaces inline page title markup
@@ -207,6 +207,8 @@ export default function PurchasesPage() {
   const [autoPrint,     setAutoPrint]     = useState(false)
   const [autoPrintPurId, setAutoPrintPurId] = useState(null)
 
+  // Consume the open-purchase payload from router state exactly once on mount.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (location.state?.openPurchase) {
       setSelectedPurId(location.state.openPurchase)
@@ -216,12 +218,13 @@ export default function PurchasesPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-  function handleDeleteClick(pur) {
+  const handleDeleteClick = useCallback((pur) => {
     setDeletingPur(pur)
     setReduceStock(false)
     setShowDelete(true)
-  }
+  }, [])
 
   function handleCloseDelete() {
     setShowDelete(false)

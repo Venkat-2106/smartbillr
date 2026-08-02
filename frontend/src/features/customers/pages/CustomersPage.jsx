@@ -297,6 +297,9 @@ export default function CustomersPage() {
     defaultValues: DEFAULT_VALUES,
   })
 
+  // RHF watch() returns an unstable subscription fn — React Compiler can't
+  // memoize it (documented false positive; the pattern is safe).
+  // eslint-disable-next-line react-hooks/incompatible-library
   const watchedCountry = watch('cust_country_code')
   const prevCountryRef = useRef(undefined)
 

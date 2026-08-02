@@ -88,7 +88,7 @@ export default function PricingPage() {
       toast.error('Checkout cancelled. You can try again anytime.')
       navigate('/pricing', { replace: true })
     }
-  }, [])
+  }, [navigate, searchParams])
 
   const { data: plansData, isLoading, isError, refetch } = usePlans()
   const { mutate: startCheckout, isPending } = useCheckout()
@@ -115,6 +115,26 @@ export default function PricingPage() {
   }
 
   function openRazorpayCheckout(data) {
+    if (data.mode === 'subscription') {
+      // Recurring plans: Razorpay derives the amount from the Plan itself,
+      // so no amount/currency/order_id — just the subscription_id.
+      const options = {
+        key: data.razorpay_key_id,
+        subscription_id: data.razorpay_subscription_id,
+        handler: function () {
+          navigate(`/billing/success?payment_id=${data.payment_id}`)
+        },
+        modal: {
+          ondismiss: () => {
+            toast.error('Checkout cancelled. You can try again anytime.')
+          },
+        },
+      }
+      const rzp = new window.Razorpay(options)
+      rzp.open()
+      return
+    }
+
     const options = {
       key: data.razorpay_key_id,
       amount: data.amount,

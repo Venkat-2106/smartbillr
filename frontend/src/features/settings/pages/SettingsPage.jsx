@@ -63,6 +63,9 @@ export default function SettingsPage() {
     },
   })
 
+  // RHF watch() returns an unstable subscription fn — React Compiler can't
+  // memoize it (documented false positive; the pattern is safe).
+  // eslint-disable-next-line react-hooks/incompatible-library
   const isGstRegistered = watch('is_gst_registered')
 
   useEffect(() => {

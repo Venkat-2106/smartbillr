@@ -429,7 +429,7 @@ export default function CreatePurchasePage() {
     },
   })
 
-  const handleSubmit = () => {
+  const handleSubmit = useCallback(() => {
     if (!isValid) {
       toast.error('Select a product and enter a valid quantity for every line item.')
       return
@@ -441,7 +441,7 @@ export default function CreatePurchasePage() {
       return
     }
     mutation.mutate(body)
-  }
+  }, [isValid, buildBody, itemsAboveSellPrice, setPendingBody, setCostWarningOpen, mutation])
 
   const handleCostWarningConfirmed = () => {
     setCostWarningOpen(false)

@@ -94,6 +94,7 @@ class SQLiteCompatSession(SASession):
     _CAST_RE = re.compile(
         r"CAST\s*\(\s*(\:\w+)\s+AS\s+(uuid|timestamptz|timestamp)\s*\)", re.IGNORECASE
     )
+    _PGCAST_RE = re.compile(r"::\w+", re.IGNORECASE)
     _FORUPDATE_RE = re.compile(r"\bFOR\s+UPDATE\b", re.IGNORECASE)
     _ILIKE_RE = re.compile(r"\bILIKE\b", re.IGNORECASE)
     _STRAGG_RE = re.compile(r"STRING_AGG\s*\(([^,]+),\s*'([^']*)'\)", re.IGNORECASE)
@@ -120,6 +121,8 @@ class SQLiteCompatSession(SASession):
             sql = self._STRAGG_RE.sub(r"GROUP_CONCAT(\1, '\2')", sql)
             # CAST(:param AS uuid|timestamptz|timestamp) → :param
             sql = self._CAST_RE.sub(r"\1", sql)
+            # PostgreSQL ::type cast suffix → bare column (e.g. payment_id::text)
+            sql = self._PGCAST_RE.sub("", sql)
             # FOR UPDATE → no-op
             sql = self._FORUPDATE_RE.sub("", sql)
             # ILIKE → LIKE (case-insensitive in SQLite via LIKE)

@@ -46,6 +46,18 @@ def _patched_uuid_bind(self, dialect):
 
 
 SATypes.Uuid.bind_processor = _patched_uuid_bind
+# Render PostgreSQL JSONB as SQLite-compatible JSON so tables like
+# plans.feature_limits create successfully on the in-memory SQLite engine.
+try:
+    from sqlalchemy.dialects.postgresql import JSONB as _PGJSONB
+    from sqlalchemy.ext.compiler import compiles
+    import sqlalchemy.types as SAT
+
+    @compiles(_PGJSONB, "sqlite")
+    def _compile_jsonb_sqlite(element, compiler, **kw):
+        return compiler.visit_JSON(SAT.JSON(), **kw)
+except Exception:
+    pass
 # Import every model module so Base.metadata knows about all tables.
 # Without this, FK resolution fails (e.g. businesses.current_plan_id -> plans)
 # and table creation errors out.
@@ -98,6 +110,9 @@ class SQLiteCompatSession(SASession):
     _FORUPDATE_RE = re.compile(r"\bFOR\s+UPDATE\b", re.IGNORECASE)
     _ILIKE_RE = re.compile(r"\bILIKE\b", re.IGNORECASE)
     _STRAGG_RE = re.compile(r"STRING_AGG\s*\(([^,]+),\s*'([^']*)'\)", re.IGNORECASE)
+    _INTERVAL_RE = re.compile(
+        r"NOW\(\)\s*-\s*INTERVAL\s+'(\d+)\s+minutes?'", re.IGNORECASE
+    )
 
     def execute(self, statement, params=None, *args, **kwargs):
         if isinstance(statement, TextClause):
@@ -127,6 +142,10 @@ class SQLiteCompatSession(SASession):
             sql = self._FORUPDATE_RE.sub("", sql)
             # ILIKE → LIKE (case-insensitive in SQLite via LIKE)
             sql = self._ILIKE_RE.sub("LIKE", sql)
+            # NOW() - INTERVAL '10 minutes' → datetime('now','-10 minutes')
+            sql = self._INTERVAL_RE.sub(
+                lambda m: f"datetime('now', '-{m.group(1)} minutes')", sql
+            )
 
             statement = sa_text(sql)
 
@@ -239,12 +258,19 @@ def _patch_server_defaults():
                     col.server_default = DefaultClause(sa_text("1"))
                 elif t.lower() == "false":
                     col.server_default = DefaultClause(sa_text("0"))
+                elif t == "gen_random_uuid()":
+                    # SQLite has no gen_random_uuid(); use a constant-ish default
+                    # so raw-SQL INSERTs without an explicit PK still work.
+                    col.server_default = DefaultClause(
+                        sa_text("lower(hex(randomblob(16)))")
+                    )
 
 
 TEST_TABLES = [
     "businesses", "business_counters",
     "roles", "permissions", "role_permissions",
     "profiles", "customers", "sales", "payments",
+    "plans", "subscription_payments",
     "super_admins",
 ]
 

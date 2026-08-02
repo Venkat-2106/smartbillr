@@ -186,6 +186,13 @@ async def create_checkout(
         # using the one-time Order flow below.
         if not plan.razorpay_plan_id:
             return error_response("Plan not configured for recurring billing", 500)
+        if not is_india:
+            # Only INR Razorpay Plans exist today; USD recurring Plans are on
+            # hold. Refuse rather than silently subscribe a non-IN business to
+            # the INR plan under a mislabeled currency.
+            return error_response(
+                "Recurring billing is currently available only for India (INR). Contact support.", 400
+            )
 
         price = plan.price_inr if is_india else plan.price_usd
         currency = "INR" if is_india else "USD"

@@ -22,6 +22,7 @@ router = APIRouter(prefix="/v1/profiles", tags=["Profiles"])
 
 
 # ─── GET /profiles/me ─────────────────────────────────────────────────────────
+@router.get("/me/")
 @router.get("/me")
 async def get_my_profile(
     _sub: None = Depends(verify_subscription),

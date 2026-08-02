@@ -70,6 +70,7 @@ router = APIRouter(prefix="/v1/dashboard", tags=["Dashboard"])
 #   revenue + expenses are returned as null if user lacks dashboard.financial.
 #   The frontend checks and shows/hides those stat cards accordingly.
 
+@router.get("/summary/")
 @router.get("/summary")
 async def get_dashboard_summary(
     background_tasks: BackgroundTasks,
@@ -168,6 +169,7 @@ async def get_dashboard_summary(
 #   New: DB groups and counts across ALL rows in one query. No limit.
 #        A business with 5,000 invoices still gets accurate counts.
 
+@router.get("/trend/")
 @router.get("/trend")
 async def get_dashboard_trend(
     period: str = "weekly",

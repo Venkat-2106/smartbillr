@@ -334,6 +334,14 @@ async def razorpay_webhook(request: Request, db: AsyncSession = Depends(get_asyn
     elif event_type == "payment.failed":
         payment_entity = payload.get("payload", {}).get("payment", {}).get("entity", {})
         await activation.handle_payment_failure(db, payment_entity, provider="razorpay")
+    elif event_type == "subscription.charged":
+        sub_entity = payload.get("payload", {}).get("subscription", {}).get("entity", {})
+        payment_entity = payload.get("payload", {}).get("payment", {}).get("entity")
+        await activation.activate_subscription_charge(db, sub_entity, payment_entity, provider="razorpay")
+    elif event_type in ("subscription.cancelled", "subscription.halted"):
+        sub_entity = payload.get("payload", {}).get("subscription", {}).get("entity", {})
+        new_status = sub_entity.get("status", event_type.split(".")[1])
+        await activation.handle_subscription_status_event(db, sub_entity, new_status)
 
     return success_response({"status": "ok"})
 

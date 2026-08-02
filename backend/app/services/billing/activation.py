@@ -16,12 +16,8 @@ async def activate_subscription(db: AsyncSession, provider_object: dict, provide
     (matched by provider_order_id), never trusts amount/plan from the webhook
     payload as source of truth for what to activate.
     """
-    if provider == "razorpay":
-        order_id = provider_object.get("order_id")
-        provider_payment_id = provider_object.get("id", "")
-    else:
-        order_id = provider_object.get("id")
-        provider_payment_id = provider_object.get("payment_intent", "")
+    order_id = provider_object.get("order_id")
+    provider_payment_id = provider_object.get("id", "")
 
     if not order_id:
         logger.error("Webhook missing order_id for provider=%s", provider)
@@ -61,10 +57,7 @@ async def activate_subscription(db: AsyncSession, provider_object: dict, provide
     current_end_at = business_row.subscription_end_at if business_row else None
 
     # Server-side amount check — defense against tampered client-side session data
-    if provider == "razorpay":
-        paid_amount = provider_object.get("amount", 0) / 100
-    else:
-        paid_amount = provider_object.get("amount_total", 0) / 100
+    paid_amount = provider_object.get("amount", 0) / 100
 
     if abs(float(paid_amount) - float(payment_row.amount)) > 0.01:
         logger.critical(
@@ -164,12 +157,8 @@ async def activate_subscription(db: AsyncSession, provider_object: dict, provide
 
 async def handle_payment_failure(db: AsyncSession, provider_object: dict, provider: str):
     """Handle a failed payment — record the failure, don't touch businesses table."""
-    if provider == "razorpay":
-        order_id = provider_object.get("order_id")
-        failure_reason = provider_object.get("error_description", "Payment failed")
-    else:
-        order_id = provider_object.get("id")
-        failure_reason = provider_object.get("failure_message", "Payment failed")
+    order_id = provider_object.get("order_id")
+    failure_reason = provider_object.get("error_description", "Payment failed")
 
     if not order_id:
         return

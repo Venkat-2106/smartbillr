@@ -16,4 +16,3 @@ python-dateutil==2.9.0.post0
 cachetools==5.5.2
 redis>=5.0.0
 razorpay>=1.4.0
-stripe>=7.0.0

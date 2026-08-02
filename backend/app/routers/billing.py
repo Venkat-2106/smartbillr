@@ -31,7 +31,7 @@ from app.schemas.billing import (
     PlanOut,
     ChangePlanRequest,
 )
-from app.services.billing import razorpay_client, stripe_client
+from app.services.billing import razorpay_client
 from app.services.billing import activation
 from app.middleware.subscription import clear_subscription_business_cache
 
@@ -139,27 +139,14 @@ async def create_checkout(
 
     existing = await _find_existing_checkout(db, bid, str(plan.plan_id))
     if existing:
-        if existing["provider"] == "razorpay":
-            return success_response({
-                "provider": "razorpay",
-                "razorpay_order_id": existing["provider_order_id"],
-                "razorpay_key_id": os.getenv("RAZORPAY_KEY_ID"),
-                "amount": int(existing["amount"] * 100),
-                "currency": existing["currency"],
-                "payment_id": existing["payment_id"],
-            })
-        else:
-            try:
-                import stripe as _stripe
-                _stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
-                session_obj = _stripe.checkout.Session.retrieve(existing["provider_order_id"])
-                return success_response({
-                    "provider": "stripe",
-                    "checkout_url": session_obj.url,
-                    "payment_id": existing["payment_id"],
-                })
-            except Exception:
-                logger.warning("Failed to retrieve existing Stripe session %s, creating new one", existing["provider_order_id"])
+        return success_response({
+            "provider": "razorpay",
+            "razorpay_order_id": existing["provider_order_id"],
+            "razorpay_key_id": os.getenv("RAZORPAY_KEY_ID"),
+            "amount": int(existing["amount"] * 100),
+            "currency": existing["currency"],
+            "payment_id": existing["payment_id"],
+        })
 
     if is_india:
         if not plan.price_inr or float(plan.price_inr) <= 0:
@@ -189,24 +176,24 @@ async def create_checkout(
         if not plan.price_usd or float(plan.price_usd) <= 0:
             return error_response("This plan is not available for USD", 400)
 
-        session = stripe_client.create_checkout_session(
-            price_id=plan.stripe_price_id,
-            amount_usd=float(plan.price_usd),
-            plan_name=plan.display_name,
-            success_url=f"{FRONTEND_URL}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{FRONTEND_URL}/pricing?cancelled=1",
-            client_reference_id=bid,
-            customer_email=business.business_email,
+        order = razorpay_client.create_order(
+            amount_paise=int(float(plan.price_usd) * 100),
+            currency="USD",
+            receipt=f"biz_{bid[:8]}_{plan.plan_code}"[:40],
+            notes={"business_id": bid, "plan_code": plan.plan_code},
         )
 
         payment_id = await _record_pending_payment(
-            db, bid, str(plan.plan_id), "stripe", session["id"],
+            db, bid, str(plan.plan_id), "razorpay", order["id"],
             float(plan.price_usd), "USD",
         )
 
         return success_response({
-            "provider": "stripe",
-            "checkout_url": session["url"],
+            "provider": "razorpay",
+            "razorpay_order_id": order["id"],
+            "razorpay_key_id": os.getenv("RAZORPAY_KEY_ID"),
+            "amount": order["amount"],
+            "currency": "USD",
             "payment_id": payment_id,
         })
 
@@ -284,52 +271,6 @@ async def razorpay_webhook(request: Request, db: AsyncSession = Depends(get_asyn
     elif event_type == "payment.failed":
         payment_entity = payload.get("payload", {}).get("payment", {}).get("entity", {})
         await activation.handle_payment_failure(db, payment_entity, provider="razorpay")
-
-    return success_response({"status": "ok"})
-
-
-@router.post("/webhooks/stripe")
-async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_async_db)):
-    body = await request.body()
-    sig_header = request.headers.get("stripe-signature", "")
-    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET", "")
-
-    try:
-        event = stripe_client.construct_event(body, sig_header, webhook_secret)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid signature")
-
-    event_id = event.get("id", "")
-    event_type = event.get("type", "")
-
-    # Idempotency check
-    result = await db.execute(
-        text("""
-            INSERT INTO subscription_events (provider, provider_event_id, event_type, payload)
-            VALUES ('stripe', :eid, :etype, CAST(:payload AS jsonb))
-            ON CONFLICT (provider, provider_event_id) DO NOTHING
-            RETURNING event_id
-        """),
-        {"eid": event_id, "etype": event_type, "payload": json.dumps(event)},
-    )
-    inserted = result.fetchone()
-    await db.commit()
-
-    if inserted is None:
-        return success_response({"status": "already_processed"})
-
-    data_object = event.get("data", {}).get("object", {})
-
-    if event_type == "checkout.session.completed":
-        await activation.activate_subscription(db, data_object, provider="stripe")
-        # NOTE: activate_subscription already calls clear_subscription_business_cache
-        # internally after db.commit(). This is belt-and-suspenders — the call here
-        # ensures cache invalidation even if activation.py changes in the future.
-        biz_id = data_object.get("client_reference_id")
-        if biz_id:
-            clear_subscription_business_cache(biz_id)
-    elif event_type == "invoice.payment_failed":
-        await activation.handle_payment_failure(db, data_object, provider="stripe")
 
     return success_response({"status": "ok"})
 

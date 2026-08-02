@@ -60,6 +60,7 @@ import app.models.supplier  # noqa: F401
 os.environ["DATABASE_URL"] = _target_url  # restore target
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.schema import DefaultClause
 from app.database import Base
 
 # All tenant-scoped tables that carry a business_id column (mirrors the
@@ -111,11 +112,38 @@ def _guard(url: str) -> None:
         )
 
 
+def _promote_defaults_to_server_defaults() -> None:
+    """Give NOT NULL columns real server-side DEFAULTs.
+
+    The models declare most defaults as Python-side ``default=``, so
+    ``create_all`` emits no ``DEFAULT`` clause and raw-SQL inserts (e.g. the
+    RLS/trigger tests seeding ``businesses``) violate NOT NULL. The migrated
+    production schema has server defaults (e.g. ``payment_status`` →
+    ``'pending'``, ``is_active`` → ``true``), so mirror that here for literal
+    defaults only (callables like ``uuid.uuid4`` are left alone).
+    """
+    for table in Base.metadata.tables.values():
+        for col in table.columns:
+            if col.nullable is False and col.server_default is None and not col.primary_key:
+                d = col.default
+                if d is None or getattr(d, "is_callable", True):
+                    continue
+                arg = d.arg
+                if isinstance(arg, bool):
+                    col.server_default = DefaultClause(text("true" if arg else "false"))
+                elif isinstance(arg, (int, float)):
+                    col.server_default = DefaultClause(text(str(arg)))
+                elif isinstance(arg, str):
+                    escaped = arg.replace("'", "''")
+                    col.server_default = DefaultClause(text(f"'{escaped}'"))
+
+
 def main() -> None:
     _guard(_target_url)
     engine = create_engine(_target_url)
 
     print("Creating schema from SQLAlchemy models ...")
+    _promote_defaults_to_server_defaults()
     Base.metadata.create_all(bind=engine)
 
     with engine.begin() as conn:

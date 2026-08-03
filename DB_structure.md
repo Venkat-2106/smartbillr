@@ -352,6 +352,8 @@
 | subscription\_payments | created\_at | timestamp with time zone | NO | now() |
 | subscription\_payments | paid\_at | timestamp with time zone | YES | NaN |
 | subscription\_payments | updated\_by\_webhook\_at | timestamp with time zone | YES | NaN |
+| subscription\_payments | razorpay\_subscription\_id | character varying | YES | NaN |
+| subscription\_payments | subscription\_status | character varying | YES | NaN |
 | super\_admins | id | integer | NO | nextval('super\_admins\_id\_seq'::regclass) |
 | super\_admins | user\_id | character varying | NO | NaN |
 | super\_admins | created\_at | timestamp without time zone | YES | now() |
@@ -699,8 +701,8 @@
 | public | purchases | uix\_purchases\_invoice\_business | CREATE UNIQUE INDEX uix\_purchases\_invoice\_business ON public.purchases USING btree (business\_id, pur\_invoice\_no) WHERE ((is\_deleted = false) AND (pur\_invoice\_no IS NOT NULL)) |
 | public | role\_permissions | idx\_role\_permissions\_role\_id | CREATE INDEX idx\_role\_permissions\_role\_id ON public.role\_permissions USING btree (role\_id) |
 | public | role\_permissions | role\_permissions\_pkey | CREATE UNIQUE INDEX role\_permissions\_pkey ON public.role\_permissions USING btree (role\_id, permission\_id) |
-| public | roles | roles\_pkey | CREATE UNIQUE INDEX roles\_pkey ON public.roles USING btree (id) |
 | public | roles | roles\_name\_key | CREATE UNIQUE INDEX roles\_name\_key ON public.roles USING btree (name) |
+| public | roles | roles\_pkey | CREATE UNIQUE INDEX roles\_pkey ON public.roles USING btree (id) |
 | public | sale\_items | idx\_sale\_items\_product\_id | CREATE INDEX idx\_sale\_items\_product\_id ON public.sale\_items USING btree (product\_id) |
 | public | sale\_items | idx\_sale\_items\_sale\_biz | CREATE INDEX idx\_sale\_items\_sale\_biz ON public.sale\_items USING btree (sale\_id, business\_id) |
 | public | sale\_items | ix\_sale\_items\_product | CREATE INDEX ix\_sale\_items\_product ON public.sale\_items USING btree (business\_id, product\_id) |
@@ -750,13 +752,12 @@
 | public | subscription\_invoices | subscription\_invoices\_pkey | CREATE UNIQUE INDEX subscription\_invoices\_pkey ON public.subscription\_invoices USING btree (invoice\_id) |
 | public | subscription\_invoices | subscription\_invoices\_invoice\_number\_key | CREATE UNIQUE INDEX subscription\_invoices\_invoice\_number\_key ON public.subscription\_invoices USING btree (invoice\_number) |
 | public | subscription\_payments | subscription\_payments\_pkey | CREATE UNIQUE INDEX subscription\_payments\_pkey ON public.subscription\_payments USING btree (payment\_id) |
-| public | subscription\_payments | idx\_subscription\_payments\_biz | CREATE INDEX idx\_subscription\_payments\_biz ON public.subscription\_payments USING btree (business\_id, created\_at DESC) |
 | public | subscription\_payments | idx\_subscription\_payments\_provider\_order | CREATE UNIQUE INDEX idx\_subscription\_payments\_provider\_order ON public.subscription\_payments USING btree (provider, provider\_order\_id) |
+| public | subscription\_payments | idx\_subscription\_payments\_biz | CREATE INDEX idx\_subscription\_payments\_biz ON public.subscription\_payments USING btree (business\_id, created\_at DESC) |
 | public | super\_admins | super\_admins\_pkey | CREATE UNIQUE INDEX super\_admins\_pkey ON public.super\_admins USING btree (id) |
 | public | super\_admins | super\_admins\_user\_id\_key | CREATE UNIQUE INDEX super\_admins\_user\_id\_key ON public.super\_admins USING btree (user\_id) |
 | public | super\_admins | idx\_super\_admins\_singleton | CREATE UNIQUE INDEX idx\_super\_admins\_singleton ON public.super\_admins USING btree ((true)) |
 | public | suppliers | suppliers\_pkey | CREATE UNIQUE INDEX suppliers\_pkey ON public.suppliers USING btree (supp\_id) |
-| public | suppliers | idx\_suppliers\_phone\_unique | CREATE UNIQUE INDEX idx\_suppliers\_phone\_unique ON public.suppliers USING btree (business\_id, supp\_phone) WHERE ((is\_deleted = false) AND (supp\_phone IS NOT NULL)) |
 | public | suppliers | idx\_suppliers\_phone\_trgm | CREATE INDEX idx\_suppliers\_phone\_trgm ON public.suppliers USING gin (supp\_phone gin\_trgm\_ops) WHERE (supp\_phone IS NOT NULL) |
 | public | suppliers | idx\_suppliers\_business\_updated | CREATE INDEX idx\_suppliers\_business\_updated ON public.suppliers USING btree (business\_id, updated\_at DESC) WHERE (is\_deleted = false) |
 | public | suppliers | idx\_suppliers\_email\_trgm | CREATE INDEX idx\_suppliers\_email\_trgm ON public.suppliers USING gin (supp\_email gin\_trgm\_ops) |
@@ -764,6 +765,7 @@
 | public | suppliers | idx\_suppliers\_phone | CREATE INDEX idx\_suppliers\_phone ON public.suppliers USING btree (supp\_phone) WHERE (supp\_phone IS NOT NULL) |
 | public | suppliers | idx\_suppliers\_business\_deleted | CREATE INDEX idx\_suppliers\_business\_deleted ON public.suppliers USING btree (business\_id, is\_deleted) |
 | public | suppliers | idx\_suppliers\_updated | CREATE INDEX idx\_suppliers\_updated ON public.suppliers USING btree (business\_id, updated\_at DESC) WHERE (is\_deleted = false) |
+| public | suppliers | idx\_suppliers\_phone\_unique | CREATE UNIQUE INDEX idx\_suppliers\_phone\_unique ON public.suppliers USING btree (business\_id, supp\_phone) WHERE ((is\_deleted = false) AND (supp\_phone IS NOT NULL)) |
 
 ## triggers
 | table\_name | trigger\_name | event\_manipulation | action\_timing | action\_statement |
@@ -992,51 +994,34 @@
 ## RLS Policies
 | schemaname | tablename | policyname | permissive | roles | cmd | qual | with\_check |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| public | businesses | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | customers | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | suppliers | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | products | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | categories | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | stock\_movements | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | roles | readonly\_for\_all | PERMISSIVE | {public} | SELECT | True | NaN |
-| public | permissions | readonly\_for\_all | PERMISSIVE | {public} | SELECT | True | NaN |
-| public | role\_permissions | readonly\_for\_all | PERMISSIVE | {public} | SELECT | True | NaN |
-| public | low\_stock\_alerts | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | purchases | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | purchase\_returns | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | purchase\_return\_items | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | sales | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | sale\_items | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | sales\_returns | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | payments | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | expenses | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | business\_counters | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
 | public | audit\_logs | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | purchase\_items | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | sales\_return\_items | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | profiles | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-| public | super\_admins | deny\_all\_policy | PERMISSIVE | {public} | ALL | False | NaN |
-| public | profiles | self\_lookup\_policy | PERMISSIVE | {public} | SELECT | (id = (NULLIF(current\_setting('app.current\_user\_id'::text, true), ''::text))::uuid) | NaN |
-| public | super\_admins | self\_lookup\_policy | PERMISSIVE | {public} | SELECT | ((user\_id)::text = NULLIF(current\_setting('app.current\_user\_id'::text, true), ''::text)) | NaN |
-| public | businesses | super\_admin\_access\_policy | PERMISSIVE | {public} | ALL | (current\_setting('app.is\_super\_admin'::text, true) = 'true'::text) | (current\_setting('app.is\_super\_admin'::text, true) = 'true'::text) |
-| public | subscription\_payments | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = (current\_setting('app.current\_business\_id'::text))::uuid) | NaN |
-| public | subscription\_invoices | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = (current\_setting('app.current\_business\_id'::text))::uuid) | NaN |
+| public | business\_counters | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
 | public | businesses | self\_lookup\_policy | PERMISSIVE | {public} | SELECT | (business\_id = ( SELECT p.business\_id\_x000D\_\n FROM profiles p\_x000D\_\n WHERE (p.id = (NULLIF(current\_setting('app.current\_user\_id'::text, true), ''::text))::uuid)\_x000D\_\n LIMIT 1)) | NaN |
+| public | businesses | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
+| public | businesses | super\_admin\_access\_policy | PERMISSIVE | {public} | ALL | (current\_setting('app.is\_super\_admin'::text, true) = 'true'::text) | (current\_setting('app.is\_super\_admin'::text, true) = 'true'::text) |
+| public | categories | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
+| public | customers | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
+| public | expenses | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
+| public | low\_stock\_alerts | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
+| public | payments | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
+| public | permissions | readonly\_for\_all | PERMISSIVE | {public} | SELECT | True | NaN |
+| public | products | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
+| public | profiles | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
+| public | profiles | self\_lookup\_policy | PERMISSIVE | {public} | SELECT | (id = (NULLIF(current\_setting('app.current\_user\_id'::text, true), ''::text))::uuid) | NaN |
+| public | purchase\_items | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
 | public | purchase\_payments | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
-
-## Sequences
-| sequence\_catalog | sequence\_schema | sequence\_name | data\_type | numeric\_precision | numeric\_precision\_radix | numeric\_scale | start\_value | minimum\_value | maximum\_value | increment | cycle\_option |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| postgres | public | roles\_id\_seq | integer | 32 | 2 | 0 | 1 | 1 | 2147483647 | 1 | NO |
-| postgres | public | permissions\_id\_seq | integer | 32 | 2 | 0 | 1 | 1 | 2147483647 | 1 | NO |
-| postgres | public | super\_admins\_id\_seq | integer | 32 | 2 | 0 | 1 | 1 | 2147483647 | 1 | NO |
-
-## Extensions
-| oid | extname | extowner | extnamespace | extrelocatable | extversion | extconfig | extcondition |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 13615 | plpgsql | 10 | 11 | False | 1 | NaN | NaN |
-| 16393 | pg\_stat\_statements | 16388 | 16392 | True | 1.11 | NaN | NaN |
-| 16436 | uuid-ossp | 16388 | 16392 | True | 1.1 | NaN | NaN |
-| 16447 | pgcrypto | 16388 | 16392 | True | 1.3 | NaN | NaN |
-| 16608 | supabase\_vault | 10 | 16607 | False | 0.3.1 | [16612] | [""] |
-| 20511 | pg\_trgm | 10 | 2200 | True | 1.6 | NaN | NaN |
+| public | purchase\_return\_items | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
+| public | purchase\_returns | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
+| public | purchases | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
+| public | role\_permissions | readonly\_for\_all | PERMISSIVE | {public} | SELECT | True | NaN |
+| public | roles | readonly\_for\_all | PERMISSIVE | {public} | SELECT | True | NaN |
+| public | sale\_items | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
+| public | sales | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
+| public | sales\_return\_items | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
+| public | sales\_returns | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
+| public | stock\_movements | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |
+| public | subscription\_invoices | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = (current\_setting('app.current\_business\_id'::text))::uuid) | NaN |
+| public | subscription\_payments | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = (current\_setting('app.current\_business\_id'::text))::uuid) | NaN |
+| public | super\_admins | deny\_all\_policy | PERMISSIVE | {public} | ALL | False | NaN |
+| public | super\_admins | self\_lookup\_policy | PERMISSIVE | {public} | SELECT | ((user\_id)::text = NULLIF(current\_setting('app.current\_user\_id'::text, true), ''::text)) | NaN |
+| public | suppliers | tenant\_access\_policy | PERMISSIVE | {public} | ALL | (business\_id = app.current\_business\_id()) | NaN |

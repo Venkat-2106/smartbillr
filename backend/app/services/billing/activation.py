@@ -206,11 +206,12 @@ async def activate_subscription_charge(
         return
 
     result = await db.execute(
-        text("SELECT subscription_end_at FROM businesses WHERE business_id = :bid"),
+        text("SELECT subscription_end_at, auto_renew FROM businesses WHERE business_id = :bid"),
         {"bid": str(original_row.business_id)},
     )
     business_row = result.fetchone()
     current_end_at = business_row.subscription_end_at if business_row else None
+    auto_renew = bool(business_row.auto_renew) if business_row and business_row.auto_renew is not None else True
 
     now = datetime.now(timezone.utc)
     period_end = _compute_period_end(current_end_at, plan.billing_cycle, now)
@@ -247,6 +248,22 @@ async def activate_subscription_charge(
             "paid_at": now,
         },
     )
+
+    # FIX (2026-08-03): if the business asked to cancel (auto_renew=false),
+    # this charge is anomalous — Razorpay billed a subscription the user
+    # cancelled through SmartBillr, or the cancel-sync failed. Record the
+    # charge row above (audit trail / reconciliation) but do NOT reactivate
+    # the business or extend subscription_end_at, and make sure it surfaces
+    # in monitoring rather than being swallowed.
+    if not auto_renew:
+        logger.warning(
+            "Anomalous renewal charge for cancelled business: business=%s sub=%s "
+            "(auto_renew=false) — recording payment without reactivating; "
+            "investigate whether the Razorpay cancel-sync failed",
+            original_row.business_id, sub_id,
+        )
+        await db.commit()
+        return
 
     await db.execute(
         text("""
@@ -326,6 +343,11 @@ async def handle_subscription_status_event(
 
     if new_status in ("cancelled", "halted"):
         business_id = updated[0][0]
+        # The commit above ended the transaction, discarding any
+        # transaction-scoped GUC the webhook set. Re-assert the super-admin
+        # GUC so this cross-tenant UPDATE on businesses matches rows
+        # (businesses has FORCE ROW LEVEL SECURITY keyed on business_id).
+        await db.execute(text("SELECT set_config('app.is_super_admin', 'true', true)"))
         await db.execute(
             text("UPDATE businesses SET auto_renew = false WHERE business_id = :bid"),
             {"bid": str(business_id)},
@@ -364,3 +386,66 @@ async def handle_payment_failure(db: AsyncSession, provider_object: dict, provid
     )
     await db.commit()
     logger.info("Payment failure recorded: provider=%s order_id=%s", provider, order_id)
+
+
+async def handle_refund(db: AsyncSession, refund_entity: dict, provider: str):
+    """
+    Handle a refund (payment.refunded / refund.processed).
+
+    Product rule (confirmed 2026-08-03): a refund reverses the money, so the
+    business loses access IMMEDIATELY. Mark the matched subscription_payments
+    row 'refunded' and suspend the business (no grace period, no auto-renew).
+    """
+    provider_payment_id = refund_entity.get("payment_id")
+    if not provider_payment_id:
+        logger.error("Refund webhook missing payment_id for provider=%s", provider)
+        return
+
+    result = await db.execute(
+        text("""
+            UPDATE subscription_payments
+            SET status = 'refunded',
+                failure_reason = COALESCE(failure_reason, 'refunded'),
+                updated_by_webhook_at = now()
+            WHERE provider = :p AND provider_payment_id = :ppid
+            RETURNING business_id, payment_id
+        """),
+        {"p": provider, "ppid": provider_payment_id},
+    )
+    rows = result.fetchall()
+    await db.commit()
+
+    if not rows:
+        logger.warning(
+            "Refund webhook for unknown provider_payment_id=%s provider=%s",
+            provider_payment_id, provider,
+        )
+        return
+
+    business_id = rows[0][0]
+
+    # The commit above ended the transaction — re-assert the super-admin GUC
+    # (businesses has FORCE ROW LEVEL SECURITY keyed on business_id).
+    await db.execute(text("SELECT set_config('app.is_super_admin', 'true', true)"))
+    await db.execute(
+        text("""
+            UPDATE businesses
+            SET payment_status = 'suspended',
+                auto_renew = false,
+                grace_period_end_at = NULL
+            WHERE business_id = :bid
+        """),
+        {"bid": str(business_id)},
+    )
+    await db.commit()
+
+    try:
+        from app.middleware.subscription import clear_subscription_business_cache
+        clear_subscription_business_cache(str(business_id))
+    except Exception:
+        logger.warning("Failed to invalidate subscription cache for business %s", business_id)
+
+    logger.warning(
+        "Subscription refunded and business suspended: business=%s payment=%s provider=%s",
+        business_id, provider_payment_id, provider,
+    )

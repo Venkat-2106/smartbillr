@@ -152,6 +152,9 @@ class SubscriptionResponse(BaseModel):
     days_remaining: Optional[int] = None
     is_expired: bool
     last_renewed_at: Optional[datetime] = None
+    # True when Razorpay is retrying a failed renewal charge
+    # (subscription_status='pending') — surfaces the "update your card" banner.
+    payment_action_required: Optional[bool] = False
 
     model_config = ConfigDict(from_attributes=True)
 

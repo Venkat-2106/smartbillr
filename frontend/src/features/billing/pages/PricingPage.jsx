@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { usePlans, useCheckout } from '../hooks/useCheckout'
+import { usePlans, useCheckout, useChangePlan } from '../hooks/useCheckout'
+import { useSubscription } from '../../subscription/hooks/useSubscription'
+import { razorpayPrefill, razorpayTheme } from '../utils/razorpayOptions'
 import useAuthStore from '../../../store/authStore'
 import { Button, Spinner } from '../../../shared/components'
 
@@ -78,7 +80,8 @@ export default function PricingPage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const isLoggedIn = !!user
-  const country = useAuthStore((s) => s.business)?.business_country_code || 'IN'
+  const business = useAuthStore((s) => s.business)
+  const country = business?.business_country_code || 'IN'
   const isIndia = country.toUpperCase() === 'IN'
 
   const [searchParams] = useSearchParams()
@@ -91,10 +94,15 @@ export default function PricingPage() {
   }, [navigate, searchParams])
 
   const { data: plansData, isLoading, isError, refetch } = usePlans()
-  const { mutate: startCheckout, isPending } = useCheckout()
+  const { data: sub } = useSubscription()
+  const { mutate: startCheckout, isPending: isCheckoutPending } = useCheckout()
+  const { mutate: startChangePlan, isPending: isChangePending } = useChangePlan()
   const [selectedBilling, setSelectedBilling] = useState('monthly')
 
+  const isPending = isCheckoutPending || isChangePending
   const displayPlans = useMemo(() => groupPlansByFamily(plansData), [plansData])
+
+  const isExistingPaidPlan = isLoggedIn && !!sub && !sub.is_expired && sub.subscription_type !== 'trial'
 
   function handleSubscribe(planCode, yearlyCode, overrideBillingCycle) {
     if (!isLoggedIn) {
@@ -103,24 +111,35 @@ export default function PricingPage() {
     }
     const billingCycle = overrideBillingCycle || (selectedBilling === 'yearly' && yearlyCode ? 'yearly' : 'monthly')
     const resolvedCode = billingCycle === 'yearly' && yearlyCode ? yearlyCode : planCode
-    startCheckout({ planCode: resolvedCode, billingCycle }, {
-      onSuccess: (data) => {
-        if (data.provider === 'razorpay') {
-          openRazorpayCheckout(data)
-        } else if (data.checkout_url) {
-          window.location.href = data.checkout_url
-        }
-      },
-    })
+    const onData = (data) => {
+      if (data.provider === 'razorpay') {
+        openRazorpayCheckout(data)
+      } else if (data.checkout_url) {
+        window.location.href = data.checkout_url
+      }
+    }
+    // FIX (2026-08-03): A subscribed business switching plans must go through
+    // /change-plan so the old Razorpay subscription is cancelled first —
+    // otherwise the same business gets billed on two subscriptions.
+    const isDifferentPlan = isExistingPaidPlan && sub.subscription_type !== resolvedCode
+    if (isDifferentPlan) {
+      startChangePlan({ planCode: resolvedCode, billingCycle }, { onSuccess: onData })
+    } else {
+      startCheckout({ planCode: resolvedCode, billingCycle }, { onSuccess: onData })
+    }
   }
 
   function openRazorpayCheckout(data) {
+    const prefill = razorpayPrefill({ business, user })
+    const theme = razorpayTheme()
     if (data.mode === 'subscription') {
       // Recurring plans: Razorpay derives the amount from the Plan itself,
       // so no amount/currency/order_id — just the subscription_id.
       const options = {
         key: data.razorpay_key_id,
         subscription_id: data.razorpay_subscription_id,
+        prefill,
+        theme,
         handler: function () {
           navigate(`/billing/success?payment_id=${data.payment_id}`)
         },
@@ -140,6 +159,8 @@ export default function PricingPage() {
       amount: data.amount,
       currency: data.currency,
       order_id: data.razorpay_order_id,
+      prefill,
+      theme,
       handler: function () {
         navigate(`/billing/success?payment_id=${data.payment_id}`)
       },

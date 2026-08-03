@@ -48,6 +48,28 @@ def _parse_dt(val):
     return val
 
 
+async def _has_payment_action_required(db: AsyncSession, bid: str) -> bool:
+    """True if the business's latest Razorpay subscription is in retry state.
+
+    A subscription.pending webhook (renewal charge failed, Razorpay retrying)
+    sets subscription_status='pending' on the newest subscription_payments row.
+    The frontend uses this to show the "payment issue, update your card" banner
+    instead of waiting silently for the terminal halted event.
+    """
+    row = (await db.execute(
+        text("""
+            SELECT subscription_status
+            FROM subscription_payments
+            WHERE business_id = CAST(:bid AS uuid)
+              AND razorpay_subscription_id IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT 1
+        """),
+        {"bid": bid},
+    )).fetchone()
+    return bool(row and row.subscription_status == "pending")
+
+
 def _get_supabase_admin_headers():
     return {
         "apikey": SUPABASE_SERVICE_KEY,
@@ -310,6 +332,7 @@ async def get_my_subscription(
             days_remaining=days_remaining,
             is_expired=is_expired,
             last_renewed_at=_parse_dt(row.last_renewed_at),
+            payment_action_required=await _has_payment_action_required(db, bid),
         ).model_dump()
     )
 

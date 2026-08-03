@@ -100,7 +100,9 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):
 class SQLiteCompatSession(SASession):
     """Translates PostgreSQL SQL syntax to SQLite at execution time."""
 
-    _SET_RE = re.compile(r"SET\s+(LOCAL\s+)?[\w.]+\s*=\s*:\w+", re.IGNORECASE)
+    # Matches both SET LOCAL x = :bind and SET LOCAL x = 'literal' (e.g. the
+    # super-admin GUC `SET LOCAL app.is_super_admin = 'true'` in the expiry cron).
+    _SET_RE = re.compile(r"SET\s+(LOCAL\s+)?[\w.]+\s*=\s*(:\w+|'[^']*')", re.IGNORECASE)
     _SETCONFIG_RE = re.compile(r"^\s*SELECT\s+set_config\(", re.IGNORECASE)
     _ADVISORY_LOCK_RE = re.compile(r"^\s*SELECT\s+pg_try_advisory_xact_lock\(", re.IGNORECASE)
     _CAST_RE = re.compile(

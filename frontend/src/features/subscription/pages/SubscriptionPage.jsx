@@ -6,7 +6,8 @@
 import { useNavigate } from 'react-router-dom'
 import { Spinner, Button } from '../../../shared/components'
 import { useSubscription } from '../hooks/useSubscription'
-import { useCheckout } from '../../billing/hooks/useCheckout'
+import { useCheckout, useChangePlan } from '../../billing/hooks/useCheckout'
+import { razorpayPrefill, razorpayTheme } from '../../billing/utils/razorpayOptions'
 import useAuthStore from '../../../store/authStore'
 import { useMemo } from 'react'
 import { formatDate } from '../../../shared/utils/formatDate'
@@ -117,14 +118,42 @@ export default function SubscriptionPage() {
   const nextTier = sub && NEXT_TIER[currentTier]
   const isNativeINR = country === 'IN'
 
-  const { mutate: startCheckout, isPending } = useCheckout()
+  const { mutate: startCheckout, isPending: isCheckoutPending } = useCheckout()
+  const { mutate: startChangePlan, isPending: isChangePending } = useChangePlan()
+  const isPending = isCheckoutPending || isChangePending
 
   function openRazorpayCheckout(data) {
+    const prefill = razorpayPrefill({ business, user })
+    const theme = razorpayTheme()
+    if (data.mode === 'subscription') {
+      // Recurring plans: Razorpay derives the amount from the Plan itself,
+      // so no amount/currency/order_id — just the subscription_id.
+      const options = {
+        key: data.razorpay_key_id,
+        subscription_id: data.razorpay_subscription_id,
+        prefill,
+        theme,
+        handler: function () {
+          navigate(`/billing/success?payment_id=${data.payment_id}`)
+        },
+        modal: {
+          ondismiss: () => {
+            toast.error('Checkout cancelled. You can try again anytime.')
+          },
+        },
+      }
+      const rzp = new window.Razorpay(options)
+      rzp.open()
+      return
+    }
+
     const options = {
       key: data.razorpay_key_id,
       amount: data.amount,
       currency: data.currency,
       order_id: data.razorpay_order_id,
+      prefill,
+      theme,
       handler: function () {
         navigate(`/billing/success?payment_id=${data.payment_id}`)
       },
@@ -145,15 +174,22 @@ export default function SubscriptionPage() {
     }
     if (planCode === 'trial') return
     const billingCycle = planCode === 'pro_yearly' ? 'yearly' : planCode === 'lifetime' ? 'one_time' : 'monthly'
-    startCheckout({ planCode, billingCycle }, {
-      onSuccess: (data) => {
-        if (data.provider === 'razorpay') {
-          openRazorpayCheckout(data)
-        } else if (data.checkout_url) {
-          window.location.href = data.checkout_url
-        }
-      },
-    })
+    const onData = (data) => {
+      if (data.provider === 'razorpay') {
+        openRazorpayCheckout(data)
+      } else if (data.checkout_url) {
+        window.location.href = data.checkout_url
+      }
+    }
+    // FIX (2026-08-03): switching from an active paid plan must cancel the
+    // existing Razorpay subscription via /change-plan to avoid double billing.
+    const isActivePaid = sub && !sub.is_expired && currentTier !== 'trial'
+    const isDifferentPlan = isActivePaid && currentTier !== planCode
+    if (isDifferentPlan) {
+      startChangePlan({ planCode, billingCycle }, { onSuccess: onData })
+    } else {
+      startCheckout({ planCode, billingCycle }, { onSuccess: onData })
+    }
   }
 
   const plans = useMemo(() => PLAN_ORDER.map((tier) => ({

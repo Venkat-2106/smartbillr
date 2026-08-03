@@ -7,7 +7,7 @@ export default function BillingSuccessPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const paymentId = searchParams.get('payment_id') || searchParams.get('session_id')
-  const { data: status } = useCheckoutStatus(paymentId)
+  const { data: status, hasTimedOut } = useCheckoutStatus(paymentId)
 
   const [elapsed, setElapsed] = useState(0)
 
@@ -41,6 +41,27 @@ export default function BillingSuccessPage() {
         <button onClick={() => navigate('/pricing')} style={{ marginTop: 16, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}>
           Back to Pricing
         </button>
+      </div>
+    )
+  }
+
+  // FIX (2026-08-03): after ~60s of unanswered polling, stop spinning and show
+  // a terminal state instead of an infinite spinner.
+  if (hasTimedOut) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+        <h2 style={{ fontSize: 20, fontWeight: 600 }}>Payment confirmation is taking longer than usual</h2>
+        <p style={{ marginTop: 8, fontSize: 14, color: 'var(--text-secondary)', textAlign: 'center', maxWidth: 420 }}>
+          We couldn't confirm your payment yet. If you were charged, we'll email you once it's verified. You can safely leave this page.
+        </p>
+        <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+          <button onClick={() => navigate('/dashboard')} style={{ color: 'var(--primary)', background: 'none', border: '1px solid var(--primary)', borderRadius: 8, padding: '10px 20px', cursor: 'pointer' }}>
+            Go to Dashboard
+          </button>
+          <button onClick={() => navigate('/pricing')} style={{ color: 'var(--primary)', background: 'none', border: '1px solid var(--primary)', borderRadius: 8, padding: '10px 20px', cursor: 'pointer' }}>
+            Back to Pricing
+          </button>
+        </div>
       </div>
     )
   }

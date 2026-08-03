@@ -34,7 +34,9 @@ AUTH_PREFIX_PATHS = ["/auth/", "/profiles/check-email"]
 ADMIN_PREFIX_PATHS = ["/v1/admin/"]
 
 # Skip rate limiting entirely for these paths.
-SKIP_PATHS = ["/", "/health"]
+# The Razorpay webhook is HMAC-signed and fires in bursts (multiple events per
+# payment, retries); IP-limiting it would break legitimate deliveries.
+SKIP_PATHS = ["/", "/health", "/v1/billing/webhooks/razorpay"]
 
 AUTH_LIMIT = 5
 AUTH_WINDOW = 60
@@ -137,7 +139,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
-        if path in ("/", "/health"):
+        if path in SKIP_PATHS:
             return await call_next(request)
 
         is_auth = (

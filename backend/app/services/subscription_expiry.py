@@ -42,6 +42,19 @@ def expire_subscriptions(db_session=None):
     db = db_session or SessionLocal()
     own_session = db_session is None
     try:
+        # FIX (2026-08-03): businesses has FORCE ROW LEVEL SECURITY with a
+        # tenant_access_policy keyed on app.current_business_id(). A plain
+        # SessionLocal() has that GUC unset (NULL) for every row, so every
+        # UPDATE/SELECT below silently matched zero rows and the expiry job
+        # never did anything. Set the super-admin GUC on this session first
+        # (transaction-scoped via SET LOCAL, same pattern as
+        # rbac.verify_super_admin_with_rls) so the cron bypasses tenant
+        # scoping exactly like the superadmin flows do.
+        db.execute(text("SET LOCAL app.is_super_admin = 'true'"))
+        logger.info(
+            "Subscription expiry: set app.is_super_admin = 'true' GUC (super-admin RLS bypass)"
+        )
+
         acquired = db.execute(
             text("SELECT pg_try_advisory_xact_lock(12345)")
         ).scalar()

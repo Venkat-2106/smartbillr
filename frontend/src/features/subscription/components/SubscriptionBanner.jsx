@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useSubscription } from '../hooks/useSubscription'
 import { formatDate } from '../../../shared/utils/formatDate'
 import { isTrial } from '../../../shared/utils/subscriptionUtils'
@@ -6,6 +7,40 @@ export default function SubscriptionBanner() {
   const { data: sub } = useSubscription()
 
   if (!sub || sub.is_expired) return null
+
+  // FIX (2026-08-03): A subscription.pending webhook means Razorpay is
+  // retrying a failed renewal charge. Surface it immediately instead of
+  // waiting for the terminal halted event days later.
+  if (sub.payment_action_required) {
+    return (
+      <div style={{
+        background: 'var(--danger-bg, #FEF2F2)',
+        borderBottom: '1px solid var(--danger-border, #FECACA)',
+        padding: '10px 28px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        fontSize: 13,
+        fontWeight: 500,
+        color: 'var(--danger-text, #991B1B)',
+        flexShrink: 0,
+      }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          <line x1="12" y1="9" x2="12" y2="13" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+        <span>Payment issue — your renewal failed and is being retried. Update your payment method to avoid interruption.</span>
+        <Link
+          to="/pricing"
+          style={{ color: 'inherit', fontWeight: 700, textDecoration: 'underline', marginLeft: 4 }}
+        >
+          Update payment method
+        </Link>
+      </div>
+    )
+  }
 
   if (sub.subscription_type === 'trial') {
     const days = sub.days_remaining

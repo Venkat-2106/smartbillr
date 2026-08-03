@@ -19,3 +19,8 @@ export async function cancelSubscription() {
   const res = await api.post('/billing/cancel')
   return res.data
 }
+
+export async function changePlan(planCode, billingCycle) {
+  const res = await api.post('/billing/change-plan', { plan_code: planCode, billing_cycle: billingCycle })
+  return res.data
+}

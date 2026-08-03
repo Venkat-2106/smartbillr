@@ -111,9 +111,11 @@ export default function PricingPage() {
     }
     const billingCycle = overrideBillingCycle || (selectedBilling === 'yearly' && yearlyCode ? 'yearly' : 'monthly')
     const resolvedCode = billingCycle === 'yearly' && yearlyCode ? yearlyCode : planCode
+    const cycleLabel = billingCycle === 'yearly' ? 'Yearly' : billingCycle === 'one_time' ? 'One-time' : 'Monthly'
+    const planLabel = `${planCode.charAt(0).toUpperCase() + planCode.slice(1)} Plan – ${cycleLabel}`
     const onData = (data) => {
       if (data.provider === 'razorpay') {
-        openRazorpayCheckout(data)
+        openRazorpayCheckout(data, planLabel)
       } else if (data.checkout_url) {
         window.location.href = data.checkout_url
       }
@@ -129,15 +131,19 @@ export default function PricingPage() {
     }
   }
 
-  function openRazorpayCheckout(data) {
+  function openRazorpayCheckout(data, planLabel) {
     const prefill = razorpayPrefill({ business, user })
     const theme = razorpayTheme()
+    const logoUrl = `${window.location.origin}/logo-512.png`
     if (data.mode === 'subscription') {
       // Recurring plans: Razorpay derives the amount from the Plan itself,
       // so no amount/currency/order_id — just the subscription_id.
       const options = {
         key: data.razorpay_key_id,
         subscription_id: data.razorpay_subscription_id,
+        name: 'SmartBillr',
+        description: planLabel,
+        image: logoUrl,
         prefill,
         theme,
         handler: function () {
@@ -159,6 +165,9 @@ export default function PricingPage() {
       amount: data.amount,
       currency: data.currency,
       order_id: data.razorpay_order_id,
+      name: 'SmartBillr',
+      description: planLabel,
+      image: logoUrl,
       prefill,
       theme,
       handler: function () {

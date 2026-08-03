@@ -74,7 +74,7 @@ export default function SignupPage() {
       if (!payload.business_address) payload.business_address = null
       const res = await registerBusiness(payload)
       if (res && res.business_id) {
-        toast.success('Business created successfully! Check your email to sign in.')
+        toast.success('Your business has been registered successfully! A confirmation email has been sent to you.')
         navigate('/login')
       } else {
         setServerError(res?.message || 'Registration failed. Please try again.')

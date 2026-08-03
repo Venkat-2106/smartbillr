@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import AuthLayout from '../../../app/layouts/AuthLayout'
 import { useLogin, useForgotPassword } from '../hooks/useAuth'
 
 export default function LoginPage() {
+  const navigate = useNavigate()
   const { login, isLoading, pendingSession, confirmSession, cancelSession } = useLogin()
   const { sendResetEmail, isLoading: resetLoading } = useForgotPassword()
 
@@ -162,6 +164,25 @@ export default function LoginPage() {
         </button>
 
       </form>
+
+      <div style={{
+        marginTop: '1.25rem', textAlign: 'center',
+      }}>
+        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+          New register?{' '}
+        </span>
+        <span
+          onClick={() => navigate('/signup')}
+          style={{
+            fontSize: '0.78rem', color: '#3B82F6', fontWeight: '600',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={e => e.currentTarget.style.color = '#1D4ED8'}
+          onMouseLeave={e => e.currentTarget.style.color = '#3B82F6'}
+        >
+          Sign up
+        </span>
+      </div>
 
       {pendingSession && (
         <div style={{

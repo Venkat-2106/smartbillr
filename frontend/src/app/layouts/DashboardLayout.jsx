@@ -15,6 +15,7 @@ import { useShortcutContext } from '../../shared/hooks/useShortcut'
 import CommandPalette from '../../shared/components/CommandPalette'
 import ShortcutHelp from '../../shared/components/ShortcutHelp'
 import SubscriptionBanner from '../../features/subscription/components/SubscriptionBanner'
+import { useSubscription } from '../../features/subscription/hooks/useSubscription'
 import { getSubscriptionDisplayName } from '../../shared/utils/subscriptionUtils'
 
 // ── Static SVG icons (hoisted to module scope) ──────────────────────────────────
@@ -636,11 +637,12 @@ export default function DashboardLayout() {
   useIdleLogout()
 
   const { theme, setTheme, accent, setAccent } = useTheme()
-  const { user, business, profile, subscription } = useAuthStore()
+  const { user, business, profile } = useAuthStore()
+  const { data: subscription } = useSubscription()
   // FIX (LOW-9 cleanup): permissions lives at profile.permissions, not a top-level
   // store field. The old s.permissions was always undefined → crashed .includes().
   // Computed inside visibleNav useMemo to avoid a new [] reference every render.
-  const showBanner  = useAuthStore(s => s.subscription && !s.subscription.is_expired)
+  const showBanner  = subscription && !subscription.is_expired
   const navigate = useNavigate()
   const location = useLocation()
 

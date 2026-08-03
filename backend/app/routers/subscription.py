@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -12,6 +12,7 @@ import logging
 from app.database import get_async_db
 from app.middleware.auth import verify_token, verify_super_admin
 from app.utils.response import success_response, error_response
+from app.services.email_service import send_business_registered_email
 from app.schemas.business import (
     BusinessCreate,
     BusinessRegistrationResponse,
@@ -102,6 +103,7 @@ async def _delete_supabase_auth_user(auth_user_id: str, email: str | None = None
 @reg_router.post("/business", status_code=201)
 async def register_business(
     payload: BusinessCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_async_db),
 ):
     now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -213,6 +215,13 @@ async def register_business(
         )
 
         await db.commit()
+
+        background_tasks.add_task(
+            send_business_registered_email,
+            payload.owner_email,
+            payload.business_name,
+            payload.owner_name,
+        )
 
     except IntegrityError as e:
         await db.rollback()

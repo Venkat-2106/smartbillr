@@ -23,7 +23,10 @@ class Business(Base):
     subscription_type = Column(String(20), nullable=False, default="trial")
     subscription_start_at = Column(DateTime, nullable=True)
     subscription_end_at = Column(DateTime, nullable=True)
-    last_renewed_at = Column(DateTime, nullable=True)
+    # NOTE: this column is timestamptz in the DB (migration f4e4a5b0809e).
+    # activation.py writes the same aware now to last_renewed_at and
+    # subscription_end_at; declaring timezone=True matches the DB truth.
+    last_renewed_at = Column(DateTime(timezone=True), nullable=True)
     trial_start_at = Column(DateTime, nullable=True)
     trial_end_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)

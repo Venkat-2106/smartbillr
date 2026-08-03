@@ -1,6 +1,7 @@
 User-agent: *
 Allow: /
 Allow: /pricing
+Allow: /user-guide
 Allow: /login
 Allow: /signup
 
@@ -25,7 +26,6 @@ Disallow: /settings
 Disallow: /staff
 Disallow: /subscription
 Disallow: /billing
-Disallow: /user-guide
 Disallow: /unauthorized
 Disallow: /reset-password
 

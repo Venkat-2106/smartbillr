@@ -7,7 +7,20 @@ export const businessSchema = z.object({
   business_address: z.string().max(500).optional().or(z.literal('')),
   business_state: z.string().max(100).optional().or(z.literal('')),
   business_country_code: z.string().max(5).optional().or(z.literal('')),
-  gstin: z.string().max(50).optional().or(z.literal('')),
+  gstin: z
+    .string()
+    .max(50)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => (v || '').toUpperCase().replace(/\s+/g, ''))
+    .refine(
+      (v) =>
+        !v ||
+        /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(v),
+      {
+        message: 'Invalid GSTIN format. Expected format: 22AAAAA0000A1Z5',
+      }
+    ),
   is_gst_registered: z.boolean().optional(),
 }).refine(
   (data) => {

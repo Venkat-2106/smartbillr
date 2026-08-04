@@ -88,18 +88,6 @@ class BusinessUpdate(BaseModel):
     def sanitize_name(cls, v: Optional[str]) -> Optional[str]:
         return strip_and_escape_html(v)
 
-    @field_validator("gstin")
-    @classmethod
-    def validate_gstin(cls, v):
-        if v is None:
-            return v
-        v = strip_and_escape_html(v).upper().replace(" ", "")
-        if v and not GSTIN_PATTERN.match(v):
-            raise ValueError(
-                "Invalid GSTIN format. Expected format: 22AAAAA0000A1Z5"
-            )
-        return v
-
     @field_validator("business_phone")
     @classmethod
     def validate_phone(cls, v):

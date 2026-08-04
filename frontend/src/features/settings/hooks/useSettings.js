@@ -28,7 +28,15 @@ export function useUpdateBusiness() {
       toast.success('Settings saved')
     },
     onError: (err) => {
-      toast.error(err?.response?.data?.message || 'Failed to save settings')
+      const detail = err?.response?.data?.detail
+      const message = Array.isArray(detail)
+        ? detail[0]?.msg
+        : typeof detail === 'string'
+          ? detail
+          : undefined
+      toast.error(
+        message || err?.response?.data?.message || 'Failed to save settings'
+      )
     },
   })
 }

@@ -6,7 +6,7 @@ from app.database import get_async_db
 from app.middleware.rbac import require_permission, async_set_rls_gucs_after_commit
 from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
-from app.schemas.business import BusinessCreate, BusinessUpdate, BusinessResponse
+from app.schemas.business import BusinessCreate, BusinessUpdate, BusinessResponse, GSTIN_PATTERN
 from app.models.business import Business
 from app.utils.timestamp import fmt_ts
 import uuid
@@ -64,6 +64,12 @@ async def update_my_business(
     new_gstin  = update_data.get("gstin")
     effective_country = business.business_country_code or "IN"
     effective_gst_registered = new_is_gst if new_is_gst is not None else (business.is_gst_registered or False)
+
+    # Normalize GSTIN (uppercase, strip spaces) before validating/storing.
+    if new_gstin is not None:
+        new_gstin = new_gstin.strip().upper().replace(" ", "") or None
+        update_data["gstin"] = new_gstin
+
     effective_gstin = new_gstin if new_gstin is not None else (business.gstin or "")
 
     if effective_gst_registered:
@@ -71,6 +77,9 @@ async def update_my_business(
             return error_response("GST registration is only available for Indian businesses.", 400)
         if not effective_gstin:
             return error_response("GSTIN is required when GST registration is enabled.", 400)
+
+    if effective_gstin and not GSTIN_PATTERN.match(effective_gstin):
+        return error_response("Invalid GSTIN format. Expected format: 22AAAAA0000A1Z5.", 400)
 
     for field, value in update_data.items():
         setattr(business, field, value)

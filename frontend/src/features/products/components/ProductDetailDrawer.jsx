@@ -17,7 +17,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { XMarkIcon, CubeIcon, PrinterIcon } from '@heroicons/react/24/outline'
 import { fetchProduct } from '../api/productsApi'
-import { Spinner } from '../../../shared/components'
+import { Spinner, DrawerPortal } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate }     from '../../../shared/utils/formatDate'
 import {
@@ -353,8 +353,10 @@ export default function ProductDetailDrawer({ product, onClose }) {
     triggerPrint(html)
   }
 
+  // DRAWER VIEWPORT FIX — see DrawerPortal.jsx: mount at document.body so
+  // position:fixed anchors to the viewport, not the .fade-up wrapper.
   return (
-    <>
+    <DrawerPortal>
       {/* Backdrop */}
       <div
         onClick={onClose}
@@ -628,6 +630,6 @@ export default function ProductDetailDrawer({ product, onClose }) {
           )}
         </div>
       </div>
-    </>
+    </DrawerPortal>
   )
 }

@@ -24,7 +24,7 @@
 //     into the print node guarantees the output looks correct.
 
 import { memo, useState } from 'react'
-import { Button, Spinner, EmptyState, Pagination } from '../../../shared/components'
+import { Button, Spinner, EmptyState, Pagination, DrawerPortal } from '../../../shared/components'
 import { useCustomer } from '../hooks/useCustomers'
 import { formatDate }     from '../../../shared/utils/formatDate'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
@@ -269,7 +269,10 @@ export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManag
     triggerPrint(html)
   }
 
+  // DRAWER VIEWPORT FIX — see DrawerPortal.jsx: mount at document.body so
+  // position:fixed anchors to the viewport, not the .fade-up wrapper.
   return (
+    <DrawerPortal>
     <div style={{
       position: 'fixed', top: 0, right: 0, bottom: 0,
       height: '100dvh',
@@ -436,5 +439,6 @@ export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManag
       )}
       </div>
     </div>
+    </DrawerPortal>
   )
 }

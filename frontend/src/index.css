@@ -99,8 +99,10 @@
   --sb-bg:           #0F172A;
   --sb-border:       rgba(255,255,255,0.06);
   --sb-text-primary: #E2E8F0;
-  --sb-text-muted:   #475569;
-  --sb-text-section: #334155;
+  /* CONTRAST FIX: raised from #475569 (2.36:1) / #334155 (1.72:1) to pass
+     WCAG AA for muted (5.98:1) and keep section labels readable (3.75:1). */
+  --sb-text-muted:   #8697AC;
+  --sb-text-section: #64748B;
   --sb-hover-bg:     rgba(255,255,255,0.05);
   --sb-hover-text:   #94A3B8;
 
@@ -112,6 +114,11 @@
   --border:          #E2E8F0;
   --border-hover:    #CBD5E1;
   --border-strong:   #94A3B8;
+
+  /* Overlay scrollbar thumb — translucent slate, deepens on hover/drag. */
+  --scrollbar-thumb:        rgba(100, 116, 139, 0.32);
+  --scrollbar-thumb-hover:  rgba(100, 116, 139, 0.55);
+  --scrollbar-thumb-active: rgba(100, 116, 139, 0.75);
 
   --shadow-xs:   0 1px 2px rgba(0,0,0,0.04);
   --shadow-sm:   0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.03);
@@ -165,6 +172,9 @@
   --bg-input-focus:  #1E2535;
 
   --sb-bg:           #080B12;
+  /* CONTRAST FIX: dark-theme overrides — muted 6.95:1 / section 5.04:1 on #080B12. */
+  --sb-text-muted:   #8B9BB0;
+  --sb-text-section: #72829A;
 
   --text-primary:    #F1F5F9;
   --text-secondary:  #94A3B8;
@@ -174,6 +184,10 @@
   --border:          rgba(255,255,255,0.07);
   --border-hover:    rgba(255,255,255,0.12);
   --border-strong:   rgba(255,255,255,0.20);
+
+  --scrollbar-thumb:        rgba(255, 255, 255, 0.18);
+  --scrollbar-thumb-hover:  rgba(255, 255, 255, 0.34);
+  --scrollbar-thumb-active: rgba(255, 255, 255, 0.46);
 
   --shadow-xs:   0 1px 2px rgba(0,0,0,0.3);
   --shadow-sm:   0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
@@ -223,13 +237,25 @@ body {
 }
 
 /* ─── Scrollbar ──────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+/* Overlay-style: invisible track, floating rounded pill thumb that
+   deepens on hover/drag. Theme-aware via --scrollbar-thumb-*. */
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: var(--border-hover);
+  background: var(--scrollbar-thumb);
+  border: 1px solid transparent;
   border-radius: 99px;
+  background-clip: content-box;
 }
-::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+::-webkit-scrollbar-thumb:active { background: var(--scrollbar-thumb-active); }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* Firefox: match the WebKit look — thin, rounded, translucent. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
 
 /* ─── Animations ─────────────────────────────────────────────── */
 @keyframes fadeUp {
@@ -510,6 +536,24 @@ body {
 }
 .premium-table tbody tr:last-child td {
   border-bottom: none;
+}
+
+/* Shared Table scroll area (Table.jsx) — bounded height + internal scroll so
+   the sticky header pins while rows scroll. Sticky is applied to <th> because
+   with border-collapse: collapse that is the reliable cross-browser pattern.
+   No overscroll-behavior override: leaving the default (auto) lets the wheel
+   chain to the outer page once the table's scroll hits its top/bottom. */
+.table-scroll {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: calc(100vh - 260px);
+  max-height: calc(100dvh - 260px);
+  -webkit-overflow-scrolling: touch;
+}
+/* Normalize any page-level `.premium-table thead` sticky rule so pinning is
+   handled solely by the sticky <th> cells in Table.jsx (avoids double-sticky). */
+.table-scroll thead {
+  position: static;
 }
 
 /* ─── Divider ────────────────────────────────────────────────── */

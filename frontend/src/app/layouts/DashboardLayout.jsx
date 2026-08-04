@@ -839,7 +839,9 @@ export default function DashboardLayout() {
           style={{
             flex: 1, overflowY: 'auto', overflowX: 'hidden',
             padding: collapsed && !isMobile ? '10px 8px' : '6px 8px',
-            scrollbarWidth: 'none',
+            // SCROLLBAR FIX: 'none' made the nav scrollbar invisible/unfindable
+            // on Windows; 'thin' keeps it slim but visible.
+            scrollbarWidth: 'thin',
           }}
         >
           {visibleNav.map(section => (

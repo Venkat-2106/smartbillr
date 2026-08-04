@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { XMarkIcon, CurrencyDollarIcon, PrinterIcon } from '@heroicons/react/24/outline'
 import { fetchExpense } from '../api/expensesApi'
-import { Spinner } from '../../../shared/components'
+import { Spinner, DrawerPortal } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate, formatDateOnly }
   from '../../../shared/utils/formatDate'
@@ -82,8 +82,10 @@ export default function ExpenseDetailDrawer({ expenseId, onClose, onEdit, canMan
     triggerPrint(html)
   }
 
+  // DRAWER VIEWPORT FIX — see DrawerPortal.jsx: mount at document.body so
+  // position:fixed anchors to the viewport, not the .fade-up wrapper.
   return (
-    <>
+    <DrawerPortal>
       <div
         onClick={onClose}
         style={{
@@ -273,6 +275,6 @@ export default function ExpenseDetailDrawer({ expenseId, onClose, onEdit, canMan
           ) : null}
         </div>
       </div>
-    </>
+    </DrawerPortal>
   )
 }

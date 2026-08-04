@@ -12,7 +12,7 @@
 import { useState, useEffect }     from 'react'
 import { XMarkIcon, DocumentTextIcon, PrinterIcon } from '@heroicons/react/24/outline'
 import { usePurchaseDetail }       from '../hooks/usePurchases'
-import { Badge, Button, Spinner }  from '../../../shared/components'
+import { Badge, Button, Spinner, DrawerPortal }  from '../../../shared/components'
 import { selectStyle }             from '../../../shared/components/FormField'
 import { formatCurrency }          from '../../../shared/utils/formatCurrency'
 import { formatDate }              from '../../../shared/utils/formatDate'
@@ -283,7 +283,10 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
     (data.pur_tax_total  || 0) > 0
   )
 
+  // DRAWER VIEWPORT FIX — see DrawerPortal.jsx: mount at document.body so
+  // position:fixed anchors to the viewport, not the .fade-up wrapper.
   return (
+    <DrawerPortal>
     <div style={{
       position: 'fixed', top: 0, right: 0,
       width: 500, height: '100vh',
@@ -671,5 +674,6 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
         />
       )}
     </div>
+    </DrawerPortal>
   )
 }

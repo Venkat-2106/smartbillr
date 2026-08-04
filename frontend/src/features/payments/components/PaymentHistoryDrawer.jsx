@@ -15,7 +15,7 @@ import { zodResolver }              from '@hookform/resolvers/zod'
 import { XMarkIcon }                from '@heroicons/react/24/outline'
 import useAuthStore                 from '../../../store/authStore'
 import { usePaymentHistory }        from '../hooks/usePayments'
-import { Badge, Button, Spinner, FormField } from '../../../shared/components'
+import { Badge, Button, Spinner, FormField, DrawerPortal } from '../../../shared/components'
 import { selectStyle }              from '../../../shared/components/FormField'
 import { formatCurrency }           from '../../../shared/utils/formatCurrency'
 import { formatDate }               from '../../../shared/utils/formatDate'
@@ -121,7 +121,10 @@ export default function PaymentHistoryDrawer({ saleId, onClose, onRecorded, isRe
     )
   }
 
+  // DRAWER VIEWPORT FIX — see DrawerPortal.jsx: mount at document.body so
+  // position:fixed anchors to the viewport, not the .fade-up wrapper.
   return (
+    <DrawerPortal>
     <div style={{
       position: 'fixed', top: 0, right: 0,
       width: 460, height: '100vh',
@@ -366,5 +369,6 @@ export default function PaymentHistoryDrawer({ saleId, onClose, onRecorded, isRe
         )}
       </div>
     </div>
+    </DrawerPortal>
   )
 }

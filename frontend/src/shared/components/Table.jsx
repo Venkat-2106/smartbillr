@@ -75,14 +75,17 @@ function Table({
         boxShadow: 'var(--shadow-card)',
         overflow: 'hidden',
       }}>
-        <div style={{ overflowX: 'auto' }}>
+        {/* STICKY-HEADER FIX: `.table-scroll` (see index.css) bounds the
+            height and scrolls internally, so the sticky <th> below pins while
+            rows scroll. Default overscroll-behavior = auto lets the wheel chain
+            to the outer page once the table hits its top/bottom. */}
+        <div className="table-scroll">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
 
             {/* Header */}
             <thead>
               <tr style={{
                 background: 'var(--bg-subtle)',
-                borderBottom: '1px solid var(--border)',
               }}>
                 {columns.map(col => {
                   const isSorted = sortKey === col.key
@@ -99,6 +102,14 @@ function Table({
                         aria-sort={isSorted ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                         className={`table-header-cell${isSorted ? ' sorted' : ''}`}
                         style={{
+                          // STICKY-HEADER FIX: native sticky on <th> is the reliable
+                          // pattern with border-collapse:collapse; opaque bg + border
+                          // move the separator onto the pinned header itself.
+                          position: 'sticky',
+                          top: 0,
+                          zIndex: 1,
+                          background: 'var(--bg-subtle)',
+                          borderBottom: '1px solid var(--border)',
                           padding: '12px 20px',
                           textAlign: col.align === 'right'  ? 'right'
                                    : col.align === 'center' ? 'center' : 'left',

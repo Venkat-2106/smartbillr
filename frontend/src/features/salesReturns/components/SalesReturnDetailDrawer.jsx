@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { XMarkIcon, ArrowPathIcon, PrinterIcon } from '@heroicons/react/24/outline'
 import { toast } from 'react-hot-toast'
 import { fetchSalesReturn, updateSalesReturnStatus } from '../api/salesReturnsApi'
-import { Button, Spinner, ConfirmDialog } from '../../../shared/components'
+import { Button, Spinner, ConfirmDialog, DrawerPortal } from '../../../shared/components'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate, formatDateTime } from '../../../shared/utils/formatDate'
 import {
@@ -148,8 +148,10 @@ export default function SalesReturnDetailDrawer({ returnId, onClose, onStatusUpd
 
   const isPending = detail?.return_status === 'pending'
 
+  // DRAWER VIEWPORT FIX — see DrawerPortal.jsx: mount at document.body so
+  // position:fixed anchors to the viewport, not the .fade-up wrapper.
   return (
-    <>
+    <DrawerPortal>
       <div
         onClick={onClose}
         style={{
@@ -410,6 +412,6 @@ export default function SalesReturnDetailDrawer({ returnId, onClose, onStatusUpd
         variant="warning"
         loading={actionLoading}
       />
-    </>
+    </DrawerPortal>
   )
 }

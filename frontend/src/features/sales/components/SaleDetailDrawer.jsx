@@ -33,6 +33,7 @@ import {
 } from '../../../shared/utils/printUtils';
 import { usePermissions } from '../../../shared/hooks/usePermissions';
 import { detectTaxType, getTaxLabel } from '../../../shared/utils/formatTax';
+import DrawerPortal from '../../../shared/components/DrawerPortal';
 import CreateSalesReturnDrawer from '../../salesReturns/components/CreateSalesReturnDrawer';
 import { useSalesReturnsBySale } from '../../salesReturns/hooks/useSalesReturns';
 import { fetchPaymentsBySale } from '../../payments/api/paymentsApi';
@@ -338,8 +339,10 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
     );
   }
 
+  // DRAWER VIEWPORT FIX — see DrawerPortal.jsx: mount at document.body so
+  // position:fixed anchors to the viewport, not the .fade-up wrapper.
   return (
-    <>
+    <DrawerPortal>
       {/* Backdrop */}
       <div
         onClick={onClose}
@@ -955,7 +958,7 @@ export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
           onClose={() => setShowReturnDrawer(false)}
         />
       )}
-    </>
+    </DrawerPortal>
   );
 }
 

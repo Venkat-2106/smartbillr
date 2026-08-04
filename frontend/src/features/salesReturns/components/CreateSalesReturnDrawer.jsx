@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast'
 import { fetchSale } from '../../sales/api/salesApi'
 import { z } from 'zod'
 import { createSalesReturn, fetchSalesReturnsBySale } from '../api/salesReturnsApi'
-import { Button, Spinner } from '../../../shared/components'
+import { Button, Spinner, DrawerPortal } from '../../../shared/components'
 import { textareaStyle } from '../../../shared/components/FormField'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate } from '../../../shared/utils/formatDate'
@@ -173,7 +173,10 @@ export default function CreateSalesReturnDrawer({ saleId, onClose }) {
     mutation.mutate(payload)
   }
 
+  // DRAWER VIEWPORT FIX — see DrawerPortal.jsx: mount at document.body so
+  // position:fixed anchors to the viewport, not the .fade-up wrapper.
   return (
+    <DrawerPortal>
     <div style={{
       position: 'fixed', top: 0, right: 0,
       width: 520, height: '100vh',
@@ -410,5 +413,6 @@ export default function CreateSalesReturnDrawer({ saleId, onClose }) {
         </Button>
       </div>
     </div>
+    </DrawerPortal>
   )
 }

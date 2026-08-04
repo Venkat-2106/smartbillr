@@ -21,6 +21,7 @@ import {
   triggerPrint,
 } from '../../../shared/utils/printUtils';
 import useAuthStore from '../../../store/authStore';
+import DrawerPortal from '../../../shared/components/DrawerPortal';
 
 // Date formatting uses the shared formatDate() utility from shared/utils/formatDate.js
 
@@ -71,8 +72,10 @@ export default function SupplierDetailDrawer({ supplier, onClose }) {
     triggerPrint(html);
   }
 
+  // DRAWER VIEWPORT FIX — see DrawerPortal.jsx: mount at document.body so
+  // position:fixed anchors to the viewport, not the .fade-up wrapper.
   return (
-    <>
+    <DrawerPortal>
       {/* ── Backdrop ──────────────────────────────────────────────────── */}
       <div
         onClick={onClose}
@@ -195,7 +198,7 @@ export default function SupplierDetailDrawer({ supplier, onClose }) {
 
         </div>
       </div>
-    </>
+    </DrawerPortal>
   );
 }
 

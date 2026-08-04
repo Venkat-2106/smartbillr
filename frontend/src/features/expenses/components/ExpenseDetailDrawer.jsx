@@ -15,6 +15,7 @@ import {
   triggerPrint,
 } from '../../../shared/utils/printUtils'
 import useAuthStore from '../../../store/authStore'
+import useEscapeToClose from '../../../shared/hooks/useEscapeToClose'
 
 const CATEGORY_LABELS = {
   // Must stay in sync with backend ALLOWED_CATEGORIES and DB CHECK constraint
@@ -62,6 +63,7 @@ function buildExpensePrintHTML(business, expense) {
 }
 
 export default function ExpenseDetailDrawer({ expenseId, onClose, onEdit, canManage }) {
+  useEscapeToClose(onClose)
   const [printHovered, setPrintHovered] = useState(false)
   const business  = useAuthStore(s => s.business)
   const country   = business?.business_country_code || 'IN'

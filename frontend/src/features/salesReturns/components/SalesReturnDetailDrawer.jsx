@@ -17,6 +17,7 @@ import {
   triggerPrint,
 } from '../../../shared/utils/printUtils'
 import useAuthStore from '../../../store/authStore'
+import useEscapeToClose from '../../../shared/hooks/useEscapeToClose'
 
 const STATUS_LABEL = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' }
 
@@ -88,6 +89,7 @@ function buildReturnPrintHTML(business, detail) {
 // ── PERMISSION SPLIT (2026-07) ──────────────────────────────────────────────
 // canApprove gates the Approve/Reject buttons (admin/manager only).
 export default function SalesReturnDetailDrawer({ returnId, onClose, onStatusUpdate, canApprove }) {
+  useEscapeToClose(onClose)
   const [actionLoading, setActionLoading] = useState(false)
   const [printHovered, setPrintHovered] = useState(false)
   const [showApproveConfirm, setShowApproveConfirm] = useState(false)

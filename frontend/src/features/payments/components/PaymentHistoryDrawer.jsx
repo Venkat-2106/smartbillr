@@ -21,6 +21,7 @@ import { formatCurrency }           from '../../../shared/utils/formatCurrency'
 import { formatDate }               from '../../../shared/utils/formatDate'
 import { PAYMENT_METHODS }          from '../../../shared/constants/paymentMethods'
 import { paymentSchema }            from '../schemas/paymentSchema'
+import useEscapeToClose             from '../../../shared/hooks/useEscapeToClose'
 
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' }
 const STATUS_LABEL   = { paid: 'Paid',    partial: 'Partial', pending: 'Unpaid' }
@@ -88,6 +89,7 @@ function PaymentProgressBar({ paid, total, country }) {
 
 // ── Main Drawer ───────────────────────────────────────────────────────────────
 export default function PaymentHistoryDrawer({ saleId, onClose, onRecorded, isRecording }) {
+  useEscapeToClose(onClose)
   const { data, isLoading } = usePaymentHistory(saleId)
   const [showForm, setShowForm]   = useState(false)
   const business  = useAuthStore(s => s.business)

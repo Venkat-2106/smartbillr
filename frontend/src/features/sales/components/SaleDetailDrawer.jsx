@@ -38,6 +38,7 @@ import CreateSalesReturnDrawer from '../../salesReturns/components/CreateSalesRe
 import { useSalesReturnsBySale } from '../../salesReturns/hooks/useSalesReturns';
 import { fetchPaymentsBySale } from '../../payments/api/paymentsApi';
 import useAuthStore from '../../../store/authStore';
+import useEscapeToClose from '../../../shared/hooks/useEscapeToClose';
 
 // ── Payment status badge helper (for print — literal hex, no CSS vars) ────────
 function paymentStatusBadge(status) {
@@ -237,6 +238,7 @@ function buildInvoiceHTML(
 }
 
 export default function SaleDetailDrawer({ sale, onClose, statusMutation }) {
+  useEscapeToClose(onClose);
   const [editingStatus, setEditingStatus] = useState(false);
   const [newStatus,     setNewStatus]     = useState(sale?.sales_payment_status || 'paid');
   const [partialAmount, setPartialAmount] = useState('');

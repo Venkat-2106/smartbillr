@@ -31,6 +31,7 @@ import {
 } from '../../../shared/utils/printUtils'
 import useAuthStore from '../../../store/authStore'
 import { usePermissions } from '../../../shared/hooks/usePermissions'
+import useEscapeToClose from '../../../shared/hooks/useEscapeToClose'
 
 // ── Direction badge for stock movements ──────────────────────────────────────
 function DirectionBadge({ direction, qty }) {
@@ -303,6 +304,7 @@ function AuditGrid({ createdAt, createdBy, updatedAt, updatedBy }) {
 
 // ── Main drawer ───────────────────────────────────────────────────────────────
 export default function ProductDetailDrawer({ product, onClose }) {
+  useEscapeToClose(onClose)
   const [printHovered, setPrintHovered] = useState(false)
   const business  = useAuthStore(s => s.business)
   const subType   = business?.subscription_type

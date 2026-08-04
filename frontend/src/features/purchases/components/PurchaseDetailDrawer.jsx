@@ -27,6 +27,7 @@ import {
 } from '../../../shared/utils/printUtils'
 import useAuthStore                from '../../../store/authStore'
 import CreatePurchaseReturnDrawer  from '../../purchaseReturns/components/CreatePurchaseReturnDrawer'
+import useEscapeToClose            from '../../../shared/hooks/useEscapeToClose'
 
 const STATUS_VARIANT = { paid: 'success', partial: 'warning', pending: 'danger' }
 const STATUS_LABEL   = { paid: 'Paid',    partial: 'Partial', pending: 'Unpaid' }
@@ -82,6 +83,7 @@ function SummaryRow({ label, value, bold, danger }) {
 }
 
 export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, isUpdatingStatus, canEdit, onDelete, onRecordPayment, isRecordingPayment, autoPrint }) {
+  useEscapeToClose(onClose)
   const { data, isLoading, isError } = usePurchaseDetail(purId)
   const [editingStatus, setEditingStatus] = useState(false)
   const [newStatus,     setNewStatus]     = useState('')

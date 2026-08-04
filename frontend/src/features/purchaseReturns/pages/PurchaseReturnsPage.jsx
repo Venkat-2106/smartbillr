@@ -238,6 +238,7 @@ export default function PurchaseReturnsPage() {
               filename="purchase-returns"
               columns={[
                 { key: 'return_created_at', label: 'Return Date', format: (v) => formatDateCSV(v) },
+                { key: 'supp_name', label: 'Supplier' },
                 { key: 'return_amount', label: 'Amount', format: (v) => formatCurrency(v, country) },
                 { key: 'return_status', label: 'Status' },
                 { key: 'return_reason', label: 'Reason' },

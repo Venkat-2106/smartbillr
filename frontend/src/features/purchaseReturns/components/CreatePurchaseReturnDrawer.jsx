@@ -10,8 +10,10 @@ import { textareaStyle } from '../../../shared/components/FormField'
 import { formatCurrency } from '../../../shared/utils/formatCurrency'
 import { formatDate } from '../../../shared/utils/formatDate'
 import useAuthStore from '../../../store/authStore'
+import useEscapeToClose from '../../../shared/hooks/useEscapeToClose'
 
 export default function CreatePurchaseReturnDrawer({ purchaseId, onClose }) {
+  useEscapeToClose(onClose)
   const queryClient = useQueryClient()
   const [reason, setReason] = useState('')
   const [restock, setRestock] = useState(true)

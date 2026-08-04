@@ -39,6 +39,7 @@ import {
   triggerPrint,
 } from '../../../shared/utils/printUtils'
 import useAuthStore from '../../../store/authStore'
+import useEscapeToClose from '../../../shared/hooks/useEscapeToClose'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getInitials(name = '') {
@@ -243,6 +244,7 @@ function buildCustomerPrintHTML(business, customer, summary, salesHistory) {
 
 // ── Main Drawer ───────────────────────────────────────────────────────────────
 export default function CustomerDetailDrawer({ custId, onClose, onEdit, canManage }) {
+  useEscapeToClose(onClose)
   const [page, setPage] = useState(1)
   const { data, isLoading, isError } = useCustomer(custId, page)
 

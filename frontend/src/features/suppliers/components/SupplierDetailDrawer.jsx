@@ -22,6 +22,7 @@ import {
 } from '../../../shared/utils/printUtils';
 import useAuthStore from '../../../store/authStore';
 import DrawerPortal from '../../../shared/components/DrawerPortal';
+import useEscapeToClose from '../../../shared/hooks/useEscapeToClose';
 
 // Date formatting uses the shared formatDate() utility from shared/utils/formatDate.js
 
@@ -63,6 +64,7 @@ function buildSupplierPrintHTML(business, supplier) {
 }
 
 export default function SupplierDetailDrawer({ supplier, onClose }) {
+  useEscapeToClose(onClose)
   const [printHovered, setPrintHovered] = useState(false)
   if (!supplier) return null;
 

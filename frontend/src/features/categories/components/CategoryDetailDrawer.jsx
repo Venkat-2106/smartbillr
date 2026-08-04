@@ -23,6 +23,7 @@ import {
 } from '../../../shared/utils/printUtils'
 import useAuthStore from '../../../store/authStore'
 import { usePermissions } from '../../../shared/hooks/usePermissions'
+import useEscapeToClose from '../../../shared/hooks/useEscapeToClose'
 
 // ── Stock status badge ────────────────────────────────────────────────────────
 function StockBadge({ qty, lowAlert }) {
@@ -118,6 +119,7 @@ function buildCategoryPrintHTML(business, category, detail, summary, products, s
 }
 
 export default function CategoryDetailDrawer({ category, onClose }) {
+  useEscapeToClose(onClose)
   const [printHovered, setPrintHovered] = useState(false)
   const business  = useAuthStore(s => s.business)
   const country   = business?.business_country_code || 'IN'

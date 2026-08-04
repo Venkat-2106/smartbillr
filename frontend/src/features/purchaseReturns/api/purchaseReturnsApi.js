@@ -1,4 +1,5 @@
 import api from '../../../api/axios'
+import { getTzOffsetMinutes } from '../../../shared/utils/dateUtils'
 
 export async function fetchPurchaseReturns({
   page      = 1,
@@ -59,5 +60,10 @@ export async function updatePurchaseReturnStatus(returnId, payload) {
 
 export async function deletePurchaseReturn(returnId) {
   const res = await api.delete(`/purchase-returns/${returnId}/`)
+  return res.data
+}
+
+export async function fetchPurchaseReturnsSummary() {
+  const res = await api.get('/purchase-returns/summary', { params: { tz_offset_minutes: getTzOffsetMinutes() } })
   return res.data
 }

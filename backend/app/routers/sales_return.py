@@ -34,7 +34,7 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.payment_helpers import record_payment_and_sync_async, calculate_payment_status
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import logging
 from decimal import Decimal
 import uuid
@@ -463,6 +463,49 @@ async def get_all_sales_returns(
     return success_response(
         pagination_response(result, total, pagination["page"], pagination["limit"], capped=pagination["_capped"])
     )
+
+
+# ── GET /sales-returns/summary → KPI cards for sales returns page ──
+@router.get("/summary")
+async def get_sales_return_summary_kpi(
+    tz_offset_minutes: int = Query(0),
+    current_user: dict = Depends(require_permission("sales_returns.manage")),
+    db: AsyncSession = Depends(get_async_db)
+):
+    bid = current_user["business_id"]
+
+    utc_now = datetime.now(timezone.utc)
+    user_now = utc_now - timedelta(minutes=tz_offset_minutes)
+    user_today = user_now.date()
+    loc_offset = -tz_offset_minutes
+
+    row = (await db.execute(text("""
+        WITH return_counts AS (
+            SELECT
+                COUNT(*)                                           AS total_count,
+                COALESCE(SUM(return_amount), 0)                    AS total_amount,
+                COUNT(*) FILTER (WHERE return_status = 'pending')  AS pending_count,
+                COUNT(*) FILTER (
+                    WHERE date_trunc('month', return_created_at + (:loc_offset * INTERVAL '1 minute'))
+                        = date_trunc('month', CAST(:user_today AS date))
+                ) AS new_this_month
+            FROM sales_returns
+            WHERE business_id = CAST(:bid AS uuid)
+        )
+        SELECT
+            rc.total_count,
+            rc.total_amount,
+            rc.pending_count,
+            rc.new_this_month
+        FROM return_counts rc
+    """), {"bid": bid, "loc_offset": loc_offset, "user_today": user_today})).fetchone()
+
+    return success_response({
+        "total_count":    int(row.total_count),
+        "total_amount":   str(row.total_amount),
+        "pending_count":  int(row.pending_count),
+        "new_this_month": int(row.new_this_month),
+    })
 
 
 # ─────────────────────────────────────────

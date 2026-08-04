@@ -35,7 +35,7 @@ from app.utils.subscription_features import check_feature_access
 from app.utils.bulk_import import parse_csv_file, validate_rows, check_required_headers, friendly_db_error, validate_upload_file, MAX_IMPORT_FILE_BYTES, bulk_import_scaffold
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 
 router = APIRouter(
@@ -366,6 +366,53 @@ async def get_categories(
             capped=pagination["_capped"]
         )
     )
+
+
+# ── GET /categories/summary → KPI cards for categories page ────────
+@router.get("/summary")
+async def get_category_summary_kpi(
+    tz_offset_minutes: int = Query(0),
+    current_user: dict = Depends(require_permission("products.view")),
+    db: AsyncSession = Depends(get_async_db)
+):
+    bid = current_user["business_id"]
+
+    utc_now = datetime.now(timezone.utc)
+    user_now = utc_now - timedelta(minutes=tz_offset_minutes)
+    user_today = user_now.date()
+    loc_offset = -tz_offset_minutes
+
+    row = (await db.execute(text("""
+        WITH category_counts AS (
+            SELECT
+                COUNT(*) FILTER (WHERE c.is_deleted = false) AS total_count,
+                COUNT(*) FILTER (WHERE c.is_deleted = true)  AS inactive_count,
+                COUNT(*) FILTER (
+                    WHERE c.is_deleted = false
+                      AND date_trunc('month', c.created_at + (:loc_offset * INTERVAL '1 minute'))
+                          = date_trunc('month', CAST(:user_today AS date))
+                ) AS new_this_month
+            FROM categories c
+            WHERE c.business_id = CAST(:bid AS uuid)
+        )
+        SELECT
+            cc.total_count,
+            cc.inactive_count,
+            cc.new_this_month,
+            (SELECT COUNT(*)
+             FROM products p
+             WHERE p.business_id   = CAST(:bid AS uuid)
+               AND p.is_deleted    = false
+               AND p.category_id   IS NOT NULL) AS total_products
+        FROM category_counts cc
+    """), {"bid": bid, "loc_offset": loc_offset, "user_today": user_today})).fetchone()
+
+    return success_response({
+        "total_count":    int(row.total_count),
+        "inactive_count": int(row.inactive_count),
+        "new_this_month": int(row.new_this_month),
+        "total_products": int(row.total_products),
+    })
 
 
 # ══════════════════════════════════════════════════════════════════

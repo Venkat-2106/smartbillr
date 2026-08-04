@@ -46,10 +46,11 @@ from app.utils.response import success_response, error_response
 from app.utils.pagination import paginate_async, pagination_response
 from app.utils.timestamp import fmt_ts
 from app.utils.usage_limits import check_create_allowed_async, fetch_subscription_type_async
+from app.utils.subscription_features import check_feature_access
 from app.utils.bulk_import import parse_csv_file, validate_rows, check_bulk_create_allowed, friendly_db_error, check_required_headers, validate_upload_file, MAX_IMPORT_FILE_BYTES, bulk_import_scaffold, make_tier_limit_fn
 from app.schemas.validators import strip_and_escape_html, strip_and_escape_csv_value
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 
 router = APIRouter(prefix="/v1/suppliers", tags=["Suppliers"])
@@ -558,6 +559,60 @@ async def get_all_suppliers(
     return success_response(
         pagination_response(data, total, pagination["page"], pagination["limit"], capped=pagination["_capped"])
     )
+
+
+# ── GET /suppliers/summary → KPI cards for suppliers page ──────────
+@router.get("/summary")
+async def get_supplier_summary_kpi(
+    tz_offset_minutes: int = Query(0),
+    current_user: dict = Depends(require_permission("suppliers.manage")),
+    db: AsyncSession = Depends(get_async_db)
+):
+    bid = current_user["business_id"]
+    fin_access = check_feature_access(current_user, "financial_reports")
+    can_financial = fin_access["allowed"]
+
+    utc_now = datetime.now(timezone.utc)
+    user_now = utc_now - timedelta(minutes=tz_offset_minutes)
+    user_today = user_now.date()
+    loc_offset = -tz_offset_minutes
+
+    row = (await db.execute(text("""
+        WITH supplier_counts AS (
+            SELECT
+                COUNT(*) AS total_count,
+                COUNT(*) FILTER (
+                    WHERE date_trunc('month', s.supp_created_at + (:loc_offset * INTERVAL '1 minute'))
+                        = date_trunc('month', CAST(:user_today AS date))
+                ) AS new_this_month
+            FROM suppliers s
+            WHERE s.business_id = CAST(:bid AS uuid)
+              AND s.is_deleted  = false
+        )
+        SELECT
+            sc.total_count,
+            sc.new_this_month,
+            COALESCE((
+                SELECT SUM(p.pur_final_amount - COALESCE(pp.cumulative_paid, 0))
+                FROM purchases p
+                LEFT JOIN LATERAL (
+                    SELECT cumulative_paid FROM purchase_payments
+                    WHERE pur_id = p.pur_id AND is_active = true
+                    LIMIT 1
+                ) pp ON true
+                WHERE p.business_id       = CAST(:bid AS uuid)
+                  AND p.is_deleted        = false
+                  AND p.pur_payment_status IN ('pending', 'partial')
+            ), 0) AS outstanding_payable
+        FROM supplier_counts sc
+    """), {"bid": bid, "loc_offset": loc_offset, "user_today": user_today})).fetchone()
+
+    return success_response({
+        "total_count":             int(row.total_count),
+        "new_this_month":          int(row.new_this_month),
+        "outstanding_payable":     str(row.outstanding_payable) if can_financial else None,
+        "financial_locked_reason": fin_access["locked_reason"],
+    })
 
 
 # ══════════════════════════════════════════════════════════════════

@@ -15,6 +15,7 @@
 //   ✅ ExportButton with CATEGORY_CSV_COLUMNS
 
 import { useState, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from 'react-router-dom'
@@ -34,13 +35,15 @@ import {
   ExportButton,
   BulkImportPanel,
   BulkImportGuidelines,
-  DateRangeFilter
+  DateRangeFilter,
+  MetricCard,
 } from '../../../shared/components'
 
 import { CATEGORY_CSV_COLUMNS } from '../../../shared/utils/csvExport'
 import { categoryImportConfig } from '../importConfig'
 import { usePermissions }        from '../../../shared/hooks/usePermissions'
 import { formatDate }            from '../../../shared/utils/formatDate'
+import { fetchCategorySummary }  from '../api/categoriesApi'
 
 import {
   useCategories,
@@ -75,6 +78,40 @@ function CategoryForm({ defaultValues = {}, onSubmit, onClose, isPending }) {
   )
 }
 
+// ── Static SVG icons (hoisted to module scope) ──────────────────────────────────
+const TagsIcon = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.83z" />
+    <line x1="7" y1="7" x2="7.01" y2="7" />
+  </svg>
+)
+
+const BoxIcon = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M16.5 9.4 7.55 4.24" />
+    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+    <polyline points="3.29 7 12 12 20.71 7" />
+    <line x1="12" y1="22" x2="12" y2="12" />
+  </svg>
+)
+
+const CalendarIcon = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+    <line x1="16" y1="2" x2="16" y2="6" />
+    <line x1="8" y1="2" x2="8" y2="6" />
+    <line x1="3" y1="10" x2="21" y2="10" />
+  </svg>
+)
+
+const ArchiveIcon = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="21 8 21 21 3 21 3 8" />
+    <rect x="1" y="3" width="22" height="5" />
+    <line x1="10" y1="12" x2="14" y2="12" />
+  </svg>
+)
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function CategoriesPage() {
   const { can }   = usePermissions()
@@ -103,6 +140,12 @@ export default function CategoriesPage() {
     isError,
     handleExport,       // lazy export — fetches all matching rows on click
   } = useCategories()
+
+  const { data: categorySummary } = useQuery({
+    queryKey: ['category-summary'],
+    queryFn: fetchCategorySummary,
+    staleTime: 5 * 60_000,
+  })
 
   // displayRows useMemo REMOVED:
   //   Previously this block did client-side date filter + sort on the raw
@@ -305,6 +348,40 @@ export default function CategoriesPage() {
           ⚠️ Could not load categories. Check that the backend is running and refresh.
         </div>
       )}
+
+      {/* METRIC CARDS */}
+      <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={TagsIcon}
+          label="Total Categories"
+          value={categorySummary?.total_count ?? 0}
+        />
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={BoxIcon}
+          label="Products in Categories"
+          value={categorySummary?.total_products ?? 0}
+          subtitle="Active products in groups"
+        />
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={CalendarIcon}
+          label="New This Month"
+          value={categorySummary?.new_this_month ?? 0}
+        />
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={ArchiveIcon}
+          label="Inactive"
+          value={categorySummary?.inactive_count ?? 0}
+          subtitle="Soft-deleted categories"
+        />
+      </div>
 
       {!isLoading && categories.length === 0 ? (
         <EmptyState

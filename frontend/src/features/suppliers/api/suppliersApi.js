@@ -25,6 +25,7 @@
 //   - Axios instance from api/axios.js used for all requests
 
 import api from '../../../api/axios'
+import { getTzOffsetMinutes } from '../../../shared/utils/dateUtils'
 
 // ── GET PAGINATED LIST — server-side filter / sort / paginate ─────────────────
 // Called by useSuppliers() on every page load and whenever filters change.
@@ -93,5 +94,11 @@ export const updateSupplier = async (id, body) => {
 // ── DELETE SUPPLIER (soft) ────────────────────────────────────────────────────
 export const deleteSupplier = async (id) => {
   const res = await api.delete(`/suppliers/${id}`)
+  return res.data
+}
+
+// ── SUPPLIER SUMMARY (KPI cards) ──────────────────────────────────────────────
+export const fetchSupplierSummary = async () => {
+  const res = await api.get('/suppliers/summary', { params: { tz_offset_minutes: getTzOffsetMinutes() } })
   return res.data
 }

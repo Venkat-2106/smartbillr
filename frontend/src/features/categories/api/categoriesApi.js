@@ -16,6 +16,7 @@
 //   so the CSV always contains all records that match the active filters.
 
 import api from '../../../api/axios'
+import { getTzOffsetMinutes } from '../../../shared/utils/dateUtils'
 
 // ── Paginated list (table view) — server-side filter/sort/paginate ────────────
 export async function fetchCategories({
@@ -80,5 +81,11 @@ export async function updateCategory(categoryId, payload) {
 // ── Delete (soft) ─────────────────────────────────────────────────────────────
 export async function deleteCategory(categoryId) {
   const res = await api.delete(`/categories/${categoryId}/`)
+  return res.data
+}
+
+// ── Category summary (KPI cards) ──────────────────────────────────────────────
+export async function fetchCategorySummary() {
+  const res = await api.get('/categories/summary', { params: { tz_offset_minutes: getTzOffsetMinutes() } })
   return res.data
 }

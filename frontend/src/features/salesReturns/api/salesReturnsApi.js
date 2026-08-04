@@ -1,4 +1,5 @@
 import api from '../../../api/axios'
+import { getTzOffsetMinutes } from '../../../shared/utils/dateUtils'
 
 export async function fetchSalesReturns({
   page      = 1,
@@ -64,5 +65,10 @@ export async function deleteSalesReturn(returnId) {
 
 export async function fetchSalesReturnsBySale(saleId) {
   const res = await api.get(`/sales-returns/by-sale/${saleId}`)
+  return res.data
+}
+
+export async function fetchSalesReturnsSummary() {
+  const res = await api.get('/sales-returns/summary', { params: { tz_offset_minutes: getTzOffsetMinutes() } })
   return res.data
 }

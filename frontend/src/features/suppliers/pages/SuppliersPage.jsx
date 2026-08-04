@@ -19,12 +19,14 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQuery } from '@tanstack/react-query';
 import { useSuppliers } from '../hooks/useSuppliers';
 import SupplierDetailDrawer from '../components/SupplierDetailDrawer';
 import {
   Button, Modal, Table, EmptyState, SearchBar,
   Pagination, ConfirmDialog, PageHeader, FormField,
   DateRangeFilter, ExportButton, BulkImportPanel, BulkImportGuidelines, StateDropdown, UpgradePrompt,
+  MetricCard,
 } from '../../../shared/components';
 import useAuthStore from '../../../store/authStore';
 import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav';
@@ -33,8 +35,10 @@ import { SUPPLIER_CSV_COLUMNS } from '../../../shared/utils/csvExport';
 import { supplierImportConfig } from '../importConfig';
 import { usePermissions } from '../../../shared/hooks/usePermissions';
 import { formatDate } from '../../../shared/utils/formatDate';
+import { formatCurrency } from '../../../shared/utils/formatCurrency';
 import { COUNTRIES } from '../../../shared/data/countries';
 import { supplierSchema } from '../schemas/supplierSchema';
+import { fetchSupplierSummary } from '../api/suppliersApi';
 
 const EMPTY_FORM = {
   supp_name: '', supp_phone: '', supp_email: '',
@@ -42,12 +46,49 @@ const EMPTY_FORM = {
   supp_state: '', supp_tax_number: '',
 };
 
+// ── Static SVG icons (hoisted to module scope) ──────────────────────────────────
+const TruckIcon = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="1" y="3" width="15" height="13" />
+    <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+    <circle cx="5.5" cy="18.5" r="2.5" />
+    <circle cx="18.5" cy="18.5" r="2.5" />
+  </svg>
+)
+
+const DollarSignIcon = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <line x1="12" y1="1" x2="12" y2="23" />
+    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+  </svg>
+)
+
+const CalendarIcon = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+    <line x1="16" y1="2" x2="16" y2="6" />
+    <line x1="8" y1="2" x2="8" y2="6" />
+    <line x1="3" y1="10" x2="21" y2="10" />
+  </svg>
+)
+
+const UsersIcon = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </svg>
+)
+
 /* ─── Page ──────────────────────────────────────────────────────────────── */
 export default function SuppliersPage() {
   const navigate      = useNavigate();
   const { can }       = usePermissions();
   const canManage     = can('suppliers.manage');
   const subscription  = useAuthStore(s => s.subscription);
+  const business      = useAuthStore(s => s.business);
+  const country       = business?.business_country_code || 'IN';
   const [showUpgradeBanner, setShowUpgradeBanner] = useState(true);
 
   // handleExport() lazily fetches all filtered records from the backend on click.
@@ -68,6 +109,12 @@ export default function SuppliersPage() {
     deleteTarget, setDeleteTarget,
     createMutation, updateMutation, deleteMutation,
   } = useSuppliers();
+
+  const { data: supplierSummary } = useQuery({
+    queryKey: ['supplier-summary'],
+    queryFn: fetchSupplierSummary,
+    staleTime: 5 * 60_000,
+  })
 
   const [bannerDismissed, setBannerDismissed] = useState(false)
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -339,6 +386,39 @@ export default function SuppliersPage() {
           </button>
         </div>
       )}
+
+      {/* METRIC CARDS */}
+      <div className="bento-grid bento-grid-12" style={{ marginBottom: 24 }}>
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={TruckIcon}
+          label="Total Suppliers"
+          value={totalItems}
+        />
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={UsersIcon}
+          label="Active Suppliers"
+          value={totalItems}
+        />
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={DollarSignIcon}
+          label="Outstanding Payable"
+          value={supplierSummary?.outstanding_payable != null ? formatCurrency(supplierSummary.outstanding_payable, country) : null}
+          locked={!!supplierSummary?.financial_locked_reason}
+        />
+        <MetricCard
+          colSpan={3}
+          loading={isLoading}
+          icon={CalendarIcon}
+          label="New This Month"
+          value={supplierSummary?.new_this_month ?? 0}
+        />
+      </div>
 
       {!isError && !isLoading && suppliers.length === 0 ? (
         <EmptyState

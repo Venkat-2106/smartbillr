@@ -261,7 +261,7 @@ async def import_customers(
 
             if not matched:
                 new_cust_id = str(uuid.uuid4())
-                new_rows.append({"cid": new_cust_id, "bid": business_id, "uid": user_id, **row})
+                new_rows.append({"cid": new_cust_id, "bid": business_id, "uid": user_id, "_row_number": row_num, **row})
                 if phone:
                     existing_phones[phone] = new_cust_id
                     seen_in_file[phone] = row_num
@@ -295,8 +295,47 @@ async def import_customers(
                     ) VALUES {placeholders}
                 """), params)
                 created = len(new_rows)
+            except IntegrityError as e:
+                orig_detail = str(getattr(e, "orig", e))
+                culprit_row = None
+                if "unique" in orig_detail.lower() or "duplicate" in orig_detail.lower():
+                    for r in new_rows:
+                        name_l = (r.get("cust_name") or "").strip().lower()
+                        phone = r.get("cust_phone")
+                        if phone and phone in orig_detail:
+                            culprit_row = r
+                            break
+                        if name_l and name_l in orig_detail.lower():
+                            culprit_row = r
+                            break
+                if culprit_row:
+                    upsert_errors.append({
+                        "row": culprit_row["_row_number"],
+                        "message": (
+                            f'Customer "{culprit_row.get("cust_name")}" conflicts with an existing '
+                            f'record (duplicate name or phone). Because this batch is inserted '
+                            f'together, none of the {len(new_rows)} new customers in this batch '
+                            f'were created. Fix or remove this row and re-upload.'
+                        ),
+                    })
+                else:
+                    upsert_errors.append({
+                        "row": 0,
+                        "message": (
+                            f"{friendly_db_error(e, context='customer insert batch')} "
+                            f"None of the {len(new_rows)} new customers in this batch were created "
+                            f"because they were inserted together — please check for duplicate "
+                            f"names/phone numbers and re-upload."
+                        ),
+                    })
             except Exception as e:
-                upsert_errors.append({"row": 0, "message": friendly_db_error(e, context="customer insert batch")})
+                upsert_errors.append({
+                    "row": 0,
+                    "message": (
+                        f"{friendly_db_error(e, context='customer insert batch')} "
+                        f"None of the {len(new_rows)} new customers in this batch were created."
+                    ),
+                })
 
         if update_rows:
             case_name = []

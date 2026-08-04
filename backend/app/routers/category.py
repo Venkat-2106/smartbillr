@@ -23,6 +23,7 @@
 from fastapi import APIRouter, Depends, Query, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from app.database import get_async_db
 from app.middleware.rbac import require_permission, async_set_rls_gucs_after_commit
 from app.utils.response import success_response, error_response
@@ -176,7 +177,7 @@ async def import_categories(
                     upsert_errors.append({"row": row_num, "message": f'Category "{name}" does not exist. Only existing categories can be updated.'})
                     continue
                 new_cat_id = str(uuid.uuid4())
-                new_rows.append({"cid": new_cat_id, "bid": business_id, "name": name, "uid": user_id})
+                new_rows.append({"cid": new_cat_id, "bid": business_id, "name": name, "uid": user_id, "_row_number": row_num})
                 existing_names[name_lower] = new_cat_id
 
         created = 0
@@ -200,8 +201,43 @@ async def import_categories(
                     VALUES {placeholders}
                 """), params)
                 created = len(new_rows)
+            except IntegrityError as e:
+                orig_detail = str(getattr(e, "orig", e))
+                culprit_row = None
+                if "unique" in orig_detail.lower() or "duplicate" in orig_detail.lower():
+                    for r in new_rows:
+                        name_l = (r.get("name") or "").strip().lower()
+                        if name_l and name_l in orig_detail.lower():
+                            culprit_row = r
+                            break
+                if culprit_row:
+                    upsert_errors.append({
+                        "row": culprit_row["_row_number"],
+                        "message": (
+                            f'Category "{culprit_row.get("name")}" conflicts with an existing '
+                            f'record. Because this batch is inserted together, none of the '
+                            f'{len(new_rows)} new categories in this batch were created. '
+                            f'Fix or remove this row and re-upload.'
+                        ),
+                    })
+                else:
+                    upsert_errors.append({
+                        "row": 0,
+                        "message": (
+                            f"{friendly_db_error(e, context='category insert batch')} "
+                            f"None of the {len(new_rows)} new categories in this batch were created "
+                            f"because they were inserted together — please check for duplicate "
+                            f"names and re-upload."
+                        ),
+                    })
             except Exception as e:
-                upsert_errors.append({"row": 0, "message": friendly_db_error(e, context="category insert batch")})
+                upsert_errors.append({
+                    "row": 0,
+                    "message": (
+                        f"{friendly_db_error(e, context='category insert batch')} "
+                        f"None of the {len(new_rows)} new categories in this batch were created."
+                    ),
+                })
 
         for i, r in enumerate(update_rows):
             try:

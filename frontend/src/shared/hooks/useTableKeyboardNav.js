@@ -49,12 +49,19 @@ export default function useTableKeyboardNav({
     if (row) onEnterRow?.(row)
   }, { ignoreWhenTyping: true })
 
+  // Fix (2026-08-04): previously passed { ignoreWhenTyping: true }, which made the
+  // shortcut dispatcher call e.preventDefault() on every 'e' keypress BEFORE this
+  // handler's own INPUT/TEXTAREA/SELECT guard below ever ran — silently blocking the
+  // letter "e" from being typed in any text field on every page using this hook
+  // (Sales, Purchases, Payments, Expenses, Customers, Suppliers, Staff). Removing the
+  // flag lets the dispatcher's normal "skip while typing" check protect text fields,
+  // as it does for every other shortcut that isn't explicitly opted out.
   useShortcut('e', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return
     e.preventDefault()
     const row = getSelectedRow()
     if (row) onEditRow?.(row)
-  }, { ignoreWhenTyping: true })
+  })
 
   useShortcut('delete', (e) => {
     e.preventDefault()
@@ -62,7 +69,12 @@ export default function useTableKeyboardNav({
     if (row) onDeleteRow?.(row)
   }, { ignoreWhenTyping: true })
 
+  // Fix (2026-08-04): same class of bug as 'e' above — this handler had no
+  // INPUT/TEXTAREA/SELECT guard at all, so with { ignoreWhenTyping: true } the
+  // spacebar was unconditionally prevented in every text field on these pages.
+  // Added the guard and removed the flag so typing a space works normally.
   useShortcut('space', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return
     e.preventDefault()
     const row = getSelectedRow()
     if (!row) return
@@ -74,7 +86,7 @@ export default function useTableKeyboardNav({
       return next
     })
     onSelectRow?.(row)
-  }, { ignoreWhenTyping: true })
+  })
 
   useShortcut('shift+down', (e) => {
     e.preventDefault()

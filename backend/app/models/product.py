@@ -5,7 +5,8 @@
 #   This mirrors the partial unique index created in the DB migration
 #   (uix_products_barcode_business). The ORM constraint is used by Alembic
 #   if you ever auto-generate migrations. It does NOT replace the DB index —
-#   the DB index (WHERE barcode IS NOT NULL) is the authoritative constraint.
+#   the DB index (WHERE barcode IS NOT NULL AND is_deleted = false) is the
+#   authoritative constraint.
 #
 #   All other columns, relationships, and comments are unchanged.
 
@@ -21,7 +22,8 @@ class Product(Base):
     __tablename__ = "products"
 
     # BARCODE FIX: UniqueConstraint mirrors the DB partial unique index
-    # uix_products_barcode_business (business_id, barcode WHERE barcode IS NOT NULL).
+    # uix_products_barcode_business
+    # (business_id, barcode WHERE barcode IS NOT NULL AND is_deleted = false).
     # SQLAlchemy's __table_args__ UniqueConstraint is the ORM declaration.
     # The WHERE clause (partial index) is not expressible here — it lives in
     # the raw SQL migration. This declaration is for ORM completeness only.

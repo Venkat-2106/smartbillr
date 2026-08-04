@@ -15,6 +15,9 @@ from app.routers import (
     stock, expense, sales_return, purchase_return, profiles,
     dashboard, reports, auth, subscription, superadmin, billing,
 )
+# Import all ORM models so Base.metadata is complete before the app serves
+# traffic (plans/billing tables are only used via raw SQL elsewhere).
+import app.models  # noqa: F401,E402
 import logging
 import os
 

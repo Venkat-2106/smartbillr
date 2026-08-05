@@ -7,6 +7,7 @@ const TIER_FEATURES = {
   basic:      { financial_reports: false, product_profit_view: false },
   pro:        { financial_reports: true,  product_profit_view: true  },
   pro_yearly: { financial_reports: true,  product_profit_view: true  },
+  lifetime:   { financial_reports: true,  product_profit_view: true  },
 }
 
 export function useFeatureAccess(featureKey) {

@@ -24,7 +24,7 @@ import { UNITS, editSchema, generateEAN13, handleBarcodeKeyUp } from './productF
 
 // ── Edit Product Form ─────────────────────────────────────────────────────────
 // Same nameError / onNameErrorClear pattern as AddProductForm.
-function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categories, canViewProfit, nameError, onNameErrorClear, barcodeError, onBarcodeErrorClear, excludeProdId }) {
+function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categories, nameError, onNameErrorClear, barcodeError, onBarcodeErrorClear, excludeProdId }) {
   const { register, handleSubmit, setValue, formState: { errors } } = useForm({
     resolver: zodResolver(editSchema),
     defaultValues,
@@ -80,18 +80,13 @@ function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categori
         />
       </FormField>
 
-      <div style={{ display: 'grid', gridTemplateColumns: canViewProfit ? '1fr 1fr' : '1fr', gap: 12, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
         <FormField label="Selling Price" error={errors.prod_sell_price} required>
           <Input type="number" step="0.01" placeholder="0.00" {...register('prod_sell_price')} />
         </FormField>
-        {canViewProfit && (
-          <FormField label="Cost Price" error={errors.prod_cost_price} required>
-            <Input type="number" step="0.01" placeholder="0.00" {...register('prod_cost_price')} />
-          </FormField>
-        )}
-        {!canViewProfit && (
-          <input type="hidden" {...register('prod_cost_price')} />
-        )}
+        <FormField label="Cost Price" error={errors.prod_cost_price} required>
+          <Input type="number" step="0.01" placeholder="0.00" {...register('prod_cost_price')} />
+        </FormField>
       </div>
 
       {/* MRP FEATURE: optional Maximum Retail Price field */}
@@ -179,7 +174,6 @@ export default function EditProductModal({
   onSubmit,
   isPending,
   categories,
-  canViewProfit,
   nameError,
   onNameErrorClear,
   barcodeError,
@@ -214,7 +208,6 @@ export default function EditProductModal({
           onClose={onClose}
           isPending={isPending}
           categories={categories}
-          canViewProfit={canViewProfit}
           nameError={nameError}
           onNameErrorClear={onNameErrorClear}
           barcodeError={barcodeError}

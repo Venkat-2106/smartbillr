@@ -28,13 +28,14 @@
 // VALIDATION CHANGES (2026-06-06):
 //
 // ── Feature 1: Cost Price vs Sale Price Confirmation ─────────────────────────
-//   When prod_sell_price < prod_cost_price (and the user can see cost price),
-//   we intercept the submit in handleCreate / handleUpdate, store the payload,
-//   and open a "LossWarning" ConfirmDialog (variant="warning").
+//   When prod_sell_price < prod_cost_price, we intercept the submit in
+//   handleCreate / handleUpdate, store the payload, and open a "LossWarning"
+//   ConfirmDialog (variant="warning").
 //   • Cancel  → closes the dialog, form stays open, user can adjust prices.
 //   • Continue → actually fires the API call.
-//   Staff who cannot see cost price (canViewProfit = false) are never shown the
-//   dialog because their hidden cost-price field always defaults to 0.
+//   Fires for every user who can create/edit products (admin + manager on any
+//   plan) — it is intentionally NOT gated on the profit permission. Staff lack
+//   products.edit, so they never reach this form/path.
 //
 // ── Feature 2: Duplicate Product Name Prevention ──────────────────────────────
 //   The backend returns HTTP 400 { message: "A product with this name already
@@ -51,7 +52,8 @@
 //   ✅ FIX A — Tax Rate changed from dropdown to number textbox
 //   ✅ FIX B — Back button wired up (← Back to Dashboard via useNavigate)
 //   ✅ ExportButton with PRODUCT_CSV_COLUMNS in the PageHeader action slot
-//   ✅ Profit permission gate (canViewProfit) for cost/profit columns + form
+//   ✅ Profit permission gate (canViewProfit) for cost/profit columns only
+//      (Cost Price is always editable in the Add/Edit product forms)
 //   ✅ Zod .trim() on prod_name (trimmed before schema min/max check)
 
 import { useState, useMemo, useCallback, useEffect } from 'react'
@@ -407,11 +409,11 @@ export default function ProductsPage() {
   }
 
   // ── Helper: did the user enter sell < cost? ───────────────────────────────
-  // Only fires when the user has the profit permission — staff submit with a
-  // hidden cost-price of 0, so the check would always be false anyway, but we
-  // gate it explicitly to be safe and clear.
+  // Data-integrity guard: fires for every user who can create/edit products
+  // (admin + manager on any plan). Deliberately NOT gated on canViewProfit —
+  // a Basic/Trial business should still be warned before saving a product that
+  // sells below cost. Staff cannot create products, so they never reach here.
   function isSellingAtLoss(payload) {
-    if (!canViewProfit) return false
     const sell = parseFloat(payload.prod_sell_price)
     const cost = parseFloat(payload.prod_cost_price)
     return !isNaN(sell) && !isNaN(cost) && sell < cost
@@ -984,7 +986,6 @@ export default function ProductsPage() {
         onSubmit={handleCreate}
         isPending={isCreating}
         categories={categories}
-        canViewProfit={canViewProfit}
         nameError={addNameError}
         onNameErrorClear={() => setAddNameError(null)}
         barcodeError={addBarcodeError}
@@ -998,7 +999,6 @@ export default function ProductsPage() {
         onSubmit={handleUpdate}
         isPending={isUpdating}
         categories={categories}
-        canViewProfit={canViewProfit}
         nameError={editNameError}
         onNameErrorClear={() => setEditNameError(null)}
         barcodeError={editBarcodeError}
@@ -1026,7 +1026,9 @@ export default function ProductsPage() {
 
       {/* ── Feature 1: Loss-price confirmation dialog ────────────────────── */}
       {/*
-          Opens when: prod_sell_price < prod_cost_price AND canViewProfit.
+          Opens when: prod_sell_price < prod_cost_price.
+          Fires for any user who can create/edit products (all plans) — the
+          loss warning is a data-integrity guard, not a profit-permission gate.
           variant="warning" → amber icon (⚠️) instead of the default red bin.
           Cancel  → closes dialog, both Add/Edit modals remain open so user
                     can correct the prices without losing their other inputs.

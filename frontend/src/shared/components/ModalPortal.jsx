@@ -24,26 +24,52 @@
 // implementation of: portal target, backdrop, viewport-centering wrapper,
 // Escape-to-close, and background scroll lock.
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { lockScroll, unlockScroll } from '../utils/scrollLock'
 
+// ── Escape-handling stack ─────────────────────────────────────────────────────
+// Modal and ConfirmDialog can be open at the same time (e.g. the MRP/loss
+// confirmation shown from inside the Add/Edit product modal). Each one mounts
+// its own <ModalPortal>, and previously every portal registered its own
+// document-level Escape listener — so pressing Escape fired ALL of them and
+// closed every layer at once, including the modal underneath the dialog.
+//
+// This stack makes only the TOP-MOST open portal respond to Escape (standard
+// modal-stack behaviour). Pressing Escape dismisses the dialog first and leaves
+// the modal underneath it open; a second press then closes the modal.
+const escapeStack = []
+
 export default function ModalPortal({ open, onClose, zIndex = 1000, children }) {
-  const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Escape') onClose?.()
-  }, [onClose])
+  // Keep the latest onClose in a ref so stack membership only tracks `open`
+  // (the parent passes inline arrow functions that change identity every
+  // render — that must NOT re-order the stack).
+  const onCloseRef = useRef(onClose)
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
 
   useEffect(() => {
     if (!open) return
+
+    const entry = { onCloseRef }
+    escapeStack.push(entry)
+
+    function handleKeyDown(e) {
+      if (e.key !== 'Escape') return
+      if (escapeStack[escapeStack.length - 1] !== entry) return
+      e.stopPropagation()
+      entry.onCloseRef.current?.()
+    }
 
     document.addEventListener('keydown', handleKeyDown)
     lockScroll()
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
+      const idx = escapeStack.indexOf(entry)
+      if (idx !== -1) escapeStack.splice(idx, 1)
       unlockScroll()
     }
-  }, [open, handleKeyDown])
+  }, [open])
 
   if (!open) return null
 

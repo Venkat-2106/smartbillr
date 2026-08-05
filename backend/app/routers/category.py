@@ -369,6 +369,13 @@ async def get_categories(
 
 
 # ── GET /categories/summary → KPI cards for categories page ────────
+# Dual-registered with and without trailing slash: the frontend axios
+# interceptor always appends a trailing slash to GET requests. Without the
+# "/summary/" variant registered here, that request falls through and
+# incorrectly matches "/{category_id}/" below (treating the literal string
+# "summary" as category_id), which crashes on the UUID cast and returns an
+# unhandled 500 (the browser reports this as a CORS error, but it is not).
+@router.get("/summary/")
 @router.get("/summary")
 async def get_category_summary_kpi(
     tz_offset_minutes: int = Query(0),

@@ -62,9 +62,7 @@ export default function Modal({
   const [closeBtnHovered, setCloseBtnHovered] = useState(false)
 
   // ── Focus trap ──────────────────────────────────────────────────────────────
-  const panelRef      = useRef(null)
-  const onCloseRef    = useRef(onClose)
-  useEffect(() => { onCloseRef.current = onClose }, [onClose])
+  const panelRef = useRef(null)
 
   useEffect(() => {
     if (!open) return
@@ -81,10 +79,6 @@ export default function Modal({
     }
 
     function handleKeyDown(e) {
-      if (e.key === 'Escape') {
-        onCloseRef.current?.()
-        return
-      }
       if (e.key === 'Tab') {
         const focusable = panel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
         if (focusable.length < 2) return

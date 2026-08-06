@@ -221,7 +221,7 @@ export default function PaymentsPage() {
   return (
     <>
       <PageHeader
-        title="Payments"
+        title="Payment Received"
         subtitle="Track payment collections, invoices, and outstanding balances"
         action={
           <ExportButton

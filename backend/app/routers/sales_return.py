@@ -483,7 +483,7 @@ async def get_sales_return_summary_kpi(
         WITH return_counts AS (
             SELECT
                 COUNT(*)                                           AS total_count,
-                COALESCE(SUM(return_amount), 0)                    AS total_amount,
+                COALESCE(SUM(return_amount) FILTER (WHERE return_status = 'approved'), 0) AS total_amount,
                 COUNT(*) FILTER (WHERE return_status = 'pending')  AS pending_count,
                 COUNT(*) FILTER (
                     WHERE date_trunc('month', return_created_at + (:loc_offset * INTERVAL '1 minute'))

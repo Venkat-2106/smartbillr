@@ -263,7 +263,7 @@ export default function PurchaseReturnsPage() {
           icon={DollarSignIcon}
           label="Total Refunded"
           value={returnsSummary?.total_amount != null ? formatCurrency(returnsSummary.total_amount, country) : null}
-          subtitle="All returns"
+          subtitle="Approved returns"
         />
         <MetricCard
           colSpan={3}

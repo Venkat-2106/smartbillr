@@ -1087,11 +1087,15 @@ async def get_product(
                     sm.move_notes, sm.move_created_at,
                     COALESCE(p.full_name, 'System') AS changed_by,
                     s.invoice_no,
-                    pur.pur_invoice_no
+                    pur.pur_invoice_no,
+                    ret_s.invoice_no AS return_invoice_no
                 FROM stock_movements sm
-                LEFT JOIN profiles  p   ON p.id     = sm.move_created_by
-                LEFT JOIN sales     s   ON s.sales_id = sm.sale_reference_id
-                LEFT JOIN purchases pur ON pur.pur_id = sm.purchase_reference_id
+                LEFT JOIN profiles  p        ON p.id           = sm.move_created_by
+                LEFT JOIN sales     s        ON s.sales_id     = sm.sale_reference_id
+                LEFT JOIN purchases pur      ON pur.pur_id     = sm.purchase_reference_id
+                LEFT JOIN sales_returns sr   ON sr.return_id   = sm.reference_id
+                                            AND sm.move_type   = 'sales_return'
+                LEFT JOIN sales      ret_s   ON ret_s.sales_id = sr.sale_id
                 WHERE sm.product_id  = CAST(:prod_id AS uuid)
                   AND sm.business_id = CAST(:bid AS uuid)
                 ORDER BY sm.move_created_at DESC
@@ -1145,7 +1149,7 @@ async def get_product(
             "notes":                 s["move_notes"],
             "changed_by":            s["changed_by"],
             "changed_at":            fmt_ts(s["move_created_at"]),
-            "invoice_no":            s.get("invoice_no") or s.get("pur_invoice_no"),
+            "invoice_no":            s.get("invoice_no") or s.get("pur_invoice_no") or s.get("return_invoice_no"),
         })
 
     price_history = []

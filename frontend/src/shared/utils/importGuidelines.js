@@ -82,7 +82,7 @@ export const CUSTOMER_GUIDELINES = {
     { name: 'Address',        required: false, note: 'Max 300 characters.' },
     { name: 'State',          required: false, note: 'Must be a valid state/province for the selected country.' },
     { name: 'Country Code',   required: false, note: '2-letter ISO code (e.g. IN, US, GB). Defaults to your business country.' },
-    { name: 'Tax / GST Number', required: false, note: 'Max 50 characters.' },
+    { name: 'Tax Number', required: false, note: 'Max 50 characters.' },
   ],
   rules: [
     'Customer Name is required and cannot be empty.',
@@ -111,7 +111,7 @@ export const CUSTOMER_UPDATE_GUIDELINES = {
     { name: 'Address',        required: false, note: 'Leave blank to keep the current address.' },
     { name: 'State',          required: false, note: 'Leave blank to keep the current state.' },
     { name: 'Country Code',   required: false, note: 'Leave blank to keep the current country.' },
-    { name: 'Tax / GST Number', required: false, note: 'Leave blank to keep the current tax number.' },
+    { name: 'Tax Number', required: false, note: 'Leave blank to keep the current tax number.' },
   ],
   rules: [
     'Customer Name is required and must match an existing customer in your business.',
@@ -139,7 +139,7 @@ export const SUPPLIER_GUIDELINES = {
     { name: 'Email',         required: false, note: 'Must be a valid email format if provided.' },
     { name: 'Address',       required: false },
     { name: 'State',         required: false, note: 'Must be a valid state/province for the selected country.' },
-    { name: 'Country',       required: false, note: '2-letter ISO code (e.g. IN, US, GB).' },
+    { name: 'Country Code',   required: false, note: '2-letter ISO code (e.g. IN, US, GB).' },
     { name: 'Tax Number',    required: false, note: 'Max 50 characters.' },
   ],
   rules: [
@@ -169,7 +169,7 @@ export const SUPPLIER_UPDATE_GUIDELINES = {
     { name: 'Email',         required: false, note: 'Leave blank to keep the current email.' },
     { name: 'Address',       required: false, note: 'Leave blank to keep the current address.' },
     { name: 'State',         required: false, note: 'Leave blank to keep the current state.' },
-    { name: 'Country',       required: false, note: 'Leave blank to keep the current country.' },
+    { name: 'Country Code',   required: false, note: 'Leave blank to keep the current country.' },
     { name: 'Tax Number',    required: false, note: 'Leave blank to keep the current tax number.' },
   ],
   rules: [

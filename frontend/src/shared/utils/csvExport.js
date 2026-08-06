@@ -170,7 +170,7 @@ export const CUSTOMER_CSV_COLUMNS = [
   { key: 'cust_address',      label: 'Address' },
   { key: 'cust_state',        label: 'State' },
   { key: 'cust_country_code', label: 'Country Code' },
-  { key: 'cust_tax_number',   label: 'Tax / GST Number' },
+  { key: 'cust_tax_number',   label: 'Tax Number' },
   { key: 'updated_at',        label: 'Last Updated',
     format: (val) => formatDateCSV(val) },
   { key: 'last_updated_by',   label: 'Last Updated By',
@@ -184,7 +184,7 @@ export const SUPPLIER_CSV_COLUMNS = [
   { key: 'supp_email',        label: 'Email' },
   { key: 'supp_address',      label: 'Address' },
   { key: 'supp_state',        label: 'State' },
-  { key: 'supp_country_code', label: 'Country' },
+  { key: 'supp_country_code', label: 'Country Code' },
   { key: 'supp_tax_number',   label: 'Tax Number' },
   { key: 'updated_at',        label: 'Last Updated',
     format: (val) => formatDateCSV(val) },
@@ -471,7 +471,7 @@ export const CUSTOMER_IMPORT_TEMPLATE = [
   { key: 'cust_address',      label: 'Address' },
   { key: 'cust_state',        label: 'State' },
   { key: 'cust_country_code', label: 'Country Code' },
-  { key: 'cust_tax_number',   label: 'Tax / GST Number' },
+  { key: 'cust_tax_number',   label: 'Tax Number' },
 ];
 
 /** Import template for Suppliers */
@@ -481,7 +481,7 @@ export const SUPPLIER_IMPORT_TEMPLATE = [
   { key: 'supp_email',        label: 'Email' },
   { key: 'supp_address',      label: 'Address' },
   { key: 'supp_state',        label: 'State' },
-  { key: 'supp_country_code', label: 'Country' },
+  { key: 'supp_country_code', label: 'Country Code' },
   { key: 'supp_tax_number',   label: 'Tax Number' },
 ];
 
@@ -619,7 +619,7 @@ export const CUSTOMER_UPDATE_TEMPLATE = [
   { key: 'cust_address',      label: 'Address' },
   { key: 'cust_state',        label: 'State' },
   { key: 'cust_country_code', label: 'Country Code' },
-  { key: 'cust_tax_number',   label: 'Tax / GST Number' },
+  { key: 'cust_tax_number',   label: 'Tax Number' },
 ];
 
 /** Minimal sample rows for Customer Bulk Update template */
@@ -635,7 +635,7 @@ export const SUPPLIER_UPDATE_TEMPLATE = [
   { key: 'supp_email',        label: 'Email' },
   { key: 'supp_address',      label: 'Address' },
   { key: 'supp_state',        label: 'State' },
-  { key: 'supp_country_code', label: 'Country' },
+  { key: 'supp_country_code', label: 'Country Code' },
   { key: 'supp_tax_number',   label: 'Tax Number' },
 ];
 

@@ -51,6 +51,7 @@ import useTableKeyboardNav from '../../../shared/hooks/useTableKeyboardNav'
 import { formatDate }      from '../../../shared/utils/formatDate'
 import { formatCurrency }  from '../../../shared/utils/formatCurrency'
 import useAuthStore        from '../../../store/authStore'
+import UpgradePrompt       from '../../../shared/components/UpgradePrompt'
 import { fetchCategories } from '../../categories/api/categoriesApi'
 import { fetchStockSummary } from '../api/stockApi'
 import { useStock, useStockMovements, useStockAlerts } from '../hooks/useStock'
@@ -1050,6 +1051,7 @@ export default function StockPage() {
   const canAdjust      = can('stock.adjust')
 
   const [activeTab, setActiveTab] = useState('current')
+  const [showProfitBanner, setShowProfitBanner] = useState(true)
 
   return (
     <>
@@ -1061,6 +1063,18 @@ export default function StockPage() {
           Monitor inventory levels, stock movements, and low stock alerts
         </p>
       </div>
+
+      {showProfitBanner && (tierReason === 'trial' || tierReason === 'basic') && (
+        <UpgradePrompt
+          variant="banner"
+          feature="profit data"
+          currentTier={tierReason}
+          title="Cost price & stock value are hidden on your plan"
+          message="Upgrade to Pro, Pro Yearly, or Lifetime to see cost price and stock value for every item."
+          onDismiss={() => setShowProfitBanner(false)}
+          style={{ marginBottom: 24 }}
+        />
+      )}
 
       <TabBar tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
 

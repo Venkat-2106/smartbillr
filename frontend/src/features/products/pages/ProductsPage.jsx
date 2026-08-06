@@ -254,6 +254,14 @@ function BarcodeHint() {
 export default function ProductsPage() {
   const { can }   = usePermissions()
   const { allowed: canViewProfit, reason: tierReason } = useFeatureAccess('product_profit_view')
+  // Column-visibility gate for the table only — permission alone, not tier.
+  // Lets a tier-locked-but-permitted user (e.g. Trial/Basic owner) see a
+  // padlocked column with an upgrade nudge instead of no column at all,
+  // matching StockPage.jsx's existing pattern. Every other use of
+  // canViewProfit in this file (modals, CSV export, low-margin check,
+  // metric card) stays on the combined permission+tier check — do not
+  // change those.
+  const hasProfitPermission = can('view_product_profit')
   const canManage = can('products.edit')
   const business      = useAuthStore(s => s.business)
   const countryCode   = business?.business_country_code
@@ -582,7 +590,7 @@ export default function ProductsPage() {
   // same array/object references across re-renders triggered by search,
   // pagination, or unrelated state — so Table (and any memoized row
   // components within it) don't see "columns" as a changed prop.
-  // Dependencies: only canViewProfit/canManage actually change which columns
+  // Dependencies: only hasProfitPermission/canManage actually change which columns
   // appear or what their action buttons do. setEditTarget/setDeleteTarget are
   // stable useState setters and don't need to be listed.
   const columns = useMemo(() => [
@@ -661,7 +669,7 @@ export default function ProductsPage() {
           : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
       ),
     },
-    ...(canViewProfit
+    ...(hasProfitPermission
       ? [
           {
             key:      'prod_cost_price',
@@ -778,7 +786,7 @@ export default function ProductsPage() {
           ),
         }]
       : []),
-  ], [canViewProfit, canManage, countryCode, isTierLocked, setEditTarget, setDeleteTarget])
+  ], [hasProfitPermission, canManage, countryCode, isTierLocked, setEditTarget, setDeleteTarget])
 
   const activeSearch     = search.trim().length > 0
   const activeDateFilter = dateFrom || dateTo

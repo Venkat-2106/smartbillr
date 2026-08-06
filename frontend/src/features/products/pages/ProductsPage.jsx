@@ -367,6 +367,7 @@ export default function ProductsPage() {
   // ── Modal open/close state ────────────────────────────────────────────────
   const subscription    = useAuthStore(s => s.subscription)
   const [showUpgradeBanner, setShowUpgradeBanner] = useState(true)
+  const [showProfitBanner, setShowProfitBanner] = useState(true)
   const [showAdd,        setShowAdd]        = useState(false)
   const [editTarget,     setEditTarget]     = useState(null)
   const [deleteTarget,   setDeleteTarget]   = useState(null)
@@ -838,6 +839,18 @@ export default function ProductsPage() {
           variant="banner"
           feature="products"
           onDismiss={() => setShowUpgradeBanner(false)}
+          style={{ marginBottom: 24 }}
+        />
+      )}
+
+      {showProfitBanner && (tierReason === 'trial' || tierReason === 'basic') && (
+        <UpgradePrompt
+          variant="banner"
+          feature="profit data"
+          currentTier={tierReason}
+          title="Cost price & profit are hidden on your plan"
+          message="Upgrade to Pro, Pro Yearly, or Lifetime to see cost price, profit, and margin for every product."
+          onDismiss={() => setShowProfitBanner(false)}
           style={{ marginBottom: 24 }}
         />
       )}

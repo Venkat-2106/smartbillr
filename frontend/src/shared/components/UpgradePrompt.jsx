@@ -62,6 +62,8 @@ export default function UpgradePrompt({
   variant = 'inline',
   feature = 'team members',
   currentTier = 'trial',
+  title,
+  message,
   onDismiss,
   onUpgrade,
   style,
@@ -96,10 +98,10 @@ export default function UpgradePrompt({
           <SparkleIcon size={18} />
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--warning-text)', marginBottom: 2 }}>
-              You&rsquo;re on a free trial
+              {title || 'You\u2019re on a free trial'}
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-              Upgrade to manage {feature} and unlock premium features.
+              {message || `Upgrade to manage ${feature} and unlock premium features.`}
             </div>
           </div>
         </div>

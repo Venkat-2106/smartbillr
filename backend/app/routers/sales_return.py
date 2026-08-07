@@ -852,7 +852,7 @@ async def update_sales_return(
                     text("""
                         INSERT INTO expenses (
                             expense_id, business_id, expense_category,
-                            expense_amount, expense_notes, created_by,
+                            expense_amount, expense_notes, created_by, updated_by,
                             source_type, source_id
                         ) VALUES (
                             CAST(:expense_id AS uuid),
@@ -861,6 +861,7 @@ async def update_sales_return(
                             :expense_amount,
                             :expense_notes,
                             CAST(:created_by AS uuid),
+                            CAST(:updated_by AS uuid),
                             :source_type,
                             CAST(:source_id AS uuid)
                         )
@@ -875,6 +876,7 @@ async def update_sales_return(
                         "expense_amount":   str(excess_refund),
                         "expense_notes":    f"Refund issued to {customer_label} — sales return {return_id}",
                         "created_by":       user_id,
+                        "updated_by":       user_id,
                         "source_type":      "sales_return",
                         "source_id":        return_id
                     }

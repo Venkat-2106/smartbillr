@@ -251,7 +251,7 @@ async def insert_purchase_header(
                 pur_total_amount, pur_discount,
                 pur_cgst_total, pur_sgst_total,
                 pur_igst_total, pur_tax_total,
-                pur_payment_status, pur_invoice_no, created_by
+                pur_payment_status, pur_invoice_no, created_by, updated_by
             ) VALUES (
                 CAST(:pur_id AS uuid),
                 CAST(:business_id AS uuid),
@@ -260,7 +260,8 @@ async def insert_purchase_header(
                 :pur_cgst_total, :pur_sgst_total,
                 :pur_igst_total, :pur_tax_total,
                 :pur_payment_status, :pur_invoice_no,
-                CAST(:created_by AS uuid)
+                CAST(:created_by AS uuid),
+                CAST(:updated_by AS uuid)
             )
         """),
         {
@@ -275,7 +276,8 @@ async def insert_purchase_header(
             "pur_tax_total":     str(tax_total),
             "pur_payment_status": data.pur_payment_status,
             "pur_invoice_no":    pur_invoice_no,
-            "created_by":        user_id
+            "created_by":        user_id,
+            "updated_by":        user_id
         }
     )
 
@@ -391,7 +393,7 @@ async def auto_record_purchase_payment(
             text("""
                 INSERT INTO expenses (
                     expense_id, business_id, expense_category,
-                    expense_amount, expense_notes, created_by,
+                    expense_amount, expense_notes, created_by, updated_by,
                     source_type, source_id
                 ) VALUES (
                     CAST(:expense_id AS uuid),
@@ -400,6 +402,7 @@ async def auto_record_purchase_payment(
                     :expense_amount,
                     :expense_notes,
                     CAST(:created_by AS uuid),
+                    CAST(:updated_by AS uuid),
                     :source_type,
                     CAST(:source_id AS uuid)
                 )
@@ -411,6 +414,7 @@ async def auto_record_purchase_payment(
                 "expense_amount":   str(amount_to_pay),
                 "expense_notes":    f"Purchase from {supplier_label} — {datetime.now(timezone.utc).strftime('%d %b %Y')}",
                 "created_by":       user_id,
+                "updated_by":       user_id,
                 "source_type":      "purchase_payment",
                 "source_id":        new_payment_id
             }
@@ -833,7 +837,7 @@ async def update_purchase_status_paid(
             text("""
                 INSERT INTO expenses (
                     expense_id, business_id, expense_category,
-                    expense_amount, expense_notes, created_by,
+                    expense_amount, expense_notes, created_by, updated_by,
                     source_type, source_id
                 ) VALUES (
                     CAST(:expense_id AS uuid),
@@ -842,6 +846,7 @@ async def update_purchase_status_paid(
                     :expense_amount,
                     :expense_notes,
                     CAST(:created_by AS uuid),
+                    CAST(:updated_by AS uuid),
                     :source_type,
                     CAST(:source_id AS uuid)
                 )
@@ -853,6 +858,7 @@ async def update_purchase_status_paid(
                 "expense_amount":   str(remaining),
                 "expense_notes":    f"Purchase from {supplier_label} — {datetime.now(timezone.utc).strftime('%d %b %Y')}",
                 "created_by":       user_id,
+                "updated_by":       user_id,
                 "source_type":      "purchase_payment",
                 "source_id":        new_payment_id
             }

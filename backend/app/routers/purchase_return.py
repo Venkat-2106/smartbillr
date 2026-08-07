@@ -283,7 +283,7 @@ async def create_purchase_return(
                 return_id, business_id, pur_id,
                 return_reason, return_status,
                 restock, refund_method,
-                return_amount, created_by
+                return_amount, created_by, updated_by
             ) VALUES (
                 CAST(:return_id AS uuid),
                 CAST(:business_id AS uuid),
@@ -291,7 +291,8 @@ async def create_purchase_return(
                 :return_reason, :return_status,
                 :restock, :refund_method,
                 :return_amount,
-                CAST(:created_by AS uuid)
+                CAST(:created_by AS uuid),
+                CAST(:updated_by AS uuid)
             )
         """), {
             "return_id":     new_return_id,
@@ -302,7 +303,8 @@ async def create_purchase_return(
             "restock":       data.restock,
             "refund_method": data.refund_method,
             "return_amount": str(total_return_amount),
-            "created_by":    str(user_id)
+            "created_by":    str(user_id),
+            "updated_by":    str(user_id)
         })
 
         # Step 5 → Insert all return items in one round trip
@@ -895,7 +897,7 @@ async def update_purchase_return(
                         text("""
                             INSERT INTO expenses (
                                 expense_id, business_id, expense_category,
-                                expense_amount, expense_notes, created_by,
+                                expense_amount, expense_notes, created_by, updated_by,
                                 source_type, source_id
                             ) VALUES (
                                 CAST(:expense_id AS uuid),
@@ -904,6 +906,7 @@ async def update_purchase_return(
                                 :expense_amount,
                                 :expense_notes,
                                 CAST(:created_by AS uuid),
+                                CAST(:updated_by AS uuid),
                                 :source_type,
                                 CAST(:source_id AS uuid)
                             )
@@ -918,6 +921,7 @@ async def update_purchase_return(
                             "expense_amount":   str(-excess_refund),
                             "expense_notes":    f"Refund credit from {supplier_label} — purchase return {return_id}",
                             "created_by":       str(user_id),
+                            "updated_by":       str(user_id),
                             "source_type":      "purchase_return",
                             "source_id":        return_id
                         }

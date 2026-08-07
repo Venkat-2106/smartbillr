@@ -471,7 +471,7 @@ async def create_purchase_payment(
             text("""
                 INSERT INTO expenses (
                     expense_id, business_id, expense_category,
-                    expense_amount, expense_notes, created_by,
+                    expense_amount, expense_notes, created_by, updated_by,
                     source_type, source_id
                 ) VALUES (
                     CAST(:expense_id AS uuid),
@@ -480,6 +480,7 @@ async def create_purchase_payment(
                     :expense_amount,
                     :expense_notes,
                     CAST(:created_by AS uuid),
+                    CAST(:updated_by AS uuid),
                     :source_type,
                     CAST(:source_id AS uuid)
                 )
@@ -491,6 +492,7 @@ async def create_purchase_payment(
                 "expense_amount":   str(new_payment.quantize(Decimal("0.01"))),
                 "expense_notes":    f"Purchase from {supplier_label} — {datetime.now(timezone.utc).strftime('%d %b %Y')}",
                 "created_by":       user_id,
+                "updated_by":       user_id,
                 "source_type":      "purchase_payment",
                 "source_id":        new_payment_id
             }

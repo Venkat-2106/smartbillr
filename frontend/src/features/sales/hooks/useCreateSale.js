@@ -285,6 +285,23 @@ export default function useCreateSale() {
 
   const handleProductSelect = useCallback((itemId, product) => {
     setItems(prev => {
+      // DUPLICATE-PRODUCT MERGE — mirrors the existing barcode-scan merge
+      // logic in handleBarcodeSubmit above. If this product is already on
+      // a different row, fold this row's quantity into that row instead
+      // of creating a second line item for the same product.
+      const currentItem = prev.find(i => i._id === itemId);
+      const existing = prev.find(i => i._id !== itemId && i.product_id === product.prod_id);
+
+      if (existing) {
+        const addedQty = currentItem?.quantity || 1;
+        toast.success(`${product.prod_name} already added — quantity updated`, { duration: 2000 });
+        return prev.map(item => {
+          if (item._id === existing._id) return { ...item, quantity: item.quantity + addedQty };
+          if (item._id === itemId) return { ...item, product_id: '', prod_name: '', mrp: 0, unit_price: 0, tax_rate: 0, prod_stock_qty: null };
+          return item;
+        });
+      }
+
       const isLast = prev[prev.length - 1]._id === itemId;
       const updated = prev.map(item => {
         if (item._id !== itemId) return item;

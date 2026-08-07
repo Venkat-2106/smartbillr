@@ -292,23 +292,42 @@ export default function CreatePurchasePage() {
   }, [])
 
   const handleProductSelect = useCallback((itemId, product) => {
-    setItems(prev => prev.map(item => {
-      if (item._id !== itemId) return item
-      return {
-        ...item,
-        product_id: product.prod_id,
-        prod_name:  product.prod_name,
-        // BUG FIX: when prod_cost_price is 0/missing, leave unit_price as 0
-        // so the price validation catches it (instead of silently submitting a 0
-        // that the backend rejects with a 422). The user must enter a price.
-        unit_price: Number(product.prod_cost_price) || 0,
-        tax_rate:   Number(product.tax_rate) || 0,
-        // COST-ABOVE-SELL FEATURE (2026-07): captured once at product-select time
-        // so PurchaseLineItemRow can warn if the entered unit price ends up above
-        // this without needing another API call.
-        sell_price: Number(product.prod_sell_price) || 0,
+    setItems(prev => {
+      // DUPLICATE-PRODUCT MERGE — mirrors the same fix applied to
+      // useCreateSale.js's handleProductSelect. If this product is
+      // already on a different row, fold this row's quantity into that
+      // row instead of creating a second line item for the same product.
+      const currentItem = prev.find(i => i._id === itemId)
+      const existing = prev.find(i => i._id !== itemId && i.product_id === product.prod_id)
+
+      if (existing) {
+        const addedQty = currentItem?.quantity || 1
+        toast.success(`${product.prod_name} already added — quantity updated`, { duration: 2000 })
+        return prev.map(item => {
+          if (item._id === existing._id) return { ...item, quantity: item.quantity + addedQty }
+          if (item._id === itemId) return { ...item, product_id: '', prod_name: '', unit_price: 0, tax_rate: 0, sell_price: 0 }
+          return item
+        })
       }
-    }))
+
+      return prev.map(item => {
+        if (item._id !== itemId) return item
+        return {
+          ...item,
+          product_id: product.prod_id,
+          prod_name:  product.prod_name,
+          // BUG FIX: when prod_cost_price is 0/missing, leave unit_price as 0
+          // so the price validation catches it (instead of silently submitting a 0
+          // that the backend rejects with a 422). The user must enter a price.
+          unit_price: Number(product.prod_cost_price) || 0,
+          tax_rate:   Number(product.tax_rate) || 0,
+          // COST-ABOVE-SELL FEATURE (2026-07): captured once at product-select time
+          // so PurchaseLineItemRow can warn if the entered unit price ends up above
+          // this without needing another API call.
+          sell_price: Number(product.prod_sell_price) || 0,
+        }
+      })
+    })
     setSearchMap(prev   => ({ ...prev, [itemId]: '' }))
     setOpenDropMap(prev => ({ ...prev, [itemId]: false }))
     setActiveItemSearch('')

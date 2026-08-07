@@ -64,9 +64,12 @@ export const createSale = async (body) => {
 }
 
 // ── Delete sale (soft-delete with optional stock restoration) ─────────────────
-export const deleteSale = async (id, restoreStock = false) => {
+export const deleteSale = async (id, restoreStock = false, confirmed = false) => {
   const res = await api.delete(`/sales/${id}`, {
-    params: { restore_stock: restoreStock || undefined },
+    params: {
+      restore_stock: restoreStock || undefined,
+      confirmed:      confirmed || undefined,
+    },
   })
   return res.data
 }

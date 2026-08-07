@@ -77,10 +77,12 @@ export default function SalesPage() {
   const [showDelete,   setShowDelete]   = useState(false);
   const [deletingSale, setDeletingSale] = useState(null);
   const [restoreStock, setRestoreStock] = useState(false);
+  const [refundWarning, setRefundWarning] = useState(null); // { refund_amount, return_count } | null
 
   function handleDeleteClick(sale) {
     setDeletingSale(sale);
     setRestoreStock(false);
+    setRefundWarning(null);
     setShowDelete(true);
   }
 
@@ -88,10 +90,19 @@ export default function SalesPage() {
     setShowDelete(false);
     setDeletingSale(null);
     setRestoreStock(false);
+    setRefundWarning(null);
   }
 
   function onConfirmDelete() {
-    deleteSale(deletingSale.sales_id, restoreStock, { onSuccess: handleCloseDelete });
+    deleteSale(
+      deletingSale.sales_id,
+      restoreStock,
+      {
+        onSuccess: handleCloseDelete,
+        onRefundWarning: (data) => setRefundWarning(data),
+      },
+      /* confirmed */ refundWarning != null,
+    );
   }
 
   useEffect(() => {
@@ -433,8 +444,12 @@ export default function SalesPage() {
         onClose={handleCloseDelete}
         onConfirm={onConfirmDelete}
         title={`Delete "${deletingSale?.invoice_no}"?`}
-        message="This action cannot be undone. The invoice will be soft-deleted and will no longer appear in reports."
-        confirmText={isDeleting ? 'Deleting...' : 'Yes, Delete Invoice'}
+        message={
+          refundWarning
+            ? `This invoice has ${refundWarning.return_count} approved return(s) with a total refund of ${formatCurrency(refundWarning.refund_amount, country)} already recorded as an expense. Deleting the invoice will NOT delete the return or the refund expense — they'll remain for accounting accuracy.`
+            : 'This action cannot be undone. The invoice will be soft-deleted and will no longer appear in reports.'
+        }
+        confirmText={isDeleting ? 'Deleting...' : (refundWarning ? 'Yes, Delete Anyway' : 'Yes, Delete Invoice')}
         loading={isDeleting}
       >
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none', padding: '4px 0' }}>

@@ -134,15 +134,17 @@ const CheckCircleIcon = (
 
 // ── Helper: resolve display label for the reference column ────────────────────
 function getReferenceLabel(row) {
-  if (row.sale_invoice_no)       return row.sale_invoice_no
-  if (row.purchase_reference_no) return row.purchase_reference_no.slice(0, 8) + '…'
+  if (row.sale_invoice_no)           return row.sale_invoice_no
+  if (row.sales_return_invoice_no)   return row.sales_return_invoice_no
+  if (row.purchase_reference_no)     return row.purchase_reference_no.slice(0, 8) + '…'
   if (row.reference_type === 'adjusted_by' && row.reference_id) return `Adjusted by ${row.reference_id}`
   return '—'
 }
 
 function getReferenceRaw(v, row) {
-  if (row.sale_invoice_no)       return row.sale_invoice_no
-  if (row.purchase_reference_no) return row.purchase_reference_no
+  if (row.sale_invoice_no)           return row.sale_invoice_no
+  if (row.sales_return_invoice_no)   return row.sales_return_invoice_no
+  if (row.purchase_reference_no)     return row.purchase_reference_no
   if (row.reference_type === 'adjusted_by' && row.reference_id) return `Adjusted by ${row.reference_id}`
   return ''
 }

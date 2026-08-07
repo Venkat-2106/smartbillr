@@ -411,6 +411,7 @@ async def handle_sale_status_patch(
 async def delete_sale(
     sales_id: str,
     restore_stock: bool = Query(False),
+    confirmed: bool = Query(False, description="Set true to proceed after a refund warning was shown"),
     current_user: dict = Depends(require_permission("sales.delete")),
     db: AsyncSession = Depends(get_async_db)
 ):
@@ -425,6 +426,47 @@ async def delete_sale(
 
     if not sale:
         return error_response("Sale not found", 404)
+
+    # ── Refund warning check (DEL-SALE-REFUND-1) ────────────────────────
+    # If this sale has an approved return with a refund already paid out
+    # (recorded as an expense, source_type='sales_return'), deleting the
+    # sale must NOT silently proceed without telling the user — the
+    # refund already happened as real cash movement and will NOT be
+    # deleted along with the sale (by design; see fix prompt history).
+    # First call (confirmed=false) returns a 409 with the refund total so
+    # the frontend can show a specific warning; the frontend re-calls
+    # with confirmed=true to actually proceed.
+    if not confirmed:
+        refund_row = (await db.execute(
+            text("""
+                SELECT COUNT(DISTINCT sr.return_id) AS return_count,
+                       COALESCE(SUM(e.expense_amount), 0) AS total_refund
+                FROM sales_returns sr
+                LEFT JOIN expenses e
+                       ON e.source_type = 'sales_return'
+                      AND e.source_id   = sr.return_id
+                      AND e.is_deleted  = false
+                WHERE sr.sale_id      = CAST(:sid AS uuid)
+                  AND sr.business_id  = CAST(:bid AS uuid)
+                  AND sr.return_status = 'approved'
+            """),
+            {"sid": sales_id, "bid": business_id}
+        )).fetchone()
+
+        total_refund = float(refund_row.total_refund or 0)
+        if total_refund > 0:
+            return error_response(
+                f"This sale has {refund_row.return_count} approved return(s) with "
+                f"a total refund of {total_refund:.2f} already recorded as an "
+                f"expense. Deleting the sale will NOT delete the return or the "
+                f"refund expense — they remain for accounting accuracy.",
+                status_code=409,
+                extensions={
+                    "requires_confirmation": True,
+                    "refund_amount": total_refund,
+                    "return_count": refund_row.return_count,
+                },
+            )
 
     sale.is_deleted = True
     sale.updated_by = user_id

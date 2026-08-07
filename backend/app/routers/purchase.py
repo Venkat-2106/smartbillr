@@ -72,6 +72,7 @@ from app.services.purchase_service import (
     get_purchase_summary,
     get_purchase_detail,
     update_purchase_status_paid,
+    get_purchase_excess_refunded,
     delete_purchase_items_and_stock,
 )
 from datetime import datetime, timezone
@@ -376,16 +377,20 @@ async def create_purchase_payment(
     )).fetchone()
     already_paid = Decimal(str(active_row.already_paid)) if active_row else Decimal("0")
 
-    # FIX-PR-1: total_refunded used to be subtracted here too, but since the
-    # PUR-RETURN-FIX, already_paid (purchase_payments.cumulative_paid) already
-    # includes every approved return's covered-by-reducing-due adjustment.
-    # Subtracting total_refunded again double-counted that portion, capping
-    # the payable balance below the true remaining amount and permanently
-    # understating the final settlement's expense record by the return amount.
+    # Refund-aware remaining, mirroring get_purchase_detail: already_paid
+    # (purchase_payments.cumulative_paid) already includes every approved
+    # return's covered-by-reducing-due adjustment payment. Only the EXCESS
+    # refund — money the supplier actually owes back (the portion beyond what
+    # the covered adjustments reduced) — still reduces the payable. Subtracting
+    # the gross return amount would double-count the covered portion
+    # (FIX-PR-1); total_refunded here is the same figure the purchase detail
+    # reports as data.total_refunded.
+    total_refunded = await get_purchase_excess_refunded(db, pur_id, business_id)
+
     new_payment = data.payment_amount
     total_after = already_paid + new_payment
 
-    remaining_balance = (pur_final - already_paid).quantize(Decimal("0.01"))
+    remaining_balance = (pur_final - already_paid - total_refunded).quantize(Decimal("0.01"))
 
     if remaining_balance <= 0:
         return error_response(

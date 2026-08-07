@@ -760,6 +760,42 @@ async def get_total_refunded(db: AsyncSession, pur_id: str, business_id: str):
     return Decimal(str(ref_row.total_refunded)) if ref_row and ref_row.total_refunded else Decimal("0")
 
 
+async def get_purchase_excess_refunded(db: AsyncSession, pur_id: str, business_id: str):
+    """Return the refund portion NOT already covered by reducing-due adjustments.
+
+    Mirrors get_purchase_detail's remaining-balance calc: approved returns
+    reduce the amount owed by recording a real 'adjustment' payment row
+    (the covered portion lands in cumulative_paid).  Only the EXCESS — money
+    the supplier actually owes back (recorded as a negative 'purchase_refund'
+    expense) — still needs to be subtracted from the payable.  This is the
+    same figure reported as data.total_refunded in the purchase detail.
+    """
+    ref_row = (await db.execute(
+        text("""
+            SELECT
+                COALESCE((
+                    SELECT SUM(return_amount)
+                    FROM purchase_returns
+                    WHERE pur_id        = CAST(:pid AS uuid)
+                      AND business_id   = CAST(:bid AS uuid)
+                      AND return_status = 'approved'
+                ), 0) AS gross_returns,
+                COALESCE((
+                    SELECT SUM(payment_amount)
+                    FROM purchase_payments
+                    WHERE pur_id         = CAST(:pid AS uuid)
+                      AND business_id    = CAST(:bid AS uuid)
+                      AND payment_method = 'adjustment'
+                ), 0) AS total_adjustment
+        """),
+        {"pid": pur_id, "bid": business_id}
+    )).fetchone()
+
+    gross_returns    = Decimal(str(ref_row.gross_returns)) if ref_row and ref_row.gross_returns else Decimal("0")
+    total_adjustment = Decimal(str(ref_row.total_adjustment)) if ref_row and ref_row.total_adjustment else Decimal("0")
+    return max(Decimal("0"), gross_returns - total_adjustment)
+
+
 async def update_purchase_status_paid(
     db: AsyncSession,
     business_id: str,
@@ -774,10 +810,12 @@ async def update_purchase_status_paid(
 
     already_paid = await get_active_payment(db, pur_id, business_id)
 
-    # FIX-PR-1: same double-count as create_purchase_payment — already_paid
-    # already reflects every approved return's covered-by-reducing-due
-    # adjustment, so total_refunded must not be subtracted again here.
-    remaining = max(Decimal("0"), final_amount - already_paid)
+    # Refund-aware remaining: already_paid already includes every approved
+    # return's covered-by-reducing-due adjustment. Only the EXCESS refund
+    # (money the supplier actually owes back) still reduces the payable —
+    # same figure as get_purchase_detail's data.total_refunded.
+    total_refunded = await get_purchase_excess_refunded(db, pur_id, business_id)
+    remaining = max(Decimal("0"), final_amount - already_paid - total_refunded)
 
     if remaining > 0:
         new_cumulative = (already_paid + remaining).quantize(Decimal("0.01"))

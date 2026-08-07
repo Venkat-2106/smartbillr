@@ -142,7 +142,7 @@ export function useSales() {
 
   // ── Delete mutation ────────────────────────────────────────────────────────
   const deleteMutation = useMutation({
-    mutationFn: ({ id, restoreStock }) => deleteSaleApi(id, restoreStock),
+    mutationFn: ({ id, restoreStock, confirmed }) => deleteSaleApi(id, restoreStock, confirmed),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
@@ -150,8 +150,16 @@ export function useSales() {
       toast.success('Sale deleted successfully');
       if (variables.callbacks?.onSuccess) variables.callbacks.onSuccess();
     },
-    onError: (err) =>
-      toast.error(err?.response?.data?.message || 'Failed to delete sale'),
+    onError: (err, variables) => {
+      const data = err?.response?.data;
+      // Refund warning — not a real error. Hand it back to the page so it
+      // can re-prompt with the specific refund amount instead of a toast.
+      if (data?.requires_confirmation && variables.callbacks?.onRefundWarning) {
+        variables.callbacks.onRefundWarning(data);
+        return;
+      }
+      toast.error(data?.message || 'Failed to delete sale');
+    },
   });
 
   return {
@@ -179,7 +187,8 @@ export function useSales() {
     drawerSale, setDrawerSale,
 
     statusMutation,
-    deleteSale: (id, restoreStock, callbacks) => deleteMutation.mutate({ id, restoreStock, callbacks }),
+    deleteSale: (id, restoreStock, callbacks, confirmed = false) =>
+      deleteMutation.mutate({ id, restoreStock, callbacks, confirmed }),
     isDeleting: deleteMutation.isPending,
   };
 }

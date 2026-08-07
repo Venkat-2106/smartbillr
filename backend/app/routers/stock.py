@@ -220,12 +220,16 @@ sort_dir:     Optional[str] = Query(default="desc"),
                     p.prod_name,
                     p2.full_name AS created_by_name,
                     s.invoice_no AS sale_invoice_no,
-                    pur.pur_invoice_no AS purchase_reference_no
+                    pur.pur_invoice_no AS purchase_reference_no,
+                    ret_s.invoice_no AS sales_return_invoice_no
                 FROM stock_movements sm
-                LEFT JOIN products  p   ON p.prod_id = sm.product_id
-                LEFT JOIN profiles  p2  ON p2.id     = sm.move_created_by
-                LEFT JOIN sales     s   ON s.sales_id = sm.sale_reference_id
-                LEFT JOIN purchases pur ON pur.pur_id = sm.purchase_reference_id
+                LEFT JOIN products      p    ON p.prod_id = sm.product_id
+                LEFT JOIN profiles      p2   ON p2.id     = sm.move_created_by
+                LEFT JOIN sales         s    ON s.sales_id = sm.sale_reference_id
+                LEFT JOIN purchases     pur  ON pur.pur_id = sm.purchase_reference_id
+                LEFT JOIN sales_returns sr   ON sr.return_id = sm.reference_id
+                                             AND sm.move_type = 'sales_return'
+                LEFT JOIN sales         ret_s ON ret_s.sales_id = sr.sale_id
                 WHERE sm.business_id = CAST(:business_id AS uuid)
                 {extra_where}
                 ORDER BY {order_col} {order_dir}
@@ -254,6 +258,7 @@ sort_dir:     Optional[str] = Query(default="desc"),
             "reference_id":          adjusted_by or (str(r.reference_id) if r.reference_id else None),
             "sale_invoice_no":       r.sale_invoice_no,
             "purchase_reference_no": r.purchase_reference_no,
+            "sales_return_invoice_no": r.sales_return_invoice_no,
             "move_notes":            re.sub(r'\s+[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*$', '', r.move_notes).strip() if r.move_notes else None,
             "move_created_at":       fmt_ts(r.move_created_at),
             "move_created_by":       str(r.move_created_by) if r.move_created_by else None,

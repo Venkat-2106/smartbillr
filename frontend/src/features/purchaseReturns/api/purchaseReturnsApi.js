@@ -63,6 +63,11 @@ export async function deletePurchaseReturn(returnId) {
   return res.data
 }
 
+export async function fetchPurchaseReturnsByPurchase(purchaseId) {
+  const res = await api.get(`/purchase-returns/by-purchase/${purchaseId}`)
+  return res.data
+}
+
 export async function fetchPurchaseReturnsSummary() {
   const res = await api.get('/purchase-returns/summary', { params: { tz_offset_minutes: getTzOffsetMinutes() } })
   return res.data

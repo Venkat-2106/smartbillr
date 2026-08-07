@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import { toast } from 'react-hot-toast'
 import { fetchPurchase } from '../../purchases/api/purchasesApi'
-import { createPurchaseReturn } from '../api/purchaseReturnsApi'
+import { createPurchaseReturn, fetchPurchaseReturnsByPurchase } from '../api/purchaseReturnsApi'
 import { z } from 'zod'
 import { Button, Spinner, DrawerPortal } from '../../../shared/components'
 import { textareaStyle } from '../../../shared/components/FormField'
@@ -29,23 +29,50 @@ export default function CreatePurchaseReturnDrawer({ purchaseId, onClose }) {
     staleTime: 0,
   })
 
+  const { data: existingReturns } = useQuery({
+    queryKey: ['purchaseReturns', 'by-purchase', purchaseId],
+    queryFn: () => fetchPurchaseReturnsByPurchase(purchaseId),
+    enabled: !!purchaseId,
+    staleTime: 0,
+  })
+
   const purchase = purchaseData?.data ?? purchaseData
+
+  const returnedQtyByProduct = useMemo(() => {
+    const map = {}
+    if (Array.isArray(existingReturns)) {
+      for (const ret of existingReturns) {
+        if (ret.return_status === 'rejected') continue
+        for (const item of ret.items || []) {
+          const pid = item.product_id
+          map[pid] = (map[pid] || 0) + item.return_qty
+        }
+      }
+    }
+    return map
+  }, [existingReturns])
 
   useEffect(() => {
     if (purchase?.items) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setItems(
-        purchase.items.map((item) => ({
-          product_id: item.product_id,
-          product_name: item.prod_name,
-          item_unit_price: item.item_unit_price,
-          max_qty: item.pur_item_qty,
-          return_qty: '',
-          refund_amount: '',
-        }))
+        purchase.items.map((item) => {
+          const returned = returnedQtyByProduct[item.product_id] || 0
+          const available = Math.max(0, item.pur_item_qty - returned)
+          return {
+            product_id: item.product_id,
+            product_name: item.prod_name,
+            item_unit_price: item.item_unit_price,
+            original_qty: item.pur_item_qty,
+            returned_qty: returned,
+            max_qty: available,
+            return_qty: '',
+            refund_amount: '',
+          }
+        })
       )
     }
-  }, [purchase?.items])
+  }, [purchase?.items, returnedQtyByProduct])
 
   const returnSchema = useMemo(() =>
     z.object({
@@ -103,6 +130,15 @@ export default function CreatePurchaseReturnDrawer({ purchaseId, onClose }) {
     })
     return { refundTotal, itemCount }
   }, [items])
+
+  const allItemsReturned = useMemo(() => {
+    const items = purchase?.items
+    if (!items) return false
+    return items.every((item) => {
+      const returned = returnedQtyByProduct[item.product_id] || 0
+      return returned >= item.pur_item_qty
+    })
+  }, [purchase, returnedQtyByProduct])
 
   const handleSubmit = () => {
     const selected = items.filter(
@@ -274,7 +310,16 @@ export default function CreatePurchaseReturnDrawer({ purchaseId, onClose }) {
                       {item.product_name}
                     </div>
                     <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
-                      Max: {formatCurrency(maxPrice, country)} × {maxQty}
+                      {item.returned_qty > 0 ? (
+                        <span>
+                          Available: {item.max_qty} of {item.original_qty}{' '}
+                          <span style={{ color: 'var(--text-muted)', fontSize: 10.5 }}>
+                            ({item.returned_qty} previously returned)
+                          </span>
+                        </span>
+                      ) : (
+                        <span>Qty: {item.original_qty} × {formatCurrency(maxPrice, country)}</span>
+                      )}
                     </div>
                     {lineTotal > 0 && (
                       <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-600)', marginTop: 2 }}>
@@ -337,6 +382,17 @@ export default function CreatePurchaseReturnDrawer({ purchaseId, onClose }) {
               <span>{formatCurrency(totals.refundTotal, country)}</span>
             </div>
           )}
+
+          {allItemsReturned && (
+            <div style={{
+              marginTop: 16, padding: '12px 16px',
+              background: 'var(--bg-subtle)',
+              border: '1px solid var(--border)', borderRadius: 12,
+              fontSize: 13, color: 'var(--text-muted)', fontWeight: 500,
+            }}>
+              All items in this purchase have been fully returned. No further returns can be processed.
+            </div>
+          )}
         </div>
       )}
 
@@ -353,7 +409,7 @@ export default function CreatePurchaseReturnDrawer({ purchaseId, onClose }) {
           variant="primary"
           onClick={handleSubmit}
           loading={mutation.isPending}
-          disabled={isLoading || !purchase}
+          disabled={isLoading || !purchase || allItemsReturned}
         >
           Submit Return
         </Button>

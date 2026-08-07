@@ -240,15 +240,13 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
         },
       })
     } else if (newStatus === 'paid') {
-      // Record full payment — compute remaining from current data.
-      // ── REFUND-AWARE REMAINING (2026-07) ──────────────────────────────────
-      // Approved purchase returns reduce the amount still owed.  The
-      // remaining is used both to determine whether to fire onRecordPayment
-      // vs onUpdateStatus, and as the payment_amount sent to the backend.
-      const finalAmount = data.pur_final_amount || 0
-      const alreadyPaid = data.total_paid || 0
-      const totalRefunded = data.total_refunded || 0
-      const remaining = Math.max(0, finalAmount - alreadyPaid - totalRefunded)
+      // Record full payment using the backend's own remaining_balance —
+      // single source of truth (get_purchase_detail and
+      // create_purchase_payment both derive this from the same
+      // get_purchase_excess_refunded() figures). Previously recomputed
+      // client-side from three raw fields; removed to eliminate the risk
+      // of the two calculations drifting out of sync.
+      const remaining = Math.max(0, data.remaining_balance || 0)
       if (remaining > 0) {
         onRecordPayment(purId, {
           payment_amount: remaining,

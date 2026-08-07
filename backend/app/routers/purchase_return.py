@@ -529,6 +529,65 @@ async def get_purchase_return_summary_kpi(
 
 
 # ─────────────────────────────────────────────
+# GET /purchase-returns/by-purchase/{pur_id} → All returns for a purchase (drawer)
+# ─────────────────────────────────────────────
+@router.get("/by-purchase/{pur_id}")
+async def get_purchase_returns_by_purchase(
+    pur_id: str,
+    current_user: dict = Depends(require_permission("purchases.view")),
+    db: AsyncSession = Depends(get_async_db),
+):
+    business_id = current_user["business_id"]
+
+    return_rows = (await db.execute(text("""
+        SELECT pr.return_id, pr.pur_id, pr.return_amount,
+               pr.return_reason, pr.return_status,
+               pr.return_created_at
+        FROM purchase_returns pr
+        WHERE pr.pur_id       = CAST(:pid AS uuid)
+          AND pr.business_id  = CAST(:bid AS uuid)
+        ORDER BY pr.return_created_at DESC
+    """), {"pid": pur_id, "bid": business_id})).fetchall()
+
+    ret_ids = [str(r.return_id) for r in return_rows]
+    all_items = []
+    if ret_ids:
+        all_items = (await db.execute(
+            text("""
+                SELECT pri.return_id, pri.product_id, pri.return_qty
+                FROM purchase_return_items pri
+                WHERE pri.return_id = ANY(CAST(:ids AS uuid[]))
+            """),
+            {"ids": ret_ids}
+        )).fetchall()
+
+    items_by_ret = {}
+    for it in all_items:
+        items_by_ret.setdefault(str(it.return_id), []).append(it)
+
+    result = []
+    for r in return_rows:
+        rid = str(r.return_id)
+        items = items_by_ret.get(rid, [])
+        result.append({
+            "return_id":         rid,
+            "return_amount":     float(r.return_amount),
+            "return_reason":     r.return_reason,
+            "return_status":     r.return_status,
+            "return_created_at": fmt_ts(r.return_created_at),
+            "items": [
+                {
+                    "product_id": str(it.product_id),
+                    "return_qty": float(it.return_qty),
+                }
+                for it in items
+            ],
+        })
+
+    return success_response(result)
+
+
+# ─────────────────────────────────────────────
 # GET /purchase-returns/{return_id} → Single return
 # ─────────────────────────────────────────────
 # CTE OPTIMIZATION (2026-07): Merged return header + items into a

@@ -279,11 +279,54 @@ async def update_purchase_status(
 async def delete_purchase(
     pur_id: str,
     reduce_stock: bool = Query(False),
+    confirmed: bool = Query(False, description="Set true to proceed after a supplier-refund warning was shown"),
     current_user: dict = Depends(require_permission("purchases.delete")),
     db: AsyncSession = Depends(get_async_db)
 ):
     business_id = current_user["business_id"]
     user_id     = current_user["user_id"]
+
+    # ── Supplier refund warning check (DEL-PUR-REFUND-1) ────────────────
+    # Mirrors DEL-SALE-REFUND-1 on the sales side. If an approved return
+    # on this purchase generated a refund-credit expense (real money the
+    # supplier already paid back), deleting the purchase must not
+    # silently proceed — that credit will NOT be deleted along with the
+    # purchase (by design; it documents real cash movement). First call
+    # (confirmed=false) returns a 409 with the credit total; the frontend
+    # re-calls with confirmed=true to actually proceed. Runs before the
+    # reduce_stock branch so no writes happen if this returns early.
+    if not confirmed:
+        refund_row = (await db.execute(
+            text("""
+                SELECT COUNT(DISTINCT pr.return_id) AS return_count,
+                       COALESCE(SUM(-e.expense_amount), 0) AS total_refund
+                FROM purchase_returns pr
+                LEFT JOIN expenses e
+                       ON e.source_type = 'purchase_return'
+                      AND e.source_id   = pr.return_id
+                      AND e.is_deleted  = false
+                WHERE pr.pur_id       = CAST(:pid AS uuid)
+                  AND pr.business_id  = CAST(:bid AS uuid)
+                  AND pr.return_status = 'approved'
+            """),
+            {"pid": pur_id, "bid": business_id}
+        )).fetchone()
+
+        total_refund = float(refund_row.total_refund or 0)
+        if total_refund > 0:
+            return error_response(
+                f"This purchase has {refund_row.return_count} approved return(s) "
+                f"with a total refund credit of {total_refund:.2f} already "
+                f"received from the supplier and recorded as an expense credit. "
+                f"Deleting the purchase will NOT delete the return or the credit "
+                f"— they remain for accounting accuracy.",
+                status_code=409,
+                extensions={
+                    "requires_confirmation": True,
+                    "refund_amount": total_refund,
+                    "return_count": refund_row.return_count,
+                },
+            )
 
     if reduce_stock:
         purchase, stock_warnings = await delete_purchase_items_and_stock(db, business_id, user_id, pur_id)

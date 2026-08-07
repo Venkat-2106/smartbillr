@@ -134,7 +134,7 @@ export function usePurchases() {
 
   // ── Delete mutation ─────────────────────────────────────────────────────────
   const deleteMutation = useMutation({
-    mutationFn: ({ purId, reduceStock }) => deletePurchaseApi(purId, reduceStock),
+    mutationFn: ({ purId, reduceStock, confirmed }) => deletePurchaseApi(purId, reduceStock, confirmed),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['purchases'] })
       queryClient.invalidateQueries({ queryKey: ['purchase', variables.purId] })
@@ -142,8 +142,15 @@ export function usePurchases() {
       toast.success('Purchase deleted successfully')
       if (variables.callbacks?.onSuccess) variables.callbacks.onSuccess()
     },
-    onError: (err) => {
-      toast.error(err?.response?.data?.message || 'Failed to delete purchase')
+    onError: (err, variables) => {
+      const data = err?.response?.data
+      // Refund warning — not a real error. Hand it back to the page so it
+      // can re-prompt with the specific credit amount instead of a toast.
+      if (data?.requires_confirmation && variables.callbacks?.onRefundWarning) {
+        variables.callbacks.onRefundWarning(data)
+        return
+      }
+      toast.error(data?.message || 'Failed to delete purchase')
     },
   })
 
@@ -191,7 +198,8 @@ export function usePurchases() {
     updateStatus:    (purId, status, callbacks) => statusMutation.mutate({ purId, status }, callbacks),
     isUpdatingStatus: statusMutation.isPending,
 
-    deletePurchase:  (purId, reduceStock, callbacks) => deleteMutation.mutate({ purId, reduceStock, callbacks }),
+    deletePurchase:  (purId, reduceStock, callbacks, confirmed = false) =>
+      deleteMutation.mutate({ purId, reduceStock, callbacks, confirmed }),
     isDeleting:      deleteMutation.isPending,
 
     recordPayment:   (purId, payload, callbacks) => paymentMutation.mutate({ purId, payload }, callbacks),

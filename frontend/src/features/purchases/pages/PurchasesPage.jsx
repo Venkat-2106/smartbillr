@@ -204,6 +204,7 @@ export default function PurchasesPage() {
   const [showDelete,    setShowDelete]    = useState(false)
   const [deletingPur,   setDeletingPur]   = useState(null)
   const [reduceStock,   setReduceStock]   = useState(false)
+  const [refundWarning, setRefundWarning] = useState(null) // { refund_amount, return_count } | null
   const [autoPrint,     setAutoPrint]     = useState(false)
   const [autoPrintPurId, setAutoPrintPurId] = useState(null)
 
@@ -223,6 +224,7 @@ export default function PurchasesPage() {
   const handleDeleteClick = useCallback((pur) => {
     setDeletingPur(pur)
     setReduceStock(false)
+    setRefundWarning(null)
     setShowDelete(true)
   }, [])
 
@@ -230,10 +232,19 @@ export default function PurchasesPage() {
     setShowDelete(false)
     setDeletingPur(null)
     setReduceStock(false)
+    setRefundWarning(null)
   }
 
   function onConfirmDelete() {
-    deletePurchase(deletingPur.pur_id, reduceStock, { onSuccess: handleCloseDelete })
+    deletePurchase(
+      deletingPur.pur_id,
+      reduceStock,
+      {
+        onSuccess: handleCloseDelete,
+        onRefundWarning: (data) => setRefundWarning(data),
+      },
+      /* confirmed */ refundWarning != null,
+    )
   }
 
   const { selectedIndex, setSelectedIndex } = useTableKeyboardNav({
@@ -502,8 +513,12 @@ export default function PurchasesPage() {
         onClose={handleCloseDelete}
         onConfirm={onConfirmDelete}
         title={`Delete "${deletingPur?.pur_invoice_no || 'Purchase'}"?`}
-        message={'This action cannot be undone. The purchase record will be soft-deleted and will no longer appear in reports.'}
-        confirmText={isDeleting ? 'Deleting...' : 'Yes, Delete Purchase'}
+        message={
+          refundWarning
+            ? `This purchase has ${refundWarning.return_count} approved return(s) with a total refund credit of ${formatCurrency(refundWarning.refund_amount, country)} already received from the supplier and recorded as an expense credit. Deleting the purchase will NOT delete the return or the credit — they'll remain for accounting accuracy.`
+            : 'This action cannot be undone. The purchase record will be soft-deleted and will no longer appear in reports.'
+        }
+        confirmText={isDeleting ? 'Deleting...' : (refundWarning ? 'Yes, Delete Anyway' : 'Yes, Delete Purchase')}
         loading={isDeleting}
       >
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none', padding: '4px 0' }}>

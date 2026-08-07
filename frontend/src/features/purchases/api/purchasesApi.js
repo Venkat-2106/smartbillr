@@ -64,9 +64,12 @@ export async function updatePurchaseStatus(purId, status) {
 }
 
 // ── DELETE purchase (soft-delete with optional stock reduction) ───────────────
-export async function deletePurchase(purId, reduceStock = false) {
+export async function deletePurchase(purId, reduceStock = false, confirmed = false) {
   const res = await api.delete(`/purchases/${purId}`, {
-    params: { reduce_stock: reduceStock || undefined },
+    params: {
+      reduce_stock: reduceStock || undefined,
+      confirmed:    confirmed || undefined,
+    },
   })
   return res.data
 }

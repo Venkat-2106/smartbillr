@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS plans (
     price_inr NUMERIC(10, 2),
     price_usd NUMERIC(10, 2),
     razorpay_plan_id VARCHAR(100),
+    razorpay_plan_id_usd VARCHAR(100),
     stripe_price_id VARCHAR(100),
     feature_limits JSONB DEFAULT '{}' NOT NULL,
     is_active BOOLEAN DEFAULT true NOT NULL,

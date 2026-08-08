@@ -195,10 +195,15 @@ async def _cancel_active_subscription_if_different(db, bid, new_plan_id: str):
     return None
 
 
-async def _create_subscription_cancelling_old(db, bid, plan, total_count: int):
+async def _create_subscription_cancelling_old(db, bid, plan, total_count: int, is_india: bool):
     """
     Cancel-old-then-create-new for recurring plans. Shared by create_checkout
     and change_plan so upgrade/downgrade always goes through one code path.
+
+    is_india selects which Razorpay Plan object to subscribe to — INR and
+    USD are separate currency-locked Plan objects on Razorpay's side, not
+    one Plan with a currency parameter. Caller is responsible for having
+    already confirmed the relevant plan_id column is not NULL.
 
     Returns (subscription_dict, error_message). On failure, error_message is
     set and subscription_dict is None — the caller must NOT proceed to create
@@ -210,8 +215,9 @@ async def _create_subscription_cancelling_old(db, bid, plan, total_count: int):
     )
     if cancel_err:
         return None, cancel_err
+    razorpay_plan_id = plan.razorpay_plan_id if is_india else plan.razorpay_plan_id_usd
     sub = razorpay_client.create_subscription(
-        plan_id=plan.razorpay_plan_id,
+        plan_id=razorpay_plan_id,
         total_count=total_count,
         notes={"business_id": bid, "plan_code": plan.plan_code},
     )
@@ -275,14 +281,17 @@ async def create_checkout(
         # Subscriptions product (one-time mandate authorization, then
         # Razorpay auto-charges each cycle). Lifetime/one_time plans keep
         # using the one-time Order flow below.
-        if not plan.razorpay_plan_id:
-            return error_response("Plan not configured for recurring billing", 500)
-        if not is_india:
-            # Only INR Razorpay Plans exist today; USD recurring Plans are on
-            # hold. Refuse rather than silently subscribe a non-IN business to
-            # the INR plan under a mislabeled currency.
+        #
+        # FIX (2026-08-08): INR and USD are separate currency-locked Razorpay
+        # Plan objects (razorpay_plan_id / razorpay_plan_id_usd), not one Plan
+        # with a currency switch. Select the column for the business's
+        # currency and fail cleanly if that specific column is NULL — never
+        # fall through to the other currency's plan_id.
+        razorpay_plan_id = plan.razorpay_plan_id if is_india else plan.razorpay_plan_id_usd
+        if not razorpay_plan_id:
+            currency_label = "INR" if is_india else "USD"
             return error_response(
-                "Recurring billing is currently available only for India (INR). Contact support.", 400
+                f"This plan is not yet configured for recurring billing in {currency_label}. Contact support.", 500
             )
 
         price = plan.price_inr if is_india else plan.price_usd
@@ -297,7 +306,7 @@ async def create_checkout(
         # cancel fails, block the new checkout: two live subscriptions is worse
         # than a blocked upgrade.
         sub, cancel_err = await _create_subscription_cancelling_old(
-            db, bid, plan, 1200 if plan.billing_cycle == "monthly" else 100
+            db, bid, plan, 1200 if plan.billing_cycle == "monthly" else 100, is_india
         )
         if cancel_err:
             return error_response(cancel_err, 502)
@@ -419,24 +428,29 @@ async def change_plan(
         return error_response(cancel_err, 502)
 
     if is_recurring:
-        if not plan.razorpay_plan_id:
-            return error_response("Plan not configured for recurring billing", 500)
-        if not is_india:
+        # FIX (2026-08-08): same currency-column selection as create_checkout.
+        # See _create_subscription_cancelling_old for why INR/USD are two
+        # separate Plan-id columns, not one Plan with a currency switch.
+        razorpay_plan_id = plan.razorpay_plan_id if is_india else plan.razorpay_plan_id_usd
+        if not razorpay_plan_id:
+            currency_label = "INR" if is_india else "USD"
             return error_response(
-                "Recurring billing is currently available only for India (INR). Contact support.", 400
+                f"This plan is not yet configured for recurring billing in {currency_label}. Contact support.", 500
             )
-        if not plan.price_inr or float(plan.price_inr) <= 0:
-            return error_response("This plan is not available for INR", 400)
+        price = plan.price_inr if is_india else plan.price_usd
+        currency = "INR" if is_india else "USD"
+        if not price or float(price) <= 0:
+            return error_response(f"This plan is not available for {currency}", 400)
 
         sub = razorpay_client.create_subscription(
-            plan_id=plan.razorpay_plan_id,
+            plan_id=razorpay_plan_id,
             total_count=1200 if plan.billing_cycle == "monthly" else 100,
             notes={"business_id": bid, "plan_code": plan.plan_code},
         )
 
         payment_id = await _record_pending_subscription(
             db, bid, str(plan.plan_id), "razorpay", sub["id"],
-            float(plan.price_inr), "INR",
+            float(price), currency,
         )
 
         return success_response({

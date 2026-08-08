@@ -18,6 +18,7 @@ class Plan(Base):
     price_inr = Column(Numeric(10, 2), nullable=True)
     price_usd = Column(Numeric(10, 2), nullable=True)
     razorpay_plan_id = Column(String(100), nullable=True)
+    razorpay_plan_id_usd = Column(String(100), nullable=True)
     feature_limits = Column(JSONB, nullable=False, default=dict)
     is_active = Column(Boolean, nullable=False, default=True)
     sort_order = Column(SmallInteger, nullable=False, default=0)

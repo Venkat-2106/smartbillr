@@ -27,10 +27,24 @@
 
 import { Component } from 'react'
 
+// FIX (2026-08-08): after a new deploy replaces Vite's hashed chunk
+// filenames, a tab that was already open still references the OLD
+// hashes. The resulting dynamic import() failure has a distinct,
+// recognizable shape across browsers — matching on it lets us tell
+// "stale deploy, a reload will fix this" apart from a genuine runtime
+// bug, which a reload would NOT fix and shouldn't be retried.
+const CHUNK_LOAD_ERROR_PATTERN = /fetch dynamically imported module|failed to load module script|failed to fetch|loading chunk|importing a module script failed/i
+
+function isChunkLoadError(error) {
+  return !!error?.message && CHUNK_LOAD_ERROR_PATTERN.test(error.message)
+}
+
+const RELOAD_FLAG_KEY = 'sb-chunk-reload-attempted'
+
 export default class ErrorBoundary extends Component {
   constructor(props) {
     super(props)
-    this.state = { hasError: false, error: null }
+    this.state = { hasError: false, error: null, isRecovering: false }
   }
 
   // Called when a child component throws during render.
@@ -44,6 +58,19 @@ export default class ErrorBoundary extends Component {
     // In production you could send this to a logging service (e.g. Sentry):
     // logErrorToService(error, info.componentStack)
     console.error('[ErrorBoundary caught]', error, info.componentStack)
+
+    if (isChunkLoadError(error)) {
+      const alreadyAttempted = sessionStorage.getItem(RELOAD_FLAG_KEY)
+      if (!alreadyAttempted) {
+        // One silent reload attempt per tab session. sessionStorage
+        // survives the reload itself (unlike component/in-memory state),
+        // so a second failure after reloading falls through to the
+        // normal error UI instead of looping forever.
+        sessionStorage.setItem(RELOAD_FLAG_KEY, '1')
+        this.setState({ isRecovering: true })
+        window.location.reload()
+      }
+    }
   }
 
   handleReset() {
@@ -52,6 +79,21 @@ export default class ErrorBoundary extends Component {
   }
 
   render() {
+    if (this.state.isRecovering) {
+      // Reload is already in flight (see componentDidCatch) — show a
+      // neutral loading state instead of "Something went wrong" for the
+      // brief moment before the page actually reloads.
+      return (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
+          background: 'var(--bg-page)',
+        }} />
+      )
+    }
+
     if (this.state.hasError) {
       // If the parent passed a custom fallback, show that instead
       if (this.props.fallback) return this.props.fallback

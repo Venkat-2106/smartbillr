@@ -206,12 +206,11 @@ async def activate_subscription_charge(
         return
 
     result = await db.execute(
-        text("SELECT subscription_end_at, auto_renew FROM businesses WHERE business_id = :bid"),
+        text("SELECT subscription_end_at FROM businesses WHERE business_id = :bid"),
         {"bid": str(original_row.business_id)},
     )
     business_row = result.fetchone()
     current_end_at = business_row.subscription_end_at if business_row else None
-    auto_renew = bool(business_row.auto_renew) if business_row and business_row.auto_renew is not None else True
 
     now = datetime.now(timezone.utc)
     period_end = _compute_period_end(current_end_at, plan.billing_cycle, now)
@@ -249,18 +248,24 @@ async def activate_subscription_charge(
         },
     )
 
-    # FIX (2026-08-03): if the business asked to cancel (auto_renew=false),
-    # this charge is anomalous — Razorpay billed a subscription the user
-    # cancelled through SmartBillr, or the cancel-sync failed. Record the
-    # charge row above (audit trail / reconciliation) but do NOT reactivate
-    # the business or extend subscription_end_at, and make sure it surfaces
-    # in monitoring rather than being swallowed.
-    if not auto_renew:
+    # FIX (2026-08-08): the anomalous-charge guard previously checked
+    # businesses.auto_renew — a single flag shared across the whole
+    # business, not scoped to this subscription. Switching plans cancels
+    # the OLD subscription first (which sets auto_renew=false via its own
+    # webhook), then creates a NEW one — so the NEW subscription's first
+    # legitimate charge was being misread as "anomalous" and silently
+    # skipped, because it raced against the OLD subscription's
+    # cancellation webhook. Check THIS subscription's own last known
+    # status instead: it is only 'cancelled'/'halted' if Razorpay told us
+    # specifically that sub_id (the one being charged right now) was
+    # cancelled — which correctly excludes the case where a DIFFERENT,
+    # older subscription was cancelled as part of switching plans.
+    if original_row.subscription_status in ("cancelled", "halted"):
         logger.warning(
-            "Anomalous renewal charge for cancelled business: business=%s sub=%s "
-            "(auto_renew=false) — recording payment without reactivating; "
+            "Anomalous renewal charge for cancelled subscription: business=%s sub=%s "
+            "(subscription_status=%s) — recording payment without reactivating; "
             "investigate whether the Razorpay cancel-sync failed",
-            original_row.business_id, sub_id,
+            original_row.business_id, sub_id, original_row.subscription_status,
         )
         await db.commit()
         return
@@ -274,7 +279,8 @@ async def activate_subscription_charge(
                 payment_provider = :provider,
                 subscription_end_at = :period_end,
                 last_renewed_at = :now,
-                grace_period_end_at = NULL
+                grace_period_end_at = NULL,
+                auto_renew = true
             WHERE business_id = :bid
         """),
         {

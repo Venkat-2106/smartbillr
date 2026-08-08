@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import { useCheckoutStatus } from '../hooks/useCheckout'
 import { Spinner } from '../../../shared/components'
 
@@ -10,13 +11,25 @@ export default function BillingSuccessPage() {
   const { data: status, hasTimedOut } = useCheckoutStatus(paymentId)
 
   const [elapsed, setElapsed] = useState(0)
+  // FIX (2026-08-08): useCheckoutStatus polls every 1.5s and this effect
+  // re-runs on every poll tick while status is still pending. Without this
+  // guard, if status flips to 'paid'/'failed' and the toast fired inside the
+  // effect body directly, StrictMode double-invocation or a stray re-render
+  // could fire it twice. A ref-based one-shot latch is the standard fix.
+  const notifiedRef = useRef(false)
 
   useEffect(() => {
-    if (status?.status === 'paid') {
+    if (status?.status === 'paid' && !notifiedRef.current) {
+      notifiedRef.current = true
+      toast.success('Subscription activated!')
       navigate('/dashboard')
       return
     }
     if (status?.status === 'failed') {
+      if (!notifiedRef.current) {
+        notifiedRef.current = true
+        toast.error('Payment could not be verified.')
+      }
       return
     }
     const timer = setInterval(() => setElapsed((e) => e + 1), 1000)

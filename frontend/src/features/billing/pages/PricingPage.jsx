@@ -208,6 +208,29 @@ export default function PricingPage() {
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: '40px 24px' }}>
+      {/* ── Back button ── */}
+      <button
+        onClick={() => navigate(-1)}
+        style={{
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          fontSize: 14,
+          color: 'var(--text-secondary)',
+          padding: '4px 0',
+          marginBottom: 8,
+          fontFamily: 'inherit',
+        }}
+      >
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M19 12H5m7-7l-7 7 7 7"/>
+        </svg>
+        Back
+      </button>
+
       <div style={{ textAlign: 'center', marginBottom: 40 }}>
         <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>Choose Your Plan</h1>
         <p style={{ fontSize: 16, color: 'var(--text-secondary)', marginBottom: 24 }}>

@@ -407,6 +407,8 @@ export const STOCK_CSV_COLUMNS = [
   { key: 'stock_status',          label: 'Stock Status' },
   { key: 'updated_at',            label: 'Last Updated',
     format: (val) => formatDateCSV(val) },
+  { key: 'last_updated_by',       label: 'Last Updated By',
+    format: (val) => val || '' },
 ];
 
 // ── STOCK CSV COLUMNS — no profit (cost price / stock value omitted) ──────────
@@ -425,6 +427,8 @@ export const STOCK_CSV_COLUMNS_NO_PROFIT = [
   { key: 'stock_status',          label: 'Stock Status' },
   { key: 'updated_at',            label: 'Last Updated',
     format: (val) => formatDateCSV(val) },
+  { key: 'last_updated_by',       label: 'Last Updated By',
+    format: (val) => val || '' },
 ];
 
 // ─── IMPORT TEMPLATE DOWNLOADER ────────────────────────────────────────────────

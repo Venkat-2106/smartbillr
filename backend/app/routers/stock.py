@@ -382,11 +382,14 @@ async def get_current_stock(
                 p.prod_id, p.prod_name, p.barcode, p.unit,
                 p.prod_stock_qty, p.prod_low_stock_alert,
                 p.prod_cost_price, p.prod_sell_price,
+                p.updated_at,
                 (p.prod_stock_qty * p.prod_cost_price) AS stock_value,
                 c.category_name,
+                prof.full_name AS last_updated_by,
                 COUNT(*) OVER() AS total_count
             FROM products p
             LEFT JOIN categories c ON c.category_id = p.category_id
+            LEFT JOIN profiles  prof ON prof.id       = p.updated_by
             WHERE p.business_id = CAST(:business_id AS uuid)
               {extra_where}
             ORDER BY {order_col} {order_dir}
@@ -421,6 +424,8 @@ async def get_current_stock(
             "prod_cost_price":      float(r.prod_cost_price) if (show_profit and r.prod_cost_price is not None) else None,
             "stock_value":          float(r.stock_value) if (show_profit and r.stock_value is not None) else None,
             "stock_status":         stock_status,
+            "updated_at":           fmt_ts(r.updated_at) if r.updated_at else None,
+            "last_updated_by":      r.last_updated_by,
         })
 
     return success_response(

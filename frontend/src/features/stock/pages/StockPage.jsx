@@ -378,6 +378,21 @@ function CurrentStockTab({ canViewProfit, isTierLocked, canAdjust }) {
         </span>
       ),
     },
+    {
+      key:      'last_updated_by',
+      label:    'Last Updated By',
+      sortable: false,
+      width:    140,
+      render: (row) => (
+        row.last_updated_by
+          ? (
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
+              {row.last_updated_by}
+            </span>
+          )
+          : <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>—</span>
+      ),
+    },
     // Adjust Stock action column — only rendered when user has stock.adjust permission
     ...(canAdjust
       ? [{

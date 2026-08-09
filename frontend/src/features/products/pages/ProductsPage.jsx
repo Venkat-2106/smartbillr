@@ -56,7 +56,6 @@
 //      (Cost Price is always editable in the Add/Edit product forms)
 //   ✅ Zod .trim() on prod_name (trimmed before schema min/max check)
 
-// test rebuild
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'

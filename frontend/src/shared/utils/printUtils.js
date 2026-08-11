@@ -312,7 +312,7 @@ export function buildPrintFooter(extra = '') {
       font-size: 10.5px;
       color: #9ca3af;
     ">
-      <span>Printed from <strong style="color: #6b7280;">SmartBillr</strong></span>
+      <span>Printed from <strong style="color: #6b7280;">SmartBillr.online</strong></span>
       <span>${escapeHTML(extra) || formatGeneratedOn()}</span>
     </div>
   `;

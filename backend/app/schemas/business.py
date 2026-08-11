@@ -143,6 +143,9 @@ class SubscriptionResponse(BaseModel):
     # True when Razorpay is retrying a failed renewal charge
     # (subscription_status='pending') — surfaces the "update your card" banner.
     payment_action_required: Optional[bool] = False
+    # False after the user cancels the subscription — hides the cancel button
+    # and surfaces a "Subscription cancelled" state in the UI.
+    auto_renew: Optional[bool] = True
 
     model_config = ConfigDict(from_attributes=True)
 

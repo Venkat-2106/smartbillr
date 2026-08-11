@@ -457,6 +457,44 @@ body {
   outline: none !important;
 }
 
+/* ─── Danger ghost button (settings cancel subscription) ─────── */
+.sb-btn-danger-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--danger-border);
+  background: transparent;
+  color: var(--danger-text);
+  font-family: var(--font-sans, "Inter", sans-serif);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: background-color var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast), transform var(--duration-fast), box-shadow var(--duration-fast);
+}
+.sb-btn-danger-ghost:hover {
+  background: var(--danger-bg);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  color: var(--danger-text);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--danger) 14%, transparent);
+}
+.sb-btn-danger-ghost:active {
+  transform: translateY(0) scale(0.98);
+}
+.sb-btn-danger-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 /* ─── Badges ─────────────────────────────────────────────────── */
 .badge {
   display: inline-flex;

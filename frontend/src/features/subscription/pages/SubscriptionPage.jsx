@@ -6,10 +6,11 @@
 import { useNavigate } from 'react-router-dom'
 import { Spinner, Button } from '../../../shared/components'
 import { useSubscription } from '../hooks/useSubscription'
-import { useCheckout, useChangePlan } from '../../billing/hooks/useCheckout'
+import { useCheckout, useChangePlan, useCancelSubscription } from '../../billing/hooks/useCheckout'
 import { razorpayPrefill, razorpayTheme } from '../../billing/utils/razorpayOptions'
 import useAuthStore from '../../../store/authStore'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import ConfirmDialog from '../../../shared/components/ConfirmDialog'
 import { formatDate } from '../../../shared/utils/formatDate'
 import toast from 'react-hot-toast'
 import {
@@ -120,7 +121,21 @@ export default function SubscriptionPage() {
 
   const { mutate: startCheckout, isPending: isCheckoutPending } = useCheckout()
   const { mutate: startChangePlan, isPending: isChangePending } = useChangePlan()
+  const { mutate: cancelSub, isPending: isCancelPending } = useCancelSubscription()
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const isPending = isCheckoutPending || isChangePending
+
+  function handleConfirmCancel() {
+    cancelSub(undefined, {
+      onSuccess: () => {
+        toast.success('Auto-renewal disabled. Access continues until your current period ends.')
+        setShowCancelConfirm(false)
+      },
+      onError: () => {
+        toast.error('Could not cancel the subscription. Please try again or contact support.')
+      },
+    })
+  }
 
   function openRazorpayCheckout(data) {
     const prefill = razorpayPrefill({ business, user })
@@ -345,6 +360,33 @@ export default function SubscriptionPage() {
                 />
               )}
             </div>
+
+            {currentTier !== 'trial' && !sub.is_expired && (
+              sub.auto_renew === false ? (
+                <div style={{ marginTop: 20 }}>
+                  <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                    Subscription cancelled — access continues until {formatDate(sub.subscription_end_at)}
+                  </span>
+                </div>
+              ) : (
+                <div style={{ marginTop: 20 }}>
+                  <button
+                    onClick={() => setShowCancelConfirm(true)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      color: 'var(--text-muted)',
+                      textDecoration: 'underline',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    Cancel subscription
+                  </button>
+                </div>
+              )
+            )}
           </div>
         )}
 
@@ -566,6 +608,18 @@ export default function SubscriptionPage() {
         </div>
 
       </div>
+
+      <ConfirmDialog
+        open={showCancelConfirm}
+        onClose={() => setShowCancelConfirm(false)}
+        onConfirm={handleConfirmCancel}
+        title="Cancel subscription?"
+        message="Auto-renewal will be turned off. You'll keep full access until your current billing period ends, then your account will move to the free trial limits."
+        confirmText="Cancel subscription"
+        cancelText="Keep subscription"
+        variant="danger"
+        loading={isCancelPending}
+      />
     </div>
   )
 }

@@ -16,9 +16,12 @@ import { COUNTRIES } from '../../../shared/data/countries'
 import { useBusiness, useUpdateBusiness } from '../hooks/useSettings'
 import { businessSchema } from '../schemas/businessSchema'
 import { useSubscription } from '../../subscription/hooks/useSubscription'
+import { useCancelSubscription } from '../../billing/hooks/useCheckout'
 import { SUBSCRIPTION_DISPLAY_NAMES as DISPLAY_NAMES } from '../../../shared/utils/subscriptionUtils'
 import { formatDate } from '../../../shared/utils/formatDate'
 import { getTaxLabel } from '../../../shared/utils/formatTax'
+import toast from 'react-hot-toast'
+import ConfirmDialog from '../../../shared/components/ConfirmDialog'
 
 const BASE_TABS = [
   { key: 'general', label: 'Business Info' },
@@ -33,6 +36,20 @@ export default function SettingsPage() {
   const { data, isLoading, isError } = useBusiness()
   const { mutate: save, isPending: isSaving } = useUpdateBusiness()
   const { data: sub, isLoading: subLoading } = useSubscription()
+  const { mutate: cancelSub, isPending: isCancelPending } = useCancelSubscription()
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+
+  function handleConfirmCancel() {
+    cancelSub(undefined, {
+      onSuccess: () => {
+        toast.success('Auto-renewal disabled. Access continues until your current period ends.')
+        setShowCancelConfirm(false)
+      },
+      onError: () => {
+        toast.error('Could not cancel the subscription. Please try again or contact support.')
+      },
+    })
+  }
 
   const business = data?.data ?? data
 
@@ -230,6 +247,30 @@ export default function SettingsPage() {
                       )}
                     </div>
 
+                    {sub && sub.subscription_type !== 'trial' && !sub.is_expired && (
+                      sub.auto_renew === false ? (
+                        <div style={{ marginTop: 20 }}>
+                          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                            Subscription cancelled — access continues until {formatDate(sub.subscription_end_at)}
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: 20 }}>
+                          <button
+                            type="button"
+                            className="sb-btn-danger-ghost"
+                            onClick={() => setShowCancelConfirm(true)}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <circle cx="12" cy="12" r="9" />
+                              <path d="M8 8l8 8M16 8l-8 8" />
+                            </svg>
+                            Cancel subscription
+                          </button>
+                        </div>
+                      )
+                    )}
+
                     <Button variant="primary" onClick={() => navigate('/subscription')}>
                       View all plans
                     </Button>
@@ -396,6 +437,18 @@ export default function SettingsPage() {
           )}
         </div>
       </BentoCard>
+
+      <ConfirmDialog
+        open={showCancelConfirm}
+        onClose={() => setShowCancelConfirm(false)}
+        onConfirm={handleConfirmCancel}
+        title="Cancel subscription?"
+        message="Auto-renewal will be turned off. You'll keep full access until your current billing period ends, then your account will move to the free trial limits."
+        confirmText="Cancel subscription"
+        cancelText="Keep subscription"
+        variant="danger"
+        loading={isCancelPending}
+      />
     </>
   )
 }

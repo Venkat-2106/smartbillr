@@ -119,7 +119,7 @@ export default function LandingHero() {
                 display: 'flex', alignItems: 'center', gap: 8,
               }}
               onClick={() => {
-                const el = document.getElementById('features')
+                const el = document.getElementById('demo')
                 if (el) el.scrollIntoView({ behavior: 'smooth' })
               }}
             >

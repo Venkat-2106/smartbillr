@@ -1,0 +1,116 @@
+/* ─── LandingDemo.jsx — scripted animation keyframes & helpers ───────────
+   Self-contained. All animations are part of a scripted timeline; users who
+   prefer reduced motion (or are on small screens) get a static panel instead
+   (handled in the component), so nothing here needs a media query.
+   Shared tenant-app keyframes (fadeIn, spin, modal-in, backdrop-in) come
+   from the app's global index.css. */
+
+@keyframes demo-page-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes demo-toast-in {
+  from { opacity: 0; transform: translateY(-10px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes demo-toast-out {
+  to { opacity: 0; transform: translateY(-8px); }
+}
+
+@keyframes demo-dropdown-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Full-loop fade used to mask the seam when the timeline wraps. Keyed by
+   cycle in the component, so it restarts cleanly on every loop. */
+@keyframes demo-cycle-fade {
+  0%   { opacity: 1; }
+  4%   { opacity: 0; }
+  60%  { opacity: 0; }
+  97%  { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes demo-caret {
+  0%, 45%   { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+/* Newly created table row: slide in, then brief accent-50 flash. */
+@keyframes row-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes demo-row-bg {
+  0%   { background: var(--accent-50); }
+  100% { background: transparent; }
+}
+
+@keyframes demo-stock-pop {
+  0%   { transform: scale(1);    background: var(--accent-50); }
+  35%  { transform: scale(1.22); background: var(--accent-100); }
+  100% { transform: scale(1);    background: transparent; }
+}
+
+/* Soft expanding ring pulse — Paid badge, low-stock pills, live status. */
+@keyframes demo-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.35); }
+  70%  { box-shadow: 0 0 0 6px rgba(22, 163, 74, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+}
+
+@keyframes demo-pulse-danger {
+  0%   { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.35); }
+  70%  { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+}
+
+/* Quantity stepper: brief scale pop when a line-item qty changes. */
+@keyframes demo-qty-pop {
+  0%   { transform: scale(1.25); color: var(--accent-700); }
+  100% { transform: scale(1);    color: var(--accent-700); }
+}
+.demo-qty-pop {
+  display: inline-block;
+  animation: demo-qty-pop 0.25s ease both;
+}
+
+/* Blinking caret shown inside inputs while the scripted typing runs. */
+.demo-caret {
+  display: inline-block;
+  width: 1.5px;
+  height: 14px;
+  background: var(--accent-600);
+  margin-left: 2px;
+  flex-shrink: 0;
+  animation: demo-caret 0.9s step-end infinite;
+}
+
+/* Step 6 loop-out: the dark backdrop behind the shrinking app frame, and
+   the brand line that fades in below it before the cycle-fade restart. */
+@keyframes demo-loopout-bg {
+  0%   { opacity: 0; }
+  60%  { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes demo-loopout-brand {
+  0%, 55% { opacity: 0; transform: translateY(6px); }
+  100%    { opacity: 1; transform: translateY(0); }
+}
+
+.demo-row-new {
+  animation: row-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both,
+             demo-row-bg 1.8s ease-out 0.2s both;
+}
+
+.demo-stock-pop {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 6px;
+  animation: demo-stock-pop 1.6s ease-out 0.3s both;
+}

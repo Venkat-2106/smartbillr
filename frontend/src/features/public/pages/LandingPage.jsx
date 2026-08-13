@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import LandingNav from '../components/LandingNav'
 import LandingHero from '../components/LandingHero'
+import LandingDemo from '../components/LandingDemo'
 import LandingFeatures from '../components/LandingFeatures'
 import LandingWhy from '../components/LandingWhy'
 import LandingPreview from '../components/LandingPreview'
@@ -27,6 +28,7 @@ export default function LandingPage() {
       <LandingNav />
       <main>
         <LandingHero />
+        <LandingDemo />
         <LandingFeatures />
         <LandingWhy />
         <LandingPreview />

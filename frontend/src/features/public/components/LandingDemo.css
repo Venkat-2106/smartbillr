@@ -24,14 +24,19 @@
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* Full-loop fade used to mask the seam when the timeline wraps. Keyed by
-   cycle in the component, so it restarts cleanly on every loop. */
-@keyframes demo-cycle-fade {
-  0%   { opacity: 1; }
-  4%   { opacity: 0; }
-  60%  { opacity: 0; }
-  97%  { opacity: 0; }
-  100% { opacity: 1; }
+/* Loop seam — the inner app frame cross-fades out at the end of the
+   loop-out step and back in at the top of the Customers step, so the wrap
+   reads as a scene change instead of a hard black mask. The component skips
+   both on the very first reveal (cycle 0), so nothing dark ever precedes
+   the first scroll-into-view. */
+@keyframes demo-frame-out {
+  0%, 84% { opacity: 1; }
+  100%    { opacity: 0; }
+}
+
+@keyframes demo-frame-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 @keyframes demo-caret {

@@ -6,15 +6,15 @@
 // visual replica of the real SmartBillr screens built with the real design
 // tokens, copy, and field labels, driven by a pure JS timeline.
 //
-// FULL LOOP (6 steps, ~36s):
-//   1. Customers (0–10s)    → create "Ravi Kumar" via the real field order
-//   2. Products (10–21.5s)  → create "Basmati Rice 5kg" via the real field order
-//   3. Create Sale (21.5–27.5s) → line item for the new product, qty bump,
+// FULL LOOP (6 steps, ~40s):
+//   1. Customers (0–11s)      → create "Ravi Kumar" via the real field order
+//   2. Products (11–23.5s)    → create "Basmati Rice 5kg" via the real field order
+//   3. Create Sale (23.5–31s) → line item for the new product, qty bump,
 //      live running totals + tax breakdown, Paid marker, save → toast
-//   4. Stock sync (27.5–30s)  → counts tick down for what was sold, low-stock alert
-//   5. Dashboard (30–33.6s) → revenue metric ticks up + SVG chart draws itself
-//   6. Loop-out (33.6–35.8s) → app frame zooms out ("camera pull-back"), then
-//      the dark fade masks the seam and the loop restarts
+//   4. Stock sync (31–34s)    → counts tick down for what was sold, low-stock alert
+//   5. Dashboard (34–37.6s)   → revenue metric ticks up + SVG chart draws itself
+//   6. Loop-out (37.6–39.8s)  → app frame zooms out ("camera pull-back"), then
+//      a quick content cross-fade masks the seam and the loop restarts
 //
 // Reduced motion / small screens → static summary panel (no animation).
 // No new runtime dependencies — plain React + CSS keyframes.
@@ -93,7 +93,7 @@ const PRODUCT_SEED = [
   { key: 'p3', name: 'Toothpaste 150g', barcode: '8904445556667', category: 'Personal Care', stock: '60 pcs', low: false, sell: '₹65', mrp: '₹75', tax: '18%' },
   { key: 'p4', name: 'Detergent 2kg', barcode: '8907778889990', category: 'Household', stock: '2 pcs', low: true, sell: '₹310', mrp: '₹340', tax: '18%' },
 ]
-const NEW_PRODUCT = { key: 'new-product', name: 'Basmati Rice 5kg', barcode: '8901234567890', category: 'Groceries', stock: '50 kg', low: false, sell: '₹620', mrp: '₹680', tax: '5%' }
+const NEW_PRODUCT = { key: 'new-product', name: 'Basmati Rice 5kg', barcode: '8904222333446', category: 'Groceries', stock: '50 kg', low: false, sell: '₹620', mrp: '₹680', tax: '5%' }
 
 const PRODUCT_METRICS = [
   { label: 'Total Products', value: '86' },
@@ -169,17 +169,23 @@ function useViewportWidth() {
 }
 
 /* Master loop: runs a requestAnimationFrame clock, flips `step` at each
-   duration boundary and bumps `cycle` when the full loop wraps. */
-function useDemoLoop(steps, reduced) {
+   duration boundary and bumps `cycle` when the full loop wraps.
+   `started` gates the clock until the section's first scroll-into-view (an
+   IntersectionObserver in the main component drives it) and `paused` halts
+   it while the section is scrolled out of view. The accumulated elapsed
+   time survives both, so resuming never restarts the timeline mid-story. */
+function useDemoLoop(steps, started, paused) {
   const [state, setState] = useState({ step: 0, cycle: 0 })
   const stateRef = useRef(state)
+  const elapsedAtPauseRef = useRef(0)
+  const stepElapsedRef = useRef(0)
 
   useEffect(() => {
     stateRef.current = state
   }, [state])
 
   useEffect(() => {
-    if (reduced) return
+    if (!started || paused) return
 
     const durations = steps.map((s) => s.duration)
     const total = durations.reduce((a, b) => a + b, 0)
@@ -187,52 +193,63 @@ function useDemoLoop(steps, reduced) {
     let acc = 0
     durations.forEach((d) => { boundaries.push(acc); acc += d })
 
-    let start = performance.now()
+    let elapsed = elapsedAtPauseRef.current
     let raf
+    let last = performance.now()
 
     const tick = (now) => {
-      const elapsed = (now - start) / 1000
+      elapsed += (now - last) / 1000
+      last = now
 
       if (elapsed >= total) {
-        start = now
+        elapsed -= total
         const next = { step: 0, cycle: stateRef.current.cycle + 1 }
         stateRef.current = next
         setState(next)
-        raf = requestAnimationFrame(tick)
-        return
+      } else {
+        let step = 0
+        for (let i = 0; i < boundaries.length; i++) {
+          if (elapsed >= boundaries[i]) step = i
+        }
+        if (step !== stateRef.current.step) {
+          const next = { ...stateRef.current, step }
+          stateRef.current = next
+          setState(next)
+        }
       }
 
-      let step = 0
-      for (let i = 0; i < boundaries.length; i++) {
-        if (elapsed >= boundaries[i]) step = i
-      }
-      if (step !== stateRef.current.step) {
-        const next = { ...stateRef.current, step }
-        stateRef.current = next
-        setState(next)
-      }
+      stepElapsedRef.current = elapsed - boundaries[stateRef.current.step]
       raf = requestAnimationFrame(tick)
     }
 
     raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [steps, reduced])
+    return () => {
+      cancelAnimationFrame(raf)
+      elapsedAtPauseRef.current = elapsed
+    }
+  }, [steps, started, paused])
 
-  return state
+  return { ...state, stepElapsedRef }
 }
 
 /* Scripted cursor: each waypoint positions the cursor (by DOM target id or
    % of stage), sets hover state, and optionally fires a press. Positions are
-   computed from getBoundingClientRect so they survive the stage's scale. */
-function useDemoCursor(path, stepKey, stageRef) {
+   computed from getBoundingClientRect so they survive the stage's scale.
+   While the section is off-screen (`paused`) no timers run; on resume the
+   cursor is placed at the furthest waypoint already reached and only the
+   remaining ones are scheduled (`stepElapsedRef` carries the current step
+   position across the pause). */
+function useDemoCursor(path, stepKey, stageRef, paused, stepElapsedRef) {
   const [pos, setPos] = useState(null)
   const [hoverId, setHoverId] = useState(null)
   const [pressId, setPressId] = useState(null)
 
   useEffect(() => {
     if (!path || path.length === 0) return
+    if (paused) return
 
     const timers = []
+    const t = stepElapsedRef.current
 
     const moveTo = (p) => {
       const stage = stageRef.current
@@ -258,13 +275,24 @@ function useDemoCursor(path, stepKey, stageRef) {
       if (px != null && py != null) setPos({ x: px, y: py })
     }
 
-    timers.push(window.setTimeout(() => moveTo(path[0]), 60))
+    let reached = null
+    for (let i = 0; i < path.length; i++) {
+      if (path[i].at <= t) reached = path[i]
+      else break
+    }
+    const seed = reached || path[0]
+    timers.push(window.setTimeout(() => {
+      moveTo(seed)
+      setHoverId(seed.hover || null)
+      setPressId(null)
+    }, 60))
 
     path.forEach((p) => {
+      if (p.at <= t) return
       timers.push(window.setTimeout(() => {
         const stage = stageRef.current
         if (p.target && stage) {
-          stage.dispatchEvent(new CustomEvent('demo:reveal', { detail: { id: p.target } }))
+          stage.dispatchEvent(new CustomEvent('demo:reveal', { bubbles: true, detail: { id: p.target } }))
         }
         moveTo(p)
         setHoverId(p.hover || null)
@@ -276,11 +304,11 @@ function useDemoCursor(path, stepKey, stageRef) {
             timers.push(window.setTimeout(() => setPressId(null), 200))
           }, PRESS_DELAY))
         }
-      }, p.at * 1000))
+      }, (p.at - t) * 1000))
     })
 
     return () => timers.forEach(clearTimeout)
-  }, [stepKey, path, stageRef])
+  }, [stepKey, path, stageRef, paused, stepElapsedRef])
 
   return { pos, hoverId, pressId }
 }
@@ -1076,7 +1104,7 @@ function ProductsDemoPage({ cursor }) {
             <TypedField
               id="product-barcode"
               label="Barcode"
-              value="8901234567890"
+              value={NEW_PRODUCT.barcode}
               placeholder="e.g. 8901234567890"
               cursor={cursor}
               speed={64}
@@ -1342,7 +1370,7 @@ function DashboardPage() {
         </div>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, fontWeight: 600, color: C.textSecondary, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 99, padding: '4px 10px', animation: 'fadeIn 0.3s ease 0.15s both' }}>
           <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V5m0 12a2 2 0 002 2h2a2 2 0 002-2v-6a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
-          This month · Aug
+          Today · 13 Aug
         </span>
       </div>
 
@@ -1447,19 +1475,17 @@ const DASHBOARD_CURSOR = [
 ]
 
 /* ═══════════════════════════════════════════════════════════════
-   Timeline — the full 6-step loop (~35.8s). Additive: each step is a
-   page + a scripted cursor path; durations sum to LOOP_MS.
+   Timeline — the full 6-step loop (~40s). Additive: each step is a
+   page + a scripted cursor path.
    ═══════════════════════════════════════════════════════════════ */
 const DEMO_STEPS = [
-  { id: 'customers', duration: 10.0, nav: 'customers', pageTitle: 'Customers', Page: CustomersDemoPage, cursor: CUSTOMER_CURSOR },
-  { id: 'products', duration: 11.5, nav: 'products', pageTitle: 'Products', Page: ProductsDemoPage, cursor: PRODUCT_CURSOR },
-  { id: 'sale', duration: 6.0, nav: 'sales', pageTitle: 'Create Sale', Page: SaleDemoPage, cursor: SALE_CURSOR },
-  { id: 'stock', duration: 2.5, nav: 'stock', pageTitle: 'Stock', Page: StockDemoPage, cursor: STOCK_CURSOR },
+  { id: 'customers', duration: 11.0, nav: 'customers', pageTitle: 'Customers', Page: CustomersDemoPage, cursor: CUSTOMER_CURSOR },
+  { id: 'products', duration: 12.5, nav: 'products', pageTitle: 'Products', Page: ProductsDemoPage, cursor: PRODUCT_CURSOR },
+  { id: 'sale', duration: 7.5, nav: 'sales', pageTitle: 'Create Sale', Page: SaleDemoPage, cursor: SALE_CURSOR },
+  { id: 'stock', duration: 3.0, nav: 'stock', pageTitle: 'Stock', Page: StockDemoPage, cursor: STOCK_CURSOR },
   { id: 'dashboard', duration: 3.6, nav: 'dashboard', pageTitle: 'Dashboard', Page: DashboardPage, cursor: DASHBOARD_CURSOR },
   { id: 'loop-out', duration: 2.2, nav: 'dashboard', pageTitle: 'Dashboard', Page: DashboardPage, cursor: [] },
 ]
-
-const LOOP_MS = DEMO_STEPS.reduce((a, s) => a + s.duration, 0) * 1000
 
 const EYEBROW = {
   display: 'inline-block', fontSize: '0.7rem', fontWeight: 700,
@@ -1468,7 +1494,7 @@ const EYEBROW = {
   background: 'var(--accent-50)', border: '1px solid var(--accent-100)',
 }
 
-/* Static fallback — reduced-motion users and sub-900px viewports. */
+/* Static fallback — reduced-motion users and sub-768px viewports. */
 function StaticPanel() {
   return (
     <section id="demo" data-accent="purple" style={{ padding: '92px 24px 104px', background: 'var(--bg-page)' }}>
@@ -1517,21 +1543,58 @@ function StaticPanel() {
 export default function LandingDemo() {
   const reduced = useReducedMotion()
   const vw = useViewportWidth()
+  const sectionRef = useRef(null)
   const stageRef = useRef(null)
-  const loop = useDemoLoop(DEMO_STEPS, reduced)
+  const [revealed, setRevealed] = useState(false)
+  const [inView, setInView] = useState(false)
+
+  const scale = reduced || vw < 768 ? null : Math.min(1, (vw - 48) / 1100)
+  const animated = scale !== null
+  const started = revealed && animated
+  const paused = !inView
+
+  // Start the timeline (from step 0) the first time the section enters the
+  // viewport, and pause/resume the RAF loop while it scrolls in and out.
+  // Mirrors the IntersectionObserver pattern used in LandingPreview.jsx.
+  useEffect(() => {
+    if (!animated) return
+    const el = sectionRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        setInView(entry.isIntersecting)
+        if (entry.isIntersecting) setRevealed(true)
+      },
+      { threshold: 0 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [animated])
+
+  const loop = useDemoLoop(DEMO_STEPS, started, paused)
 
   const step = reduced ? 0 : loop.step
   const cycle = reduced ? 0 : loop.cycle
   const S = DEMO_STEPS[step]
   const stepKey = `${step}-${cycle}`
-  const cursor = useDemoCursor(S.cursor, stepKey, stageRef)
-
-  const scale = reduced || vw < 900 ? null : Math.min(1, (vw - 48) / 1100)
+  const cursor = useDemoCursor(S.cursor, stepKey, stageRef, paused, loop.stepElapsedRef)
 
   if (scale === null) return <StaticPanel />
 
+  // Loop seam: on the loop-out step the app frame fades out (masking the
+  // wrap), then fades back in at the top of the Customers step. Skipped on
+  // the first-ever reveal (cycle 0, step 0) so no dark/empty stage ever
+  // shows before a visitor has seen any content.
+  const frameAnim =
+    S.id === 'loop-out'
+      ? `demo-frame-out ${S.duration}s ease-in-out forwards`
+      : cycle > 0 && step === 0
+        ? 'demo-frame-in 0.4s ease-out both'
+        : undefined
+
   return (
-    <section id="demo" data-accent="purple" style={{ padding: '92px 24px 104px', background: 'var(--bg-page)' }}>
+    <section id="demo" data-accent="purple" ref={sectionRef} style={{ padding: '92px 24px 104px', background: 'var(--bg-page)' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 44 }}>
           <span style={EYEBROW}>See SmartBillr in Action</span>
@@ -1558,6 +1621,7 @@ export default function LandingDemo() {
               transform: S.id === 'loop-out' ? 'scale(0.58)' : 'scale(1)',
               transformOrigin: 'center 62%',
               transition: `transform 1.4s ${EASE}`,
+              ...(frameAnim ? { animation: frameAnim } : {}),
             }}>
               <BrowserChrome />
               <div style={{ display: 'flex', height: APP_H }}>
@@ -1576,14 +1640,6 @@ export default function LandingDemo() {
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-300)', letterSpacing: '-0.3px' }}>SmartBillr — billing, inventory &amp; reports in one app</span>
               </div>
             )}
-            <div
-              key={loop.cycle}
-              style={{
-                position: 'absolute', inset: 0, zIndex: 70, pointerEvents: 'none',
-                background: '#0F172A', borderRadius: 16,
-                animation: `demo-cycle-fade ${LOOP_MS}ms linear both`,
-              }}
-            />
           </div>
         </div>
       </div>

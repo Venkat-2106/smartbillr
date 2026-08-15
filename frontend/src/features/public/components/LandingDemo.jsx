@@ -16,7 +16,8 @@
 //   6. Loop-out (37.6–39.8s)  → app frame zooms out ("camera pull-back"), then
 //      a quick content cross-fade masks the seam and the loop restarts
 //
-// Reduced motion / small screens → static summary panel (no animation).
+// Reduced motion → static summary panel (no animation). The animated stage
+// scales to fit every viewport, so it also plays on small screens.
 // No new runtime dependencies — plain React + CSS keyframes.
 
 import { useEffect, useRef, useState } from 'react'
@@ -1494,7 +1495,7 @@ const EYEBROW = {
   background: 'var(--accent-50)', border: '1px solid var(--accent-100)',
 }
 
-/* Static fallback — reduced-motion users and sub-768px viewports. */
+/* Static fallback — reduced-motion users. */
 function StaticPanel() {
   return (
     <section id="demo" data-accent="purple" style={{ padding: '92px 24px 104px', background: 'var(--bg-page)' }}>
@@ -1548,7 +1549,7 @@ export default function LandingDemo() {
   const [revealed, setRevealed] = useState(false)
   const [inView, setInView] = useState(false)
 
-  const scale = reduced || vw < 768 ? null : Math.min(1, (vw - 48) / 1100)
+  const scale = reduced ? null : Math.min(1, (vw - 48) / 1100)
   const animated = scale !== null
   const started = revealed && animated
   const paused = !inView

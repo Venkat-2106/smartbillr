@@ -1,7 +1,7 @@
 /* ─── LandingDemo.jsx — scripted animation keyframes & helpers ───────────
    Self-contained. All animations are part of a scripted timeline; users who
-   prefer reduced motion (or are on small screens) get a static panel instead
-   (handled in the component), so nothing here needs a media query.
+   prefer reduced motion get a static panel instead (handled in the component),
+   so nothing here needs a media query.
    Shared tenant-app keyframes (fadeIn, spin, modal-in, backdrop-in) come
    from the app's global index.css. */
 

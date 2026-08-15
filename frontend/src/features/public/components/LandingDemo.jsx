@@ -1595,7 +1595,7 @@ export default function LandingDemo() {
         : undefined
 
   return (
-    <section id="demo" data-accent="purple" ref={sectionRef} style={{ padding: '92px 24px 104px', background: 'var(--bg-page)' }}>
+    <section id="demo" data-accent="purple" ref={sectionRef} style={{ padding: '92px 24px 104px', background: 'var(--bg-page)', overflow: 'hidden' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 44 }}>
           <span style={EYEBROW}>See SmartBillr in Action</span>

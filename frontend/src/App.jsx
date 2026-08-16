@@ -1,3 +1,4 @@
+import { SpeedInsights } from '@vercel/speed-insights/react'
 import AppRouter from './app/router'
 import ErrorBoundary from './shared/components/ErrorBoundary'
 
@@ -8,6 +9,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AppRouter />
+      <SpeedInsights />
     </ErrorBoundary>
   )
 }

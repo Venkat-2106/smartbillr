@@ -6,6 +6,8 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 //   and beforeunload handler when form is dirty. Prevents accidental data loss.
 //   See UI_UX_AUDIT_REPORT.md
 import { useNavigate } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'react-hot-toast';
 import { Button, FormField, Modal } from '../../../shared/components';
 import { selectStyle } from '../../../shared/components/FormField';
 import { formatCurrency } from '../../../shared/utils/formatCurrency';
@@ -21,6 +23,8 @@ import useCreateSale from '../hooks/useCreateSale';
 import { useShortcut } from '../../../shared/hooks/useShortcut';
 import useAuthStore from '../../../store/authStore';
 import { usePermissions } from '../../../shared/hooks/usePermissions';
+import SaleDetailDrawer from '../components/SaleDetailDrawer';
+import { updateSaleStatus } from '../api/salesApi';
 
 const EMPTY_ARRAY = [];
 
@@ -38,7 +42,7 @@ const CARD_TITLE_STYLE = {
   color: 'var(--text-primary)',
 };
 
-export default function CreateSalePage() {
+export default function CreateSalePage({ standalone = false }) {
   const navigate = useNavigate();
   const business  = useAuthStore(s => s.business);
   const country   = business?.business_country_code || 'IN';
@@ -49,6 +53,26 @@ export default function CreateSalePage() {
   // stock.  Staff see the StockOverrideModal but with a "ask a manager" message
   // and no override button.  Backend also enforces this (sale.py create_sale).
   const canOverrideStock = isAdmin || isManager;
+
+  // ── Standalone mode: show invoice drawer + reset form after creation ──
+  const [createdSale, setCreatedSale] = useState(null);
+  const queryClient = useQueryClient();
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status, paid_amount }) => updateSaleStatus(id, status, paid_amount),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['sale', variables.id] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-trend'] });
+      const msg = data?.data?.note || 'Payment status updated';
+      toast.success(msg);
+    },
+    onError: (err) =>
+      toast.error(err?.response?.data?.message || 'Failed to update status'),
+  });
+
+  const resetFormRef = useRef(null);
+
   const {
     customers, loadingCust,
     customerId, handleCustomerChange,
@@ -72,7 +96,18 @@ export default function CreateSalePage() {
     handleSubmit, isPending,
     parsedPaidAmount,
     shouldResetRef, resetForm,
-  } = useCreateSale();
+  } = useCreateSale(standalone
+    ? { onCreated: (data) => {
+        setCreatedSale({
+          sales_id:   data.sales_id,
+          invoice_no: data.invoice_no,
+          _autoPrint: data.autoPrint,
+        });
+        resetFormRef.current?.();
+      }}
+    : undefined
+  );
+  useEffect(() => { resetFormRef.current = resetForm; }, [resetForm]);
 
   const [addItemHovered, setAddItemHovered] = useState(false);
   const customerRef = useRef(null);
@@ -248,7 +283,7 @@ export default function CreateSalePage() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
-            onClick={() => { if (confirmLeave()) navigate('/sales') }}
+            onClick={() => { if (confirmLeave()) { standalone ? window.close() : navigate('/sales') } }}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
               background: 'none', border: 'none', cursor: 'pointer',
@@ -272,7 +307,7 @@ export default function CreateSalePage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <Button variant="ghost" onClick={() => { if (confirmLeave()) navigate('/sales') }} disabled={isPending}>
+          <Button variant="ghost" onClick={() => { if (confirmLeave()) { standalone ? window.close() : navigate('/sales') } }} disabled={isPending}>
             Cancel
           </Button>
           <Button variant="primary" onClick={handleSubmit} loading={isPending} disabled={!isValid}>
@@ -412,12 +447,12 @@ export default function CreateSalePage() {
             {/* Table header — flexShrink: 0 keeps it pinned above the scroll area */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 90px 100px 72px 110px 72px 100px 28px',
+              gridTemplateColumns: '32px 1fr 90px 100px 72px 110px 72px 100px 28px',
               gap: 8, paddingBottom: 8,
               borderBottom: '1px solid var(--border)', marginBottom: 4,
               flexShrink: 0,
             }}>
-              {['Product', 'Barcode', 'Qty', 'Unit Price', `${taxLabel} %`, 'Stock', 'Total', ''].map((h, i) => (
+              {['#', 'Product', 'Barcode', 'Qty', 'Unit Price', `${taxLabel} %`, 'Stock', 'Total', ''].map((h, i) => (
                 <span key={i} style={{
                   fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
                   textTransform: 'uppercase', letterSpacing: '0.07em',
@@ -439,9 +474,10 @@ export default function CreateSalePage() {
               marginRight: -8,
               paddingRight: 8,
             }}>
-              {items.map((item) => (
+              {items.map((item, index) => (
                 <SaleLineItemRow
                   key={item._id}
+                  serial={index + 1}
                   item={item}
                   isOpen={!!openDropMap[item._id]}
                   searchText={searchMap[item._id] || ''}
@@ -566,30 +602,14 @@ export default function CreateSalePage() {
         </div>
       </div>
 
-      {/* ── Bottom action bar ──────────────────────────────────────── */}
-      {/* flexShrink: 0 — fixed footer within the flex layout.
-          CSS class makes it sticky at ≤900px for easy access on scroll. */}
-      <div className="create-sale-bottom-bar" style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8,
-        paddingTop: 16, paddingBottom: 8, flexWrap: 'wrap',
-        flexShrink: 0,
-      }}>
-        <Button variant="ghost" onClick={() => { if (confirmLeave()) navigate('/sales') }} disabled={isPending}>
-          Cancel
-        </Button>
-        <Button variant="primary" onClick={handleSubmit} loading={isPending} disabled={!isValid}>
-          Save
-        </Button>
-        <Button variant="secondary" onClick={handleSaveAndNew} loading={isPending} disabled={!isValid}>
-          Save & New
-        </Button>
-        <Button variant="secondary" onClick={handleSaveAndPrint} loading={isPending} disabled={!isValid}>
-          Save & Print
-        </Button>
-        <Button variant="secondary" onClick={() => setPreviewOpen(true)}>
-          Preview
-        </Button>
-      </div>
+      {/* ── Standalone: invoice detail drawer ──────────────────────── */}
+      {standalone && createdSale && (
+        <SaleDetailDrawer
+          sale={createdSale}
+          onClose={() => setCreatedSale(null)}
+          statusMutation={statusMutation}
+        />
+      )}
     </div>
   );
 }

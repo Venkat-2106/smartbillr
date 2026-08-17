@@ -22,6 +22,8 @@ import {
   buildPrintHeader,
   buildPrintWatermark,
   buildPrintFooter,
+  buildPrintItemTableHeader,
+  buildPrintItemTableRow,
   escapeHTML,
   triggerPrint,
 } from '../../../shared/utils/printUtils'
@@ -142,15 +144,16 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
       return ''
     })()
 
-    const itemRows = items.map((item, i) => `
-      <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'};page-break-inside:avoid;">
+    const itemRows = items.map((item, i) => {
+      const cellsHtml = `
         <td style="padding:5px 5px;font-size:10.5px;color:#111827;word-break:break-word;">${escapeHTML(item.prod_name || 'Product')}</td>
         <td style="padding:5px 5px;text-align:center;font-size:10px;color:#374151;white-space:nowrap;">${item.pur_item_qty}</td>
         <td style="padding:5px 5px;text-align:right;font-size:10px;color:#374151;white-space:nowrap;">${formatCurrency(item.item_unit_price, country)}</td>
         <td style="padding:5px 5px;text-align:right;font-size:10px;color:#374151;white-space:nowrap;">${Number(item.item_tax_total) > 0 ? formatCurrency(item.item_tax_total, country) : '—'}</td>
         <td style="padding:5px 5px;text-align:right;font-size:10.5px;font-weight:700;color:#111827;white-space:nowrap;">${formatCurrency(item.item_total_with_tax || item.item_subtotal || 0, country)}</td>
-      </tr>
-    `).join('')
+      `
+      return buildPrintItemTableRow(i, cellsHtml, i % 2 === 0);
+    }).join('')
 
     return `
       ${buildPrintWatermark()}
@@ -176,13 +179,13 @@ export default function PurchaseDetailDrawer({ purId, onClose, onUpdateStatus, i
 
       <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
         <thead>
-          <tr style="border-bottom:2px solid #111827;background:#f9fafb;">
-            <th style="text-align:left;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Item</th>
-            <th style="text-align:center;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Qty</th>
-            <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Rate</th>
-            <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">${getTaxLabel(country, isGstRegistered)}</th>
-            <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Total</th>
-          </tr>
+          ${buildPrintItemTableHeader([
+            { label: 'Item' },
+            { label: 'Qty', align: 'center' },
+            { label: 'Rate', align: 'right' },
+            { label: getTaxLabel(country, isGstRegistered), align: 'right' },
+            { label: 'Total', align: 'right' },
+          ])}
         </thead>
         <tbody>${itemRows}</tbody>
       </table>

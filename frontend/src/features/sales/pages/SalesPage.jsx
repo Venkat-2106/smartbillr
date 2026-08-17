@@ -265,7 +265,7 @@ export default function SalesPage() {
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <ExportButton onFetch={handleExport} filename="sales" columns={getSalesCsvColumns(country, isGstRegistered)} />
             {canCreate && (
-              <Button variant="primary" onClick={() => navigate('/sales/new')} data-shortcut="new">
+              <Button variant="primary" onClick={() => window.open('/sales/new-tab', '_blank', 'noopener,noreferrer')} data-shortcut="new">
                 + New Invoice
               </Button>
             )}
@@ -393,7 +393,7 @@ export default function SalesPage() {
                 Clear filters
               </Button>
             ) : canCreate ? (
-              <Button variant="primary" size="sm" onClick={() => navigate('/sales/new')}>
+              <Button variant="primary" size="sm" onClick={() => window.open('/sales/new-tab', '_blank', 'noopener,noreferrer')}>
                 New Sale
               </Button>
             ) : undefined}

@@ -411,6 +411,8 @@ export function buildPrintTable(columns, rows, emptyMessage = 'No records found.
     return `<p style="font-size: 12.5px; color: #9ca3af; padding: 16px 0;">${emptyMessageHTML}</p>`;
   }
 
+  const serialTh = `<th style="text-align:center;padding:5px 5px;font-size:9px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.04em;border-bottom:2px solid #e5e7eb;white-space:nowrap;width:32px;">#</th>`;
+
   const headerCells = columns.map(col => `
     <th style="
       text-align: ${col.align || 'left'};
@@ -426,6 +428,8 @@ export function buildPrintTable(columns, rows, emptyMessage = 'No records found.
   `).join('');
 
   const dataRows = rows.map((row, i) => {
+    const serialTd = `<td style="padding:4px 5px;text-align:center;font-size:10px;color:#6b7280;border-bottom:1px solid #f3f4f6;">${i + 1}</td>`;
+
     const cells = columns.map(col => {
       const raw = row[col.key];
       const val = col.format ? col.format(raw, row) : (raw ?? '—');
@@ -445,6 +449,7 @@ export function buildPrintTable(columns, rows, emptyMessage = 'No records found.
 
     return `
       <tr style="background: ${i % 2 === 0 ? '#ffffff' : '#f9fafb'};">
+        ${serialTd}
         ${cells}
       </tr>
     `;
@@ -453,11 +458,50 @@ export function buildPrintTable(columns, rows, emptyMessage = 'No records found.
   return `
     <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
       <thead>
-        <tr>${headerCells}</tr>
+        <tr>${serialTh}${headerCells}</tr>
       </thead>
       <tbody>${dataRows}</tbody>
     </table>
   `;
+}
+
+// ── Invoice item table helpers ────────────────────────────────────────────────
+
+/**
+ * Builds a print table header row for invoice line items.
+ * Always includes a `#` serial-number column as the first column.
+ *
+ * @param {Array<{label: string, align?: string}>} columns - Remaining columns after #
+ * @returns {string} HTML string for a <tr> inside <thead>
+ */
+export function buildPrintItemTableHeader(columns) {
+  const serialTh = `<th style="text-align:center;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">#</th>`
+  const dataThs = columns.map(col => `
+    <th style="text-align:${col.align || 'left'};padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">${escapeHTML(col.label)}</th>
+  `).join('')
+  return `
+    <tr style="border-bottom:2px solid #111827;background:#f9fafb;">
+      ${serialTh}${dataThs}
+    </tr>
+  `
+}
+
+/**
+ * Builds a single line-item row for a print invoice table.
+ * First cell is the 1-based serial number.
+ *
+ * @param {number} index  - 0-based row index (serial number = index + 1)
+ * @param {string} cellsHtml - Pre-built <td> HTML for the remaining columns
+ * @param {boolean} isEven - true when index is even (white background)
+ * @returns {string} HTML string for a single <tr>
+ */
+export function buildPrintItemTableRow(index, cellsHtml, isEven) {
+  return `
+    <tr style="background:${isEven ? '#fff' : '#f9fafb'};page-break-inside:avoid;">
+      <td style="padding:5px 5px;text-align:center;font-size:10px;color:#6b7280;">${index + 1}</td>
+      ${cellsHtml}
+    </tr>
+  `
 }
 
 // ── Main trigger function ────────────────────────────────────────────────────

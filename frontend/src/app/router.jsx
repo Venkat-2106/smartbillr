@@ -2,6 +2,7 @@ import React, { Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Spinner } from '../shared/components'
 import DashboardLayout from './layouts/DashboardLayout'
+import StandaloneLayout from './layouts/StandaloneLayout'
 import LoginPage from '../features/auth/pages/LoginPage'
 import SignupPage from '../features/auth/pages/SignupPage'
 import ResetPasswordPage from '../features/auth/pages/ResetPasswordPage'
@@ -75,6 +76,17 @@ export default function AppRouter() {
         >
           <Route path="/admin/businesses" element={<AdminBusinessesPage />} />
           <Route path="/admin/businesses/:id" element={<AdminBusinessDetailPage />} />
+        </Route>
+
+        {/* Standalone routes — minimal header, no sidebar */}
+        <Route
+          element={
+            <ProtectedRoute permission="sales.create">
+              <StandaloneLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/sales/new-tab" element={<CreateSalePage standalone />} />
         </Route>
 
         {/* Protected routes — all inside DashboardLayout */}

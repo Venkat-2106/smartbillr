@@ -22,7 +22,7 @@ const newItem = () => ({
   tax_rate:   0,
 });
 
-export default function useCreateSale() {
+export default function useCreateSale({ onCreated } = {}) {
   const navigate    = useNavigate();
   const queryClient = useQueryClient();
   const user        = useAuthStore((s) => s.user);
@@ -247,13 +247,17 @@ export default function useCreateSale() {
         toast.success(`Invoice${inv ? ` ${inv}` : ''} created! Starting new invoice.`);
       } else {
         toast.success(`Invoice${inv ? ` ${inv}` : ''} created successfully!`);
-        navigate('/sales', {
-          state: {
-            openInvoice: data?.sales_id,
-            autoPrint:   autoPrint,
-            invoiceNo:   inv,
-          },
-        });
+        if (onCreated) {
+          onCreated({ sales_id: data?.sales_id, invoice_no: inv, autoPrint });
+        } else {
+          navigate('/sales', {
+            state: {
+              openInvoice: data?.sales_id,
+              autoPrint:   autoPrint,
+              invoiceNo:   inv,
+            },
+          });
+        }
       }
     },
     onError: (err) => {

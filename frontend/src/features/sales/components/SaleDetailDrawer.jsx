@@ -28,6 +28,8 @@ import {
   buildPrintHeader,
   buildPrintWatermark,
   buildPrintFooter,
+  buildPrintItemTableHeader,
+  buildPrintItemTableRow,
   escapeHTML,
   triggerPrint,
 } from '../../../shared/utils/printUtils';
@@ -134,39 +136,25 @@ function buildInvoiceHTML(
       ? `<td style="padding:5px 5px;text-align:right;font-size:9.5px;color:#059669;font-weight:600;white-space:nowrap;">${discAmt != null ? `−${formatCurrency(discAmt, country)}` : '—'}</td>`
       : '';
 
-    return `
-      <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'};page-break-inside:avoid;">
-        <td style="padding:5px 5px;font-size:10.5px;color:#111827;word-break:break-word;">${escapeHTML(item.product_name || 'Product')}</td>
-        <td style="padding:5px 5px;text-align:center;font-size:10px;color:#374151;white-space:nowrap;">${qty}</td>
-        ${mrpCell}
-        <td style="padding:5px 5px;text-align:right;font-size:10px;color:#374151;white-space:nowrap;">${formatCurrency(unitPrice, country)}</td>
-        <td style="padding:5px 5px;text-align:right;font-size:10px;color:#374151;white-space:nowrap;">${Number(item.item_tax_total) > 0 ? formatCurrency(item.item_tax_total, country) : '—'}</td>
-        ${discCell}
-        <td style="padding:5px 5px;text-align:right;font-size:10.5px;font-weight:700;color:#111827;white-space:nowrap;">${formatCurrency(item.item_total_with_tax, country)}</td>
-      </tr>
-    `;
+    const cellsHtml = `
+      <td style="padding:5px 5px;font-size:10.5px;color:#111827;word-break:break-word;">${escapeHTML(item.product_name || 'Product')}</td>
+      <td style="padding:5px 5px;text-align:center;font-size:10px;color:#374151;white-space:nowrap;">${qty}</td>
+      ${mrpCell}
+      <td style="padding:5px 5px;text-align:right;font-size:10px;color:#374151;white-space:nowrap;">${formatCurrency(unitPrice, country)}</td>
+      <td style="padding:5px 5px;text-align:right;font-size:10px;color:#374151;white-space:nowrap;">${Number(item.item_tax_total) > 0 ? formatCurrency(item.item_tax_total, country) : '—'}</td>
+      ${discCell}
+      <td style="padding:5px 5px;text-align:right;font-size:10.5px;font-weight:700;color:#111827;white-space:nowrap;">${formatCurrency(item.item_total_with_tax, country)}</td>
+    `
+    return buildPrintItemTableRow(i, cellsHtml, i % 2 === 0);
   }).join('');
 
   // MRP FEATURE: table header changes when MRP columns are shown
-  const tableHeader = showMRP ? `
-    <tr style="border-bottom:2px solid #111827;background:#f9fafb;">
-      <th style="text-align:left;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Item</th>
-      <th style="text-align:center;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Qty</th>
-      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">MRP</th>
-      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Rate</th>
-      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">${getTaxLabel(country, isGstRegistered)}</th>
-      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#059669;text-transform:uppercase;letter-spacing:0.05em;">Discount</th>
-      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Total</th>
-    </tr>
-  ` : `
-    <tr style="border-bottom:2px solid #111827;background:#f9fafb;">
-      <th style="text-align:left;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Item</th>
-      <th style="text-align:center;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Qty</th>
-      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Rate</th>
-      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">${getTaxLabel(country, isGstRegistered)}</th>
-      <th style="text-align:right;padding:5px 5px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Total</th>
-    </tr>
-  `;
+  const saleTaxLabel = getTaxLabel(country, isGstRegistered);
+  const tableHeader = buildPrintItemTableHeader(
+    showMRP
+      ? [{ label: 'Item' }, { label: 'Qty' }, { label: 'MRP', align: 'right' }, { label: 'Rate', align: 'right' }, { label: saleTaxLabel, align: 'right' }, { label: 'Discount', align: 'right' }, { label: 'Total', align: 'right' }]
+      : [{ label: 'Item' }, { label: 'Qty' }, { label: 'Rate', align: 'right' }, { label: saleTaxLabel, align: 'right' }, { label: 'Total', align: 'right' }]
+  );
 
   // MRP FEATURE: "You Saved" banner — only when savings > 0
   const savingsBanner = (showMRP && totalSavings > 0) ? `

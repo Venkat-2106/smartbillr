@@ -196,6 +196,7 @@ function buildCustomerPrintHTML(business, customer, summary, salesHistory) {
     const bg        = i % 2 === 0 ? '#ffffff' : '#f9fafb'
     const dateStr   = formatDate(row.sales_created_at)
     return `<tr style="background:${bg};">
+      <td style="padding:7px 8px;font-size:10px;color:#6b7280;text-align:center;">${i + 1}</td>
       <td style="padding:7px 8px;font-size:12px;color:#111827;text-align:left;">${invNo}</td>
       <td style="padding:7px 8px;font-size:12px;color:#374151;text-align:left;">${dateStr}</td>
       <td style="padding:7px 8px;font-size:12px;color:#111827;text-align:right;font-weight:600;">${formatCurrency(row.sales_final_amount, currencyCountry)}</td>
@@ -210,6 +211,7 @@ function buildCustomerPrintHTML(business, customer, summary, salesHistory) {
     : `<table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
         <thead>
           <tr>
+            <th style="text-align:center;padding:8px;font-size:9px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #e5e7eb;width:32px;">#</th>
             <th style="text-align:left;padding:8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #e5e7eb;">Invoice</th>
             <th style="text-align:left;padding:8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #e5e7eb;">Date</th>
             <th style="text-align:right;padding:8px;font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #e5e7eb;">Amount</th>

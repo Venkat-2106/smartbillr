@@ -30,6 +30,7 @@ import ProductSearchDropdownPortal from './ProductSearchDropdownPortal';
 
 const SaleLineItemRow = memo(function SaleLineItemRow({
   item,
+  serial,
   isOpen,
   searchText,
   searchResults,
@@ -84,11 +85,19 @@ const SaleLineItemRow = memo(function SaleLineItemRow({
     /* FIX L3: grid template matches updated header — 8 columns */
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '1fr 90px 100px 72px 110px 72px 100px 28px',
+      gridTemplateColumns: '32px 1fr 90px 100px 72px 110px 72px 100px 28px',
       gap: 8, alignItems: 'center',
       padding: '9px 0',
       borderBottom: '1px solid var(--border)',
     }}>
+
+      {/* Serial number */}
+      <span style={{
+        fontSize: 12, fontWeight: 600, color: 'var(--text-muted)',
+        textAlign: 'center',
+      }}>
+        {serial}
+      </span>
 
       {/* Product search combobox */}
       <div ref={comboRef} style={{ position: 'relative' }}>

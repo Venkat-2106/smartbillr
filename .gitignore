@@ -41,10 +41,24 @@ backend/dist/
 *.swo
 *~
 
-#test login
+# Test & E2E
 e2e/.env
 test-results/
 e2e/.auth/
 frontend/e2e/.auth/
 frontend/test-results/
 frontend/blob-report/
+
+# Generated/Build outputs
+.agents/
+.playwright-mcp/
+brag-output-*/
+skills-lock.json
+.vite/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*

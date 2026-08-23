@@ -30,7 +30,7 @@ def _get_redis_rate():
 # Exact paths (matched via ==) and prefix paths (matched via startswith) are separate
 # to avoid /v1/business accidentally matching /v1/businesses/*.
 AUTH_EXACT_PATHS = ["/v1/business"]
-AUTH_PREFIX_PATHS = ["/auth/", "/profiles/check-email"]
+AUTH_PREFIX_PATHS = ["/v1/auth/", "/v1/profiles/check-email"]
 ADMIN_PREFIX_PATHS = ["/v1/admin/"]
 
 # Skip rate limiting entirely for these paths.

@@ -663,7 +663,7 @@
 | public | products | idx\_products\_barcode | CREATE INDEX idx\_products\_barcode ON public.products USING btree (barcode) WHERE (barcode IS NOT NULL) |
 | public | products | idx\_products\_category | CREATE INDEX idx\_products\_category ON public.products USING btree (category\_id) WHERE (category\_id IS NOT NULL) |
 | public | products | uix\_products\_name\_business | CREATE UNIQUE INDEX uix\_products\_name\_business ON public.products USING btree (business\_id, lower(TRIM(BOTH FROM prod\_name))) WHERE (is\_deleted = false) |
-| public | products | uix\_products\_barcode\_business | CREATE UNIQUE INDEX uix\_products\_barcode\_business ON public.products USING btree (business\_id, barcode) WHERE (barcode IS NOT NULL) |
+| public | products | uix\_products\_barcode\_business | CREATE UNIQUE INDEX uix\_products\_barcode\_business ON public.products USING btree (business\_id, barcode) WHERE ((barcode IS NOT NULL) AND (is\_deleted = false)) |
 | public | products | idx\_products\_business\_updated | CREATE INDEX idx\_products\_business\_updated ON public.products USING btree (business\_id, updated\_at DESC) WHERE (is\_deleted = false) |
 | public | products | idx\_products\_business\_name\_active | CREATE INDEX idx\_products\_business\_name\_active ON public.products USING btree (business\_id, prod\_name) WHERE (is\_deleted = false) |
 | public | products | idx\_products\_business\_barcode\_active | CREATE INDEX idx\_products\_business\_barcode\_active ON public.products USING btree (business\_id, barcode) WHERE ((is\_deleted = false) AND (barcode IS NOT NULL)) |

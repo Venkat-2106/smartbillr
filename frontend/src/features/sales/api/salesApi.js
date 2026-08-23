@@ -158,6 +158,10 @@ export async function fetchSalesSummary() {
 //   Fields: prod_id, prod_name, prod_sell_price, prod_mrp,
 //           tax_rate, barcode, unit, prod_stock_qty
 //   These are exactly what CreateSalePage needs to add a line item.
+//
+// NOTE: unlike the same-named helper in features/products/api/productsApi.js,
+// this version does NOT swallow 404 — callers rely on the thrown error to show
+// "product not found" inline. The products copy returns null on 404 instead.
 export const fetchProductByBarcode = async (code) => {
   const res = await api.get(`/products/barcode/${encodeURIComponent(code.trim())}`)
   return res.data   // lean product row (8 fields only)

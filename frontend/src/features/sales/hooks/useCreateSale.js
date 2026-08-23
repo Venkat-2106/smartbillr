@@ -399,7 +399,16 @@ export default function useCreateSale({ onCreated } = {}) {
   );
 
   // ── Submit ────────────────────────────────────────────────────────────────
+  // S-1 FIX (duplicate submission): ref mirror of mutation.isPending so BOTH
+  // submit paths refuse to fire while a sale POST is in flight. The Save
+  // button is already disabled by Button.jsx while loading, but the
+  // Ctrl/Cmd+Enter shortcut calls handleSubmit() directly and previously had
+  // no guard — two rapid submits created two real sales (double stock
+  // deduction, second payment record) because the backend has no idempotency
+  // key. Mirrors the handleSubmitRef pattern below.
+  const isPendingRef = useRef(false);
   const handleSubmit = useCallback(() => {
+    if (isPendingRef.current || mutation.isPending) return;
     if (!isValid) {
       if (!paidAmountValid) {
         toast.error('Enter a valid paid amount (must be > 0 and less than the total).');
@@ -408,11 +417,19 @@ export default function useCreateSale({ onCreated } = {}) {
       }
       return;
     }
+    // Set synchronously — closes the window before React re-renders with the
+    // new isPending from mutate().
+    isPendingRef.current = true;
     mutation.mutate(buildBody(false));
   }, [isValid, paidAmountValid, mutation, buildBody]);
 
   const handleSubmitRef = useRef(handleSubmit);
   useEffect(() => { handleSubmitRef.current = handleSubmit; });
+
+  // Authoritative sync/reset of the pending flag on every render — resets it
+  // when the mutation settles (success OR error), so a failed submission
+  // stays retryable.
+  useEffect(() => { isPendingRef.current = mutation.isPending; });
 
   // ── Form reset ──────────────────────────────────────────────────────────
   const resetForm = useCallback(() => {

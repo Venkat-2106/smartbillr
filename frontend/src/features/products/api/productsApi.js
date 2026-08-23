@@ -72,6 +72,10 @@ export async function fetchProduct(prodId) {
 }
 
 // ── Exact barcode lookup (BARCODE FIX — unchanged) ────────────────────────────
+// NOTE: same endpoint as fetchProductByBarcode in features/sales/api/salesApi.js
+// but a DIFFERENT contract: this version swallows 404 → returns null (used by
+// checkBarcode()'s boolean duplicate test); the sales version lets 404 throw so
+// the scanner UI can show "not found". Don't unify them blindly.
 export async function fetchProductByBarcode(code) {
   try {
     const res = await api.get(`/products/barcode/${encodeURIComponent(code.trim())}`)

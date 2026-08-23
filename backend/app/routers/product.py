@@ -293,14 +293,18 @@ async def create_product(
     if dup:
         return error_response("A product with this name already exists.", 400)
 
-    # ── 3. Duplicate barcode check (BARCODE FIX) ──────────────────────────────
-    # Only runs when a barcode was actually supplied. Empty/None barcodes are
-    # allowed on multiple products — not every product has a barcode.
-    if data.barcode and data.barcode.strip():
-        data.barcode = data.barcode.strip()
-        dup_bc = await _find_duplicate_barcode(db, business_id, data.barcode)
+    # ── 3. Duplicate barcode check + empty-string normalisation (BARCODE FIX) ─
+    # Normalise exactly like update_product does: "" → None BEFORE the insert.
+    # The partial unique index only excludes NULL barcodes, not '' — without
+    # this, a raw API caller posting barcode:"" for multiple products would
+    # collide on '' and get a misleading "barcode already exists" error.
+    # (The shipped UI already sends null, so this only changes the raw-API case.)
+    clean_bc = data.barcode.strip() if data.barcode else None
+    if clean_bc:
+        dup_bc = await _find_duplicate_barcode(db, business_id, clean_bc)
         if dup_bc:
             return error_response("A product with this barcode already exists.", 400)
+    data.barcode = clean_bc
 
     # ── 4. Create the product ─────────────────────────────────────────────────
     new_product = Product(

@@ -334,7 +334,7 @@ function HealthScore({ data, loading }) {
 function QuickActions({ navigate }) {
   const [hoveredIdx, setHoveredIdx] = useState(null)
   const actions = [
-    { label: 'New Sale', path: '/sales/new', icon: 'M12 4v16m8-8H4', color: 'var(--accent-600)' },
+    { label: 'New Sale', path: '/sales/new-tab', icon: 'M12 4v16m8-8H4', color: 'var(--accent-600)', newTab: true },
     { label: 'New Product', path: '/products', icon: 'M12 4v16m8-8H4', color: 'var(--success)' },
     { label: 'New Customer', path: '/customers', icon: 'M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z', color: 'var(--info)' },
     { label: 'New Purchase', path: '/purchases/new', icon: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z', color: 'var(--warning)' },
@@ -349,7 +349,7 @@ function QuickActions({ navigate }) {
           return (
           <button
             key={a.label}
-            onClick={() => navigate(a.path)}
+            onClick={() => a.newTab ? window.open(a.path, '_blank', 'noopener,noreferrer') : navigate(a.path)}
             onMouseEnter={() => setHoveredIdx(i)}
             onMouseLeave={() => setHoveredIdx(null)}
             style={{

@@ -14,6 +14,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@supabase/supabase-js": "^2.106.1",
     "@tanstack/react-query": "^5.100.11",
+    "jsbarcode": "^3.12.3",
     "@vercel/speed-insights": "^2.0.0",
     "axios": "^1.16.1",
     "clsx": "^2.1.1",

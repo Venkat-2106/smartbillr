@@ -14,7 +14,7 @@
 //   Feature 2: server-side "name already exists" error is shown inside the
 //   Product Name FormField (nameError / onNameErrorClear), not just a toast.
 
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 
 import {
@@ -27,6 +27,7 @@ import {
 
 import { checkBarcode } from '../api/productsApi'
 import { UNITS, createSchema, generateEAN13, handleBarcodeKeyUp } from './productFormShared'
+import BarcodePreview from './BarcodePreview'
 
 // ── Add Product Form ──────────────────────────────────────────────────────────
 // Props:
@@ -34,7 +35,7 @@ import { UNITS, createSchema, generateEAN13, handleBarcodeKeyUp } from './produc
 //   onNameErrorClear — () => void     — called on first keystroke in Name field
 //                                       so the red error banner disappears
 function AddProductForm({ onSubmit, onClose, isPending, categories, nameError, onNameErrorClear, barcodeError, onBarcodeErrorClear }) {
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm({
+  const { register, handleSubmit, setValue, control, formState: { errors } } = useForm({
     resolver: zodResolver(createSchema),
     defaultValues: {
       prod_stock_qty:       0,
@@ -50,6 +51,9 @@ function AddProductForm({ onSubmit, onClose, isPending, categories, nameError, o
   // successful Zod pass but a failed API call.
   const nameFieldError    = errors.prod_name || (nameError    ? { message: nameError    } : undefined)
   const barcodeFieldError = errors.barcode   || (barcodeError ? { message: barcodeError } : undefined)
+
+  // Live label preview — useWatch() covers generate, type, and blur alike
+  const barcodeWatchValue = useWatch({ control, name: 'barcode' }) ?? ''
 
   function generateBarcode() {
     setValue('barcode', generateEAN13(), { shouldValidate: true })
@@ -157,6 +161,9 @@ function AddProductForm({ onSubmit, onClose, isPending, categories, nameError, o
           </Button>
         </div>
       </FormField>
+
+      {/* Live scannable preview — hidden when the value is empty/unrenderable */}
+      <BarcodePreview value={barcodeWatchValue} />
 
       <Modal.Footer>
         <Button variant="ghost" onClick={onClose} disabled={isPending}>Cancel</Button>

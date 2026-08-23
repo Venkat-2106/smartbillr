@@ -29,6 +29,7 @@ import {
   buildPrintTable,
   triggerPrint,
 } from '../../../shared/utils/printUtils'
+import { printBarcodeLabels, clampCopies, MIN_LABEL_COPIES, MAX_LABEL_COPIES } from '../utils/barcodeLabelPrint'
 import useAuthStore from '../../../store/authStore'
 import { usePermissions } from '../../../shared/hooks/usePermissions'
 import useEscapeToClose from '../../../shared/hooks/useEscapeToClose'
@@ -306,6 +307,9 @@ function AuditGrid({ createdAt, createdBy, updatedAt, updatedBy }) {
 export default function ProductDetailDrawer({ product, onClose }) {
   useEscapeToClose(onClose)
   const [printHovered, setPrintHovered] = useState(false)
+  const [barcodeHovered, setBarcodeHovered] = useState(false)
+  // Copies kept as a raw string while typing; clamped on blur and at print time
+  const [labelCopies, setLabelCopies] = useState('1')
   const business  = useAuthStore(s => s.business)
   const subType   = business?.subscription_type
   const country   = business?.business_country_code || 'IN'
@@ -355,6 +359,26 @@ export default function ProductDetailDrawer({ product, onClose }) {
     triggerPrint(html)
   }
 
+  // ── Barcode label printing (separate from the product report) ────────────
+  // A shelf sticker and an A4 business document are different physical paper
+  // sizes — deliberately two distinct print flows. Uses the row/detail object
+  // already in hand; nothing new is fetched.
+  const barcodeValue = String(detail?.barcode || product.barcode || '').trim()
+  const hasBarcode   = Boolean(barcodeValue)
+
+  function handlePrintBarcode() {
+    if (!product || !hasBarcode) return
+    printBarcodeLabels(
+      {
+        prod_name:       product.prod_name,
+        barcode:         barcodeValue,
+        prod_sell_price: detail?.prod_sell_price ?? product.prod_sell_price,
+      },
+      clampCopies(labelCopies),
+      country
+    )
+  }
+
   // DRAWER VIEWPORT FIX — see DrawerPortal.jsx: mount at document.body so
   // position:fixed anchors to the viewport, not the .fade-up wrapper.
   return (
@@ -396,8 +420,8 @@ export default function ProductDetailDrawer({ product, onClose }) {
             }}>
               <CubeIcon style={{ width: 22, height: 22, color: '#fff' }} />
             </div>
-            <div>
-              <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0, lineHeight: 1.3 }}>
+            <div style={{ minWidth: 0 }}>
+              <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0, lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {product.prod_name}
               </h2>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0' }}>
@@ -405,7 +429,61 @@ export default function ProductDetailDrawer({ product, onClose }) {
               </p>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {/* Copies stepper for barcode stickers (1–50) */}
+            <label
+              title="Number of barcode stickers to print (1–50)"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                fontSize: 12, fontWeight: 600,
+                color: 'var(--text-muted)', fontFamily: 'inherit',
+              }}
+            >
+              Copies
+              <input
+                type="number"
+                min={MIN_LABEL_COPIES}
+                max={MAX_LABEL_COPIES}
+                value={labelCopies}
+                disabled={!hasBarcode}
+                onChange={(e) => setLabelCopies(e.target.value)}
+                onBlur={(e) => setLabelCopies(String(clampCopies(e.target.value)))}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}
+                style={{
+                  width: 54, padding: '6px',
+                  border: '1px solid var(--border)', borderRadius: 8,
+                  fontSize: 13, fontFamily: 'inherit',
+                  color: 'var(--text-primary)', background: 'var(--bg-page)',
+                  outline: 'none',
+                  opacity: hasBarcode ? 1 : 0.55,
+                }}
+              />
+            </label>
+
+            {/* Barcode sticker print — separate from the full product report
+                (different physical paper size). Native disabled <button> keeps
+                the "Generate a barcode first" tooltip visible. */}
+            <button
+              onClick={handlePrintBarcode}
+              disabled={!hasBarcode}
+              title={hasBarcode ? 'Print barcode label' : 'Generate a barcode first'}
+              onMouseEnter={() => setBarcodeHovered(true)}
+              onMouseLeave={() => setBarcodeHovered(false)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                background: barcodeHovered && hasBarcode ? 'var(--bg-hover)' : 'var(--bg-page)',
+                border: '1px solid var(--border)',
+                cursor: hasBarcode ? 'pointer' : 'not-allowed',
+                opacity: hasBarcode ? 1 : 0.55,
+                padding: '6px 10px', borderRadius: 8,
+                color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600,
+                fontFamily: 'inherit', transition: 'background 0.12s',
+              }}
+            >
+              <PrinterIcon style={{ width: 15, height: 15 }} />
+              Barcode
+            </button>
+
             <button
               onClick={handlePrint}
               title="Print product report"

@@ -8,7 +8,7 @@
 // pattern as AddProductModal — see productFormShared.js for shared schema
 // and barcode helpers.
 
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 
 import {
@@ -21,17 +21,21 @@ import {
 
 import { checkBarcode } from '../api/productsApi'
 import { UNITS, editSchema, generateEAN13, handleBarcodeKeyUp } from './productFormShared'
+import BarcodePreview from './BarcodePreview'
 
 // ── Edit Product Form ─────────────────────────────────────────────────────────
 // Same nameError / onNameErrorClear pattern as AddProductForm.
 function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categories, nameError, onNameErrorClear, barcodeError, onBarcodeErrorClear, excludeProdId }) {
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm({
+  const { register, handleSubmit, setValue, control, formState: { errors } } = useForm({
     resolver: zodResolver(editSchema),
     defaultValues,
   })
 
   const nameFieldError    = errors.prod_name || (nameError    ? { message: nameError    } : undefined)
   const barcodeFieldError = errors.barcode   || (barcodeError ? { message: barcodeError } : undefined)
+
+  // Live label preview — useWatch() covers generate, type, and blur alike
+  const barcodeWatchValue = useWatch({ control, name: 'barcode' }) ?? ''
 
   function generateBarcode() {
     setValue('barcode', generateEAN13(), { shouldValidate: true })
@@ -133,27 +137,34 @@ function EditProductForm({ defaultValues, onSubmit, onClose, isPending, categori
           <Input placeholder="e.g. 1006" {...register('tax_code')} />
         </FormField>
         {/* BARCODE FIX: Generate button + scanner support + inline duplicate error */}
-        <FormField label="Barcode" error={barcodeFieldError} helper="Scan, type, or generate">
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <Input
-              placeholder="e.g. 8901234567890"
-              {...register('barcode')}
-              onKeyUp={handleBarcodeKeyUp}
-              onBlur={handleBarcodeBlur}
-              onInput={() => { if (barcodeError) onBarcodeErrorClear?.(null) }}
-              style={{ flex: 1 }}
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={generateBarcode}
-              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-            >
-              Generate
-            </Button>
-          </div>
-        </FormField>
+        <div>
+          <FormField label="Barcode" error={barcodeFieldError} helper="Scan, type, or generate">
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Input
+                placeholder="e.g. 8901234567890"
+                {...register('barcode')}
+                onKeyUp={handleBarcodeKeyUp}
+                onBlur={handleBarcodeBlur}
+                onInput={() => { if (barcodeError) onBarcodeErrorClear?.(null) }}
+                style={{ flex: 1 }}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={generateBarcode}
+                style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+              >
+                Generate
+              </Button>
+            </div>
+          </FormField>
+
+          {/* Live scannable preview — hidden when the value is empty/unrenderable.
+              Wrapped in a plain div so the outer two-column form grid keeps its
+              two items (Tax Code field + this wrapper) and doesn't break. */}
+          <BarcodePreview value={barcodeWatchValue} />
+        </div>
       </div>
 
       <Modal.Footer>

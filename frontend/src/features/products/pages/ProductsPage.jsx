@@ -99,6 +99,7 @@ import { fetchProductByBarcode, fetchProductSummary } from '../api/productsApi'
 import ProductDetailDrawer from '../components/ProductDetailDrawer'
 import AddProductModal from '../components/AddProductModal'
 import EditProductModal from '../components/EditProductModal'
+import { printBarcodeLabels } from '../utils/barcodeLabelPrint'
 
 // ── Static SVG icons (hoisted to module scope) ──────────────────────────────────
 // Why: Inline JSX SVGs are re-created as new element trees on every render.
@@ -110,6 +111,15 @@ const TrashIcon = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <polyline points="3 6 5 6 21 6" />
     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+  </svg>
+)
+
+// Printer glyph for the per-row "print barcode label" quick action
+const PrintGlyph = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="6 9 6 2 18 2 18 9" />
+    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+    <rect x="6" y="14" width="12" height="8" />
   </svg>
 )
 
@@ -768,13 +778,32 @@ export default function ProductsPage() {
           : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
       ),
     },
-    ...(canManage
-      ? [{
-          key:   'actions',
-          label: '',
-          width: 130,
-          render: (row) => (
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+    {
+      key:   'actions',
+      label: '',
+      // Print sticker is available to every viewer (printing is not a manage
+      // action); Edit/Delete remain canManage-only. Width shrinks for staff.
+      width: canManage ? 178 : 52,
+      render: (row) => (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+          {/* Barcode label print — prints ONE sticker (multi-copy with a
+              Copies input lives in ProductDetailDrawer). Inlined call keeps
+              the columns useMemo free of extra handler deps. Disabled with
+              tooltip until a barcode exists; wrapped in a span so the
+              tooltip still shows while the Button inside is disabled. */}
+          <span title={row.barcode ? 'Print barcode label' : 'Generate a barcode first'}>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!row.barcode}
+              onClick={(e) => { e.stopPropagation(); printBarcodeLabels(row, 1, countryCode) }}
+              leftIcon={PrintGlyph}
+              aria-label={`Print barcode label for ${row.prod_name}`}
+              style={{ paddingLeft: 7, paddingRight: 7 }}
+            />
+          </span>
+          {canManage && (
+            <>
               <Button variant="secondary" size="sm" onClick={(e) => { e.stopPropagation(); setEditTarget(row) }}>
                 Edit
               </Button>
@@ -782,10 +811,11 @@ export default function ProductsPage() {
                 leftIcon={TrashIcon}>
                 Delete
               </Button>
-            </div>
-          ),
-        }]
-      : []),
+            </>
+          )}
+        </div>
+      ),
+    },
   ], [hasProfitPermission, canManage, countryCode, isTierLocked, setEditTarget, setDeleteTarget])
 
   const activeSearch     = search.trim().length > 0

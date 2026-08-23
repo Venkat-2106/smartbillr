@@ -8,6 +8,7 @@ from app.middleware.auth import verify_token
 from app.middleware.security import SecurityHeadersMiddleware
 from app.middleware.ratelimit import RateLimitMiddleware
 from app.middleware.request_size_limit import RequestSizeLimitMiddleware
+from app.middleware.trailing_slash import TrailingSlashMiddleware
 from app.utils.response import success_response, error_response
 from app.routers import (
     business, category, customer, supplier,
@@ -113,6 +114,13 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+# ── Trailing-slash normalization ──────────────────────────────────────────────
+# Added LAST (outermost = runs first). The axios interceptor sends every
+# request with a trailing slash but most routes are registered without one;
+# this normalizes the path before RateLimitMiddleware / SecurityHeadersMiddleware
+# do their exact-path matching. See TrailingSlashMiddleware docstring.
+app.add_middleware(TrailingSlashMiddleware)
 
 # ── Global exception handlers ──────────────────────────────────────────
 # Reshape auth/rbac HTTPExceptions (verify_token, require_permission) to

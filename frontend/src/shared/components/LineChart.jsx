@@ -7,16 +7,24 @@ const chartH = H - PAD_T - PAD_B
 export default function LineChart({ data = [], accentColor, loading, error }) {
   const points = useMemo(() => Array.isArray(data) ? data : [], [data])
 
-  const { maxVal, coords, yTicks } = useMemo(() => {
-    const maxVal = Math.max(...points.map(p => p.value ?? 0), 1)
+  const { coords, yTicks } = useMemo(() => {
+    const values = points.map(p => p.value ?? 0)
+    const minVal = Math.min(...values, 0)
+    const maxVal = Math.max(...values, 0)
+    const range = maxVal - minVal || 1
+    const yFor = value => PAD_T + chartH - ((value - minVal) / range) * chartH
     const coords = points.map((p, i) => ({
       x: PAD_L + (i / Math.max(points.length - 1, 1)) * chartW,
-      y: PAD_T + chartH - ((p.value ?? 0) / maxVal) * chartH,
+      y: yFor(p.value ?? 0),
       label: p.label,
       value: p.value ?? 0,
     }))
-    const yTicks = [...new Set([0, Math.ceil(maxVal / 2), maxVal])]
-    return { maxVal, coords, yTicks }
+    const midpoint = (minVal + maxVal) / 2
+    const yTicks = [...new Set([minVal, midpoint, 0, maxVal]
+      .filter(t => t >= minVal && t <= maxVal))]
+      .sort((a, b) => a - b)
+      .map(tick => ({ tick, y: yFor(tick) }))
+    return { coords, yTicks }
   }, [points])
 
   const accent = accentColor || 'var(--accent-600)'
@@ -70,15 +78,12 @@ export default function LineChart({ data = [], accentColor, loading, error }) {
           <feMerge><feMergeNode in="coloredBlur" /><feMergeNode in="SourceGraphic" /></feMerge>
         </filter>
       </defs>
-      {yTicks.map((tick, i) => {
-        const y = PAD_T + chartH - (tick / maxVal) * chartH
-        return (
-          <g key={i}>
-            <line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y} stroke="var(--border)" strokeWidth="1" strokeDasharray="4 4" />
-            <text x={PAD_L - 8} y={y + 4} textAnchor="end" fontSize="10" fill="var(--text-muted)">{String(Math.round(tick))}</text>
-          </g>
-        )
-      })}
+      {yTicks.map(({ tick, y }, i) => (
+        <g key={i}>
+          <line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y} stroke="var(--border)" strokeWidth="1" strokeDasharray="4 4" />
+          <text x={PAD_L - 8} y={y + 4} textAnchor="end" fontSize="10" fill="var(--text-muted)">{String(Math.round(tick))}</text>
+        </g>
+      ))}
       <path d={areaPath(coords)} fill={`url(#${fillId})`} />
       <path d={smoothPath(coords)} fill="none" stroke={accent} strokeWidth="2.5"
         strokeLinecap="round" strokeLinejoin="round" filter={`url(#glow_${fillId})`} />

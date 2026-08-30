@@ -17,9 +17,9 @@ export default function ProfitSection({ dateFrom, dateTo }) {
     return trend.data.map(d => ({ label: d.label, value: Math.round(d.profit) }))
   }, [trend.data])
 
-  const profitByProductData = useMemo(() => (Array.isArray(byProduct.data) ? byProduct.data.map(d => ({ label: d.prod_name, value: d.profit ?? d.revenue })) : []), [byProduct.data])
+  const profitByProductData = useMemo(() => (Array.isArray(byProduct.data) ? byProduct.data.map(d => ({ label: d.prod_name, value: d.profit ?? d.revenue, formatted: formatCurrency(d.profit ?? d.revenue, country) })) : []), [byProduct.data, country])
 
-  const profitByCategoryData = useMemo(() => (Array.isArray(byCategory.data) ? byCategory.data.map(d => ({ label: d.category_name, value: d.profit ?? d.revenue })) : []), [byCategory.data])
+  const profitByCategoryData = useMemo(() => (Array.isArray(byCategory.data) ? byCategory.data.map(d => ({ label: d.category_name, value: d.profit ?? d.revenue, formatted: formatCurrency(d.profit ?? d.revenue, country) })) : []), [byCategory.data, country])
 
   if (grossProfit.data?.gross_profit === undefined || grossProfit.data?.gross_profit === null) {
     const lockedReason = grossProfit.data?.financial_locked_reason
